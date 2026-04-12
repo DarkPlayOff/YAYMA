@@ -1,0 +1,69 @@
+name: Build and Package
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build for ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+        include:
+          - os: windows-latest
+            platform: windows
+            artifact_name: yamusic-windows
+          - os: ubuntu-latest
+            platform: linux
+            artifact_name: yamusic-linux
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      - name: Install Linux dependencies
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libstdc++-12-dev
+
+      - name: Install flutter_rust_bridge_codegen
+        run: cargo install flutter_rust_bridge_codegen --version 2.12.0
+
+      - name: Generate Code
+        working-directory: frontend
+        run: |
+          flutter_rust_bridge_codegen generate
+          dart run build_runner build --delete-conflicting-outputs
+
+      - name: Build Flutter App
+        working-directory: frontend
+        run: flutter build ${{ matrix.platform }} --release --obfuscate --split-debug-info=debug_info
+
+      - name: Package Windows
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          cd frontend/build/windows/x64/runner/Release
+          tar -czvf ../../../../../${{ matrix.artifact_name }}.tar.gz .
+
+      - name: Package Linux
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          cd frontend/build/linux/x64/release/bundle
+          tar -czvf ../../../../../${{ matrix.artifact_name }}.tar.gz .
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: ${{ matrix.artifact_name }}.tar.gz

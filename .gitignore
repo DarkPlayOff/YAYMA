@@ -1,0 +1,78 @@
+/target
+.env
+.cargo
+frontend/lib/src/rust/frb_generated.web.dart
+
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+.metadata
+
+# Flutter/Dart/Pub related
+frontend/**/doc/api/
+frontend/**/ios/Flutter/.last_build_id
+frontend/.dart_tool/
+frontend/.flutter-plugins-dependencies
+frontend/.pub-cache/
+frontend/.pub/
+frontend/build/
+frontend/coverage/
+
+# Symbolication related
+app.*.symbols
+
+# Obfuscation related
+app.*.map.json
+
+# Android Studio will place build artifacts here
+/android/app/debug
+/android/app/profile
+/android/app/release
+
+# Flutter Rust Bridge (FRB) Generated Files
+frontend/lib/src/rust/frb_generated*
+frontend/lib/src/rust/api/
+frontend/rust/src/frb_generated*
+frontend/lib/src/rust/api/simple.dart
+
+# Riverpod & Freezed Generated Files
+*.g.dart
+*.freezed.dart
+
+# Others
+frontend/windows/flutter/ephemeral/
+frontend/android/gradlew.bat
+frontend/android/app/src/main/java/io/flutter/plugins/
+frontend/linux/flutter/ephemeral/*
+frontend/macos/Flutter/ephemeral/*
+frontend/rust_builder/cargokit/build_tool/.dart_tool/*
+frontend/android/gradle/wrapper/gradle-wrapper.jar
+frontend/android/gradlew
+frontend/android/local.properties
+
+frontend/android/.gradle/
+frontend/android/.kotlin/sessions/
+frontend/android/build/
+frontend/android/app/build/
+frontend/android/app/.cxx/
+frontend/rust_builder/.dart_tool
+frontend/rust_builder/pubspec.lock
+frontend/rust_builder/android/build/
+.gemini/
+src/frb_generated.rs

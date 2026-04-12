@@ -1,0 +1,31 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug",
+            "request": "launch",
+            "type": "dart",
+            "program": "${workspaceFolder}/frontend/lib/main.dart",
+            "cwd": "${workspaceFolder}/frontend",
+            "preLaunchTask": "generate-code"
+        },
+        {
+            "name": "Profile",
+            "request": "launch",
+            "type": "dart",
+            "flutterMode": "profile",
+            "program": "${workspaceFolder}/frontend/lib/main.dart",
+            "cwd": "${workspaceFolder}/frontend",
+            "preLaunchTask": "generate-code"
+        },
+        {
+            "name": "Release",
+            "request": "launch",
+            "type": "dart",
+            "flutterMode": "release",
+            "program": "${workspaceFolder}/frontend/lib/main.dart",
+            "cwd": "${workspaceFolder}/frontend",
+            "preLaunchTask": "generate-code"
+        }
+    ]
+}

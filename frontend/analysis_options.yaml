@@ -1,0 +1,25 @@
+include: package:very_good_analysis/analysis_options.yaml
+
+analyzer:
+  errors:
+    lines_longer_than_80_chars: ignore
+  exclude:
+    - "lib/src/rust/**" # Игнорируем автосгенерированный код Rust bridge
+    - "test/**"
+
+linter:
+  rules:
+    # Отключаем обязательное комментирование каждого метода (избыточно для приложения)
+    public_member_api_docs: false
+    
+    # Сортировка конструкторов первыми — на любителя, отключим для гибкости
+    sort_constructors_first: false
+
+    # Разрешим использовать print (хотя в проде лучше логгер)
+    avoid_print: false
+
+    # Предпочитаем одинарные кавычки, но strict lints иногда требуют двойные
+    prefer_single_quotes: true
+    
+    # Не требуем явного типа везде, где он выводится (Dart 3+ отлично справляется)
+    always_specify_types: false

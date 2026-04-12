@@ -1,0 +1,189 @@
+import 'dart:async';
+
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/material.dart';
+import 'package:signals_flutter/signals_flutter.dart';
+import 'package:yayma/src/providers/auth_provider.dart';
+import 'package:yayma/src/rust/api/content.dart' as rust;
+import 'package:yayma/src/ui/widgets/common_ui.dart';
+
+class SettingsView extends StatefulWidget {
+  const SettingsView({super.key});
+
+  @override
+  State<SettingsView> createState() => _SettingsViewState();
+}
+
+class _SettingsViewState extends State<SettingsView> {
+  late final FutureSignal<String?> _pathSignal;
+
+  @override
+  void initState() {
+    super.initState();
+    _pathSignal = futureSignal(() async {
+      final ctx = appContextSignal.value;
+      if (ctx == null) return null;
+      return rust.getDownloadPath(ctx: ctx);
+    });
+  }
+
+  Future<void> _pickPath() async {
+    final result = await FilePicker.getDirectoryPath();
+    if (result != null) {
+      final ctx = appContextSignal.value;
+      if (ctx != null) {
+        await rust.setDownloadPath(ctx: ctx, path: result);
+        unawaited(_pathSignal.refresh());
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      body: CustomScrollView(
+        slivers: [
+          const SliverToBoxAdapter(
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(40, 60, 40, 40),
+              child: Text(
+                'Настройки',
+                style: TextStyle(
+                  fontSize: 48,
+                  fontWeight: FontWeight.w900,
+                  color: Colors.white,
+                  letterSpacing: -1,
+                ),
+              ),
+            ),
+          ),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 40),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildSectionTitle(context, 'Загрузки'),
+                  const SizedBox(height: 24),
+                  Watch((context) {
+                    return CommonAsyncView<String?>(
+                      state: _pathSignal.value,
+                      loading: LinearProgressIndicator(color: Theme.of(context).colorScheme.primary),
+                      builder: (context, path) => _buildSettingItem(
+                        context,
+                        title: 'Путь для сохранения треков',
+                        subtitle: path ?? 'По умолчанию (папка Загрузки)',
+                        icon: Icons.folder_open_rounded,
+                        onTap: () => unawaited(_pickPath()),
+                      ),
+                    );
+                  }),
+                  const SizedBox(height: 48),
+                  _buildSectionTitle(context, 'О приложении'),
+                  const SizedBox(height: 24),
+                  Container(
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.05),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: Colors.white10),
+                    ),
+                    child: const Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'YAYMA',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        SizedBox(height: 8),
+                        Text(
+                          'Альтернативный клиент для Яндекс Музыки.\nВерсия 0.1.0',
+                          style: TextStyle(color: Colors.white54, fontSize: 16),
+                        ),                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SliverToBoxAdapter(child: SizedBox(height: 100)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSectionTitle(BuildContext context, String title) {
+    return Text(
+      title,
+      style: TextStyle(
+        color: Theme.of(context).colorScheme.primary,
+        fontSize: 24,
+        fontWeight: FontWeight.w800,
+      ),
+    );
+  }
+
+  Widget _buildSettingItem(
+    BuildContext context, {
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required VoidCallback onTap,
+  }) {
+    final primaryColor = Theme.of(context).colorScheme.primary;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.05),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: Colors.white10),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: primaryColor.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(icon, color: primaryColor, size: 28),
+            ),
+            const SizedBox(width: 20),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(
+                      color: Colors.white38,
+                      fontSize: 15,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right_rounded, color: Colors.white24, size: 32),
+          ],
+        ),
+      ),
+    );
+  }
+}

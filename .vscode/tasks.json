@@ -1,0 +1,48 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "generate-code",
+            "type": "shell",
+            "command": "flutter_rust_bridge_codegen generate; dart run build_runner build --delete-conflicting-outputs",
+            "options": {
+                "cwd": "${workspaceFolder}/frontend"
+            },
+            "group": "build",
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared",
+                "focus": false
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Build Release",
+            "type": "shell",
+            "command": "flutter build ${input:platform} --split-debug-info=debug_info",
+            "options": {
+                "cwd": "${workspaceFolder}/frontend"
+            },
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "dependsOn": [
+                "generate-code"
+            ],
+            "problemMatcher": []
+        }
+    ],
+    "inputs": [
+        {
+            "id": "platform",
+            "type": "pickString",
+            "description": "Choose platform for release",
+            "options": [
+                "windows",
+                "linux"
+            ],
+            "default": "windows"
+        }
+    ]
+}

@@ -1,0 +1,198 @@
+import 'package:flutter/material.dart';
+import 'package:signals_flutter/signals_flutter.dart';
+import 'package:yayma/src/providers/navigation_provider.dart';
+import 'package:yayma/src/providers/notification_provider.dart';
+import 'package:yayma/src/ui/album_view.dart';
+import 'package:yayma/src/ui/artist_view.dart';
+import 'package:yayma/src/ui/home_view.dart';
+import 'package:yayma/src/ui/layout/background.dart';
+import 'package:yayma/src/ui/layout/navigation_bar.dart';
+import 'package:yayma/src/ui/layout/player_bar.dart';
+import 'package:yayma/src/ui/library_view.dart';
+import 'package:yayma/src/ui/playlist_view.dart';
+import 'package:yayma/src/ui/search_view.dart';
+import 'package:yayma/src/ui/settings_view.dart';
+
+class AppLayout extends StatelessWidget {
+  const AppLayout({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final navStack = navStackSignal.watch(context);
+    final currentSection = navStack.last.section;
+    final isHome = currentSection == AppSection.home;
+
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: GlobalNotificationListener(
+        child: Stack(
+          children: [
+            // 1. Фон (шейдер + размытие)
+            const Positioned.fill(child: BlurredCoverBackground()),
+            const Positioned.fill(child: WaveBackground()),
+
+            // 2. Затемнение при уходе с главной
+            Positioned.fill(
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 500),
+                color: isHome ? Colors.transparent : Colors.black87,
+              ),
+            ),
+
+            // 3. Контент (стек окон)
+            Positioned.fill(
+              child: Column(
+                children: [
+                  Expanded(
+                    child: Stack(
+                      children: _buildWindowStack(navStack),
+                    ),
+                  ),
+                  AnimatedSize(
+                    duration: const Duration(milliseconds: 500),
+                    curve: Curves.easeOutCubic,
+                    child: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 500),
+                      reverseDuration: const Duration(milliseconds: 400),
+                      switchInCurve: Curves.easeOutCubic,
+                      switchOutCurve: Curves.easeInCubic,
+                      transitionBuilder:
+                          (child, animation) {
+                        final offsetAnimation = Tween<Offset>(
+                          begin: const Offset(0, 1),
+                          end: Offset.zero,
+                        ).animate(animation);
+                        return SlideTransition(
+                          position: offsetAnimation,
+                          child: child,
+                        );
+                      },
+                      child: !isHome
+                          ? const Padding(
+                              padding: EdgeInsets.only(left: 96),
+                              key: ValueKey('player_bar_visible'),
+                              child: PlayerBar(),
+                            )
+                          : const SizedBox.shrink(
+                              key: ValueKey('player_bar_hidden')),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // 4. Навигация (NavBar)
+            const Align(
+              alignment: Alignment.centerLeft,
+              child: Padding(
+                padding: EdgeInsets.only(left: 16),
+                child: FloatingNavBar(),
+              ),
+            ),
+
+            // 5. Кнопка "Назад"
+            _FloatingBackButton(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  List<Widget> _buildWindowStack(List<NavState> stack) {
+    return stack.asMap().entries.map((entry) {
+      final index = entry.key;
+      final state = entry.value;
+      final isLast = index == stack.length - 1;
+
+      // Оптимизация: отключаем рендеринг и анимации для экранов,
+      // которые находятся глубоко в стеке (оставляем только текущий и предыдущий).
+      // Это кардинально экономит CPU/GPU, сохраняя при этом State (скролл, инпуты).
+      final isDeeplyHidden = index < stack.length - 2;
+
+      return Offstage(
+        key: ValueKey('win_${state.section}_${state.id}_$index'),
+        offstage: isDeeplyHidden,
+        child: TickerMode(
+          enabled: !isDeeplyHidden,
+          child: AnimatedOpacity(
+            duration: const Duration(milliseconds: 400),
+            opacity: isLast ? 1.0 : 0.0,
+            curve: Curves.easeInOut,
+            child: IgnorePointer(
+              ignoring: !isLast,
+              child: _buildWindowContent(state),
+            ),
+          ),
+        ),
+      );
+    }).toList();
+  }
+
+  Widget _buildWindowContent(NavState state) {
+    final isRoot = state.section == AppSection.home;
+    final child = _mapSectionToWidget(state);
+
+    return isRoot
+        ? child
+        : Padding(
+            padding: const EdgeInsets.only(left: 96),
+            child: child,
+          );
+  }
+
+  Widget _mapSectionToWidget(NavState state) {
+    switch (state.section) {
+      case AppSection.home:
+        return const HomeView();
+      case AppSection.search:
+        return const SearchView();
+      case AppSection.liked:
+      case AppSection.playlists:
+        return const LibraryView();
+      case AppSection.album:
+        return AlbumView(albumId: state.id);
+      case AppSection.artist:
+        return ArtistView(artistId: state.id);
+      case AppSection.playlist:
+        final parts = state.id?.split(':') ?? [];
+        return PlaylistView(
+          uid: parts.isNotEmpty ? parts[0] : null,
+          kind: parts.length > 1 ? parts[1] : null,
+        );
+      case AppSection.wave:
+        return const Center(
+          child: Text('Волна', style: TextStyle(color: Colors.white24)),
+        );
+      case AppSection.account:
+        return const SettingsView();
+    }
+  }
+}
+
+class _FloatingBackButton extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Watch((context) {
+      if (!canGoBackSignal.value) return const SizedBox.shrink();
+
+      return Positioned(
+        top: 60,
+        left: 24,
+        child: IconButton(
+          onPressed: goBack,
+          style: IconButton.styleFrom(
+            backgroundColor: const Color(0xFF1E1E1E),
+            hoverColor: Colors.white10,
+            padding: const EdgeInsets.all(12),
+            side: const BorderSide(color: Colors.white10),
+          ),
+          icon: const Icon(
+            Icons.arrow_back_ios_new_rounded,
+            color: Colors.white70,
+            size: 24,
+          ),
+        ),
+      );
+    });
+  }
+}

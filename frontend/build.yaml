@@ -1,0 +1,32 @@
+targets:
+  $default:
+    builders:
+      freezed:
+        generate_for:
+          include:
+            - lib/src/rust/api/models.dart
+            - lib/src/rust/api/simple.dart
+            - lib/src/models/**
+          exclude:
+            - lib/src/ui/**
+            - lib/main.dart
+
+      json_serializable:
+        generate_for:
+          include:
+            - lib/src/rust/api/models.dart
+            - lib/src/rust/api/simple.dart
+            - lib/src/models/**
+          exclude:
+            - lib/src/ui/**
+            - lib/main.dart
+
+      source_gen:combining_builder:
+        generate_for:
+          include:
+            - lib/src/rust/api/models.dart
+            - lib/src/rust/api/simple.dart
+            - lib/src/models/**
+          exclude:
+            - lib/src/ui/**
+            - lib/main.dart
