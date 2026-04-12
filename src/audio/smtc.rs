@@ -1,5 +1,6 @@
 use souvlaki::{MediaControlEvent, MediaControls, MediaMetadata, MediaPlayback, PlatformConfig};
 
+#[cfg(target_os = "windows")]
 use windows::{Win32::UI::Shell::SetCurrentProcessExplicitAppUserModelID, core::w};
 
 use crate::audio::commands::AudioMessage;
@@ -8,11 +9,13 @@ use flume::Sender;
 use tokio::sync::mpsc;
 use yandex_music::model::track::Track;
 
+#[cfg(target_os = "windows")]
 use crate::audio::thumbnail::ThumbnailManager;
 
 pub struct SmtcManager {
     controls: MediaControls,
     _cmd_tx: mpsc::UnboundedSender<AudioMessage>,
+    #[cfg(target_os = "windows")]
     thumbnail_manager: Option<ThumbnailManager>,
 }
 
@@ -21,14 +24,15 @@ impl SmtcManager {
         _event_tx: Sender<Event>,
         cmd_tx: mpsc::UnboundedSender<AudioMessage>,
     ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
-        // Set AppUserModelID so Windows can identify the app correctly
-
+        #[cfg(target_os = "windows")]
         unsafe {
             let _ = SetCurrentProcessExplicitAppUserModelID(w!("com.vyfor.yamusic"));
         }
 
-        let hwnd =
-            crate::audio::thumbnail::get_flutter_hwnd().map(|h| h.0 as *mut std::ffi::c_void);
+        #[cfg(target_os = "windows")]
+        let hwnd = crate::audio::thumbnail::get_flutter_hwnd().map(|h| h.0 as *mut std::ffi::c_void);
+        #[cfg(not(target_os = "windows"))]
+        let hwnd = None;
 
         let config = PlatformConfig {
             dbus_name: "yamusic",
@@ -73,13 +77,17 @@ impl SmtcManager {
                 ))
             })?;
 
-        let thumbnail_hwnd =
-            crate::audio::thumbnail::get_flutter_hwnd().map(|h| h.0 as *mut std::ffi::c_void);
-        let thumbnail_manager = thumbnail_hwnd.and_then(ThumbnailManager::new);
+        #[cfg(target_os = "windows")]
+        let thumbnail_manager = {
+            let thumbnail_hwnd =
+                crate::audio::thumbnail::get_flutter_hwnd().map(|h| h.0 as *mut std::ffi::c_void);
+            thumbnail_hwnd.and_then(ThumbnailManager::new)
+        };
 
         Ok(Self {
             controls,
             _cmd_tx: cmd_tx,
+            #[cfg(target_os = "windows")]
             thumbnail_manager,
         })
     }
@@ -101,6 +109,7 @@ impl SmtcManager {
             .as_ref()
             .map(|uri| format!("https://{}", uri.replace("%%", "400x400")));
 
+        #[cfg(target_os = "windows")]
         if let (Some(url), Some(thumb_mgr)) = (&cover_url, self.thumbnail_manager) {
             let url_clone = url.clone();
             tokio::spawn(async move {
@@ -137,19 +146,4 @@ impl SmtcManager {
             tracing::error!("Failed to update SMTC playback status: {:?}", e);
         }
     }
-}
-
-#[cfg(not(target_os = "windows"))]
-pub struct SmtcManager;
-
-#[cfg(not(target_os = "windows"))]
-impl SmtcManager {
-    pub fn new(
-        _event_tx: Sender<Event>,
-        _cmd_tx: mpsc::UnboundedSender<AudioMessage>,
-    ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
-        Ok(Self)
-    }
-    pub fn update_metadata(&mut self, _track: &Track) {}
-    pub fn update_playback_status(&mut self, _is_playing: bool) {}
 }

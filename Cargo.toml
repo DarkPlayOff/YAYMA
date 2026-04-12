@@ -1,12 +1,6 @@
 [package]
-authors = ["vyfor"]
-categories = ["multimedia", "multimedia::audio"]
-description = "Yet Another Yandex Music App"
-edition = "2024"
-keywords = ["yandex", "music", "audio-player"]
-license = "GPL-3.0"
 name = "yayma"
-repository = "https://github.com/yamusic/yamusic"
+edition = "2024"
 version = "0.1.0"
 
 [lib]

@@ -11,7 +11,6 @@ pub mod playback;
 pub mod progress;
 pub mod queue;
 pub mod signals;
-#[cfg(target_os = "windows")]
 pub mod smtc;
 pub mod state;
 pub mod stream_manager;
