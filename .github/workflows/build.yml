@@ -1,4 +1,4 @@
-name: Manual Build
+name: Manual Arch Build (YAYMA)
 
 on:
   workflow_dispatch:
@@ -9,18 +9,15 @@ jobs:
     container:
       image: archlinux:latest
     steps:
-      - name: Update System and Install Deps
+      - name: System Init
         run: |
           pacman -Syu --noconfirm
-          pacman -S --noconfirm \
-            base-devel git cmake ninja pkg-config \
-            gtk3 libsecret libsoup3 unzip curl wget \
-            clang llvm wpewebkit wpebackend-fdo libwpe rustup
+          pacman -S --noconfirm base-devel git cmake ninja pkg-config gtk3 libsecret libsoup3 unzip curl wget clang llvm wpewebkit wpebackend-fdo libwpe rustup
 
-      - name: Checkout Code
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Cache Rust & FRB
+      - name: Cache Rust
         uses: actions/cache@v4
         with:
           path: |
@@ -28,7 +25,7 @@ jobs:
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             target/
-          key: ${{ runner.os }}-arch-rust-frb-2.12.0-${{ hashFiles('**/Cargo.lock') }}
+          key: rust-frb-2.12.0-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Setup Rust
         run: |
@@ -42,35 +39,31 @@ jobs:
           if ! command -v flutter_rust_bridge_codegen &> /dev/null; then
             cargo install flutter_rust_bridge_codegen --version 2.12.0
           fi
-          
-      - name: Cache Flutter SDK
+
+      - name: Cache Flutter
         id: cache-flutter
         uses: actions/cache@v4
         with:
           path: /opt/flutter
-          key: ${{ runner.os }}-arch-flutter-linux-stable
+          key: flutter-linux-stable
 
       - name: Install Flutter
         if: steps.cache-flutter.outputs.cache-hit != 'true'
-        run: |
-          git clone --depth 1 https://github.com/flutter/flutter -b stable /opt/flutter
-          /opt/flutter/bin/flutter precache --linux --no-android --no-ios --no-web --no-fuchsia
+        run: git clone --depth 1 --single-branch https://github.com/flutter/flutter -b stable /opt/flutter && /opt/flutter/bin/flutter precache --linux --no-android --no-ios --no-web --no-fuchsia
 
-      - name: Build Project
+      - name: Build
         run: |
           export PATH="$PATH:/opt/flutter/bin:/root/.cargo/bin"
+          cd frontend
           flutter config --no-analytics
           flutter pub get
           flutter_rust_bridge_codegen generate
-          flutter build linux --release
+          flutter build linux --release --no-pub
 
-      - name: Prepare Archive
-        run: |
-          cd build/linux/x64/release/bundle/
-          tar -czvf ../../../../linux_release.tar.gz .
+      - name: Archive
+        run: tar -czvf linux_release.tar.gz -C build/linux/x64/release/bundle/ .
 
-      # 9. Загрузка артефакта
-      - name: Upload Artifact
+      - name: Upload
         uses: actions/upload-artifact@v4
         with:
           name: linux_release
