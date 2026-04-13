@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:yayma/src/providers/navigation_provider.dart';
 import 'package:yayma/src/rust/api/models.dart';
+import 'package:yayma/src/ui/widgets/fullscreen_cover.dart';
 import 'package:yayma/src/ui/widgets/rust_cached_image.dart';
 
 class TrackVersionWidget extends StatelessWidget {
@@ -151,6 +152,7 @@ class TrackCover extends StatelessWidget {
   final double size;
   final double borderRadius;
   final bool isCircle;
+  final bool canExpand;
 
   const TrackCover({
     required this.url,
@@ -158,11 +160,12 @@ class TrackCover extends StatelessWidget {
     this.size = 64,
     this.borderRadius = 8,
     this.isCircle = false,
+    this.canExpand = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    Widget content = Container(
       width: size,
       height: size,
       decoration: BoxDecoration(
@@ -173,15 +176,30 @@ class TrackCover extends StatelessWidget {
       child: ClipRRect(
         borderRadius: BorderRadius.circular(isCircle ? size / 2 : borderRadius),
         child: url != null
-            ? RustCachedImage(
-                imageUrl: url,
-                width: size,
-                height: size,
-                errorWidget: _buildPlaceholder(),
+            ? Hero(
+                tag: url!,
+                child: RustCachedImage(
+                  imageUrl: url,
+                  width: size,
+                  height: size,
+                  errorWidget: _buildPlaceholder(),
+                ),
               )
             : _buildPlaceholder(),
       ),
     );
+
+    if (canExpand && url != null) {
+      content = MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          onTap: () => FullscreenCoverDialog.show(context, url!),
+          child: content,
+        ),
+      );
+    }
+
+    return content;
   }
 
   Widget _buildPlaceholder() {
@@ -192,3 +210,4 @@ class TrackCover extends StatelessWidget {
     );
   }
 }
+
