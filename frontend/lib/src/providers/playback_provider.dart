@@ -49,12 +49,14 @@ Future<void> initPlayback() async {
 
   audioQualitySignal.value = await rust.getAudioQuality(ctx: ctx);
   // Активируем эффекты
+  _activatePersistentColorScheme();
   _activateVibePalette();
   if (Platform.isWindows) {
     _activateTaskbarEffect();
   }
 }
 
+void _activatePersistentColorScheme() => _persistentColorSchemeEffect;
 void _activateVibePalette() => _vibePaletteEffect;
 void _activateTaskbarEffect() => _taskbarEffect;
 
@@ -109,9 +111,24 @@ final FutureSignal<ColorScheme?> colorSchemeSignal = computedAsync(() async {
   );
 }, debugLabel: 'colorSchemeSignal');
 
+// Храним последнюю успешную цветовую схему, чтобы не было отката цветов при смене трека
+final FlutterSignal<ColorScheme?> _persistentColorScheme = signal<ColorScheme?>(null);
+
+// Эффект для обновления персистентной цветовой схемы
+final EffectCleanup _persistentColorSchemeEffect = effect(() {
+  final url = currentCoverUrlSignal();
+  final scheme = colorSchemeSignal().value;
+
+  if (url == null) {
+    _persistentColorScheme.value = null;
+  } else if (scheme != null) {
+    _persistentColorScheme.value = scheme;
+  }
+});
+
 // Акцентный цвет
 final FlutterComputed<Color> accentColorSignal = computed(
-  () => colorSchemeSignal().value?.primary ?? Colors.blue,
+  () => _persistentColorScheme()?.primary ?? Colors.deepOrange,
   debugLabel: 'accentColorSignal',
 );
 
@@ -119,7 +136,7 @@ final FlutterComputed<Color> accentColorSignal = computed(
 final FlutterComputed<Color> playerBarColorSignal = computed(
   () =>
       Color.lerp(
-        colorSchemeSignal().value?.surfaceContainerHighest,
+        _persistentColorScheme()?.surfaceContainerHighest,
         Colors.black,
         0.4,
       ) ??

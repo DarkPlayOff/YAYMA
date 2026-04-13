@@ -78,17 +78,10 @@ class AppContextMenu<T> extends StatelessWidget {
           ),
         ),
         menuChildren: item.subItems!.map((sub) => _buildItem(context, sub)).toList(),
-        leadingIcon: const Icon(Icons.chevron_left_rounded, size: 18, color: Colors.white38),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(item.icon, color: item.color ?? Colors.white70, size: 18),
-            const SizedBox(width: 12),
-            Text(
-              item.label,
-              style: TextStyle(color: item.color ?? Colors.white, fontSize: 14),
-            ),
-          ],
+        leadingIcon: Icon(item.icon, color: item.color ?? Colors.white70, size: 18),
+        child: Text(
+          item.label,
+          style: TextStyle(color: item.color ?? Colors.white, fontSize: 14),
         ),
       );
     }

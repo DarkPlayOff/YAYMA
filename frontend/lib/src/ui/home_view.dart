@@ -322,7 +322,7 @@ class _HomeViewState extends State<HomeView> {
               icon: Icon(
                 Icons.lyrics_rounded,
                 size: small ? 20 : 24,
-                color: showLyrics ? Theme.of(context).colorScheme.primary : Colors.white38,
+                color: showLyrics ? accentColor : Colors.white38,
               ),
               onPressed: () => showLyricsSignal.value = !showLyricsSignal.value,
             ),

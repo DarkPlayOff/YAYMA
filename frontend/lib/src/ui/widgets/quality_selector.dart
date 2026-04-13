@@ -156,7 +156,6 @@ class CommonQualitySelector extends StatelessWidget {
     AudioQuality current,
   ) {
     final isSelected = value == current;
-    final primaryColor = Theme.of(context).colorScheme.primary;
     return PopupMenuItem(
       value: value,
       child: Row(
@@ -164,7 +163,7 @@ class CommonQualitySelector extends StatelessWidget {
           Text(
             label,
             style: TextStyle(
-              color: isSelected ? primaryColor : Colors.white,
+              color: isSelected ? accentColor : Colors.white,
               fontWeight: FontWeight.bold,
             ),
           ),
@@ -173,14 +172,14 @@ class CommonQualitySelector extends StatelessWidget {
             desc,
             style: TextStyle(
               color: isSelected
-                  ? primaryColor.withValues(alpha: 0.7)
+                  ? accentColor.withValues(alpha: 0.7)
                   : Colors.white54,
               fontSize: 13,
             ),
           ),
           if (isSelected) ...[
             const Spacer(),
-            Icon(Icons.check_rounded, color: primaryColor, size: 18),
+            Icon(Icons.check_rounded, color: accentColor, size: 18),
           ],
         ],
       ),
