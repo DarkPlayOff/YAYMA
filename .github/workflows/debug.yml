@@ -89,9 +89,10 @@ jobs:
 
       - name: Install Tools
         run: |
-          # Install binstall
+          # Install binstall using curl to avoid PowerShell iwr issues
           if ((Test-Path "$HOME\.cargo\bin\cargo-binstall.exe") -eq $false) {
-            Set-ExecutionPolicy RemoteSigned -Scope Process ; iex (iwr "https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.ps1").Content
+            curl.exe -L --proto "=https" --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.ps1 -o install-binstall.ps1
+            powershell -ExecutionPolicy RemoteSigned -File install-binstall.ps1 -Force
           }
           # Install others via binstall
           cargo binstall -y flutter_rust_bridge_codegen --version 2.12.0
