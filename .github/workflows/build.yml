@@ -12,7 +12,7 @@ jobs:
       - name: System Init
         run: |
           pacman -Syu --noconfirm
-          pacman -S --noconfirm base-devel git cmake ninja pkg-config gtk3 libsecret libsoup3 unzip curl wget clang llvm wpewebkit wpebackend-fdo libwpe rustup
+          pacman -S --noconfirm base-devel git cmake ninja pkg-config gtk3 libsecret libsoup3 unzip curl wget clang llvm wpewebkit wpebackend-fdo libwpe rustup alsa-lib
 
       - name: Checkout
         uses: actions/checkout@v4
