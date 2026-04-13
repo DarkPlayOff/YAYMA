@@ -71,7 +71,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   void _handleLogin(String val) {
     var token = val.trim();
-    final match = RegExp(r'access_token=([^&]+)').firstMatch(token);
+    final match = RegExp('access_token=([^&]+)').firstMatch(token);
     if (match != null) {
       token = match.group(1)!;
     }

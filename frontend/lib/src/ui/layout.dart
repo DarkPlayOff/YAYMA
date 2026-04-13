@@ -13,87 +13,121 @@ import 'package:yayma/src/ui/playlist_view.dart';
 import 'package:yayma/src/ui/search_view.dart';
 import 'package:yayma/src/ui/settings_view.dart';
 
-class AppLayout extends StatelessWidget {
+class AppLayout extends StatefulWidget {
   const AppLayout({super.key});
 
   @override
+  State<AppLayout> createState() => _AppLayoutState();
+}
+
+class _AppLayoutState extends State<AppLayout> {
+  final PageStorageBucket _bucket = PageStorageBucket();
+
+  @override
   Widget build(BuildContext context) {
-    final navStack = navStackSignal.watch(context);
-    final currentSection = navStack.last.section;
-    final isHome = currentSection == AppSection.home;
+    return Watch((context) {
+      final activeRoot = currentRootSignal.watch(context);
+      final navState = currentNavStateSignal.watch(context);
+      final isHome = navState.section == AppSection.home;
 
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: GlobalNotificationListener(
-        child: Stack(
-          children: [
-            // 1. Фон (шейдер + размытие)
-            const Positioned.fill(child: BlurredCoverBackground()),
-            const Positioned.fill(child: WaveBackground()),
+      return Scaffold(
+        backgroundColor: Colors.black,
+        body: PageStorage(
+          bucket: _bucket,
+          child: GlobalNotificationListener(
+            child: Stack(
+              children: [
+                // 1. Фон (шейдер + размытие)
+                const Positioned.fill(child: BlurredCoverBackground()),
+                const Positioned.fill(child: WaveBackground()),
 
-            // 2. Затемнение при уходе с главной
-            Positioned.fill(
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 500),
-                color: isHome ? Colors.transparent : Colors.black87,
-              ),
-            ),
-
-            // 3. Контент (стек окон)
-            Positioned.fill(
-              child: Column(
-                children: [
-                  Expanded(
-                    child: Stack(
-                      children: _buildWindowStack(navStack),
-                    ),
-                  ),
-                  AnimatedSize(
+                // 2. Затемнение при уходе с главной
+                Positioned.fill(
+                  child: AnimatedContainer(
                     duration: const Duration(milliseconds: 500),
-                    curve: Curves.easeOutCubic,
-                    child: AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 500),
-                      reverseDuration: const Duration(milliseconds: 400),
-                      switchInCurve: Curves.easeOutCubic,
-                      switchOutCurve: Curves.easeInCubic,
-                      transitionBuilder:
-                          (child, animation) {
-                        final offsetAnimation = Tween<Offset>(
-                          begin: const Offset(0, 1),
-                          end: Offset.zero,
-                        ).animate(animation);
-                        return SlideTransition(
-                          position: offsetAnimation,
-                          child: child,
-                        );
-                      },
-                      child: !isHome
-                          ? const Padding(
-                              padding: EdgeInsets.only(left: 96),
-                              key: ValueKey('player_bar_visible'),
-                              child: PlayerBar(),
-                            )
-                          : const SizedBox.shrink(
-                              key: ValueKey('player_bar_hidden')),
-                    ),
+                    color: isHome ? Colors.transparent : Colors.black87,
                   ),
-                ],
-              ),
-            ),
+                ),
 
-            // 4. Навигация (NavBar)
-            const Align(
-              alignment: Alignment.centerLeft,
-              child: Padding(
-                padding: EdgeInsets.only(left: 16),
-                child: FloatingNavBar(),
-              ),
-            ),
+                // 3. Контент (набор независимых стеков для каждой вкладки)
+                Positioned.fill(
+                  child: Column(
+                    children: [
+                      Expanded(
+                        child: Stack(
+                          children: rootSections
+                              .map((root) => _buildRootBucket(context, root))
+                              .toList(),
+                        ),
+                      ),
+                      _buildAnimatedPlayerBar(isHome),
+                    ],
+                  ),
+                ),
 
-            // 5. Кнопка "Назад"
-            _FloatingBackButton(),
-          ],
+                // 4. Навигация (NavBar)
+                const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Padding(
+                    padding: EdgeInsets.only(left: 16),
+                    child: FloatingNavBar(),
+                  ),
+                ),
+
+                // 5. Кнопка "Назад"
+                _FloatingBackButton(),
+              ],
+            ),
+          ),
         ),
+      );
+    });
+  }
+
+  Widget _buildRootBucket(BuildContext context, AppSection root) {
+    return Watch((context) {
+      final activeRoot = currentRootSignal.watch(context);
+      final stack = rootStacksSignal.watch(context)[root] ?? [NavState(root)];
+      final isVisible = activeRoot == root;
+
+      return Offstage(
+        offstage: !isVisible,
+        child: TickerMode(
+          enabled: isVisible,
+          child: Stack(
+            children: _buildWindowStack(stack),
+          ),
+        ),
+      );
+    });
+  }
+
+  Widget _buildAnimatedPlayerBar(bool isHome) {
+    return AnimatedSize(
+      duration: const Duration(milliseconds: 500),
+      curve: Curves.easeOutCubic,
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 500),
+        reverseDuration: const Duration(milliseconds: 400),
+        switchInCurve: Curves.easeOutCubic,
+        switchOutCurve: Curves.easeInCubic,
+        transitionBuilder: (child, animation) {
+          final offsetAnimation = Tween<Offset>(
+            begin: const Offset(0, 1),
+            end: Offset.zero,
+          ).animate(animation);
+          return SlideTransition(
+            position: offsetAnimation,
+            child: child,
+          );
+        },
+        child: !isHome
+            ? const Padding(
+                padding: EdgeInsets.only(left: 96),
+                key: ValueKey('player_bar_visible'),
+                child: PlayerBar(),
+              )
+            : const SizedBox.shrink(key: ValueKey('player_bar_hidden')),
       ),
     );
   }
@@ -104,9 +138,7 @@ class AppLayout extends StatelessWidget {
       final state = entry.value;
       final isLast = index == stack.length - 1;
 
-      // Оптимизация: отключаем рендеринг и анимации для экранов,
-      // которые находятся глубоко в стеке (оставляем только текущий и предыдущий).
-      // Это кардинально экономит CPU/GPU, сохраняя при этом State (скролл, инпуты).
+      // Оптимизация: оставляем только текущий и предыдущий экраны в стеке вкладки
       final isDeeplyHidden = index < stack.length - 2;
 
       return Offstage(
@@ -120,7 +152,7 @@ class AppLayout extends StatelessWidget {
             curve: Curves.easeInOut,
             child: IgnorePointer(
               ignoring: !isLast,
-              child: _buildWindowContent(state),
+              child: _buildWindowContent(state, index),
             ),
           ),
         ),
@@ -128,9 +160,12 @@ class AppLayout extends StatelessWidget {
     }).toList();
   }
 
-  Widget _buildWindowContent(NavState state) {
+  Widget _buildWindowContent(NavState state, int index) {
     final isRoot = state.section == AppSection.home;
-    final child = _mapSectionToWidget(state);
+    final child = KeyedSubtree(
+      key: PageStorageKey('scroll_${state.section}_${state.id}_$index'),
+      child: _mapSectionToWidget(state),
+    );
 
     return isRoot
         ? child

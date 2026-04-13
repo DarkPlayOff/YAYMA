@@ -25,7 +25,13 @@ class _LibraryViewState extends State<LibraryView>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    final currentSection = navStackSignal.value.last.section;
+    final initialIndex = currentSection == AppSection.playlists ? 1 : 0;
+    _tabController = TabController(
+      length: 2,
+      vsync: this,
+      initialIndex: initialIndex,
+    );
     _searchController.text = librarySearchQuerySignal.value;
     _tabController.addListener(() {
       if (mounted) setState(() {});
