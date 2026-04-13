@@ -2,8 +2,8 @@
 cmake_minimum_required(VERSION 3.14)
 project(yayma LANGUAGES CXX)
 
-# Use lld linker for windows
-set(CMAKE_LINKER "lld-link" CACHE FILEPATH "Linker" FORCE)
+# Use mold linker for windows
+set(CMAKE_LINKER "mold-link" CACHE FILEPATH "Linker" FORCE)
 
 # The name of the executable created for the application. Change this to change
 # the on-disk name of your application.
