@@ -1,4 +1,4 @@
-name: Manual Arch Build (YAYMA)
+name: Manual Build
 
 on:
   workflow_dispatch:
@@ -12,7 +12,7 @@ jobs:
       - name: System Init
         run: |
           pacman -Syu --noconfirm
-          pacman -S --noconfirm base-devel git cmake ninja pkg-config gtk3 libsecret libsoup3 unzip curl wget clang llvm wpewebkit wpebackend-fdo libwpe rustup alsa-lib
+          pacman -S --noconfirm base-devel git cmake ninja pkg-config gtk3 libsecret libsoup3 unzip curl wget clang llvm webkit2gtk-4.1 rustup alsa-lib
 
       - name: Checkout
         uses: actions/checkout@v4
@@ -57,10 +57,13 @@ jobs:
           flutter build linux --release --no-pub
 
       - name: Archive
-        run: tar -czvf linux_release.tar.gz -C frontend/build/linux/x64/release/bundle/ .
+        run: |
+          tar -czvf linux_release.tar.gz -C frontend/build/linux/x64/release/bundle/ .
 
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: linux_release
+          name: linux_release_tar
           path: linux_release.tar.gz
+          compression-level: 0
+
