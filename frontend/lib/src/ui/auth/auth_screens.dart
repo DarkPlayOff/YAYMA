@@ -1,8 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:signals_flutter/signals_flutter.dart';
+import 'package:webview_all/webview_all.dart';
 import 'package:yayma/src/providers/auth_provider.dart';
 import 'package:yayma/src/rust/api/auth.dart' as rust;
 import 'package:yayma/src/rust/api/playback.dart' as rust;
@@ -69,6 +69,17 @@ class _LoginScreenState extends State<LoginScreen> {
     ));
   }
 
+  void _handleLogin(String val) {
+    var token = val.trim();
+    final match = RegExp(r'access_token=([^&]+)').firstMatch(token);
+    if (match != null) {
+      token = match.group(1)!;
+    }
+    if (token.isNotEmpty) {
+      unawaited(login(token));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -108,14 +119,15 @@ class _LoginScreenState extends State<LoginScreen> {
                     style: TextStyle(color: Colors.white54),
                   ),
                   const SizedBox(height: 32),
-                  ElevatedButton(
+                  ElevatedButton.icon(
                     onPressed: _showWebView,
+                    icon: const Icon(Icons.open_in_browser_rounded),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Theme.of(context).colorScheme.primary,
                       foregroundColor: Colors.black,
                       minimumSize: const Size(double.infinity, 56),
                     ),
-                    child: const Text(
+                    label: const Text(
                       'ОТКРЫТЬ ОКНО ВХОДА',
                       style: TextStyle(fontWeight: FontWeight.bold),
                     ),
@@ -128,7 +140,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         Padding(
                           padding: EdgeInsets.symmetric(horizontal: 16),
                           child: Text(
-                            'ИЛИ',
+                            'ИЛИ ВВЕДИТЕ ТОКЕН',
                             style: TextStyle(
                               color: Colors.white24,
                               fontSize: 12,
@@ -142,8 +154,8 @@ class _LoginScreenState extends State<LoginScreen> {
                   TextField(
                     controller: _tokenController,
                     decoration: InputDecoration(
-                      labelText: 'Вставить OAuth токен',
-                      hintText: 'y0_AgAAA...',
+                      labelText: 'Ссылка или OAuth токен',
+                      hintText: 'https://music.yandex.ru/#access_token=y0_...',
                       border: const OutlineInputBorder(),
                       suffixIcon: IconButton(
                         icon: const Icon(Icons.login_rounded),
@@ -160,12 +172,6 @@ class _LoginScreenState extends State<LoginScreen> {
       ),
     );
   }
-
-  void _handleLogin(String val) {
-    if (val.trim().isNotEmpty) {
-      unawaited(login(val.trim()));
-    }
-  }
 }
 
 class YandexLoginDialog extends StatefulWidget {
@@ -176,11 +182,67 @@ class YandexLoginDialog extends StatefulWidget {
 }
 
 class _YandexLoginDialogState extends State<YandexLoginDialog> {
-  InAppWebViewController? _webViewController;
+  late final WebViewController _controller;
   bool _isFinalized = false;
   bool _isFetchingToken = false;
-
   static final _tokenRegExp = RegExp('access_token=(y0_[^&]+)');
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36')
+      ..setNavigationDelegate(
+        NavigationDelegate(
+          onPageStarted: (String url) => _parseToken(url),
+          onUrlChange: (UrlChange change) {
+            if (change.url != null) {
+              _parseToken(change.url!);
+            }
+          },
+          onNavigationRequest: (NavigationRequest request) {
+            _parseToken(request.url);
+            return NavigationDecision.navigate;
+          },
+        ),
+      )
+      ..loadRequest(Uri.parse('https://passport.yandex.ru/pwl-yandex/auth/'));
+  }
+
+  Future<void> _parseToken(String urlString) async {
+    if (_isFinalized) return;
+
+    // 1. ПЕРЕХВАТ ИЗ URL (OAuth редирект)
+    final match = _tokenRegExp.firstMatch(urlString);
+    if (match != null) {
+      final token = match.group(1);
+      if (token != null) {
+        await _handleFoundToken(token);
+        return;
+      }
+    }
+
+    // 2. ЕСЛИ В ПРОФИЛЕ И ЕЩЕ НЕ ПОШЛИ ЗА ТОКЕНОМ - ИДЕМ ЗА ТОКЕНОМ
+    if (!_isFetchingToken &&
+        (urlString.startsWith('https://id.yandex.ru') ||
+            urlString.startsWith('https://passport.yandex.ru/profile'))) {
+      debugPrint('🔍 Authorized! Getting token via official desktop client...');
+      _isFetchingToken = true;
+
+      await _controller.loadRequest(Uri.parse('https://oauth.yandex.ru/authorize?response_type=token&client_id=23cabbbdc6cd418abb4b39c32c41195d'));
+    }
+  }
+
+  Future<void> _handleFoundToken(String token) async {
+    if (_isFinalized) return;
+    _isFinalized = true;
+    await login(token);
+
+    if (mounted) {
+      Navigator.of(context).pop();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -195,26 +257,7 @@ class _YandexLoginDialogState extends State<YandexLoginDialog> {
                 borderRadius: const BorderRadius.vertical(
                   top: Radius.circular(12),
                 ),
-                child: InAppWebView(
-                  initialUrlRequest: URLRequest(
-                    url: WebUri(
-                      'https://passport.yandex.ru/pwl-yandex/auth/',
-                    ),
-                  ),
-                  initialSettings: InAppWebViewSettings(
-                    userAgent:
-                        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-                    preferredContentMode: UserPreferredContentMode.DESKTOP,
-                  ),
-                  onWebViewCreated: (controller) =>
-                      _webViewController = controller,
-                  onLoadStop: (controller, url) => unawaited(_parseToken(url)),
-                  onUpdateVisitedHistory: (c, url, _) => unawaited(_parseToken(url)),
-                  onPermissionRequest: (c, r) async => PermissionResponse(
-                    resources: r.resources,
-                    action: PermissionResponseAction.GRANT,
-                  ),
-                ),
+                child: WebViewWidget(controller: _controller),
               ),
             ),
             Container(
@@ -223,7 +266,7 @@ class _YandexLoginDialogState extends State<YandexLoginDialog> {
                 children: [
                   TextButton.icon(
                     onPressed: () async {
-                      await CookieManager.instance().deleteAllCookies();
+                      await WebViewCookieManager().clearCookies();
                       if (context.mounted) Navigator.pop(context);
                     },
                     icon: const Icon(
@@ -247,50 +290,5 @@ class _YandexLoginDialogState extends State<YandexLoginDialog> {
         ),
       ),
     );
-  }
-
-  Future<void> _parseToken(WebUri? url) async {
-    if (url == null || _isFinalized) return;
-    final urlString = url.toString();
-
-    // 1. ПЕРЕХВАТ ИЗ URL (OAuth редирект)
-    final match = _tokenRegExp.firstMatch(urlString);
-    if (match != null) {
-      final token = match.group(1);
-      if (token != null) {
-        await _handleFoundToken(token);
-        return;
-      }
-    }
-
-    // 2. ЕСЛИ В ПРОФИЛЕ И ЕЩЕ НЕ ПОШЛИ ЗА ТОКЕНОМ - ИДЕМ ЗА ТОКЕНОМ
-    if (!_isFetchingToken &&
-        (urlString.startsWith('https://id.yandex.ru') ||
-            urlString.startsWith('https://passport.yandex.ru/profile'))) {
-      debugPrint('🔍 Authorized! Getting token via official desktop client...');
-      _isFetchingToken = true;
-
-      await _webViewController?.loadUrl(
-        urlRequest: URLRequest(
-          url: WebUri(
-            'https://oauth.yandex.ru/authorize?response_type=token&client_id=97fe03033fa34407ac9bcf91d5afed5b',
-          ),
-        ),
-      );
-    }
-  }
-
-  Future<void> _handleFoundToken(String token) async {
-    if (_isFinalized) return;
-    _isFinalized = true;
-    await login(token);
-
-    if (_webViewController != null) {
-      await _webViewController?.stopLoading();
-    }
-
-    if (mounted) {
-      Navigator.of(context).pop();
-    }
   }
 }

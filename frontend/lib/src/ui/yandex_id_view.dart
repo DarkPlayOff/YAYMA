@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'package:webview_all/webview_all.dart';
 import 'package:yayma/src/providers/navigation_provider.dart';
 
 class YandexIdView extends StatefulWidget {
@@ -11,7 +11,16 @@ class YandexIdView extends StatefulWidget {
 }
 
 class _YandexIdViewState extends State<YandexIdView> {
-  InAppWebViewController? _webViewController;
+  late final WebViewController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setBackgroundColor(Colors.transparent)
+      ..loadRequest(Uri.parse('https://id.yandex.ru'));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -38,8 +47,8 @@ class _YandexIdViewState extends State<YandexIdView> {
                   ),
                   onPressed: () {
                     unawaited(() async {
-                      if (await _webViewController?.canGoBack() ?? false) {
-                        await _webViewController?.goBack();
+                      if (await _controller.canGoBack()) {
+                        await _controller.goBack();
                       }
                     }());
                   },
@@ -52,8 +61,8 @@ class _YandexIdViewState extends State<YandexIdView> {
                   ),
                   onPressed: () {
                     unawaited(() async {
-                      if (await _webViewController?.canGoForward() ?? false) {
-                        await _webViewController?.goForward();
+                      if (await _controller.canGoForward()) {
+                        await _controller.goForward();
                       }
                     }());
                   },
@@ -70,18 +79,7 @@ class _YandexIdViewState extends State<YandexIdView> {
               borderRadius: const BorderRadius.vertical(
                 top: Radius.circular(24),
               ),
-              child: InAppWebView(
-                initialUrlRequest: URLRequest(
-                  url: WebUri('https://id.yandex.ru'),
-                ),
-                initialSettings: InAppWebViewSettings(
-                  transparentBackground: true,
-                  supportZoom: false,
-                ),
-                onWebViewCreated: (controller) {
-                  _webViewController = controller;
-                },
-              ),
+              child: WebViewWidget(controller: _controller),
             ),
           ),
         ],
