@@ -1,10 +1,10 @@
-name: Manual Build
+name: Debug Build
 
 on:
   workflow_dispatch:
 
 jobs:
-  build-linux:
+  build-linux-debug:
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout
@@ -27,7 +27,7 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             frontend/target/
-          key: rust-frb-2.12.0-linux-${{ hashFiles('**/Cargo.lock') }}
+          key: rust-frb-debug-linux-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Install FRB Codegen
         run: |
@@ -47,20 +47,19 @@ jobs:
           flutter config --no-analytics
           flutter pub get
           flutter_rust_bridge_codegen generate
-          flutter build linux --release --no-pub
+          flutter build linux --debug --no-pub
 
       - name: Archive
         run: |
-          tar -czvf linux_release.tar.gz -C frontend/build/linux/x64/release/bundle/ .
+          tar -czvf linux_debug.tar.gz -C frontend/build/linux/x64/debug/bundle/ .
 
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: linux_release_tar
-          path: linux_release.tar.gz
-          compression-level: 0
+          name: linux_debug_tar
+          path: linux_debug.tar.gz
 
-  build-windows:
+  build-windows-debug:
     runs-on: windows-latest
     steps:
       - name: Checkout
@@ -78,7 +77,7 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             frontend/target/
-          key: rust-frb-2.12.0-windows-${{ hashFiles('**/Cargo.lock') }}
+          key: rust-frb-debug-windows-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Install FRB Codegen
         run: |
@@ -99,18 +98,16 @@ jobs:
           flutter config --no-analytics
           flutter pub get
           flutter_rust_bridge_codegen generate
-          flutter build windows --release --no-pub
+          flutter build windows --debug --no-pub
         shell: powershell
 
       - name: Archive
         run: |
-          Compress-Archive -Path "frontend\build\windows\x64\runner\Release\*" -DestinationPath "windows_release.zip"
+          Compress-Archive -Path "frontend\build\windows\x64\runner\Debug\*" -DestinationPath "windows_debug.zip"
         shell: powershell
 
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: windows_release_zip
-          path: windows_release.zip
-          compression-level: 0
-
+          name: windows_debug_zip
+          path: windows_debug.zip
