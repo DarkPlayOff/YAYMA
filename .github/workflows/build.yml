@@ -1,4 +1,4 @@
-name: Manual Build
+name: Manual Arch Build (YAYMA)
 
 on:
   workflow_dispatch:
@@ -21,24 +21,26 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
+            ~/.cargo/bin/
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: rust-target-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: rust-target-
+          key: rust-frb-2.12.0-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: rust-frb-2.12.0-
 
       - name: Setup Rust
         run: |
           rustup default stable
           echo "LIBCLANG_PATH=/usr/lib" >> $GITHUB_ENV
           echo "CLANG_PATH=/usr/bin/clang" >> $GITHUB_ENV
+          echo "/root/.cargo/bin" >> $GITHUB_PATH
 
-      - name: Install Prebuilt FRB Codegen
+      - name: Install FRB Codegen
         run: |
-          mkdir -p /usr/local/bin
-          curl -L https://github.com | tar xz -C /usr/local/bin
-          chmod +x /usr/local/bin/flutter_rust_bridge_codegen
+          if ! command -v flutter_rust_bridge_codegen &> /dev/null; then
+            cargo install flutter_rust_bridge_codegen --version 2.12.0
+          fi
 
       - name: Install Flutter
         run: |
@@ -47,7 +49,7 @@ jobs:
 
       - name: Build
         run: |
-          export PATH="$PATH:/opt/flutter/bin:/usr/local/bin"
+          export PATH="$PATH:/opt/flutter/bin:/root/.cargo/bin"
           flutter config --no-analytics
           flutter pub get
           flutter_rust_bridge_codegen generate
