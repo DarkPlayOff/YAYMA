@@ -1,8 +1,0 @@
-[target.x86_64-unknown-linux-gnu]
-rustflags = ["-C", "link-arg=-fuse-ld=mold"]
-
-[target.x86_64-pc-windows-msvc]
-rustflags = ["-C", "link-arg=-fuse-ld=mold-link"]
-
-[target.aarch64-unknown-linux-gnu]
-rustflags = ["-C", "link-arg=-fuse-ld=mold"]

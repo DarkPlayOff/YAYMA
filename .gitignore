@@ -1,5 +1,6 @@
 /target
 .env
+.cargo
 frontend/lib/src/rust/frb_generated.web.dart
 
 # Miscellaneous

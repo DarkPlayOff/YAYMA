@@ -13,7 +13,7 @@ jobs:
       - name: System Init
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential cmake ninja-build pkg-config libgtk-3-dev libsecret-1-dev libsoup-3.0-dev libwebkit2gtk-4.1-dev libasound2-dev curl git unzip clang libclang-dev llvm-dev mold
+          sudo apt-get install -y build-essential cmake ninja-build pkg-config libgtk-3-dev libsecret-1-dev libsoup-3.0-dev libwebkit2gtk-4.1-dev libasound2-dev curl git unzip clang libclang-dev llvm-dev
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -41,19 +41,11 @@ jobs:
           cargo binstall -y flutter_rust_bridge_codegen --version 2.12.0
           cargo binstall -y cargo-expand
 
-      - name: Cache Flutter
-        uses: actions/cache@v4
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
         with:
-          path: ~/flutter
-          key: flutter-stable-linux
-
-      - name: Install Flutter
-        run: |
-          if [ ! -d "$HOME/flutter" ]; then
-            git clone --depth 1 -b stable https://github.com/flutter/flutter $HOME/flutter
-          fi
-          echo "$HOME/flutter/bin" >> $GITHUB_PATH
-          $HOME/flutter/bin/flutter precache --linux --no-android --no-ios --no-web --no-fuchsia
+          channel: 'stable'
+          cache: true
 
       - name: Build
         working-directory: ./frontend
@@ -79,18 +71,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: System Init
-        run: |
-          # Download latest mold release using GitHub CLI
-          gh release download --repo rui314/mold --pattern "*x86_64-windows.zip" --output mold.zip
-          Expand-Archive mold.zip -DestinationPath $env:USERPROFILE\mold
-          # Find the bin directory dynamically
-          $binDir = Get-ChildItem -Path "$env:USERPROFILE\mold" -Recurse -Filter "bin" | Select-Object -First 1 -ExpandProperty FullName
-          echo "$binDir" >> $env:GITHUB_PATH
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: powershell
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -120,20 +100,11 @@ jobs:
           cargo binstall -y cargo-expand
         shell: powershell
 
-      - name: Cache Flutter
-        uses: actions/cache@v4
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
         with:
-          path: $env:USERPROFILE\flutter
-          key: flutter-stable-windows
-
-      - name: Install Flutter
-        run: |
-          if ((Test-Path "$env:USERPROFILE\flutter") -eq $false) {
-            git clone --depth 1 -b stable https://github.com/flutter/flutter $env:USERPROFILE\flutter
-          }
-          echo "$env:USERPROFILE\flutter\bin" >> $env:GITHUB_PATH
-          & "$env:USERPROFILE\flutter\bin\flutter.bat" precache --windows --no-android --no-ios --no-web --no-fuchsia
-        shell: powershell
+          channel: 'stable'
+          cache: true
 
       - name: Build
         working-directory: ./frontend
