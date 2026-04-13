@@ -1,69 +1,69 @@
-name: Build and Package
+name: Manual Build
 
 on:
   workflow_dispatch:
 
 jobs:
-  build:
-    name: Build for ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [windows-latest, ubuntu-latest]
-        include:
-          - os: windows-latest
-            platform: windows
-            artifact_name: yamusic-windows
-          - os: ubuntu-latest
-            platform: linux
-            artifact_name: yamusic-linux
-
+  build-arch:
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:latest
     steps:
-      - name: Checkout code
+      - name: System Init
+        run: |
+          pacman -Syu --noconfirm
+          pacman -S --noconfirm base-devel git cmake ninja pkg-config gtk3 libsecret libsoup3 unzip curl wget clang llvm webkit2gtk-4.1 rustup alsa-lib
+
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+      - name: Cache Rust
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            frontend/target/
+          key: rust-frb-2.12.0-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Setup Rust
+        run: |
+          rustup default stable
+          echo "LIBCLANG_PATH=/usr/lib" >> $GITHUB_ENV
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+      - name: Install FRB Codegen
+        run: |
+          rustup default stable
+          if [ ! -f "$HOME/.cargo/bin/flutter_rust_bridge_codegen" ]; then
+            cargo install flutter_rust_bridge_codegen --version 2.12.0
+          fi
 
       - name: Install Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          channel: 'stable'
-
-      - name: Install Linux dependencies
-        if: matrix.os == 'ubuntu-latest'
         run: |
-          sudo apt-get update
-          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libstdc++-12-dev
+          git clone --depth 1 -b stable https://github.com/flutter/flutter /opt/flutter
+          echo "/opt/flutter/bin" >> $GITHUB_PATH
+          /opt/flutter/bin/flutter precache --linux --no-android --no-ios --no-web --no-fuchsia
 
-      - name: Install flutter_rust_bridge_codegen
-        run: cargo install flutter_rust_bridge_codegen --version 2.12.0
-
-      - name: Generate Code
-        working-directory: frontend
+      - name: Build
+        working-directory: ./frontend
         run: |
+          export PATH="$PATH:/opt/flutter/bin:$HOME/.cargo/bin"
+          flutter config --no-analytics
+          flutter pub get
           flutter_rust_bridge_codegen generate
-          dart run build_runner build --delete-conflicting-outputs
+          flutter build linux --release --no-pub
 
-      - name: Build Flutter App
-        working-directory: frontend
-        run: flutter build ${{ matrix.platform }} --release --obfuscate --split-debug-info=debug_info
-
-      - name: Package Windows
-        if: matrix.os == 'windows-latest'
-        shell: pwsh
+      - name: Archive
         run: |
-          cd frontend/build/windows/x64/runner/Release
-          tar -czvf ../../../../../${{ matrix.artifact_name }}.tar.gz .
+          tar -czvf linux_release.tar.gz -C frontend/build/linux/x64/release/bundle/ .
 
-      - name: Package Linux
-        if: matrix.os == 'ubuntu-latest'
-        run: |
-          cd frontend/build/linux/x64/release/bundle
-          tar -czvf ../../../../../${{ matrix.artifact_name }}.tar.gz .
-
-      - name: Upload Artifact
+      - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact_name }}
-          path: ${{ matrix.artifact_name }}.tar.gz
+          name: linux_release_tar
+          path: linux_release.tar.gz
+          compression-level: 0
+
