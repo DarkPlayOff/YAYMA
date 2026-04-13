@@ -53,7 +53,7 @@ jobs:
       - name: Install Flutter
         if: steps.cache-flutter.outputs.cache-hit != 'true'
         run: |
-          git clone --depth 1 https://github.com -b stable /opt/flutter
+          git clone --depth 1 https://github.com/flutter/flutter -b stable /opt/flutter
           /opt/flutter/bin/flutter precache --linux --no-android --no-ios --no-web --no-fuchsia
 
       - name: Build Project
