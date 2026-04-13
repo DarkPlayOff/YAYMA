@@ -1,4 +1,4 @@
-name: Manual Arch Build (YAYMA)
+name: Manual Build
 
 on:
   workflow_dispatch:
@@ -21,40 +21,33 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            ~/.cargo/bin/
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
             target/
-          key: rust-frb-2.12.0-${{ hashFiles('**/Cargo.lock') }}
+          key: rust-target-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: rust-target-
 
       - name: Setup Rust
         run: |
           rustup default stable
           echo "LIBCLANG_PATH=/usr/lib" >> $GITHUB_ENV
           echo "CLANG_PATH=/usr/bin/clang" >> $GITHUB_ENV
-          echo "/root/.cargo/bin" >> $GITHUB_PATH
 
-      - name: Install FRB Codegen
+      - name: Install Prebuilt FRB Codegen
         run: |
-          if ! command -v flutter_rust_bridge_codegen &> /dev/null; then
-            cargo install flutter_rust_bridge_codegen --version 2.12.0
-          fi
-
-      - name: Cache Flutter
-        id: cache-flutter
-        uses: actions/cache@v4
-        with:
-          path: /opt/flutter
-          key: flutter-linux-stable
+          mkdir -p /usr/local/bin
+          curl -L https://github.com | tar xz -C /usr/local/bin
+          chmod +x /usr/local/bin/flutter_rust_bridge_codegen
 
       - name: Install Flutter
-        if: steps.cache-flutter.outputs.cache-hit != 'true'
-        run: git clone --depth 1 --single-branch https://github.com/flutter/flutter -b stable /opt/flutter && /opt/flutter/bin/flutter precache --linux --no-android --no-ios --no-web --no-fuchsia
+        run: |
+          git clone --depth 1 --single-branch https://github.com -b stable /opt/flutter
+          /opt/flutter/bin/flutter precache --linux --no-android --no-ios --no-web --no-fuchsia
 
       - name: Build
         run: |
-          export PATH="$PATH:/opt/flutter/bin:/root/.cargo/bin"
-          cd frontend
+          export PATH="$PATH:/opt/flutter/bin:/usr/local/bin"
           flutter config --no-analytics
           flutter pub get
           flutter_rust_bridge_codegen generate
