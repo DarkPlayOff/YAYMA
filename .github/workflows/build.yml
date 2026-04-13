@@ -44,7 +44,7 @@ jobs:
 
       - name: Install Flutter
         run: |
-          git clone --depth 1 --single-branch https://github.com -b stable /opt/flutter
+          git clone --depth 1 --single-branch https://github.com/flutter/flutter -b stable /opt/flutter
           /opt/flutter/bin/flutter precache --linux --no-android --no-ios --no-web --no-fuchsia
 
       - name: Build
