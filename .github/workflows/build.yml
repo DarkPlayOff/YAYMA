@@ -33,7 +33,7 @@ jobs:
 
       - name: Install Tools
         run: |
-          git clone --depth 1 -b stable https://github.com /opt/flutter
+          git clone --depth 1 -b stable https://github.com/flutter/flutter /opt/flutter
           echo "/opt/flutter/bin" >> $GITHUB_PATH
           /root/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo install flutter_rust_bridge_codegen --version 2.12.0 || true
 
