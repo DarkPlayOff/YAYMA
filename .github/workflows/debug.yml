@@ -17,6 +17,8 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rust-src
 
       - name: Cache Rust
         uses: actions/cache@v4
@@ -29,11 +31,15 @@ jobs:
             frontend/target/
           key: rust-frb-debug-linux-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Install FRB Codegen
+      - name: Install Tools
         run: |
-          if [ ! -f "$HOME/.cargo/bin/flutter_rust_bridge_codegen" ]; then
-            cargo install flutter_rust_bridge_codegen --version 2.12.0
+          # Install binstall if not present
+          if [ ! -f "$HOME/.cargo/bin/cargo-binstall" ]; then
+            curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
           fi
+          # Install others via binstall
+          cargo binstall -y flutter_rust_bridge_codegen --version 2.12.0
+          cargo binstall -y cargo-expand
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -67,6 +73,8 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rust-src
 
       - name: Cache Rust
         uses: actions/cache@v4
@@ -79,11 +87,15 @@ jobs:
             frontend/target/
           key: rust-frb-debug-windows-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Install FRB Codegen
+      - name: Install Tools
         run: |
-          if ((Test-Path "$HOME\.cargo\bin\flutter_rust_bridge_codegen.exe") -eq $false) {
-            cargo install flutter_rust_bridge_codegen --version 2.12.0
+          # Install binstall
+          if ((Test-Path "$HOME\.cargo\bin\cargo-binstall.exe") -eq $false) {
+            Set-ExecutionPolicy RemoteSigned -Scope Process ; iex (iwr "https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.ps1").Content
           }
+          # Install others via binstall
+          cargo binstall -y flutter_rust_bridge_codegen --version 2.12.0
+          cargo binstall -y cargo-expand
         shell: powershell
 
       - name: Setup Flutter
