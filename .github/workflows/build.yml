@@ -21,33 +21,21 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
+            /root/.cargo/
+            frontend/target/
           key: rust-frb-2.12.0-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: rust-frb-2.12.0-
 
       - name: Setup Rust
         run: |
           rustup default stable
           echo "LIBCLANG_PATH=/usr/lib" >> $GITHUB_ENV
-          echo "CLANG_PATH=/usr/bin/clang" >> $GITHUB_ENV
           echo "/root/.cargo/bin" >> $GITHUB_PATH
 
-      - name: Install FRB Codegen
+      - name: Install Tools
         run: |
-          if ! command -v flutter_rust_bridge_codegen &> /dev/null; then
-            cargo install flutter_rust_bridge_codegen --version 2.12.0
-          fi
-          echo "/root/.cargo/bin" >> $GITHUB_PATH
-
-      - name: Install Flutter
-        run: |
-          git clone --depth 1 --single-branch https://github.com/flutter/flutter -b stable /opt/flutter
-          /opt/flutter/bin/flutter precache --linux --no-android --no-ios --no-web --no-fuchsia
+          git clone --depth 1 -b stable https://github.com /opt/flutter
           echo "/opt/flutter/bin" >> $GITHUB_PATH
+          /root/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo install flutter_rust_bridge_codegen --version 2.12.0 || true
 
       - name: Build
         working-directory: ./frontend
@@ -55,11 +43,11 @@ jobs:
           export PATH="$PATH:/opt/flutter/bin:/root/.cargo/bin"
           flutter config --no-analytics
           flutter pub get
-          flutter_rust_bridge_codegen generate
+          /root/.cargo/bin/flutter_rust_bridge_codegen generate
           flutter build linux --release --no-pub
 
       - name: Archive
-        run: tar -czvf linux_release.tar.gz -C build/linux/x64/release/bundle/ .
+        run: tar -czvf linux_release.tar.gz -C frontend/build/linux/x64/release/bundle/ .
 
       - name: Upload
         uses: actions/upload-artifact@v4
