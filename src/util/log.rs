@@ -55,10 +55,10 @@ pub fn initialize_logging() -> Result<()> {
         .with_ansi(true)
         .with_filter(tracing_subscriber::filter::EnvFilter::new("info"));
 
-    tracing_subscriber::registry()
+    let _ = tracing_subscriber::registry()
         .with(file_subscriber)
         .with(console_subscriber)
-        .init();
+        .try_init();
 
     Ok(())
 }

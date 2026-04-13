@@ -21,13 +21,17 @@ pub async fn initialize_app(
 /// Инициализация базовой инфраструктуры (логирование, паник-хук, БД)
 /// Вызывается один раз при старте FRB
 pub fn initialize_infrastructure() {
-    flutter_rust_bridge::setup_default_user_utils();
-    crate::util::hook::set_panic_hook();
-    let _ = crate::util::log::initialize_logging();
+    static ONCE: std::sync::Once = std::sync::Once::new();
 
-    if let Err(e) = ensure_database_initialized() {
-        eprintln!("Failed to initialize database: {e}");
-    }
+    ONCE.call_once(|| {
+        flutter_rust_bridge::setup_default_user_utils();
+        crate::util::hook::set_panic_hook();
+        let _ = crate::util::log::initialize_logging();
+
+        if let Err(e) = ensure_database_initialized() {
+            eprintln!("Failed to initialize database: {e}");
+        }
+    });
 }
 
 /// Остановка текущей сессии
