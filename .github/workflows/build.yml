@@ -48,6 +48,7 @@ jobs:
           /opt/flutter/bin/flutter precache --linux --no-android --no-ios --no-web --no-fuchsia
 
       - name: Build
+        working-directory: ./frontend
         run: |
           export PATH="$PATH:/opt/flutter/bin:/root/.cargo/bin"
           flutter config --no-analytics
