@@ -73,10 +73,9 @@ pub trait SessionExt {
 
 impl SessionExt for Session {
     fn station_id(&self) -> &str {
-        self.wave
-            .as_ref()
-            .map(|w| w.station_id.as_str())
-            .or(self.radio_session_id.as_deref())
+        self.radio_session_id
+            .as_deref()
+            .or(self.wave.as_ref().map(|w| w.station_id.as_str()))
             .unwrap_or("user:onyourwave")
     }
 

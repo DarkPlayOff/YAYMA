@@ -485,7 +485,7 @@ impl AudioSystem {
 
     pub fn send_wave_track_started(&self, track: &Track) {
         let track_id = as_wave_seed(track);
-        self.send_wave_feedback("trackStarted", Some(track_id), Some(Duration::from_secs(0)), true);
+        self.send_wave_feedback("trackStarted", Some(track_id), None, true);
     }
 
     pub fn send_wave_like(&mut self, track: &Track) {
