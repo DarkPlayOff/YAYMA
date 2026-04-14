@@ -6,6 +6,7 @@ use tokio::sync::{Notify, OnceCell};
 
 pub mod context;
 pub mod init;
+pub mod logic;
 pub mod session;
 pub mod settings;
 pub mod workers;
