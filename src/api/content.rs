@@ -4,6 +4,8 @@ use crate::api::models::{
     StationItemDto, TrackDetailsDto, format_cover,
 };
 use crate::app::AppContext;
+use crate::storage::cache::get_http_cache;
+use crate::util::flac::extract_native_flac;
 use foldhash::HashMapExt;
 
 async fn get_liked_snapshot(
@@ -150,9 +152,35 @@ pub async fn download_track(ctx: &AppContext, track_id: String) -> Result<String
         .await
         .map_err(|_| AppError::NetworkError)?;
     let bytes = response.bytes().await.map_err(|_| AppError::NetworkError)?;
-    tokio::fs::write(&dest_path, &bytes)
+
+    if ext == "flac" && !bytes.starts_with(b"fLaC") {
+        let temp_path = dest_path.with_extension("m4a_tmp");
+        tokio::fs::write(&temp_path, &bytes)
+            .await
+            .map_err(|e| AppError::DbError(e.to_string()))?;
+
+        let input_path_str = temp_path.to_string_lossy().to_string();
+        let output_path_str = dest_path.to_string_lossy().to_string();
+
+        let extraction_result = tokio::task::spawn_blocking(move || {
+            extract_native_flac(&input_path_str, &output_path_str)
+        })
         .await
-        .map_err(|e| AppError::DbError(e.to_string()))?;
+        .map_err(|e| AppError::Unknown(e.to_string()))?;
+
+        let _ = tokio::fs::remove_file(&temp_path).await;
+
+        if let Err(e) = extraction_result {
+            tracing::error!("Failed to extract native FLAC: {}", e);
+            tokio::fs::write(&dest_path, &bytes)
+                .await
+                .map_err(|e| AppError::DbError(e.to_string()))?;
+        }
+    } else {
+        tokio::fs::write(&dest_path, &bytes)
+            .await
+            .map_err(|e| AppError::DbError(e.to_string()))?;
+    }
 
     let _ = embed_metadata(&dest_path, &dto).await;
     Ok(dest_path.to_string_lossy().to_string())
@@ -184,8 +212,9 @@ async fn embed_metadata(
         } else {
             url.clone()
         };
-        if let Ok(resp) = reqwest::get(https_url).await {
-            resp.bytes().await.ok().map(|b| b.to_vec())
+        let cache = get_http_cache().await;
+        if let Ok(path) = cache.get_file(&https_url).await {
+            tokio::fs::read(path).await.ok()
         } else {
             None
         }
