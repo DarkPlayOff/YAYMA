@@ -157,10 +157,15 @@ impl HttpCache {
             .and_then(|v| v.to_str().ok())
             .map(|s| s.to_string());
 
-        let bytes = response.bytes().await?;
-        let size = bytes.len() as u64;
+        let size = response.content_length().unwrap_or(0);
 
-        fs::write(&file_path, &bytes).await?;
+        // Stream the response to file to avoid loading everything into RAM
+        let mut file = fs::File::create(&file_path).await?;
+        let mut response = response;
+        while let Ok(Some(chunk)) = response.chunk().await {
+            tokio::io::AsyncWriteExt::write_all(&mut file, &chunk).await?;
+        }
+        tokio::io::AsyncWriteExt::flush(&mut file).await?;
 
         // Update DB
         if let Some(db_arc) = get_db() {
