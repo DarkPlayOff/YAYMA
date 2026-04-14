@@ -13,10 +13,12 @@ class TrackDetailsDialog extends StatelessWidget {
   const TrackDetailsDialog({required this.trackId, super.key});
 
   static void show(BuildContext context, String trackId) {
-    unawaited(showDialog<void>(
-      context: context,
-      builder: (context) => TrackDetailsDialog(trackId: trackId),
-    ));
+    unawaited(
+      showDialog<void>(
+        context: context,
+        builder: (context) => TrackDetailsDialog(trackId: trackId),
+      ),
+    );
   }
 
   @override
@@ -53,7 +55,10 @@ class TrackDetailsDialog extends StatelessWidget {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: Text('Закрыть', style: TextStyle(color: Theme.of(context).colorScheme.primary)),
+          child: Text(
+            'Закрыть',
+            style: TextStyle(color: Theme.of(context).colorScheme.primary),
+          ),
         ),
       ],
     );

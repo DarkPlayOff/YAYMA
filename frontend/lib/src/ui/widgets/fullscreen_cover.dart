@@ -8,7 +8,9 @@ class FullscreenCoverDialog extends StatelessWidget {
 
   static Future<void> show(BuildContext context, String imageUrl) {
     // Пытаемся получить версию высокого качества
-    final highResUrl = imageUrl.replaceFirst('200x200', '1000x1000').replaceFirst('400x400', '1000x1000');
+    final highResUrl = imageUrl
+        .replaceFirst('200x200', '1000x1000')
+        .replaceFirst('400x400', '1000x1000');
 
     return showDialog<void>(
       context: context,
@@ -28,7 +30,7 @@ class FullscreenCoverDialog extends StatelessWidget {
           children: [
             Positioned.fill(
               child: Padding(
-                padding: const EdgeInsets.all(16.0),
+                padding: const EdgeInsets.all(16),
                 child: Center(
                   child: Hero(
                     tag: imageUrl,
@@ -49,7 +51,11 @@ class FullscreenCoverDialog extends StatelessWidget {
               top: 24,
               right: 24,
               child: IconButton(
-                icon: const Icon(Icons.close_rounded, size: 32, color: Colors.white70),
+                icon: const Icon(
+                  Icons.close_rounded,
+                  size: 32,
+                  color: Colors.white70,
+                ),
                 onPressed: () => Navigator.of(context).pop(),
               ),
             ),

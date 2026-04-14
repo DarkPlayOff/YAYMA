@@ -1,5 +1,5 @@
 use foldhash::HashMap;
-use foldhash::{HashMapExt};
+use foldhash::HashMapExt;
 use std::sync::Arc;
 use std::time::Duration;
 

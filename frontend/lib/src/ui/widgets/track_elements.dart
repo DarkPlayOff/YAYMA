@@ -210,4 +210,3 @@ class TrackCover extends StatelessWidget {
     );
   }
 }
-

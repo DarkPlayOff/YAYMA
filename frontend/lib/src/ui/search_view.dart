@@ -98,7 +98,8 @@ class _SearchViewState extends State<SearchView> {
               return _buildResults(results);
             },
             loading: () => const CommonLoadingWidget(),
-            error: (Object e, StackTrace? _) => CommonErrorWidget(error: e.toString()),
+            error: (Object e, StackTrace? _) =>
+                CommonErrorWidget(error: e.toString()),
           ),
         ),
       ],
@@ -131,7 +132,9 @@ class _SearchViewState extends State<SearchView> {
             height: 180,
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 32), // 32 + 8 (internal card padding) = 40
+              padding: const EdgeInsets.symmetric(
+                horizontal: 32,
+              ), // 32 + 8 (internal card padding) = 40
               itemCount: results.artists.length,
               itemBuilder: (context, i) => _buildArtistCard(results.artists[i]),
             ),
@@ -143,7 +146,9 @@ class _SearchViewState extends State<SearchView> {
             height: 240,
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 32), // 32 + 8 = 40
+              padding: const EdgeInsets.symmetric(
+                horizontal: 32,
+              ), // 32 + 8 = 40
               itemCount: results.albums.length,
               itemBuilder: (context, i) => _buildAlbumCard(results.albums[i]),
             ),
@@ -176,7 +181,10 @@ class _SearchViewState extends State<SearchView> {
           onPressed: () => AddToPlaylistDialog.show(context, track),
         ),
         IconButton(
-          icon: Icon(Icons.play_arrow_rounded, color: Theme.of(context).colorScheme.primary),
+          icon: Icon(
+            Icons.play_arrow_rounded,
+            color: Theme.of(context).colorScheme.primary,
+          ),
           onPressed: () => PlaybackController.playTrack(track.id),
         ),
       ],

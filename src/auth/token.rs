@@ -1,5 +1,5 @@
-use std::sync::{Arc, LazyLock};
 use keyring::Entry;
+use std::sync::{Arc, LazyLock};
 use yandex_music::YandexMusicClient;
 
 static SERVICE_NAME: LazyLock<String> =

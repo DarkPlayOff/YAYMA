@@ -87,8 +87,9 @@ List<LyricItem> _parseLrc(String lrc) {
 
       // Остальное время (за вычетом 1 сек перед следующей строкой) — таймер
       final timerStart = current.time + textDuration;
-      final timerDuration = duration - textDuration - const Duration(seconds: 1);
-      
+      final timerDuration =
+          duration - textDuration - const Duration(seconds: 1);
+
       result.add(LyricTimer(timerStart, timerDuration));
     } else {
       // Обычная последовательность

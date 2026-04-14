@@ -21,9 +21,14 @@ pub fn format_cover(uri: Option<String>, size: &str) -> Option<String> {
 
 #[flutter_rust_bridge::frb(ignore)]
 fn get_any_cover(t: &Track) -> Option<String> {
-    t.og_image.clone()
+    t.og_image
+        .clone()
         .or_else(|| t.cover_uri.clone())
-        .or_else(|| t.albums.first().and_then(|a| a.og_image.clone().or(a.cover_uri.clone())))
+        .or_else(|| {
+            t.albums
+                .first()
+                .and_then(|a| a.og_image.clone().or(a.cover_uri.clone()))
+        })
 }
 
 #[flutter_rust_bridge::frb(unignore)]
@@ -84,7 +89,9 @@ impl SimpleTrackDto {
         disliked_ids: &std::collections::HashSet<String, S>,
     ) -> Self {
         let track_id_base = t.id.to_base_id();
-        let (album_title, album_id) = t.albums.first()
+        let (album_title, album_id) = t
+            .albums
+            .first()
             .map(|a| (a.title.clone(), a.id.as_ref().map(|id| id.to_string())))
             .unwrap_or((None, None));
 
@@ -131,11 +138,7 @@ impl TrackDetailsDto {
         Self {
             id: t.id,
             title: t.title.take().unwrap_or_default(),
-            artists: t
-                .artists
-                .iter()
-                .map(TrackArtistDto::from_yandex)
-                .collect(),
+            artists: t.artists.iter().map(TrackArtistDto::from_yandex).collect(),
             album: album_title,
             label,
             music_authors,

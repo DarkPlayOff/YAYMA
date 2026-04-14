@@ -334,7 +334,9 @@ class _HomeViewState extends State<HomeView> {
                 color: isDisliked ? Colors.blueGrey : Colors.white38,
               ),
               onPressed: () => trackId != null
-                  ? unawaited(PlaybackController.toggleDislike(trackId: trackId))
+                  ? unawaited(
+                      PlaybackController.toggleDislike(trackId: trackId),
+                    )
                   : null,
             ),
             SizedBox(width: small ? 8 : 12),

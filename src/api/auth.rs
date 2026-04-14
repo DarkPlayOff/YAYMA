@@ -1,6 +1,6 @@
 use crate::api::models::{AppError, SavedStateDto, UserAccountDto};
-use crate::app::{AppContext, initialize_infrastructure};
 use crate::app::logic::auth as logic;
+use crate::app::{AppContext, initialize_infrastructure};
 use flutter_rust_bridge::frb;
 
 #[frb(init)]

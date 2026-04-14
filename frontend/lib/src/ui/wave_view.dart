@@ -545,7 +545,11 @@ class _AllStationsSheetState extends State<_AllStationsSheet> {
                                       selected: isSelected,
                                       label: Text(item.label),
                                       onSelected: (_) {
-                                        unawaited(WaveController.toggleStation(item.seed));
+                                        unawaited(
+                                          WaveController.toggleStation(
+                                            item.seed,
+                                          ),
+                                        );
                                         Navigator.pop(context);
                                       },
                                       backgroundColor: Colors.white.withValues(

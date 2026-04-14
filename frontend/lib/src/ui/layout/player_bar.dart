@@ -207,7 +207,6 @@ class _PlayerControls extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-
     var repeatIcon = Icons.repeat;
     if (meta.repeatMode == RepeatModeDto.single) {
       repeatIcon = Icons.repeat_one;
@@ -301,7 +300,6 @@ class _VolumeAndQuality extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-
     return Row(
       mainAxisAlignment: MainAxisAlignment.end,
       children: [

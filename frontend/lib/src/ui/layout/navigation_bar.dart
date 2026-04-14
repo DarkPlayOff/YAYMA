@@ -46,12 +46,14 @@ class _FloatingNavBarState extends State<FloatingNavBar>
       _overlayEntry = null;
       return;
     }
-    unawaited(Future.delayed(const Duration(milliseconds: 150), () {
-      if (!_isHovered && mounted) {
-        _overlayEntry?.remove();
-        _overlayEntry = null;
-      }
-    }));
+    unawaited(
+      Future.delayed(const Duration(milliseconds: 150), () {
+        if (!_isHovered && mounted) {
+          _overlayEntry?.remove();
+          _overlayEntry = null;
+        }
+      }),
+    );
   }
 
   @override
@@ -104,8 +106,12 @@ class _FloatingNavBarState extends State<FloatingNavBar>
                     }
                   },
                   style: IconButton.styleFrom(
-                    backgroundColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
-                    hoverColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.2),
+                    backgroundColor: Theme.of(
+                      context,
+                    ).colorScheme.primary.withValues(alpha: 0.1),
+                    hoverColor: Theme.of(
+                      context,
+                    ).colorScheme.primary.withValues(alpha: 0.2),
                   ),
                   icon: Icon(
                     isWaveActive && isPlaying
@@ -165,7 +171,11 @@ class _AccountButton extends StatelessWidget {
           shape: BoxShape.circle,
           gradient: account.hasPlus
               ? LinearGradient(
-                  colors: [Colors.purple, Colors.orange, Theme.of(context).colorScheme.primary],
+                  colors: [
+                    Colors.purple,
+                    Colors.orange,
+                    Theme.of(context).colorScheme.primary,
+                  ],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 )
@@ -463,7 +473,9 @@ class _NavIcon extends StatelessWidget {
         onPressed: onTap,
         icon: Icon(
           icon,
-          color: isSelected ? Theme.of(context).colorScheme.primary : Colors.white38,
+          color: isSelected
+              ? Theme.of(context).colorScheme.primary
+              : Colors.white38,
           size: 28,
         ),
       ),

@@ -15,11 +15,18 @@ import 'package:yayma/src/rust/api/playback.dart' as rust;
 import 'package:yayma/src/rust/api/simple.dart' as rust;
 
 // Сигналы состояния
-final FlutterSignal<PlaybackState?> playerStateSignal = signal<PlaybackState?>(null);
-final FlutterSignal<PlaybackProgressDto?> playerProgressSignal = signal<PlaybackProgressDto?>(null);
-final FlutterSignal<Float32List> vibeTickSignal = signal<Float32List>(Float32List(0));
+final FlutterSignal<PlaybackState?> playerStateSignal = signal<PlaybackState?>(
+  null,
+);
+final FlutterSignal<PlaybackProgressDto?> playerProgressSignal =
+    signal<PlaybackProgressDto?>(null);
+final FlutterSignal<Float32List> vibeTickSignal = signal<Float32List>(
+  Float32List(0),
+);
 
-final FlutterSignal<AudioQuality> audioQualitySignal = signal<AudioQuality>(AudioQuality.normal);
+final FlutterSignal<AudioQuality> audioQualitySignal = signal<AudioQuality>(
+  AudioQuality.normal,
+);
 
 StreamSubscription<rust.AppEvent>? _eventSub;
 
@@ -61,7 +68,25 @@ void _activateVibePalette() => _vibePaletteEffect;
 void _activateTaskbarEffect() => _taskbarEffect;
 
 // Метаданные трека (без прогресса)
-final FlutterComputed<({String? albumId, List<TrackArtistDto> artists, String? codec, String? coverUrl, List<String> currentWaveSeeds, String? id, bool isDisliked, bool isLiked, bool isPlaying, bool isShuffled, RepeatModeDto repeatMode, String title, String? version, int volume})> trackMetadataSignal = computed(() {
+final FlutterComputed<
+  ({
+    String? albumId,
+    List<TrackArtistDto> artists,
+    String? codec,
+    String? coverUrl,
+    List<String> currentWaveSeeds,
+    String? id,
+    bool isDisliked,
+    bool isLiked,
+    bool isPlaying,
+    bool isShuffled,
+    RepeatModeDto repeatMode,
+    String title,
+    String? version,
+    int volume,
+  })
+>
+trackMetadataSignal = computed(() {
   final state = playerStateSignal.value;
   return (
     id: state?.currentTrack?.id,
@@ -82,7 +107,8 @@ final FlutterComputed<({String? albumId, List<TrackArtistDto> artists, String? c
 }, debugLabel: 'trackMetadataSignal');
 
 // Прогресс трека (обновляется часто)
-final FlutterComputed<({double durationMs, double positionMs})> trackProgressSignal = computed(() {
+final FlutterComputed<({double durationMs, double positionMs})>
+trackProgressSignal = computed(() {
   final progress = playerProgressSignal.value;
   return (
     durationMs: (progress?.durationMs ?? 1).toDouble(),
@@ -112,7 +138,9 @@ final FutureSignal<ColorScheme?> colorSchemeSignal = computedAsync(() async {
 }, debugLabel: 'colorSchemeSignal');
 
 // Храним последнюю успешную цветовую схему, чтобы не было отката цветов при смене трека
-final FlutterSignal<ColorScheme?> _persistentColorScheme = signal<ColorScheme?>(null);
+final FlutterSignal<ColorScheme?> _persistentColorScheme = signal<ColorScheme?>(
+  null,
+);
 
 // Эффект для обновления персистентной цветовой схемы
 final EffectCleanup _persistentColorSchemeEffect = effect(() {
@@ -158,10 +186,12 @@ final EffectCleanup _vibePaletteEffect = effect(() {
       ...c(scheme.secondaryContainer),
       ...c(scheme.tertiaryContainer),
     ];
-    unawaited(rust.setVibePalette(
-      ctx: ctx,
-      colors: Float32List.fromList(p),
-    ));
+    unawaited(
+      rust.setVibePalette(
+        ctx: ctx,
+        colors: Float32List.fromList(p),
+      ),
+    );
   }
 });
 
@@ -194,7 +224,9 @@ final EffectCleanup _taskbarEffect = effect(() {
           metadata.isDisliked ? 'Убрать дизлайк' : 'Дизлайк',
           () {
             if (metadata.id != null) {
-              unawaited(PlaybackController.toggleDislike(trackId: metadata.id!));
+              unawaited(
+                PlaybackController.toggleDislike(trackId: metadata.id!),
+              );
             }
           },
         ),
@@ -241,7 +273,9 @@ final EffectCleanup _taskbarEffect = effect(() {
         ),
         ThumbnailToolbarButton(
           ThumbnailToolbarAssetIcon(
-            metadata.isLiked ? 'assets/icons/liked.ico' : 'assets/icons/like.ico',
+            metadata.isLiked
+                ? 'assets/icons/liked.ico'
+                : 'assets/icons/like.ico',
           ),
           metadata.isLiked ? 'Убрать лайк' : 'Лайк',
           () {
@@ -272,8 +306,11 @@ final FlutterComputed<double> playerPositionMsSignal = computed(
 
 final FlutterSignal<bool> showLyricsSignal = signal<bool>(false);
 
-final FlutterSignal<EqualizerDto?> equalizerSignal = signal<EqualizerDto?>(null);
-final FlutterSignal<List<AudioEffectDto>> audioEffectsSignal = signal<List<AudioEffectDto>>([]);
+final FlutterSignal<EqualizerDto?> equalizerSignal = signal<EqualizerDto?>(
+  null,
+);
+final FlutterSignal<List<AudioEffectDto>> audioEffectsSignal =
+    signal<List<AudioEffectDto>>([]);
 
 Future<void> refreshEqualizer() async {
   final ctx = appContextSignal.value;
@@ -289,51 +326,82 @@ Future<void> refreshAudioEffects() async {
 
 // Глобальные методы управления
 class PlaybackController {
-  static Future<void> playTrack(String trackId) => runRustAction((ctx) => rust.playTrack(ctx: ctx, trackId: trackId));
-  static Future<void> playLikedTrack(String trackId) => runRustAction((ctx) => rust.playLikedTrack(ctx: ctx, trackId: trackId));
-  static Future<void> playAlbumTrack(int albumId, String trackId) => runRustAction((ctx) => rust.playAlbumTrack(ctx: ctx, albumId: albumId, trackId: trackId));
-  static Future<void> playPlaylistTrack(String uid, int kind, String trackId) => runRustAction((ctx) => rust.playPlaylistTrack(ctx: ctx, uid: uid, kind: kind, trackId: trackId));
-  static Future<void> playPlaylist(String uid, int kind) => runRustAction((ctx) => rust.playPlaylist(ctx: ctx, uid: uid, kind: kind));
-  static Future<void> playAlbum(int albumId) => runRustAction((ctx) => rust.playAlbum(ctx: ctx, albumId: albumId));
-  static Future<void> togglePlay() => runRustAction((ctx) => rust.togglePlayPause(ctx: ctx));
+  static Future<void> playTrack(String trackId) =>
+      runRustAction((ctx) => rust.playTrack(ctx: ctx, trackId: trackId));
+  static Future<void> playLikedTrack(String trackId) =>
+      runRustAction((ctx) => rust.playLikedTrack(ctx: ctx, trackId: trackId));
+  static Future<void> playAlbumTrack(int albumId, String trackId) =>
+      runRustAction(
+        (ctx) =>
+            rust.playAlbumTrack(ctx: ctx, albumId: albumId, trackId: trackId),
+      );
+  static Future<void> playPlaylistTrack(String uid, int kind, String trackId) =>
+      runRustAction(
+        (ctx) => rust.playPlaylistTrack(
+          ctx: ctx,
+          uid: uid,
+          kind: kind,
+          trackId: trackId,
+        ),
+      );
+  static Future<void> playPlaylist(String uid, int kind) =>
+      runRustAction((ctx) => rust.playPlaylist(ctx: ctx, uid: uid, kind: kind));
+  static Future<void> playAlbum(int albumId) =>
+      runRustAction((ctx) => rust.playAlbum(ctx: ctx, albumId: albumId));
+  static Future<void> togglePlay() =>
+      runRustAction((ctx) => rust.togglePlayPause(ctx: ctx));
   static Future<void> next() => runRustAction((ctx) => rust.playNext(ctx: ctx));
   static Future<void> prev() => runRustAction((ctx) => rust.playPrev(ctx: ctx));
-  static Future<void> toggleShuffle() => runRustAction((ctx) => rust.toggleShuffle(ctx: ctx));
-  static Future<void> toggleRepeat() => runRustAction((ctx) => rust.toggleRepeatMode(ctx: ctx));
-  static Future<void> toggleLike({required String trackId}) => runRustAction((ctx) => rust.toggleLike(ctx: ctx, trackId: trackId));
-  static Future<void> toggleDislike({required String trackId}) => runRustAction((ctx) => rust.toggleDislike(ctx: ctx, trackId: trackId));
-  static Future<void> startMyWave() => runRustAction((ctx) => rust.startWave(ctx: ctx, seeds: ['user:onyourwave']));
-  static Future<void> startTrackWave(String trackId) => runRustAction((ctx) => rust.startWave(ctx: ctx, seeds: ['track:$trackId']));
-  static Future<void> changeVolume(int volume) => runRustAction((ctx) => rust.setVolume(ctx: ctx, volume: volume));
-  static Future<void> seekTo(Duration duration) => runRustAction((ctx) => rust.seek(ctx: ctx, positionMs: duration.inMilliseconds));
+  static Future<void> toggleShuffle() =>
+      runRustAction((ctx) => rust.toggleShuffle(ctx: ctx));
+  static Future<void> toggleRepeat() =>
+      runRustAction((ctx) => rust.toggleRepeatMode(ctx: ctx));
+  static Future<void> toggleLike({required String trackId}) =>
+      runRustAction((ctx) => rust.toggleLike(ctx: ctx, trackId: trackId));
+  static Future<void> toggleDislike({required String trackId}) =>
+      runRustAction((ctx) => rust.toggleDislike(ctx: ctx, trackId: trackId));
+  static Future<void> startMyWave() => runRustAction(
+    (ctx) => rust.startWave(ctx: ctx, seeds: ['user:onyourwave']),
+  );
+  static Future<void> startTrackWave(String trackId) => runRustAction(
+    (ctx) => rust.startWave(ctx: ctx, seeds: ['track:$trackId']),
+  );
+  static Future<void> changeVolume(int volume) =>
+      runRustAction((ctx) => rust.setVolume(ctx: ctx, volume: volume));
+  static Future<void> seekTo(Duration duration) => runRustAction(
+    (ctx) => rust.seek(ctx: ctx, positionMs: duration.inMilliseconds),
+  );
 
-  static Future<void> setQuality(AudioQuality quality) => runRustAction((ctx) async {
-    await rust.setAudioQuality(ctx: ctx, quality: quality);
-    audioQualitySignal.value = quality;
-  });
+  static Future<void> setQuality(AudioQuality quality) =>
+      runRustAction((ctx) async {
+        await rust.setAudioQuality(ctx: ctx, quality: quality);
+        audioQualitySignal.value = quality;
+      });
 
-  static Future<void> setEqualizerEnabled({required bool enabled}) => runRustAction((ctx) async {
-    await rust.setEqualizerEnabled(ctx: ctx, enabled: enabled);
-    await refreshEqualizer();
-  });
+  static Future<void> setEqualizerEnabled({required bool enabled}) =>
+      runRustAction((ctx) async {
+        await rust.setEqualizerEnabled(ctx: ctx, enabled: enabled);
+        await refreshEqualizer();
+      });
 
-  static Future<void> setEqualizerBand(int index, double gainDb) => runRustAction((ctx) async {
-    await rust.setEqualizerBand(ctx: ctx, index: index, gainDb: gainDb);
-    // Local update for smoothness
-    final current = equalizerSignal.value;
-    if (current != null) {
-      final newBands = List<BandDto>.from(current.bands);
-      newBands[index] = BandDto(
-        frequency: current.bands[index].frequency,
-        gainDb: gainDb,
-        index: index,
-      );
-      equalizerSignal.value = EqualizerDto(
-        enabled: current.enabled,
-        bands: newBands,
-      );
-    }
-  });
+  static Future<void> setEqualizerBand(int index, double gainDb) =>
+      runRustAction((ctx) async {
+        await rust.setEqualizerBand(ctx: ctx, index: index, gainDb: gainDb);
+        // Local update for smoothness
+        final current = equalizerSignal.value;
+        if (current != null) {
+          final newBands = List<BandDto>.from(current.bands);
+          newBands[index] = BandDto(
+            frequency: current.bands[index].frequency,
+            gainDb: gainDb,
+            index: index,
+          );
+          equalizerSignal.value = EqualizerDto(
+            enabled: current.enabled,
+            bands: newBands,
+          );
+        }
+      });
 
   static Future<void> resetEqualizer() => runRustAction((ctx) async {
     final current = equalizerSignal.value;
@@ -345,39 +413,43 @@ class PlaybackController {
     }
   });
 
-  static Future<void> setEffectEnabled(String id, {required bool enabled}) => runRustAction((ctx) async {
-    await rust.setEffectEnabled(ctx: ctx, id: id, enabled: enabled);
-    await refreshAudioEffects();
-  });
+  static Future<void> setEffectEnabled(String id, {required bool enabled}) =>
+      runRustAction((ctx) async {
+        await rust.setEffectEnabled(ctx: ctx, id: id, enabled: enabled);
+        await refreshAudioEffects();
+      });
 
-  static Future<void> setEffectParam(String id, int index, double value) => runRustAction((ctx) async {
-    await rust.setEffectParam(ctx: ctx, id: id, index: index, value: value);
-    // Local update for smoothness
-    final currentEffects = List<AudioEffectDto>.from(audioEffectsSignal.value);
-    final effectIndex = currentEffects.indexWhere((e) => e.id == id);
-    if (effectIndex != -1) {
-      final effect = currentEffects[effectIndex];
-      final newParams = List<EffectParamDto>.from(effect.params);
-      final param = newParams[index];
-      newParams[index] = EffectParamDto(
-        name: param.name,
-        value: value,
-        defaultValue: param.defaultValue,
-        min: param.min,
-        max: param.max,
-        step: param.step,
-        unit: param.unit,
-        index: index,
-      );
-      currentEffects[effectIndex] = AudioEffectDto(
-        id: effect.id,
-        name: effect.name,
-        enabled: effect.enabled,
-        params: newParams,
-      );
-      audioEffectsSignal.value = currentEffects;
-    }
-  });
+  static Future<void> setEffectParam(String id, int index, double value) =>
+      runRustAction((ctx) async {
+        await rust.setEffectParam(ctx: ctx, id: id, index: index, value: value);
+        // Local update for smoothness
+        final currentEffects = List<AudioEffectDto>.from(
+          audioEffectsSignal.value,
+        );
+        final effectIndex = currentEffects.indexWhere((e) => e.id == id);
+        if (effectIndex != -1) {
+          final effect = currentEffects[effectIndex];
+          final newParams = List<EffectParamDto>.from(effect.params);
+          final param = newParams[index];
+          newParams[index] = EffectParamDto(
+            name: param.name,
+            value: value,
+            defaultValue: param.defaultValue,
+            min: param.min,
+            max: param.max,
+            step: param.step,
+            unit: param.unit,
+            index: index,
+          );
+          currentEffects[effectIndex] = AudioEffectDto(
+            id: effect.id,
+            name: effect.name,
+            enabled: effect.enabled,
+            params: newParams,
+          );
+          audioEffectsSignal.value = currentEffects;
+        }
+      });
 
   static Future<void> resetEffect(String id) => runRustAction((ctx) async {
     await rust.resetEffect(ctx: ctx, id: id);

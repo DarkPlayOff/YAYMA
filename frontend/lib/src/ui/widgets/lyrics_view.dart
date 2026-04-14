@@ -58,7 +58,7 @@ class _LyricsWidgetState extends State<LyricsWidget> {
         }
 
         final currentHeight = lines[index] is LyricTimer ? 250 : _itemHeight;
-        // Т.к. у нас padding.top = viewportHeight / 2, 
+        // Т.к. у нас padding.top = viewportHeight / 2,
         // начало списка уже в центре. Нам нужно прокрутить только на высоту элементов.
         final targetScroll = offsetBefore + (currentHeight / 2);
 
@@ -66,11 +66,13 @@ class _LyricsWidgetState extends State<LyricsWidget> {
           _initialScrollDone = true;
           _scrollController.jumpTo(targetScroll);
         } else {
-          unawaited(_scrollController.animateTo(
-            targetScroll,
-            duration: const Duration(milliseconds: 500),
-            curve: Curves.easeOutCubic,
-          ));
+          unawaited(
+            _scrollController.animateTo(
+              targetScroll,
+              duration: const Duration(milliseconds: 500),
+              curve: Curves.easeOutCubic,
+            ),
+          );
         }
       }
     }
@@ -151,7 +153,8 @@ class _LyricsWidgetState extends State<LyricsWidget> {
                           ),
                         );
                       } else if (item is LyricTimer) {
-                        final remainingMs = (item.time.inMilliseconds +
+                        final remainingMs =
+                            (item.time.inMilliseconds +
                                 item.duration.inMilliseconds) -
                             currentMs;
                         final elapsedMs = currentMs - item.time.inMilliseconds;
@@ -199,11 +202,13 @@ class _LyricsWidgetState extends State<LyricsWidget> {
                       }
 
                       return GestureDetector(
-                        onTap: () => unawaited(PlaybackController.seekTo(
-                          Duration(
-                            milliseconds: item.time.inMilliseconds,
+                        onTap: () => unawaited(
+                          PlaybackController.seekTo(
+                            Duration(
+                              milliseconds: item.time.inMilliseconds,
+                            ),
                           ),
-                        )),
+                        ),
                         child: Container(
                           height: item is LyricTimer ? 250 : _itemHeight,
                           padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -260,10 +265,13 @@ class LyricsReaderDialog extends StatelessWidget {
   });
 
   static void show(BuildContext context, String trackId, String title) {
-    unawaited(showDialog<void>(
-      context: context,
-      builder: (context) => LyricsReaderDialog(trackId: trackId, title: title),
-    ));
+    unawaited(
+      showDialog<void>(
+        context: context,
+        builder: (context) =>
+            LyricsReaderDialog(trackId: trackId, title: title),
+      ),
+    );
   }
 
   @override

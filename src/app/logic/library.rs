@@ -22,10 +22,18 @@ pub async fn toggle_like(ctx: &AppContext, track_id: String) {
     tokio::spawn(async move {
         if is_liked {
             let _ = api.remove_like_track(track_id_clone.clone()).await;
-            let _ = audio_tx.send(crate::audio::commands::AudioMessage::WaveUnlike(track_id_clone)).await;
+            let _ = audio_tx
+                .send(crate::audio::commands::AudioMessage::WaveUnlike(
+                    track_id_clone,
+                ))
+                .await;
         } else {
             let _ = api.add_like_track(track_id_clone.clone()).await;
-            let _ = audio_tx.send(crate::audio::commands::AudioMessage::WaveLike(track_id_clone)).await;
+            let _ = audio_tx
+                .send(crate::audio::commands::AudioMessage::WaveLike(
+                    track_id_clone,
+                ))
+                .await;
         }
     });
 
@@ -55,10 +63,18 @@ pub async fn toggle_dislike(ctx: &AppContext, track_id: String) {
     tokio::spawn(async move {
         if is_disliked {
             let _ = api.remove_dislike_track(track_id_clone.clone()).await;
-            let _ = audio_tx.send(crate::audio::commands::AudioMessage::WaveUndislike(track_id_clone)).await;
+            let _ = audio_tx
+                .send(crate::audio::commands::AudioMessage::WaveUndislike(
+                    track_id_clone,
+                ))
+                .await;
         } else {
             let _ = api.add_dislike_track(track_id_clone.clone()).await;
-            let _ = audio_tx.send(crate::audio::commands::AudioMessage::WaveDislike(track_id_clone)).await;
+            let _ = audio_tx
+                .send(crate::audio::commands::AudioMessage::WaveDislike(
+                    track_id_clone,
+                ))
+                .await;
         }
     });
 }

@@ -30,7 +30,8 @@ impl SmtcManager {
         }
 
         #[cfg(target_os = "windows")]
-        let hwnd = crate::audio::thumbnail::get_flutter_hwnd().map(|h| h.0 as *mut std::ffi::c_void);
+        let hwnd =
+            crate::audio::thumbnail::get_flutter_hwnd().map(|h| h.0 as *mut std::ffi::c_void);
         #[cfg(not(target_os = "windows"))]
         let hwnd = None;
 

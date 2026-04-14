@@ -1,8 +1,8 @@
 use crate::app::get_db;
 use directories::ProjectDirs;
 use foldhash::HashMap;
-use foldhash::fast::FixedState;
 use foldhash::HashMapExt;
+use foldhash::fast::FixedState;
 use parking_lot::Mutex as SyncMutex;
 use std::hash::{BuildHasher, Hasher};
 use std::path::{Path, PathBuf};

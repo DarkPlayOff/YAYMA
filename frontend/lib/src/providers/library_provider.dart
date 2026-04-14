@@ -65,7 +65,10 @@ void setLibrarySearchQuery(String query) {
 
   _librarySearchDebounce = Timer(const Duration(milliseconds: 500), () {
     unawaited(
-      refreshLikedTracks(query: query.trim().isEmpty ? null : query, force: true),
+      refreshLikedTracks(
+        query: query.trim().isEmpty ? null : query,
+        force: true,
+      ),
     );
   });
 }
@@ -122,7 +125,10 @@ Future<bool> moveTrackInPlaylistAction(
   ),
 );
 
-Future<bool> createPlaylistAction(String title, {required bool isPublic}) async {
+Future<bool> createPlaylistAction(
+  String title, {
+  required bool isPublic,
+}) async {
   final success = await runRustAction(
     (ctx) => createPlaylist(ctx: ctx, title: title, isPublic: isPublic),
   );
@@ -146,7 +152,10 @@ Future<bool> renamePlaylistAction(int kind, String newTitle) async {
   return success;
 }
 
-Future<bool> setPlaylistVisibilityAction(int kind, {required bool isPublic}) async {
+Future<bool> setPlaylistVisibilityAction(
+  int kind, {
+  required bool isPublic,
+}) async {
   final success = await runRustAction(
     (ctx) => setPlaylistVisibility(ctx: ctx, kind: kind, isPublic: isPublic),
   );

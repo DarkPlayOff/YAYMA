@@ -20,7 +20,8 @@ class MyApp extends StatelessWidget {
           title: 'YAYMA',
           debugShowCheckedModeBanner: false,
           theme: ThemeData(
-            colorScheme: darkDynamic ??
+            colorScheme:
+                darkDynamic ??
                 ColorScheme.fromSeed(
                   seedColor: Colors.deepOrange,
                   brightness: Brightness.dark,

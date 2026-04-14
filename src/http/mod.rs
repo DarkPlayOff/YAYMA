@@ -194,16 +194,13 @@ impl ApiService {
             .await?
             .json::<serde_json::Value>()
             .await?;
-        let id = v["id"]
-            .as_str()
-            .map(|s| s.to_string())
-            .unwrap_or_else(|| {
-                if v["result"] == "CREATED" {
-                    "CREATED_PENDING".into()
-                } else {
-                    v.to_string()
-                }
-            });
+        let id = v["id"].as_str().map(|s| s.to_string()).unwrap_or_else(|| {
+            if v["result"] == "CREATED" {
+                "CREATED_PENDING".into()
+            } else {
+                v.to_string()
+            }
+        });
         Ok(id)
     }
 

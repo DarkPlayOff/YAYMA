@@ -42,16 +42,21 @@ const List<AppSection> rootSections = [
 ];
 
 /// Текущая активная корневая вкладка
-final FlutterSignal<AppSection> currentRootSignal = signal<AppSection>(AppSection.home);
+final FlutterSignal<AppSection> currentRootSignal = signal<AppSection>(
+  AppSection.home,
+);
 
 /// Стэки навигации для каждой вкладки
-final FlutterSignal<Map<AppSection, List<NavState>>> rootStacksSignal = signal<Map<AppSection, List<NavState>>>({
-  for (var root in rootSections) root: [NavState(root)],
-});
+final FlutterSignal<Map<AppSection, List<NavState>>> rootStacksSignal =
+    signal<Map<AppSection, List<NavState>>>({
+      for (var root in rootSections) root: [NavState(root)],
+    });
 
 /// Вычисляемый текущий стек
 final FlutterComputed<List<NavState>> navStackSignal = computed(
-  () => rootStacksSignal()[currentRootSignal()] ?? [NavState(currentRootSignal())],
+  () =>
+      rootStacksSignal()[currentRootSignal()] ??
+      [NavState(currentRootSignal())],
   debugLabel: 'navStackSignal',
 );
 
@@ -76,7 +81,9 @@ void navigateTo(AppSection section, [String? id]) {
   if (rootSections.contains(section) && id == null) {
     if (activeRoot == section) {
       // Если кликнули на уже активную вкладку - сбрасываем её стек к корню
-      final newStacks = Map<AppSection, List<NavState>>.from(rootStacksSignal.value);
+      final newStacks = Map<AppSection, List<NavState>>.from(
+        rootStacksSignal.value,
+      );
       newStacks[section] = [NavState(section)];
       rootStacksSignal.value = newStacks;
     } else {
@@ -87,10 +94,13 @@ void navigateTo(AppSection section, [String? id]) {
   }
 
   // Обычный переход (Push) в текущей вкладке
-  final currentStack = rootStacksSignal.value[activeRoot] ?? [NavState(activeRoot)];
+  final currentStack =
+      rootStacksSignal.value[activeRoot] ?? [NavState(activeRoot)];
   if (currentStack.last == newState) return;
 
-  final newStacks = Map<AppSection, List<NavState>>.from(rootStacksSignal.value);
+  final newStacks = Map<AppSection, List<NavState>>.from(
+    rootStacksSignal.value,
+  );
   newStacks[activeRoot] = List.unmodifiable([...currentStack, newState]);
   rootStacksSignal.value = newStacks;
 }
@@ -101,7 +111,9 @@ void goBack() {
   final currentStack = rootStacksSignal.value[activeRoot] ?? [];
   if (currentStack.length <= 1) return;
 
-  final newStacks = Map<AppSection, List<NavState>>.from(rootStacksSignal.value);
+  final newStacks = Map<AppSection, List<NavState>>.from(
+    rootStacksSignal.value,
+  );
   newStacks[activeRoot] = List.unmodifiable(
     currentStack.sublist(0, currentStack.length - 1),
   );

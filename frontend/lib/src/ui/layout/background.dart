@@ -38,8 +38,7 @@ class BlurredCoverBackground extends StatelessWidget {
                         height: 160,
                         color: Colors.black.withValues(alpha: 0.3),
                         colorBlendMode: BlendMode.darken,
-                        errorWidget:
-                            Container(color: Colors.black),
+                        errorWidget: Container(color: Colors.black),
                       ),
                     ),
                   ),
@@ -92,7 +91,9 @@ class _WaveBackgroundState extends State<WaveBackground> {
     ];
     final ctx = appContextSignal.value;
     if (trackMetadataSignal().id == null && ctx != null) {
-      unawaited(rust_api.setVibePalette(ctx: ctx, colors: _cachedThemePalette!));
+      unawaited(
+        rust_api.setVibePalette(ctx: ctx, colors: _cachedThemePalette!),
+      );
     }
   }
 

@@ -1,7 +1,7 @@
 use crate::api::models::{PlaybackProgressDto, PlaybackState, SimpleTrackDto};
 use crate::app::AppContext;
-use crate::frb_generated::StreamSink;
 use crate::app::logic::simple as logic;
+use crate::frb_generated::StreamSink;
 
 #[derive(Debug, Clone)]
 pub enum AppEvent {

@@ -61,73 +61,71 @@ class _LibraryViewState extends State<LibraryView>
     unawaited(
       showDialog<void>(
         context: context,
-        builder:
-            (context) => StatefulBuilder(
-              builder:
-                  (context, setState) => AlertDialog(
-                    backgroundColor: const Color(0xFF1E1E1E),
-                    title: const Text(
-                      'Новый плейлист',
-                      style: TextStyle(color: Colors.white),
-                    ),
-                    content: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        TextField(
-                          controller: controller,
-                          autofocus: true,
-                          style: const TextStyle(color: Colors.white),
-                          decoration: InputDecoration(
-                            hintText: 'Название',
-                            hintStyle: const TextStyle(color: Colors.white24),
-                            filled: true,
-                            fillColor: Colors.white.withValues(alpha: 0.05),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide: BorderSide.none,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        SwitchListTile(
-                          title: const Text(
-                            'Публичный',
-                            style: TextStyle(color: Colors.white70),
-                          ),
-                          value: isPublic,
-                          onChanged: (val) => setState(() => isPublic = val),
-                        ),
-                      ],
-                    ),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(context),
-                        child: const Text('Отмена'),
-                      ),
-                      ElevatedButton(
-                        onPressed: () async {
-                          if (controller.text.isNotEmpty) {
-                            final success = await createPlaylistAction(
-                              controller.text,
-                              isPublic: isPublic,
-                            );
-                            if (!context.mounted) return;
-                            Navigator.pop(context);
-                            if (!success) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Ошибка при создании плейлиста'),
-                                  backgroundColor: Colors.red,
-                                ),
-                              );
-                            }
-                          }
-                        },
-                        child: const Text('Создать'),
-                      ),
-                    ],
-                  ),
+        builder: (context) => StatefulBuilder(
+          builder: (context, setState) => AlertDialog(
+            backgroundColor: const Color(0xFF1E1E1E),
+            title: const Text(
+              'Новый плейлист',
+              style: TextStyle(color: Colors.white),
             ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: controller,
+                  autofocus: true,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                    hintText: 'Название',
+                    hintStyle: const TextStyle(color: Colors.white24),
+                    filled: true,
+                    fillColor: Colors.white.withValues(alpha: 0.05),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                SwitchListTile(
+                  title: const Text(
+                    'Публичный',
+                    style: TextStyle(color: Colors.white70),
+                  ),
+                  value: isPublic,
+                  onChanged: (val) => setState(() => isPublic = val),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Отмена'),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  if (controller.text.isNotEmpty) {
+                    final success = await createPlaylistAction(
+                      controller.text,
+                      isPublic: isPublic,
+                    );
+                    if (!context.mounted) return;
+                    Navigator.pop(context);
+                    if (!success) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Ошибка при создании плейлиста'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
+                  }
+                },
+                child: const Text('Создать'),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -177,7 +175,10 @@ class _LibraryViewState extends State<LibraryView>
           labelColor: Colors.white,
           unselectedLabelColor: Colors.white38,
           dividerColor: Colors.transparent,
-          tabs: const [Tab(text: 'Любимые треки'), Tab(text: 'Плейлисты')],
+          tabs: const [
+            Tab(text: 'Любимые треки'),
+            Tab(text: 'Плейлисты'),
+          ],
         ),
         if (_tabController.index == 0)
           Padding(
@@ -190,16 +191,15 @@ class _LibraryViewState extends State<LibraryView>
                 hintText: 'Поиск в любимых треках...',
                 hintStyle: const TextStyle(color: Colors.white24),
                 prefixIcon: const Icon(Icons.search, color: Colors.white38),
-                suffixIcon:
-                    _searchController.text.isNotEmpty
-                        ? IconButton(
-                          icon: const Icon(Icons.clear, color: Colors.white38),
-                          onPressed: () {
-                            _searchController.clear();
-                            setLibrarySearchQuery('');
-                          },
-                        )
-                        : null,
+                suffixIcon: _searchController.text.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear, color: Colors.white38),
+                        onPressed: () {
+                          _searchController.clear();
+                          setLibrarySearchQuery('');
+                        },
+                      )
+                    : null,
                 filled: true,
                 fillColor: Colors.white.withValues(alpha: 0.05),
                 border: OutlineInputBorder(
@@ -258,8 +258,12 @@ class _LikedTracksTab extends StatelessWidget {
             ),
             hoverActions: [
               IconButton(
-                icon: Icon(Icons.play_arrow_rounded, color: Theme.of(context).colorScheme.primary),
-                onPressed: () => unawaited(PlaybackController.playLikedTrack(track.id)),
+                icon: Icon(
+                  Icons.play_arrow_rounded,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+                onPressed: () =>
+                    unawaited(PlaybackController.playLikedTrack(track.id)),
               ),
             ],
             onTap: () => unawaited(PlaybackController.playLikedTrack(track.id)),
@@ -338,11 +342,10 @@ class _PlaylistCardState extends State<_PlaylistCard> {
         valueListenable: _isHovered,
         builder: (context, hovered, _) {
           return GestureDetector(
-            onTap:
-                () => navigateTo(
-                  AppSection.playlist,
-                  '${playlist.uid}:${playlist.kind}',
-                ),
+            onTap: () => navigateTo(
+              AppSection.playlist,
+              '${playlist.uid}:${playlist.kind}',
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -384,11 +387,12 @@ class _PlaylistCardState extends State<_PlaylistCard> {
                                   Icons.play_circle_filled_rounded,
                                   color: Theme.of(context).colorScheme.primary,
                                 ),
-                                onPressed:
-                                    () => unawaited(PlaybackController.playPlaylist(
-                                      playlist.uid.toString(),
-                                      playlist.kind,
-                                    )),
+                                onPressed: () => unawaited(
+                                  PlaybackController.playPlaylist(
+                                    playlist.uid.toString(),
+                                    playlist.kind,
+                                  ),
+                                ),
                               ),
                             ),
                           ),

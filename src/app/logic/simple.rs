@@ -1,6 +1,6 @@
+use crate::api::simple::AppEvent;
 use crate::app::AppContext;
 use crate::frb_generated::StreamSink;
-use crate::api::simple::AppEvent;
 
 pub fn get_app_version() -> String {
     env!("CARGO_PKG_VERSION").to_string()

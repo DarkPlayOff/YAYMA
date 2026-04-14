@@ -58,13 +58,13 @@ impl ThumbnailManager {
 
     pub fn update_cover(&self, img_bytes: Vec<u8>) {
         *PENDING_BYTES.lock() = Some(img_bytes);
-        
+
         if let Some(old) = CURRENT_BITMAP.lock().take() {
             unsafe {
                 let _ = DeleteObject(HBITMAP(old.hbitmap_ptr as *mut _).into());
             }
         }
-        
+
         unsafe {
             let hwnd = HWND(self.hwnd_ptr as *mut std::ffi::c_void);
             if IsWindow(Some(hwnd)).as_bool() {
@@ -112,8 +112,10 @@ unsafe extern "system" fn hook_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -
             let hwnd = msg.hwnd;
             let force_iconic = BOOL::from(true);
             let attr_ptr = std::ptr::addr_of!(force_iconic) as *const _;
-            
-            let _ = unsafe { DwmSetWindowAttribute(hwnd, DWMWA_FORCE_ICONIC_REPRESENTATION, attr_ptr, 4) };
+
+            let _ = unsafe {
+                DwmSetWindowAttribute(hwnd, DWMWA_FORCE_ICONIC_REPRESENTATION, attr_ptr, 4)
+            };
             let _ = unsafe { DwmSetWindowAttribute(hwnd, DWMWA_HAS_ICONIC_BITMAP, attr_ptr, 4) };
             let _ = unsafe { SetWindowSubclass(hwnd, Some(subclass_proc), 1337, 0) };
 
@@ -135,9 +137,7 @@ unsafe extern "system" fn subclass_proc(
     _data: usize,
 ) -> LRESULT {
     let (tw, th) = match msg {
-        WM_DWMSENDICONICTHUMBNAIL => {
-            ((lparam.0 >> 16) as u32, (lparam.0 & 0xFFFF) as u32)
-        }
+        WM_DWMSENDICONICTHUMBNAIL => ((lparam.0 >> 16) as u32, (lparam.0 & 0xFFFF) as u32),
         WM_DWMSENDICONICLIVEPREVIEWBITMAP => {
             let mut rc = RECT::default();
             let _ = unsafe { GetClientRect(hwnd, &mut rc) };
@@ -153,28 +153,33 @@ unsafe extern "system" fn subclass_proc(
     let mut hbitmap_ptr_to_set = None;
     {
         let mut cache_guard = CURRENT_BITMAP.lock();
-        if let Some(cache) = cache_guard.as_ref().filter(|c| c.width == tw && c.height == th) {
+        if let Some(cache) = cache_guard
+            .as_ref()
+            .filter(|c| c.width == tw && c.height == th)
+        {
             hbitmap_ptr_to_set = Some(cache.hbitmap_ptr);
         }
 
         if hbitmap_ptr_to_set.is_none() {
-            let bytes_to_use = PENDING_BYTES.lock().clone()
+            let bytes_to_use = PENDING_BYTES
+                .lock()
+                .clone()
                 .or_else(|| cache_guard.as_ref().map(|c| c.raw_bytes.clone()));
 
-            if let Some(bytes) = bytes_to_use {
-                if let Some(h) = create_hbitmap_from_wic(&bytes, tw, th) {
-                    if let Some(old) = cache_guard.take() {
-                        let _ = unsafe { DeleteObject(HBITMAP(old.hbitmap_ptr as *mut _).into()) };
-                    }
-                    let ptr = h.0 as isize;
-                    *cache_guard = Some(CachedBitmap {
-                        hbitmap_ptr: ptr,
-                        width: tw,
-                        height: th,
-                        raw_bytes: bytes,
-                    });
-                    hbitmap_ptr_to_set = Some(ptr);
+            if let Some(bytes) = bytes_to_use
+                && let Some(h) = create_hbitmap_from_wic(&bytes, tw, th)
+            {
+                if let Some(old) = cache_guard.take() {
+                    let _ = unsafe { DeleteObject(HBITMAP(old.hbitmap_ptr as *mut _).into()) };
                 }
+                let ptr = h.0 as isize;
+                *cache_guard = Some(CachedBitmap {
+                    hbitmap_ptr: ptr,
+                    width: tw,
+                    height: th,
+                    raw_bytes: bytes,
+                });
+                hbitmap_ptr_to_set = Some(ptr);
             }
         }
     }
@@ -247,10 +252,14 @@ fn create_hbitmap_from_wic(bytes: &[u8], target_w: u32, target_h: u32) -> Option
                 let src_idx = (y * stride + x * 4) as usize;
                 let dest_idx = ((offset_y + y) * target_w * 4 + (offset_x + x) * 4) as usize;
                 let mut a = temp_buf[src_idx + 3];
-                
-                let dx = (r_f - x as f32).max(x as f32 - (size as f32 - r_f - 1.0)).max(0.0);
-                let dy = (r_f - y as f32).max(y as f32 - (size as f32 - r_f - 1.0)).max(0.0);
-                
+
+                let dx = (r_f - x as f32)
+                    .max(x as f32 - (size as f32 - r_f - 1.0))
+                    .max(0.0);
+                let dy = (r_f - y as f32)
+                    .max(y as f32 - (size as f32 - r_f - 1.0))
+                    .max(0.0);
+
                 if dx > 0.0 && dy > 0.0 {
                     let dist = (dx * dx + dy * dy).sqrt();
                     if dist > r_f {

@@ -108,8 +108,9 @@ class _EqualizerView extends StatelessWidget {
                 const Spacer(),
                 Switch(
                   value: eq.enabled,
-                  onChanged: (val) =>
-                      unawaited(PlaybackController.setEqualizerEnabled(enabled: val)),
+                  onChanged: (val) => unawaited(
+                    PlaybackController.setEqualizerEnabled(enabled: val),
+                  ),
                   activeThumbColor: accentColorSignal.value,
                 ),
               ],
@@ -139,11 +140,12 @@ class _EqualizerView extends StatelessWidget {
                               min: -12,
                               max: 12,
                               onChanged: eq.enabled
-                                  ? (val) =>
-                                        unawaited(PlaybackController.setEqualizerBand(
-                                          band.index,
-                                          val,
-                                        ))
+                                  ? (val) => unawaited(
+                                      PlaybackController.setEqualizerBand(
+                                        band.index,
+                                        val,
+                                      ),
+                                    )
                                   : null,
                             ),
                           ),
@@ -209,8 +211,12 @@ class _EffectsView extends StatelessWidget {
                 const Spacer(),
                 Switch(
                   value: effect.enabled,
-                  onChanged: (val) =>
-                      unawaited(PlaybackController.setEffectEnabled(effect.id, enabled: val)),
+                  onChanged: (val) => unawaited(
+                    PlaybackController.setEffectEnabled(
+                      effect.id,
+                      enabled: val,
+                    ),
+                  ),
                   activeThumbColor: accentColorSignal.value,
                 ),
               ],
@@ -258,12 +264,13 @@ class _EffectsView extends StatelessWidget {
                                             .toInt()
                                       : null,
                                   onChanged: effect.enabled
-                                      ? (val) =>
-                                            unawaited(PlaybackController.setEffectParam(
-                                              effect.id,
-                                              param.index,
-                                              val,
-                                            ))
+                                      ? (val) => unawaited(
+                                          PlaybackController.setEffectParam(
+                                            effect.id,
+                                            param.index,
+                                            val,
+                                          ),
+                                        )
                                       : null,
                                 ),
                               ),
@@ -288,8 +295,9 @@ class _EffectsView extends StatelessWidget {
                     Align(
                       alignment: Alignment.centerRight,
                       child: TextButton.icon(
-                        onPressed: () =>
-                            unawaited(PlaybackController.resetEffect(effect.id)),
+                        onPressed: () => unawaited(
+                          PlaybackController.resetEffect(effect.id),
+                        ),
                         icon: const Icon(Icons.refresh_rounded, size: 14),
                         label: const Text(
                           'Сбросить параметры',

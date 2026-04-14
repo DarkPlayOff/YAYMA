@@ -95,8 +95,10 @@ class _CommonTrackTileState extends State<CommonTrackTile> {
                         children: [
                           Flexible(
                             child: MouseRegion(
-                              onEnter: (_) => setState(() => _isTitleHovered = true),
-                              onExit: (_) => setState(() => _isTitleHovered = false),
+                              onEnter: (_) =>
+                                  setState(() => _isTitleHovered = true),
+                              onExit: (_) =>
+                                  setState(() => _isTitleHovered = false),
                               cursor: widget.onTitleTap != null
                                   ? SystemMouseCursors.click
                                   : SystemMouseCursors.basic,
@@ -111,7 +113,8 @@ class _CommonTrackTileState extends State<CommonTrackTile> {
                                         : Colors.white,
                                     fontWeight: FontWeight.bold,
                                     fontSize: 16,
-                                    decoration: _isTitleHovered &&
+                                    decoration:
+                                        _isTitleHovered &&
                                             widget.onTitleTap != null
                                         ? TextDecoration.underline
                                         : null,
@@ -140,8 +143,7 @@ class _CommonTrackTileState extends State<CommonTrackTile> {
                     if (!showHighlighted && widget.trailing != null)
                       widget.trailing!,
                     if (showHighlighted) ...[
-                      if (widget.hoverActions != null)
-                        ...widget.hoverActions!,
+                      if (widget.hoverActions != null) ...widget.hoverActions!,
                       Watch((watchContext) {
                         final playlists = playlistsSignal.watch(watchContext);
                         return AppContextMenu<String>(
@@ -149,7 +151,7 @@ class _CommonTrackTileState extends State<CommonTrackTile> {
                           onClose: () => setState(() => _isMenuOpen = false),
                           onSelected: (value) async {
                             if (!mounted) return;
-                            
+
                             // Сохраняем мессенджер из стабильного контекста компонента
                             final messenger = ScaffoldMessenger.of(context);
 
@@ -164,11 +166,14 @@ class _CommonTrackTileState extends State<CommonTrackTile> {
                                 );
                                 messenger.showSnackBar(
                                   SnackBar(
-                                    content: Text(success
-                                        ? 'Добавлено в плейлист'
-                                        : 'Ошибка при добавлении'),
-                                    backgroundColor:
-                                        success ? Colors.green : Colors.red,
+                                    content: Text(
+                                      success
+                                          ? 'Добавлено в плейлист'
+                                          : 'Ошибка при добавлении',
+                                    ),
+                                    backgroundColor: success
+                                        ? Colors.green
+                                        : Colors.red,
                                   ),
                                 );
                               }
@@ -178,29 +183,43 @@ class _CommonTrackTileState extends State<CommonTrackTile> {
                             switch (value) {
                               case 'lyrics':
                                 LyricsReaderDialog.show(
-                                    context, widget.trackId, widget.title);
+                                  context,
+                                  widget.trackId,
+                                  widget.title,
+                                );
                               case 'wave':
-                                unawaited(PlaybackController.startTrackWave(
-                                    widget.trackId));
+                                unawaited(
+                                  PlaybackController.startTrackWave(
+                                    widget.trackId,
+                                  ),
+                                );
                               case 'about':
                                 TrackDetailsDialog.show(
-                                    context, widget.trackId);
+                                  context,
+                                  widget.trackId,
+                                );
                               case 'download':
                                 messenger.showSnackBar(
                                   const SnackBar(
-                                      content: Text('Скачивание началось...')),
+                                    content: Text('Скачивание началось...'),
+                                  ),
                                 );
                                 final ctx = appContextSignal.value;
                                 if (ctx != null) {
                                   try {
                                     final path = await rust.downloadTrack(
-                                        ctx: ctx, trackId: widget.trackId);
-                                    messenger.showSnackBar(SnackBar(
-                                        content: Text(
-                                            'Трек сохранен: $path')));
+                                      ctx: ctx,
+                                      trackId: widget.trackId,
+                                    );
+                                    messenger.showSnackBar(
+                                      SnackBar(
+                                        content: Text('Трек сохранен: $path'),
+                                      ),
+                                    );
                                   } on Object catch (e) {
-                                    messenger.showSnackBar(SnackBar(
-                                        content: Text('Ошибка: $e')));
+                                    messenger.showSnackBar(
+                                      SnackBar(content: Text('Ошибка: $e')),
+                                    );
                                   }
                                 }
                             }
@@ -210,11 +229,13 @@ class _CommonTrackTileState extends State<CommonTrackTile> {
                               label: 'Добавить в плейлист',
                               icon: Icons.playlist_add_rounded,
                               subItems: playlists
-                                  .map((p) => AppContextMenuItem(
-                                        value: 'add_to_${p.kind}',
-                                        label: p.title,
-                                        icon: Icons.library_music_rounded,
-                                      ))
+                                  .map(
+                                    (p) => AppContextMenuItem(
+                                      value: 'add_to_${p.kind}',
+                                      label: p.title,
+                                      icon: Icons.library_music_rounded,
+                                    ),
+                                  )
                                   .toList(),
                             ),
                             const AppContextMenuItem(

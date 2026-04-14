@@ -415,25 +415,23 @@ impl FetchState {
         self.task = Some(tokio::spawn(async move {
             let feedbacks: Vec<StationFeedback> = pending_feedback
                 .into_iter()
-                .map(|e| {
-                    StationFeedback {
-                        batch_id: Some(session.batch_id.clone()),
-                        event: StationFeedbackEvent {
-                            track_id: Some(e.track_id),
-                            item_type: Some(
-                                match e.outcome {
-                                    WaveTrackOutcome::Finished => "trackFinished",
-                                    WaveTrackOutcome::Skipped => "skip",
-                                }
-                                .to_string(),
-                            ),
-                            timestamp: Utc::now(),
-                            from: None,
-                            total_played: Some(e.total_played),
-                            track_length: e.track_length,
-                        },
-                        from: Some(session.from_id().to_string()),
-                    }
+                .map(|e| StationFeedback {
+                    batch_id: Some(session.batch_id.clone()),
+                    event: StationFeedbackEvent {
+                        track_id: Some(e.track_id),
+                        item_type: Some(
+                            match e.outcome {
+                                WaveTrackOutcome::Finished => "trackFinished",
+                                WaveTrackOutcome::Skipped => "skip",
+                            }
+                            .to_string(),
+                        ),
+                        timestamp: Utc::now(),
+                        from: None,
+                        total_played: Some(e.total_played),
+                        track_length: e.track_length,
+                    },
+                    from: Some(session.from_id().to_string()),
                 })
                 .collect();
 
@@ -496,10 +494,10 @@ impl WaveExtensionHandles {
         }
 
         let hidden: Vec<Track> = additional.into_iter().skip(WAVE_VISIBLE_TRACKS).collect();
-        if !hidden.is_empty() {
-            if let Some(tx) = self.event_tx {
-                let _ = tx.send(Event::WaveBuffer(hidden));
-            }
+        if !hidden.is_empty()
+            && let Some(tx) = self.event_tx
+        {
+            let _ = tx.send(Event::WaveBuffer(hidden));
         }
     }
 }
@@ -658,10 +656,7 @@ impl QueueManager {
     }
 
     pub fn in_wave(&self) -> bool {
-        matches!(
-            *self.playback_context.lock(),
-            PlaybackContext::Wave(_)
-        )
+        matches!(*self.playback_context.lock(), PlaybackContext::Wave(_))
     }
 
     pub fn playback_context(&self) -> PlaybackContext {
@@ -947,12 +942,10 @@ impl QueueManager {
             let queue_len = self.signals.queue().len();
             let is_at_visible_tail = index + 1 >= queue_len;
 
-            if is_at_visible_tail {
-                if let Some(next) = self.wave_buffer.pop_front() {
-                    let mut q = self.signals.queue();
-                    q.push_back(next);
-                    self.signals.set_queue(q);
-                }
+            if is_at_visible_tail && let Some(next) = self.wave_buffer.pop_front() {
+                let mut q = self.signals.queue();
+                q.push_back(next);
+                self.signals.set_queue(q);
             }
 
             let remaining = self.wave_buffer.len();

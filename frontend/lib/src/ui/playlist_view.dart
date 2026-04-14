@@ -26,7 +26,8 @@ class PlaylistView extends StatefulWidget {
 class _PlaylistViewState extends State<PlaylistView> {
   late final FutureSignal<PlaylistDetailsDto?> _playlistAsync;
   // Сигнал для хранения метаданных (заголовок), чтобы они не исчезали при поиске
-  final FlutterSignal<PlaylistDetailsDto?> _playlistMetadata = signal<PlaylistDetailsDto?>(null);
+  final FlutterSignal<PlaylistDetailsDto?> _playlistMetadata =
+      signal<PlaylistDetailsDto?>(null);
   final FlutterSignal<String> _searchQuery = signal('');
   final _searchController = TextEditingController();
 
@@ -277,15 +278,14 @@ class _PlaylistContentState extends State<_PlaylistContent> {
                 hintText: 'Поиск в плейлисте...',
                 hintStyle: const TextStyle(color: Colors.white24),
                 prefixIcon: const Icon(Icons.search, color: Colors.white38),
-                suffixIcon:
-                    widget.searchController.text.isNotEmpty
-                        ? IconButton(
-                          icon: const Icon(Icons.clear, color: Colors.white38),
-                          onPressed: () {
-                            widget.searchController.clear();
-                          },
-                        )
-                        : null,
+                suffixIcon: widget.searchController.text.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear, color: Colors.white38),
+                        onPressed: () {
+                          widget.searchController.clear();
+                        },
+                      )
+                    : null,
                 filled: true,
                 fillColor: Colors.white.withValues(alpha: 0.05),
                 border: OutlineInputBorder(
@@ -386,7 +386,10 @@ class _PlaylistContentState extends State<_PlaylistContent> {
     );
   }
 
-  Future<void> _showRenameDialog(BuildContext context, PlaylistDetailsDto playlist) async {
+  Future<void> _showRenameDialog(
+    BuildContext context,
+    PlaylistDetailsDto playlist,
+  ) async {
     final controller = TextEditingController(text: playlist.title);
     await showDialog<void>(
       context: context,
@@ -429,7 +432,10 @@ class _PlaylistContentState extends State<_PlaylistContent> {
     );
   }
 
-  Future<void> _showDeleteConfirm(BuildContext context, PlaylistDetailsDto playlist) async {
+  Future<void> _showDeleteConfirm(
+    BuildContext context,
+    PlaylistDetailsDto playlist,
+  ) async {
     await showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
@@ -517,7 +523,10 @@ class _TrackTile extends StatelessWidget {
           ),
         ),
         IconButton(
-          icon: const Icon(Icons.playlist_remove_rounded, color: Colors.redAccent),
+          icon: const Icon(
+            Icons.playlist_remove_rounded,
+            color: Colors.redAccent,
+          ),
           onPressed: onRemove,
           tooltip: 'Удалить из плейлиста',
         ),

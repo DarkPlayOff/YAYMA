@@ -15,7 +15,11 @@ class CommonLoadingWidget extends StatelessWidget {
   const CommonLoadingWidget({super.key});
   @override
   Widget build(BuildContext context) {
-    return Center(child: CircularProgressIndicator(color: Theme.of(context).colorScheme.primary));
+    return Center(
+      child: CircularProgressIndicator(
+        color: Theme.of(context).colorScheme.primary,
+      ),
+    );
   }
 }
 
@@ -187,7 +191,8 @@ class _CommonVolumeSliderState extends State<CommonVolumeSlider> {
 
   @override
   Widget build(BuildContext context) {
-    final activeColor = widget.activeColor ?? Theme.of(context).colorScheme.primary;
+    final activeColor =
+        widget.activeColor ?? Theme.of(context).colorScheme.primary;
     return SizedBox(
       width: widget.width,
       child: SliderTheme(
@@ -240,7 +245,9 @@ class CommonAsyncView<T> extends StatelessWidget {
         return builder(context, data);
       },
       loading: () => loading ?? const CommonLoadingWidget(),
-      error: (Object e, _) => error != null ? error!(e.toString()) : CommonErrorWidget(error: e.toString()),
+      error: (Object e, _) => error != null
+          ? error!(e.toString())
+          : CommonErrorWidget(error: e.toString()),
     );
   }
 }
@@ -360,9 +367,11 @@ class _CommonProgressSliderState extends State<CommonProgressSlider> {
                               }
                             },
                           );
-                          unawaited(PlaybackController.seekTo(
-                            Duration(milliseconds: val.toInt()),
-                          ));
+                          unawaited(
+                            PlaybackController.seekTo(
+                              Duration(milliseconds: val.toInt()),
+                            ),
+                          );
                         },
                       ),
                     ),
@@ -414,9 +423,11 @@ class _CommonProgressSliderState extends State<CommonProgressSlider> {
                             }
                           },
                         );
-                        unawaited(PlaybackController.seekTo(
-                          Duration(milliseconds: val.toInt()),
-                        ));
+                        unawaited(
+                          PlaybackController.seekTo(
+                            Duration(milliseconds: val.toInt()),
+                          ),
+                        );
                       },
                     ),
                   ),

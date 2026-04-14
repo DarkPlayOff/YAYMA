@@ -40,10 +40,12 @@ class CommonQualitySelector extends StatelessWidget {
           } else if (val == 'eq') {
             unawaited(refreshEqualizer());
             unawaited(refreshAudioEffects());
-            unawaited(showDialog<void>(
-              context: context,
-              builder: (context) => const AudioSettingsDialog(),
-            ));
+            unawaited(
+              showDialog<void>(
+                context: context,
+                builder: (context) => const AudioSettingsDialog(),
+              ),
+            );
           }
         },
         color: const Color(0xFF2A2A2E),
@@ -116,7 +118,13 @@ class CommonQualitySelector extends StatelessWidget {
             ),
           ),
           _buildItem(context, AudioQuality.low, 'LQ', 'Низкое', quality),
-          _buildItem(context, AudioQuality.normal, 'NQ', 'Стандартное', quality),
+          _buildItem(
+            context,
+            AudioQuality.normal,
+            'NQ',
+            'Стандартное',
+            quality,
+          ),
           _buildItem(context, AudioQuality.high, 'HQ', 'Высокое', quality),
           const PopupMenuDivider(),
           PopupMenuItem(

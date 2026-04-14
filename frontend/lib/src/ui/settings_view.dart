@@ -69,7 +69,9 @@ class _SettingsViewState extends State<SettingsView> {
                   Watch((context) {
                     return CommonAsyncView<String?>(
                       state: _pathSignal.value,
-                      loading: LinearProgressIndicator(color: Theme.of(context).colorScheme.primary),
+                      loading: LinearProgressIndicator(
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
                       builder: (context, path) => _buildSettingItem(
                         context,
                         title: 'Путь для сохранения треков',
@@ -104,7 +106,8 @@ class _SettingsViewState extends State<SettingsView> {
                         Text(
                           'Альтернативный клиент для Яндекс Музыки.\nВерсия 0.1.0',
                           style: TextStyle(color: Colors.white54, fontSize: 16),
-                        ),                      ],
+                        ),
+                      ],
                     ),
                   ),
                 ],
@@ -180,7 +183,11 @@ class _SettingsViewState extends State<SettingsView> {
                 ],
               ),
             ),
-            const Icon(Icons.chevron_right_rounded, color: Colors.white24, size: 32),
+            const Icon(
+              Icons.chevron_right_rounded,
+              color: Colors.white24,
+              size: 32,
+            ),
           ],
         ),
       ),

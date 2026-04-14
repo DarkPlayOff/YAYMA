@@ -8,7 +8,9 @@ class AppContextMenuItem<T> {
   final List<AppContextMenuItem<T>>? subItems;
 
   const AppContextMenuItem({
-    required this.label, required this.icon, this.value,
+    required this.label,
+    required this.icon,
+    this.value,
     this.color,
     this.subItems,
   });
@@ -77,8 +79,14 @@ class AppContextMenu<T> extends StatelessWidget {
             ),
           ),
         ),
-        menuChildren: item.subItems!.map((sub) => _buildItem(context, sub)).toList(),
-        leadingIcon: Icon(item.icon, color: item.color ?? Colors.white70, size: 18),
+        menuChildren: item.subItems!
+            .map((sub) => _buildItem(context, sub))
+            .toList(),
+        leadingIcon: Icon(
+          item.icon,
+          color: item.color ?? Colors.white70,
+          size: 18,
+        ),
         child: Text(
           item.label,
           style: TextStyle(color: item.color ?? Colors.white, fontSize: 14),
@@ -92,7 +100,11 @@ class AppContextMenu<T> extends StatelessWidget {
           onSelected(item.value as T);
         }
       },
-      leadingIcon: Icon(item.icon, color: item.color ?? Colors.white70, size: 18),
+      leadingIcon: Icon(
+        item.icon,
+        color: item.color ?? Colors.white70,
+        size: 18,
+      ),
       child: Text(
         item.label,
         style: TextStyle(color: item.color ?? Colors.white, fontSize: 14),

@@ -2,9 +2,9 @@ use crate::audio::cache::UrlCache;
 use crate::{
     audio::{
         commands::AudioMessage, controller::AudioController, events::Event,
-        playback::PlaybackEngine, queue::QueueManager, queue::as_wave_seed, signals::AudioSignals, smtc::SmtcManager,
-        state::SystemState, stream_manager::StreamManager, yandex::YandexProvider,
-        progress::TrackProgress,
+        playback::PlaybackEngine, progress::TrackProgress, queue::QueueManager,
+        queue::as_wave_seed, signals::AudioSignals, smtc::SmtcManager, state::SystemState,
+        stream_manager::StreamManager, yandex::YandexProvider,
     },
     http::{ApiService, SessionExt},
 };

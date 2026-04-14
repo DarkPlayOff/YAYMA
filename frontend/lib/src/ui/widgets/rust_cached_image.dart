@@ -15,7 +15,8 @@ class RustCachedImage extends StatefulWidget {
   final BlendMode? colorBlendMode;
 
   const RustCachedImage({
-    required this.imageUrl, super.key,
+    required this.imageUrl,
+    super.key,
     this.width,
     this.height,
     this.fit = BoxFit.cover,
@@ -113,11 +114,13 @@ class _RustCachedImageState extends State<RustCachedImage> {
         frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
           if (frame != null && !_imageReady) {
             _imageReady = true;
-            unawaited(Future.microtask(() {
-              if (mounted) {
-                setState(() {});
-              }
-            }));
+            unawaited(
+              Future.microtask(() {
+                if (mounted) {
+                  setState(() {});
+                }
+              }),
+            );
           }
           return TweenAnimationBuilder<double>(
             tween: Tween(begin: 0, end: _imageReady ? 1.0 : 0.0),

@@ -26,27 +26,30 @@ class _RootScreenState extends State<RootScreen> {
         if (isLoggedIn) {
           if (!_hasLoadedState) {
             _hasLoadedState = true;
-            unawaited(Future.microtask(() {
-              unawaited(() async {
-                final ctx = appContextSignal.value;
-                if (ctx == null) return;
-                final state = await rust.restoreSavedState(ctx: ctx);
-                if (state != null) {
-                  await rust.restoreAndPlay(
-                    ctx: ctx,
-                    trackId: state.trackId,
-                    positionMs: state.positionMs,
-                    isPlaying: state.isPlaying,
-                  );
-                }
-              }());
-            }));
+            unawaited(
+              Future.microtask(() {
+                unawaited(() async {
+                  final ctx = appContextSignal.value;
+                  if (ctx == null) return;
+                  final state = await rust.restoreSavedState(ctx: ctx);
+                  if (state != null) {
+                    await rust.restoreAndPlay(
+                      ctx: ctx,
+                      trackId: state.trackId,
+                      positionMs: state.positionMs,
+                      isPlaying: state.isPlaying,
+                    );
+                  }
+                }());
+              }),
+            );
           }
           return const AppLayout();
         }
         return const LoginScreen();
       },
-      error: (dynamic e, dynamic _) => Scaffold(body: Center(child: Text('Ошибка: $e'))),
+      error: (dynamic e, dynamic _) =>
+          Scaffold(body: Center(child: Text('Ошибка: $e'))),
       loading: () =>
           const Scaffold(body: Center(child: CircularProgressIndicator())),
     );
@@ -63,10 +66,12 @@ class _LoginScreenState extends State<LoginScreen> {
   final _tokenController = TextEditingController();
 
   void _showWebView() {
-    unawaited(showDialog<void>(
-      context: context,
-      builder: (context) => const YandexLoginDialog(),
-    ));
+    unawaited(
+      showDialog<void>(
+        context: context,
+        builder: (context) => const YandexLoginDialog(),
+      ),
+    );
   }
 
   void _handleLogin(String val) {
@@ -192,16 +197,18 @@ class _YandexLoginDialogState extends State<YandexLoginDialog> {
     super.initState();
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36')
+      ..setUserAgent(
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+      )
       ..setNavigationDelegate(
         NavigationDelegate(
-          onPageStarted: (String url) => _parseToken(url),
-          onUrlChange: (UrlChange change) {
+          onPageStarted: _parseToken,
+          onUrlChange: (change) {
             if (change.url != null) {
               _parseToken(change.url!);
             }
           },
-          onNavigationRequest: (NavigationRequest request) {
+          onNavigationRequest: (request) {
             _parseToken(request.url);
             return NavigationDecision.navigate;
           },
@@ -230,7 +237,11 @@ class _YandexLoginDialogState extends State<YandexLoginDialog> {
       debugPrint('🔍 Authorized! Getting token via official desktop client...');
       _isFetchingToken = true;
 
-      await _controller.loadRequest(Uri.parse('https://oauth.yandex.ru/authorize?response_type=token&client_id=23cabbbdc6cd418abb4b39c32c41195d'));
+      await _controller.loadRequest(
+        Uri.parse(
+          'https://oauth.yandex.ru/authorize?response_type=token&client_id=23cabbbdc6cd418abb4b39c32c41195d',
+        ),
+      );
     }
   }
 

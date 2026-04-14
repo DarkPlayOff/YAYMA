@@ -5,11 +5,14 @@ use crate::http::ApiService;
 
 pub async fn restore_saved_state(_ctx: &AppContext) -> Option<SavedStateDto> {
     let db = APP_DB.get()?.lock();
-    db.load_playback_state().ok().flatten().map(|(id, pos, playing)| SavedStateDto {
-        track_id: id,
-        position_ms: pos as u32,
-        is_playing: playing,
-    })
+    db.load_playback_state()
+        .ok()
+        .flatten()
+        .map(|(id, pos, playing)| SavedStateDto {
+            track_id: id,
+            position_ms: pos as u32,
+            is_playing: playing,
+        })
 }
 
 pub async fn clear_token() {
@@ -17,15 +20,18 @@ pub async fn clear_token() {
 }
 
 pub async fn login_with_token(token: String) -> Result<AppContext, AppError> {
-    let (client, user_id) = TokenProvider::validate(token.clone()).await
+    let (client, user_id) = TokenProvider::validate(token.clone())
+        .await
         .map_err(|_| AppError::InvalidToken)?;
 
     let _ = TokenProvider::store(&token, user_id);
-    
-    let api = ApiService::new(token, Some(client), Some(user_id)).await
+
+    let api = ApiService::new(token, Some(client), Some(user_id))
+        .await
         .map_err(|e| AppError::ApiError(e.to_string()))?;
 
-    initialize_app(api).await
+    initialize_app(api)
+        .await
         .map_err(|e| AppError::Unknown(e.to_string()))
 }
 

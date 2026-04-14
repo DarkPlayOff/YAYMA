@@ -1,3 +1,3 @@
 mod token;
 
-pub use token::{TokenProvider};
+pub use token::TokenProvider;

@@ -1,6 +1,6 @@
 use crate::audio::fx::{EffectHandle, FxSource, modules::*};
 use foldhash::HashMap;
-use foldhash::{HashMapExt};
+use foldhash::HashMapExt;
 use rodio::Source;
 
 pub fn init_all<T: Source<Item = f32> + Send + 'static>(source: &mut FxSource<T>) {
