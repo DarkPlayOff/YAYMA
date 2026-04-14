@@ -1,8 +1,7 @@
 use crate::api::models::{AppError, SavedStateDto, UserAccountDto};
-use crate::app::{APP_DB, AppContext, CURRENT_SESSION, initialize_app};
+use crate::app::{APP_DB, AppContext, initialize_app};
 use crate::auth::TokenProvider;
 use crate::http::ApiService;
-use std::sync::Arc;
 
 pub async fn restore_saved_state(_ctx: &AppContext) -> Option<SavedStateDto> {
     let db = APP_DB.get()?.lock();
@@ -15,9 +14,6 @@ pub async fn restore_saved_state(_ctx: &AppContext) -> Option<SavedStateDto> {
 
 pub async fn clear_token() {
     let _ = TokenProvider::delete();
-    if let Some(session) = CURRENT_SESSION.swap(None) {
-        session.stop();
-    }
 }
 
 pub async fn login_with_token(token: String) -> Result<AppContext, AppError> {
@@ -29,10 +25,8 @@ pub async fn login_with_token(token: String) -> Result<AppContext, AppError> {
     let api = ApiService::new(token, Some(client), Some(user_id)).await
         .map_err(|e| AppError::ApiError(e.to_string()))?;
 
-    let context = initialize_app(api).await
-        .map_err(|e| AppError::Unknown(e.to_string()))?;
-
-    Ok(Arc::try_unwrap(context).unwrap_or_else(|arc| (*arc).clone()))
+    initialize_app(api).await
+        .map_err(|e| AppError::Unknown(e.to_string()))
 }
 
 pub async fn try_auto_login() -> Option<AppContext> {

@@ -1,8 +1,7 @@
 use crate::app::context::AppContext;
-use crate::app::session::AppSession;
 use crate::app::settings::load_persisted_settings;
 use crate::app::workers;
-use crate::app::{APP_DB, AUDIO_READY, CURRENT_SESSION};
+use crate::app::{APP_DB, AUDIO_READY};
 use crate::audio::system::AudioSystem;
 use crate::db::AppDatabase;
 use crate::http::ApiService;
@@ -12,8 +11,7 @@ use std::sync::Arc;
 /// Полный цикл инициализации приложения
 pub async fn initialize_app(
     api: ApiService,
-) -> Result<Arc<AppContext>, Box<dyn std::error::Error + Send + Sync>> {
-    stop_current_session().await;
+) -> Result<AppContext, Box<dyn std::error::Error + Send + Sync>> {
     ensure_database_initialized()?;
     initialize_services(api).await
 }
@@ -34,14 +32,6 @@ pub fn initialize_infrastructure() {
     });
 }
 
-/// Остановка текущей сессии
-pub async fn stop_current_session() {
-    if let Some(old_session) = CURRENT_SESSION.swap(None) {
-        old_session.stop();
-        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
-    }
-}
-
 fn ensure_database_initialized() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     if APP_DB.get().is_none() {
         let db = AppDatabase::init()?;
@@ -52,7 +42,7 @@ fn ensure_database_initialized() -> Result<(), Box<dyn std::error::Error + Send 
 
 async fn initialize_services(
     api: ApiService,
-) -> Result<Arc<AppContext>, Box<dyn std::error::Error + Send + Sync>> {
+) -> Result<AppContext, Box<dyn std::error::Error + Send + Sync>> {
     let api_arc = Arc::new(api);
     let (event_tx, event_rx) = flume::unbounded();
 
@@ -64,7 +54,7 @@ async fn initialize_services(
         .ok_or_else(|| "Database not initialized".to_string())?
         .clone();
 
-    let context = AppContext::new(
+    let (context, shutdown_rx) = AppContext::new(
         audio_tx,
         api_arc.clone(),
         db_arc,
@@ -76,15 +66,14 @@ async fn initialize_services(
     load_persisted_settings(&context).await;
     context.signals.monitor.set_enabled(true);
 
-    let (session, shutdown_rx) = AppSession::new(context);
-    CURRENT_SESSION.store(Some(session.clone()));
+    let context_arc = Arc::new(context.clone());
 
-    workers::spawn_sync_worker(session.context.clone(), shutdown_rx.clone());
-    workers::spawn_event_worker(session.context.clone(), event_rx, shutdown_rx.clone());
-    workers::spawn_bridge_worker(session.context.clone(), shutdown_rx.clone());
-    workers::spawn_settings_worker(session.context.clone(), shutdown_rx.clone());
+    workers::spawn_sync_worker(context_arc.clone(), shutdown_rx.clone());
+    workers::spawn_event_worker(context_arc.clone(), event_rx, shutdown_rx.clone());
+    workers::spawn_bridge_worker(context_arc.clone(), shutdown_rx.clone());
+    workers::spawn_settings_worker(context_arc.clone(), shutdown_rx.clone());
     workers::spawn_cache_worker(shutdown_rx.clone());
 
     AUDIO_READY.notify_waiters();
-    Ok(session.context.clone())
+    Ok(context)
 }

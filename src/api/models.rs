@@ -2,6 +2,10 @@ use crate::util::track::CleanId;
 use serde::{Deserialize, Serialize};
 use yandex_music::model::{album::Album, artist::Artist, playlist::Playlist, track::Track};
 
+pub const COVER_SIZE_SMALL: &str = "200x200";
+pub const COVER_SIZE_MEDIUM: &str = "400x400";
+pub const COVER_SIZE_LARGE: &str = "1000x1000";
+
 pub fn format_cover(uri: Option<String>, size: &str) -> Option<String> {
     uri.map(|s| {
         let s = s.replace("%%", size);
@@ -16,14 +20,7 @@ pub fn format_cover(uri: Option<String>, size: &str) -> Option<String> {
 }
 
 #[flutter_rust_bridge::frb(ignore)]
-pub fn take_track_cover_uri(t: &mut Track) -> Option<String> {
-    t.og_image.take()
-        .or_else(|| t.cover_uri.take())
-        .or_else(|| t.albums.get_mut(0).and_then(|a| a.og_image.take().or(a.cover_uri.take())))
-}
-
-#[flutter_rust_bridge::frb(ignore)]
-pub fn get_track_cover_uri(t: &Track) -> Option<String> {
+fn get_any_cover(t: &Track) -> Option<String> {
     t.og_image.clone()
         .or_else(|| t.cover_uri.clone())
         .or_else(|| t.albums.first().and_then(|a| a.og_image.clone().or(a.cover_uri.clone())))
@@ -507,10 +504,33 @@ pub enum AppError {
     ApiError(String),
     #[error("Database error: {0}")]
     DbError(String),
+    #[error("Invalid token or session expired")]
+    Unauthorized,
     #[error("Invalid token")]
     InvalidToken,
-    #[error("Network error")]
+    #[error("Network error: please check your connection")]
     NetworkError,
+    #[error("Resource not found: {0}")]
+    NotFound(String),
+    #[error("Rate limited: too many requests")]
+    RateLimited,
     #[error("Unknown error: {0}")]
     Unknown(String),
+}
+
+impl From<Box<dyn std::error::Error + Send + Sync>> for AppError {
+    fn from(err: Box<dyn std::error::Error + Send + Sync>) -> Self {
+        let s = err.to_string();
+        if s.contains("401") || s.contains("unauthorized") {
+            AppError::Unauthorized
+        } else if s.contains("404") || s.contains("not found") {
+            AppError::NotFound(s)
+        } else if s.contains("429") || s.contains("too many requests") {
+            AppError::RateLimited
+        } else if s.contains("timeout") || s.contains("connection") {
+            AppError::NetworkError
+        } else {
+            AppError::ApiError(s)
+        }
+    }
 }
