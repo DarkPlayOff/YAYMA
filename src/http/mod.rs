@@ -104,19 +104,6 @@ pub struct ApiService {
     pub quality: RwLock<AudioQuality>,
 }
 
-#[derive(Debug, Serialize, Clone, Copy)]
-#[serde(rename_all = "camelCase")]
-pub enum RotorEvent {
-    RadioStarted,
-    TrackStarted,
-    TrackFinished,
-    Skip,
-    Like,
-    Unlike,
-    Dislike,
-    Undislike,
-}
-
 impl ApiService {
     pub async fn new(
         token: String,

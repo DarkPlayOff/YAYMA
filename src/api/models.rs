@@ -15,6 +15,20 @@ pub fn format_cover(uri: Option<String>, size: &str) -> Option<String> {
     })
 }
 
+#[flutter_rust_bridge::frb(ignore)]
+pub fn take_track_cover_uri(t: &mut Track) -> Option<String> {
+    t.og_image.take()
+        .or_else(|| t.cover_uri.take())
+        .or_else(|| t.albums.get_mut(0).and_then(|a| a.og_image.take().or(a.cover_uri.take())))
+}
+
+#[flutter_rust_bridge::frb(ignore)]
+pub fn get_track_cover_uri(t: &Track) -> Option<String> {
+    t.og_image.clone()
+        .or_else(|| t.cover_uri.clone())
+        .or_else(|| t.albums.first().and_then(|a| a.og_image.clone().or(a.cover_uri.clone())))
+}
+
 #[flutter_rust_bridge::frb(unignore)]
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Default, PartialEq, Eq)]
 pub enum AudioQuality {
@@ -90,8 +104,7 @@ impl SimpleTrackDto {
         let is_liked = liked_ids.contains(track_id_base);
         let is_disliked = disliked_ids.contains(track_id_base);
 
-        let album = t.albums.get_mut(0);
-        let (album_title, album_id) = if let Some(a) = album {
+        let (album_title, album_id) = if let Some(a) = t.albums.get_mut(0) {
             (
                 std::mem::take(&mut a.title),
                 a.id.take().map(|id| id.to_string()),
@@ -99,6 +112,8 @@ impl SimpleTrackDto {
         } else {
             (None, None)
         };
+
+        let cover_url = format_cover(take_track_cover_uri(&mut t), "400x400");
 
         Self {
             id: t.id,
@@ -112,7 +127,7 @@ impl SimpleTrackDto {
             album: album_title,
             album_id,
             duration_ms: t.duration.map(|d| d.as_millis() as u32).unwrap_or(0),
-            cover_url: format_cover(t.og_image.take(), "400x400"),
+            cover_url,
             is_liked,
             is_disliked,
         }
@@ -134,6 +149,8 @@ impl SimpleTrackDto {
             (None, None)
         };
 
+        let cover_url = format_cover(get_track_cover_uri(t), "200x200");
+
         Self {
             id: t.id.clone(),
             title: t.title.clone().unwrap_or_default(),
@@ -146,7 +163,7 @@ impl SimpleTrackDto {
             album: album_title,
             album_id,
             duration_ms: t.duration.map(|d| d.as_millis() as u32).unwrap_or(0),
-            cover_url: format_cover(t.og_image.clone(), "200x200"),
+            cover_url,
             is_liked,
             is_disliked,
         }
