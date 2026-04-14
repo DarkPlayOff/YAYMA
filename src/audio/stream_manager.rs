@@ -37,8 +37,12 @@ impl StreamManager {
 
     pub fn prewarm(&self, track: Track) {
         let id = track.id.clone();
-        if self.prewarm_cache.lock().contains_key(&id) {
-            return;
+        {
+            let mut cache = self.prewarm_cache.lock();
+            if cache.contains_key(&id) {
+                return;
+            }
+            cache.clear();
         }
 
         let this = self.clone();
