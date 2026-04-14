@@ -269,7 +269,7 @@ pub async fn liked_tracks_stream(
 
         let dtos_iter = tracks_vec
             .into_iter()
-            .map(|t| SimpleTrackDto::from_yandex(t, &liked_ids, &disliked_ids))
+            .map(|t| SimpleTrackDto::from_yandex(&t, &liked_ids, &disliked_ids))
             .filter(matches_query);
 
         let mut current_chunk = Vec::with_capacity(30);

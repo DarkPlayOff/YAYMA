@@ -1,7 +1,6 @@
 use crate::api::models::AudioQuality;
 use chrono::Utc;
 use parking_lot::RwLock;
-use serde::Serialize;
 use serde_json;
 use std::sync::Arc;
 use std::time::Duration;

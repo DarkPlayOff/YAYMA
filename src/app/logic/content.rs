@@ -24,7 +24,7 @@ pub async fn search(ctx: &AppContext, query: String) -> Option<SearchResultsDto>
                 .map(|t| {
                     t.results
                         .into_iter()
-                        .map(|track| SimpleTrackDto::from_yandex(track, &liked, &disliked))
+                        .map(|track| SimpleTrackDto::from_yandex(&track, &liked, &disliked))
                         .collect()
                 })
                 .unwrap_or_default();
@@ -98,7 +98,7 @@ pub async fn download_track(ctx: &AppContext, track_id: String) -> Result<String
         .next()
         .ok_or_else(|| AppError::ApiError("Track not found".to_string()))?;
 
-    let dto = SimpleTrackDto::from_yandex(track, &liked, &disliked);
+    let dto = SimpleTrackDto::from_yandex(&track, &liked, &disliked);
     let artist_name = dto
         .artists
         .first()
@@ -296,7 +296,7 @@ pub async fn get_artist_details(
         (Ok(mut artist), Ok((tracks, pager))) => {
             let mapped_tracks = tracks
                 .into_iter()
-                .map(|t| SimpleTrackDto::from_yandex(t, &liked, &disliked))
+                .map(|t| SimpleTrackDto::from_yandex(&t, &liked, &disliked))
                 .collect();
             Some(ArtistDetailsDto {
                 id: artist_id,
@@ -340,7 +340,7 @@ pub async fn get_playlist_details(
                     })
             })
         })
-        .map(|t| SimpleTrackDto::from_yandex(t, &liked, &disliked))
+        .map(|t| SimpleTrackDto::from_yandex(&t, &liked, &disliked))
         .collect();
 
     let mut dto = PlaylistDetailsDto::from_yandex(playlist);

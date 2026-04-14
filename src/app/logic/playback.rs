@@ -24,7 +24,7 @@ pub fn get_playback_state_internal<S: std::hash::BuildHasher>(
         current_wave_seeds: signals.current_wave_seeds.get(),
         codec: signals.codec.get(),
         current_track: current_track
-            .map(|t| SimpleTrackDto::from_yandex(t, liked_ids, disliked_ids)),
+            .map(|t| SimpleTrackDto::from_yandex(&t, liked_ids, disliked_ids)),
     }
 }
 
@@ -78,7 +78,7 @@ pub async fn get_queue(ctx: &AppContext) -> Vec<SimpleTrackDto> {
     let (liked_ids, disliked_ids) = ctx.state.read().await.liked.snapshot();
     ctx.signals.queue.with(|q| {
         q.iter()
-            .map(|t| SimpleTrackDto::from_yandex_ref(t, &liked_ids, &disliked_ids))
+            .map(|t| SimpleTrackDto::from_yandex(t, &liked_ids, &disliked_ids))
             .collect()
     })
 }
@@ -87,7 +87,7 @@ pub async fn get_history(ctx: &AppContext) -> Vec<SimpleTrackDto> {
     let (liked_ids, disliked_ids) = ctx.state.read().await.liked.snapshot();
     ctx.signals.history.with(|h| {
         h.iter()
-            .map(|t| SimpleTrackDto::from_yandex_ref(t, &liked_ids, &disliked_ids))
+            .map(|t| SimpleTrackDto::from_yandex(t, &liked_ids, &disliked_ids))
             .collect()
     })
 }

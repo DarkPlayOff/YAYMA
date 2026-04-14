@@ -1,6 +1,6 @@
 use crate::util::track::CleanId;
 use serde::{Deserialize, Serialize};
-use yandex_music::model::{album::Album, artist::Artist, playlist::Playlist, track::Track};
+pub use yandex_music::model::{album::Album, artist::Artist, playlist::Playlist, track::Track};
 
 pub const COVER_SIZE_SMALL: &str = "200x200";
 pub const COVER_SIZE_MEDIUM: &str = "400x400";
@@ -53,21 +53,7 @@ pub struct TrackArtistDto {
 
 #[flutter_rust_bridge::frb(ignore)]
 impl TrackArtistDto {
-    pub fn from_yandex_track_artist(mut a: yandex_music::model::artist::Artist) -> Self {
-        Self {
-            id: a.id.take().map(|id| id.to_string()).unwrap_or_default(),
-            name: a.name.take().unwrap_or_default(),
-        }
-    }
-
-    pub fn from_yandex_artist(mut a: yandex_music::model::artist::Artist) -> Self {
-        Self {
-            id: a.id.take().map(|id| id.to_string()).unwrap_or_default(),
-            name: a.name.take().unwrap_or_default(),
-        }
-    }
-
-    pub fn from_yandex_artist_ref(a: &yandex_music::model::artist::Artist) -> Self {
+    pub fn from_yandex(a: &yandex_music::model::artist::Artist) -> Self {
         Self {
             id: a.id.as_ref().map(|id| id.to_string()).unwrap_or_default(),
             name: a.name.clone().unwrap_or_default(),
@@ -93,76 +79,26 @@ pub struct SimpleTrackDto {
 #[flutter_rust_bridge::frb(ignore)]
 impl SimpleTrackDto {
     pub fn from_yandex<S: std::hash::BuildHasher>(
-        mut t: Track,
-        liked_ids: &std::collections::HashSet<String, S>,
-        disliked_ids: &std::collections::HashSet<String, S>,
-    ) -> Self {
-        let track_id_base = t.id.to_base_id();
-        let is_liked = liked_ids.contains(track_id_base);
-        let is_disliked = disliked_ids.contains(track_id_base);
-
-        let (album_title, album_id) = if let Some(a) = t.albums.get_mut(0) {
-            (
-                std::mem::take(&mut a.title),
-                a.id.take().map(|id| id.to_string()),
-            )
-        } else {
-            (None, None)
-        };
-
-        let cover_url = format_cover(take_track_cover_uri(&mut t), "400x400");
-
-        Self {
-            id: t.id,
-            title: t.title.take().unwrap_or_default(),
-            version: t.version.take(),
-            artists: t
-                .artists
-                .into_iter()
-                .map(TrackArtistDto::from_yandex_track_artist)
-                .collect(),
-            album: album_title,
-            album_id,
-            duration_ms: t.duration.map(|d| d.as_millis() as u32).unwrap_or(0),
-            cover_url,
-            is_liked,
-            is_disliked,
-        }
-    }
-
-    pub fn from_yandex_ref<S: std::hash::BuildHasher>(
         t: &Track,
         liked_ids: &std::collections::HashSet<String, S>,
         disliked_ids: &std::collections::HashSet<String, S>,
     ) -> Self {
         let track_id_base = t.id.to_base_id();
-        let is_liked = liked_ids.contains(track_id_base);
-        let is_disliked = disliked_ids.contains(track_id_base);
-
-        let album = t.albums.get(0);
-        let (album_title, album_id) = if let Some(a) = album {
-            (a.title.clone(), a.id.as_ref().map(|id| id.to_string()))
-        } else {
-            (None, None)
-        };
-
-        let cover_url = format_cover(get_track_cover_uri(t), "200x200");
+        let (album_title, album_id) = t.albums.first()
+            .map(|a| (a.title.clone(), a.id.as_ref().map(|id| id.to_string())))
+            .unwrap_or((None, None));
 
         Self {
             id: t.id.clone(),
             title: t.title.clone().unwrap_or_default(),
             version: t.version.clone(),
-            artists: t
-                .artists
-                .iter()
-                .map(TrackArtistDto::from_yandex_artist_ref)
-                .collect(),
+            artists: t.artists.iter().map(TrackArtistDto::from_yandex).collect(),
             album: album_title,
             album_id,
             duration_ms: t.duration.map(|d| d.as_millis() as u32).unwrap_or(0),
-            cover_url,
-            is_liked,
-            is_disliked,
+            cover_url: format_cover(get_any_cover(t), COVER_SIZE_MEDIUM),
+            is_liked: liked_ids.contains(track_id_base),
+            is_disliked: disliked_ids.contains(track_id_base),
         }
     }
 }
@@ -197,8 +133,8 @@ impl TrackDetailsDto {
             title: t.title.take().unwrap_or_default(),
             artists: t
                 .artists
-                .into_iter()
-                .map(TrackArtistDto::from_yandex_track_artist)
+                .iter()
+                .map(TrackArtistDto::from_yandex)
                 .collect(),
             album: album_title,
             label,
@@ -263,8 +199,8 @@ impl AlbumDetailsDto {
         let year = album.year.map(|y| y as i32);
         let artists = album
             .artists
-            .into_iter()
-            .map(TrackArtistDto::from_yandex_artist)
+            .iter()
+            .map(TrackArtistDto::from_yandex)
             .collect();
 
         let tracks = album
@@ -272,7 +208,7 @@ impl AlbumDetailsDto {
             .into_iter()
             .flatten()
             .map(|t| {
-                let mut dto = SimpleTrackDto::from_yandex(t, liked_ids, disliked_ids);
+                let mut dto = SimpleTrackDto::from_yandex(&t, liked_ids, disliked_ids);
                 dto.album = Some(album_title.clone());
                 dto.album_id = Some(album_id.clone());
                 dto
@@ -318,8 +254,8 @@ impl SimpleAlbumDto {
             title: album.title.take().unwrap_or_default(),
             artists: album
                 .artists
-                .into_iter()
-                .map(TrackArtistDto::from_yandex_artist)
+                .iter()
+                .map(TrackArtistDto::from_yandex)
                 .collect(),
             cover_url: format_cover(album.og_image.take(), "400x400"),
             year: album.year.map(|y| y as i32),
