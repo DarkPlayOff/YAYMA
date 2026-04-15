@@ -63,6 +63,8 @@ pub async fn login_via_webview() -> Result<String, AppError> {
         // На Windows и Linux нужно явно разрешить создание EventLoop не в главном потоке.
         #[cfg(target_os = "windows")]
         use tao::platform::windows::EventLoopBuilderExtWindows;
+        #[cfg(target_os = "linux")]
+        use tao::platform::unix::EventLoopBuilderExtUnix;
         #[cfg(any(target_os = "windows", target_os = "linux"))]
         use tao::platform::run_return::EventLoopExtRunReturn;
 
@@ -74,7 +76,7 @@ pub async fn login_via_webview() -> Result<String, AppError> {
 
         let mut builder = EventLoopBuilder::<UserEvent>::with_user_event();
         
-        #[cfg(target_os = "windows")]
+        #[cfg(any(target_os = "windows", target_os = "linux"))]
         builder.with_any_thread(true);
 
         let mut event_loop = builder.build();
