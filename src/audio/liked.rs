@@ -4,11 +4,13 @@ use foldhash::HashSet;
 use yandex_music::model::collection::Collection;
 
 pub type LikedSnapshot = (HashSet<String>, HashSet<String>);
+pub type OrderedLikedSnapshot = (Vec<String>, HashSet<String>);
 
 #[derive(Debug, Clone, Default)]
 pub struct LikedCache {
     pub revision: Option<u64>,
-    liked_ids: HashSet<String>,
+    liked_ids: Vec<String>,
+    liked_ids_set: HashSet<String>,
     disliked_ids: HashSet<String>,
     liked_albums_ids: HashSet<u32>,
     liked_artists_ids: HashSet<String>,
@@ -24,6 +26,8 @@ impl LikedCache {
                 .iter()
                 .map(|t| t.track_id.to_base_id().to_string())
                 .collect();
+            self.liked_ids_set = self.liked_ids.iter().cloned().collect();
+            
             self.disliked_ids = tracks
                 .disliked
                 .iter()
@@ -60,32 +64,42 @@ impl LikedCache {
             .into_iter()
             .map(|id| id.to_base_id().to_string())
             .collect();
+        self.liked_ids_set = self.liked_ids.iter().cloned().collect();
     }
 
     pub fn snapshot(&self) -> LikedSnapshot {
+        (self.liked_ids_set.clone(), self.disliked_ids.clone())
+    }
+
+    pub fn ordered_snapshot(&self) -> OrderedLikedSnapshot {
         (self.liked_ids.clone(), self.disliked_ids.clone())
     }
 
     pub fn set_like_status(&mut self, track_id: &str, liked: bool) {
-        let base_id = track_id.to_base_id();
+        let base_id = track_id.to_base_id().to_string();
         if liked {
-            self.liked_ids.insert(base_id.to_string());
+            if self.liked_ids_set.insert(base_id.clone()) {
+                // Новые лайки добавляем в начало
+                self.liked_ids.insert(0, base_id);
+            }
         } else {
-            self.liked_ids.remove(base_id);
+            if self.liked_ids_set.remove(&base_id) {
+                self.liked_ids.retain(|id| id != &base_id);
+            }
         }
     }
 
     pub fn set_dislike_status(&mut self, track_id: &str, disliked: bool) {
-        let base_id = track_id.to_base_id();
+        let base_id = track_id.to_base_id().to_string();
         if disliked {
-            self.disliked_ids.insert(base_id.to_string());
+            self.disliked_ids.insert(base_id);
         } else {
-            self.disliked_ids.remove(base_id);
+            self.disliked_ids.remove(&base_id);
         }
     }
 
     pub fn is_liked(&self, track_id: &str) -> bool {
-        self.liked_ids.contains(track_id.to_base_id())
+        self.liked_ids_set.contains(track_id.to_base_id())
     }
 
     pub fn is_disliked(&self, track_id: &str) -> bool {

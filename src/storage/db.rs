@@ -308,6 +308,22 @@ impl AppDatabase {
         Ok(result)
     }
 
+    pub fn add_liked_track(&self, track_id: &str) -> Result<()> {
+        self.conn.execute(
+            "INSERT OR IGNORE INTO liked_tracks (track_id) VALUES (?1)",
+            params![track_id],
+        )?;
+        Ok(())
+    }
+
+    pub fn remove_liked_track(&self, track_id: &str) -> Result<()> {
+        self.conn.execute(
+            "DELETE FROM liked_tracks WHERE track_id = ?1",
+            params![track_id],
+        )?;
+        Ok(())
+    }
+
     pub fn upsert_track_metadata(
         &self,
         id: &str,

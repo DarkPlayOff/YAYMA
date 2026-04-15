@@ -37,6 +37,9 @@ pub struct AudioSignals {
     // Канал для уведомления об изменении любого из сигналов (кроме прогресса)
     pub changed: watch::Sender<()>,
     pub changed_rx: watch::Receiver<()>,
+    // Канал для уведомления об изменениях в библиотеке (лайки, плейлисты)
+    pub library_changed: watch::Sender<()>,
+    pub library_changed_rx: watch::Receiver<()>,
     // Канал для уведомления об изменении прогресса
     pub progress_changed: watch::Sender<u32>,
     pub progress_rx: watch::Receiver<u32>,
@@ -45,6 +48,7 @@ pub struct AudioSignals {
 impl AudioSignals {
     pub fn new() -> Self {
         let (changed_tx, changed_rx) = watch::channel(());
+        let (library_changed_tx, library_changed_rx) = watch::channel(());
         let (progress_tx, progress_rx) = watch::channel(0u32);
         Self {
             is_playing: Signal::new(false),
@@ -73,6 +77,8 @@ impl AudioSignals {
             monitor: Arc::new(Monitor::new(1024)),
             changed: changed_tx,
             changed_rx,
+            library_changed: library_changed_tx,
+            library_changed_rx,
             progress_changed: progress_tx,
             progress_rx,
         }

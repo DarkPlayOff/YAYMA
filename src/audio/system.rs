@@ -342,7 +342,12 @@ impl AudioSystem {
                 });
             }
             AudioMessage::SyncLiked => {
-                Self::sync_liked_collection_with(self.yandex.api.clone(), self.state.clone()).await;
+                Self::sync_liked_collection_with(
+                    self.yandex.api.clone(),
+                    self.state.clone(),
+                    self.signals.clone(),
+                )
+                .await;
                 self.signals.changed.send_replace(());
             }
             AudioMessage::WaveLike(track_id) => {
@@ -535,13 +540,25 @@ impl AudioSystem {
         self.queue.refresh_wave_queue();
     }
 
-    pub async fn sync_liked_collection_with(api: Arc<ApiService>, state: Arc<RwLock<SystemState>>) {
+    pub async fn sync_liked_collection_with(
+        api: Arc<ApiService>,
+        state: Arc<RwLock<SystemState>>,
+        signals: AudioSignals,
+    ) {
         if let Ok(ids) = api.fetch_liked_ids().await {
             let count = ids.len();
             {
                 let mut state = state.write().await;
-                state.liked.set_liked_ids(ids);
+                state.liked.set_liked_ids(ids.clone());
             }
+            signals.library_changed.send_replace(());
+
+            // Sync with DB
+            if let Some(db_arc) = crate::app::get_db() {
+                let db = db_arc.lock();
+                let _ = db.save_liked_tracks(&ids);
+            }
+
             tracing::info!("Synced {} liked track IDs directly from API", count);
         } else {
             tracing::warn!("Failed to fetch liked track IDs");

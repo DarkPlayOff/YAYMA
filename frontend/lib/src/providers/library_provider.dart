@@ -31,7 +31,10 @@ Future<void> refreshPlaylists() async {
 }
 
 Future<void> refreshLikedTracks({String? query, bool force = false}) async {
-  if (!force && query == null && likedTracksSignal.value.isNotEmpty) return;
+  if (!force &&
+      query == null &&
+      likedTracksSignal.value.isNotEmpty &&
+      _likedSub != null) return;
 
   final ctx = appContextSignal.value;
   if (ctx == null) return;
@@ -42,7 +45,12 @@ Future<void> refreshLikedTracks({String? query, bool force = false}) async {
 
   _likedSub = likedTracksStream(ctx: ctx, query: query).listen(
     (chunk) {
-      likedTracksSignal.value = [...likedTracksSignal.value, ...chunk];
+      if (chunk.isEmpty) {
+        // Пустой чанк служит сигналом сброса (reset) от Rust
+        likedTracksSignal.value = [];
+      } else {
+        likedTracksSignal.value = [...likedTracksSignal.value, ...chunk];
+      }
     },
     onDone: () {
       isLibraryLoadingSignal.value = false;

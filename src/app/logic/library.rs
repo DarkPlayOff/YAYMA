@@ -1,6 +1,7 @@
 use crate::api::models::{SimplePlaylistDto, SimpleTrackDto};
 use crate::app::AppContext;
 use crate::frb_generated::StreamSink;
+use foldhash::HashMapExt;
 
 pub async fn toggle_like(ctx: &AppContext, track_id: String) {
     let is_liked = {
@@ -12,6 +13,16 @@ pub async fn toggle_like(ctx: &AppContext, track_id: String) {
     {
         let mut state = ctx.state.write().await;
         state.liked.set_like_status(&track_id, !is_liked);
+
+        // Обновляем БД сразу для поиска и оффлайн-доступа
+        let db = ctx.db.lock();
+        if is_liked {
+            let _ = db.remove_liked_track(&track_id);
+        } else {
+            let _ = db.add_liked_track(&track_id);
+        }
+
+        ctx.signals.library_changed.send_replace(());
         ctx.signals.changed.send_replace(());
     }
 
@@ -53,6 +64,7 @@ pub async fn toggle_dislike(ctx: &AppContext, track_id: String) {
     {
         let mut state = ctx.state.write().await;
         state.liked.set_dislike_status(&track_id, !is_disliked);
+        ctx.signals.library_changed.send_replace(());
         ctx.signals.changed.send_replace(());
     }
 
@@ -199,111 +211,180 @@ pub async fn liked_tracks_stream(
     sink: StreamSink<Vec<SimpleTrackDto>>,
     query: Option<String>,
 ) {
-    let (liked_ids, disliked_ids) = ctx.state.read().await.liked.snapshot();
+    let mut changed_rx = ctx.signals.library_changed_rx.clone();
 
-    // Если есть запрос, пробуем искать в БД
-    if let Some(ref q) = query
-        && !q.trim().is_empty()
-        && let Ok(found_ids) = ctx.db.lock().search_liked_tracks(q)
-        && !found_ids.is_empty()
-        && let Ok(metadata) = ctx.db.lock().get_track_metadata(&found_ids)
-    {
-        let mut dtos = Vec::new();
-        for (id, title, version, artists_names, album, album_id, cover_url, duration_ms) in metadata
+    loop {
+        // Отправляем пустой список как сигнал сброса для фронтенда,
+        // чтобы избежать дубликатов при обновлении.
+        if sink.add(vec![]).is_err() {
+            return;
+        }
+
+        let (liked_ids, disliked_ids_set) = ctx.state.read().await.liked.ordered_snapshot();
+
+        // 1. Обработка поиска (используем БД)
+        if let Some(ref q) = query
+            && !q.trim().is_empty()
         {
-            let artists: Vec<crate::api::models::TrackArtistDto> = artists_names
-                .into_iter()
-                .map(|name| crate::api::models::TrackArtistDto {
-                    id: "".to_string(),
-                    name,
-                })
+            if let Ok(found_ids) = ctx.db.lock().search_liked_tracks(q)
+                && !found_ids.is_empty()
+            {
+                // Для поиска используем метаданные из БД
+                if let Ok(metadata) = ctx.db.lock().get_track_metadata(&found_ids) {
+                    let mut dtos = Vec::new();
+                    for (id, title, version, artists_names, album, album_id, cover_url, duration_ms) in
+                        metadata
+                    {
+                        let artists: Vec<crate::api::models::TrackArtistDto> = artists_names
+                            .into_iter()
+                            .map(|name: String| crate::api::models::TrackArtistDto {
+                                id: "".to_string(),
+                                name,
+                            })
+                            .collect();
+
+                        dtos.push(SimpleTrackDto {
+                            id,
+                            title,
+                            version,
+                            artists,
+                            album,
+                            album_id,
+                            cover_url,
+                            duration_ms: duration_ms as u32,
+                            is_liked: true,
+                            is_disliked: false,
+                        });
+
+                        if dtos.len() == 50 && sink.add(std::mem::take(&mut dtos)).is_err() {
+                            return;
+                        }
+                    }
+                    if !dtos.is_empty() {
+                        let _ = sink.add(dtos);
+                    }
+                }
+            } else {
+                let _ = sink.add(vec![]);
+            }
+        } else {
+            // 2. Основной список (Local-First)
+            if liked_ids.is_empty() {
+                // Если локально пусто, возможно еще не синхронизировались
+                let _ = ctx.audio_tx.send(crate::audio::commands::AudioMessage::SyncLiked).await;
+            }
+
+            // Пытаемся достать метаданные из БД для всех лайкнутых ID
+            let mut metadata_map = foldhash::HashMap::new();
+            if let Ok(metadata) = ctx.db.lock().get_track_metadata(&liked_ids) {
+                for m in metadata {
+                    metadata_map.insert(m.0.clone(), m);
+                }
+            }
+
+            // Проверяем, для каких треков нет метаданных
+            let missing_ids: Vec<String> = liked_ids
+                .iter()
+                .filter(|id| !metadata_map.contains_key(*id))
+                .cloned()
                 .collect();
 
-            dtos.push(SimpleTrackDto {
-                id,
-                title,
-                version,
-                artists,
-                album,
-                album_id,
-                cover_url,
-                duration_ms: duration_ms as u32,
-                is_liked: true,
-                is_disliked: false,
-            });
+            if !missing_ids.is_empty() {
+                // Дотягиваем недостающие метаданные из API (батчами по 50)
+                for chunk in missing_ids.chunks(50) {
+                    if let Ok(tracks) = ctx.api.fetch_tracks(chunk.to_vec()).await {
+                        for t in tracks {
+                            let artists: Vec<String> =
+                                t.artists.iter().filter_map(|a| a.name.clone()).collect();
+                            let album = t.albums.first().and_then(|a| a.title.clone());
+                            let album_id =
+                                t.albums.first().and_then(|a| a.id).map(|id| id.to_string());
+                            let cover_url = t
+                                .og_image
+                                .as_ref()
+                                .map(|img| format!("https://{}", img.replace("%%", "200x200")));
 
-            if dtos.len() == 30 && sink.add(std::mem::take(&mut dtos)).is_err() {
-                return;
+                            let _ = ctx.db.lock().upsert_track_metadata(
+                                &t.id,
+                                t.title.as_deref().unwrap_or_default(),
+                                t.version.as_deref(),
+                                &artists,
+                                album.as_deref(),
+                                album_id.as_deref(),
+                                cover_url.as_deref(),
+                                t.duration.map(|d| d.as_millis() as u64).unwrap_or(0),
+                            );
+
+                            // Добавляем в текущую карту для мгновенного отображения
+                            let duration_ms = t.duration.map(|d| d.as_millis() as u64).unwrap_or(0);
+                            metadata_map.insert(
+                                t.id.clone(),
+                                (
+                                    t.id.clone(),
+                                    t.title.clone().unwrap_or_default(),
+                                    t.version.clone(),
+                                    artists,
+                                    album,
+                                    album_id,
+                                    cover_url,
+                                    duration_ms,
+                                ),
+                            );
+                        }
+                    }
+                }
             }
-        }
-        if !dtos.is_empty() {
-            let _ = sink.add(dtos);
-        }
-        return;
-    }
 
-    // Если запроса нет, или в БД пусто, или поиск в БД ничего не нашел — тянем из API
-    if let Ok(playlist) = ctx.api.fetch_liked_tracks().await
-        && let Some(tracks_enum) = playlist.tracks
-    {
-        let tracks_vec = crate::util::track::fetch_full_tracks(&ctx.api, tracks_enum).await;
-
-        // Сохраняем в БД для будущего поиска
-        for t in &tracks_vec {
-            let artists: Vec<String> = t.artists.iter().filter_map(|a| a.name.clone()).collect();
-            let album = t.albums.first().and_then(|a| a.title.clone());
-            let album_id = t.albums.first().and_then(|a| a.id).map(|id| id.to_string());
-            let cover_url = t
-                .og_image
-                .as_ref()
-                .map(|img| format!("https://{}", img.replace("%%", "200x200")));
-
-            let _ = ctx.db.lock().upsert_track_metadata(
-                &t.id,
-                t.title.as_deref().unwrap_or_default(),
-                t.version.as_deref(),
-                &artists,
-                album.as_deref(),
-                album_id.as_deref(),
-                cover_url.as_deref(),
-                t.duration.map(|d| d.as_millis() as u64).unwrap_or(0),
-            );
-        }
-
-        let query_lower = query.map(|q| q.to_lowercase());
-        let matches_query = |dto: &SimpleTrackDto| {
-            if let Some(ref q) = query_lower {
-                dto.title.to_lowercase().contains(q)
-                    || dto
-                        .artists
+            // Формируем финальный список DTO в правильном порядке
+            let mut dtos = Vec::with_capacity(liked_ids.len());
+            for id in &liked_ids {
+                if let Some((
+                    id,
+                    title,
+                    version,
+                    artists_names,
+                    album,
+                    album_id,
+                    cover_url,
+                    duration_ms,
+                )) = metadata_map.get(id)
+                {
+                    let artists: Vec<crate::api::models::TrackArtistDto> = artists_names
                         .iter()
-                        .any(|a| a.name.to_lowercase().contains(q))
-            } else {
-                true
+                        .map(|name: &String| crate::api::models::TrackArtistDto {
+                            id: "".to_string(),
+                            name: name.clone(),
+                        })
+                        .collect();
+
+                    dtos.push(SimpleTrackDto {
+                        id: id.clone(),
+                        title: title.clone(),
+                        version: version.clone(),
+                        artists,
+                        album: album.clone(),
+                        album_id: album_id.clone(),
+                        cover_url: cover_url.clone(),
+                        duration_ms: *duration_ms as u32,
+                        is_liked: true,
+                        is_disliked: disliked_ids_set.contains(id),
+                    });
+
+                    if dtos.len() == 50 {
+                        if sink.add(std::mem::take(&mut dtos)).is_err() {
+                            return;
+                        }
+                    }
+                }
             }
-        };
-
-        let dtos_iter = tracks_vec
-            .into_iter()
-            .map(|t| SimpleTrackDto::from_yandex(&t, &liked_ids, &disliked_ids))
-            .filter(matches_query);
-
-        let mut current_chunk = Vec::with_capacity(30);
-        for dto in dtos_iter {
-            current_chunk.push(dto);
-            if current_chunk.len() == 30
-                && sink
-                    .add(std::mem::replace(
-                        &mut current_chunk,
-                        Vec::with_capacity(30),
-                    ))
-                    .is_err()
-            {
-                return;
+            if !dtos.is_empty() {
+                let _ = sink.add(dtos);
             }
         }
-        if !current_chunk.is_empty() {
-            let _ = sink.add(current_chunk);
+
+        // Ждем изменений в сигналах
+        if changed_rx.changed().await.is_err() {
+            break;
         }
     }
 }
