@@ -264,12 +264,7 @@ class _YandexLoginDialogState extends State<YandexLoginDialog> {
         child: Column(
           children: [
             Expanded(
-              child: ClipRRect(
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(12),
-                ),
-                child: WebViewWidget(controller: _controller),
-              ),
+              child: WebViewWidget(controller: _controller),
             ),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),

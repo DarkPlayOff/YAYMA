@@ -61,7 +61,6 @@ static void my_application_activate(GApplication* application) {
 
   FlView* view = fl_view_new(project);
   gtk_widget_show(GTK_WIDGET(view));
-  gtk_widget_set_can_focus(GTK_WIDGET(view), FALSE);
 
   GtkWidget* overlay = gtk_overlay_new();
   gtk_widget_show(overlay);
