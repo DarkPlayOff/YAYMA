@@ -32,8 +32,8 @@ impl TokenProvider {
         Ok(Entry::new(&SERVICE_NAME, "default")?.delete_credential()?)
     }
 
-    pub async fn validate(token: String) -> Result<(Arc<YandexMusicClient>, u64)> {
-        let client = YandexMusicClient::builder(&token).build()?;
+    pub async fn validate(token: &str) -> Result<(Arc<YandexMusicClient>, u64)> {
+        let client = YandexMusicClient::builder(token).build()?;
         let status = client.get_account_status().await?;
 
         let user_id = status.account.uid.ok_or("No user id found")?;

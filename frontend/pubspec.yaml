@@ -26,7 +26,6 @@ dependencies:
   windows_taskbar: ^1.1.2
   m3e_collection: ^0.3.7
   dynamic_color: ^1.8.1
-  webview_all: ^1.0.3
 
 dev_dependencies:
   flutter_test:

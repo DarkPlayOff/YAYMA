@@ -4,7 +4,6 @@
 
 list(APPEND FLUTTER_PLUGIN_LIST
   dynamic_color
-  webview_all_linux
 )
 
 list(APPEND FLUTTER_FFI_PLUGIN_LIST
