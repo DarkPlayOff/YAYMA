@@ -6,6 +6,10 @@ on:
 jobs:
   build-linux-debug:
     runs-on: ubuntu-22.04
+    env:
+      RUSTFLAGS: -C link-arg=-fuse-ld=lld
+      CC: clang
+      CXX: clang++
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -13,7 +17,7 @@ jobs:
       - name: System Init
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential cmake ninja-build pkg-config libgtk-3-dev libsecret-1-dev libsoup-3.0-dev libwebkit2gtk-4.1-dev libasound2-dev curl git unzip clang libclang-dev llvm-dev
+          sudo apt-get install -y build-essential cmake ninja-build pkg-config libgtk-3-dev libsecret-1-dev libsoup-3.0-dev libwebkit2gtk-4.1-dev libasound2-dev curl git unzip clang lld libclang-dev llvm-dev
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -67,6 +71,10 @@ jobs:
 
   build-windows-debug:
     runs-on: windows-latest
+    env:
+      RUSTFLAGS: -C linker=lld-link.exe
+      CC: clang
+      CXX: clang++
     steps:
       - name: Checkout
         uses: actions/checkout@v4
