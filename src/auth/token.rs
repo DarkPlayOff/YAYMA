@@ -36,10 +36,6 @@ impl TokenProvider {
         let client = YandexMusicClient::builder(&token).build()?;
         let status = client.get_account_status().await?;
 
-        if !status.plus.has_plus {
-            return Err("No Yandex Plus subscription found".into());
-        }
-
         let user_id = status.account.uid.ok_or("No user id found")?;
         Ok((Arc::new(client), user_id))
     }

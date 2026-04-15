@@ -118,7 +118,7 @@ impl ApiService {
         );
         headers.insert(
             "X-Yandex-Music-Client",
-            HeaderValue::from_str("YandexMusicDesktopAppWindows/5.82.0")?,
+            HeaderValue::from_str("YandexMusicDesktopAppWindows/5.95.0")?,
         );
         headers.insert("Accept-Language", HeaderValue::from_str("ru")?);
         headers.insert("Accept", HeaderValue::from_str("*/*")?);
@@ -132,7 +132,7 @@ impl ApiService {
         );
 
         let http_client = reqwest::Client::builder()
-            .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 YandexMusic/5.82.0")
+            .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 YandexMusic/5.95.0")
             .default_headers(headers.clone())
             .pool_max_idle_per_host(0)
             .brotli(true)

@@ -239,7 +239,7 @@ class _YandexLoginDialogState extends State<YandexLoginDialog> {
 
       await _controller.loadRequest(
         Uri.parse(
-          'https://oauth.yandex.ru/authorize?response_type=token&client_id=23cabbbdc6cd418abb4b39c32c41195d',
+          'https://oauth.yandex.ru/authorize?response_type=token&client_id=97fe03033fa34407ac9bcf91d5afed5b',
         ),
       );
     }
