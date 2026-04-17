@@ -34,48 +34,36 @@ class RustCachedImage extends StatefulWidget {
 class _RustCachedImageState extends State<RustCachedImage> {
   static final Map<String, String> _pathCache = {};
   String? _resolvedPath;
-  bool _isLoading = false;
+  late bool _isLoading;
   bool _imageReady = false;
   String? _lastUrl;
 
   @override
   void initState() {
     super.initState();
-    unawaited(_resolvePath());
+    _initPath();
   }
 
-  @override
-  void didUpdateWidget(RustCachedImage oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.imageUrl != widget.imageUrl) {
-      _imageReady = false;
-      unawaited(_resolvePath());
-    }
-  }
-
-  Future<void> _resolvePath() async {
+  void _initPath() {
     final url = widget.imageUrl;
     if (url == null || url.isEmpty) {
-      setState(() {
-        _resolvedPath = null;
-        _isLoading = false;
-      });
+      _resolvedPath = null;
+      _isLoading = false;
       return;
     }
 
     if (_pathCache.containsKey(url)) {
-      setState(() {
-        _resolvedPath = _pathCache[url];
-        _isLoading = false;
-      });
+      _resolvedPath = _pathCache[url];
+      _isLoading = false;
       return;
     }
 
-    setState(() {
-      _isLoading = true;
-      _lastUrl = url;
-    });
+    _isLoading = true;
+    _lastUrl = url;
+    unawaited(_resolvePathAsync(url));
+  }
 
+  Future<void> _resolvePathAsync(String url) async {
     try {
       final path = await getCachedImagePath(url: url);
       if (mounted && _lastUrl == url) {
@@ -98,51 +86,70 @@ class _RustCachedImageState extends State<RustCachedImage> {
   }
 
   @override
+  void didUpdateWidget(RustCachedImage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.imageUrl != widget.imageUrl) {
+      _imageReady = false;
+      _initPath();
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     Widget content;
 
     if (widget.imageUrl == null || widget.imageUrl!.isEmpty) {
       content = widget.placeholder ?? _buildPlaceholder();
     } else if (_resolvedPath != null) {
-      content = Image.file(
-        File(_resolvedPath!),
-        width: widget.width,
-        height: widget.height,
-        fit: widget.fit,
-        color: widget.color,
-        colorBlendMode: widget.colorBlendMode,
-        frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
-          if (frame != null && !_imageReady) {
-            _imageReady = true;
-            unawaited(
-              Future.microtask(() {
-                if (mounted) {
-                  setState(() {});
-                }
-              }),
-            );
-          }
-          return TweenAnimationBuilder<double>(
-            tween: Tween(begin: 0, end: _imageReady ? 1.0 : 0.0),
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeInOut,
-            builder: (context, opacity, innerChild) {
-              return Opacity(opacity: opacity, child: innerChild);
-            },
-            child: child,
-          );
-        },
-        errorBuilder: (context, error, stackTrace) =>
-            widget.errorWidget ?? _buildError(),
-      );
-      if (!_imageReady) {
-        content = Stack(
-          children: [
+      content = Stack(
+        fit: StackFit.passthrough,
+        children: [
+          if (widget.placeholder != null)
+            AnimatedOpacity(
+              opacity: _imageReady ? 0.0 : 1.0,
+              duration: const Duration(milliseconds: 300),
+              child: widget.placeholder!,
+            )
+          else if (!_imageReady)
             _buildShimmer(),
-            content,
-          ],
-        );
-      }
+          Image.file(
+            File(_resolvedPath!),
+            width: widget.width,
+            height: widget.height,
+            fit: widget.fit,
+            color: widget.color,
+            colorBlendMode: widget.colorBlendMode,
+            frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+              if (frame != null && !_imageReady) {
+                _imageReady = true;
+                unawaited(
+                  Future.microtask(() {
+                    if (mounted) {
+                      setState(() {});
+                    }
+                  }),
+                );
+              }
+
+              if (wasSynchronouslyLoaded) {
+                return child;
+              }
+
+              return TweenAnimationBuilder<double>(
+                tween: Tween(begin: 0, end: _imageReady ? 1.0 : 0.0),
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeInOut,
+                builder: (context, opacity, innerChild) {
+                  return Opacity(opacity: opacity, child: innerChild);
+                },
+                child: child,
+              );
+            },
+            errorBuilder: (context, error, stackTrace) =>
+                widget.errorWidget ?? _buildError(),
+          ),
+        ],
+      );
     } else if (_isLoading) {
       content = widget.placeholder ?? _buildShimmer();
     } else {

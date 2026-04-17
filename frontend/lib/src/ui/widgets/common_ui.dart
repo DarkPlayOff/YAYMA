@@ -99,6 +99,7 @@ class CommonDetailHeader extends StatelessWidget {
             borderRadius: 16,
             isCircle: isCircle,
             canExpand: true,
+            heroTag: coverUrl,
           ),
           const SizedBox(width: 40),
           Expanded(

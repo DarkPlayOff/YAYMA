@@ -153,6 +153,7 @@ class TrackCover extends StatelessWidget {
   final double borderRadius;
   final bool isCircle;
   final bool canExpand;
+  final String? heroTag;
 
   const TrackCover({
     required this.url,
@@ -161,10 +162,20 @@ class TrackCover extends StatelessWidget {
     this.borderRadius = 8,
     this.isCircle = false,
     this.canExpand = false,
+    this.heroTag,
   });
 
   @override
   Widget build(BuildContext context) {
+    Widget image = url != null
+        ? RustCachedImage(
+            imageUrl: url,
+            width: size,
+            height: size,
+            errorWidget: _buildPlaceholder(),
+          )
+        : _buildPlaceholder();
+
     Widget content = Container(
       width: size,
       height: size,
@@ -175,25 +186,26 @@ class TrackCover extends StatelessWidget {
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(isCircle ? size / 2 : borderRadius),
-        child: url != null
-            ? Hero(
-                tag: url!,
-                child: RustCachedImage(
-                  imageUrl: url,
-                  width: size,
-                  height: size,
-                  errorWidget: _buildPlaceholder(),
-                ),
-              )
-            : _buildPlaceholder(),
+        child: image,
       ),
     );
+
+    if (heroTag != null && url != null) {
+      content = Hero(
+        tag: heroTag!,
+        child: content,
+      );
+    }
 
     if (canExpand && url != null) {
       content = MouseRegion(
         cursor: SystemMouseCursors.click,
         child: GestureDetector(
-          onTap: () => FullscreenCoverDialog.show(context, url!),
+          onTap: () => FullscreenCoverDialog.show(
+            context,
+            url!,
+            heroTag: heroTag ?? url!,
+          ),
           child: content,
         ),
       );
