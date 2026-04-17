@@ -272,6 +272,7 @@ impl AudioController {
         self.track_progress.read().reset();
 
         self.signals.set_playing(false);
+        self.signals.set_current_track(None);
         self.signals.is_stopped.set(true);
         self.signals.is_buffering.set(false);
         self.signals.update_progress(0, 0);

@@ -191,7 +191,10 @@ impl AudioSystem {
             }
             AudioMessage::Pause => self.controller.handle_message(AudioMessage::Pause).await,
             AudioMessage::Resume => self.controller.handle_message(AudioMessage::Resume).await,
-            AudioMessage::Stop => self.controller.handle_message(AudioMessage::Stop).await,
+            AudioMessage::Stop => {
+                self.controller.handle_message(AudioMessage::Stop).await;
+                self.queue.clear();
+            }
             AudioMessage::Next => {
                 self.play_next().await;
             }

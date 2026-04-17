@@ -998,9 +998,19 @@ impl QueueManager {
     pub fn clear(&mut self) {
         self.signals.set_queue(Vector::new());
         self.signals.set_index(0);
+        self.signals.set_history(Vector::new());
+        self.signals.set_repeat_mode(RepeatMode::None);
+        self.signals.set_shuffled(false);
+        self.signals.set_wave_seeds(Vec::new());
+        self.signals.inner.set_stream_info(None);
+
+        self.shuffle.reset();
+        self.history.reset();
         self.wave_buffer.clear();
         self.wave_feedbacks.clear();
         self.wave_feedback_sent = false;
+        self.playback_context = Arc::new(Mutex::new(PlaybackContext::Standalone));
+
         self.update_prefetch_interest();
     }
 

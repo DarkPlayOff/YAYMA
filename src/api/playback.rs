@@ -39,6 +39,10 @@ pub async fn toggle_repeat_mode(ctx: &AppContext) {
     logic::toggle_repeat_mode(ctx).await
 }
 
+pub async fn stop(ctx: &AppContext) {
+    logic::stop(ctx).await
+}
+
 pub async fn get_queue(ctx: &AppContext) -> Vec<SimpleTrackDto> {
     logic::get_queue(ctx).await
 }

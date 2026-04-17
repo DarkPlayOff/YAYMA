@@ -74,6 +74,10 @@ pub async fn toggle_repeat_mode(ctx: &AppContext) {
     let _ = ctx.audio_tx.send(AudioMessage::ToggleRepeatMode).await;
 }
 
+pub async fn stop(ctx: &AppContext) {
+    let _ = ctx.audio_tx.send(AudioMessage::Stop).await;
+}
+
 pub async fn get_queue(ctx: &AppContext) -> Vec<SimpleTrackDto> {
     let (liked_ids, disliked_ids) = ctx.state.read().await.liked.snapshot();
     ctx.signals.queue.with(|q| {

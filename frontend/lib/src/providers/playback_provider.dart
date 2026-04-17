@@ -356,6 +356,7 @@ class PlaybackController {
       runRustAction((ctx) => rust.toggleShuffle(ctx: ctx));
   static Future<void> toggleRepeat() =>
       runRustAction((ctx) => rust.toggleRepeatMode(ctx: ctx));
+  static Future<void> stop() => runRustAction((ctx) => rust.stop(ctx: ctx));
   static Future<void> toggleLike({required String trackId}) =>
       runRustAction((ctx) => rust.toggleLike(ctx: ctx, trackId: trackId));
   static Future<void> toggleDislike({required String trackId}) =>

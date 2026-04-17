@@ -75,6 +75,7 @@ class AppInit {
 
   /// Выход из аккаунта
   static Future<void> logout() async {
+    await PlaybackController.stop();
     await clearToken();
     accountSignal.value = null;
     appContextSignal.value = null;
