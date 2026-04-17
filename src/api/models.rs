@@ -22,13 +22,14 @@ pub fn format_cover(uri: Option<String>, size: &str) -> Option<String> {
 #[flutter_rust_bridge::frb(ignore)]
 fn get_any_cover(t: &Track) -> Option<String> {
     t.og_image
-        .clone()
-        .or_else(|| t.cover_uri.clone())
+        .as_ref()
+        .or(t.cover_uri.as_ref())
         .or_else(|| {
             t.albums
                 .first()
-                .and_then(|a| a.og_image.clone().or(a.cover_uri.clone()))
+                .and_then(|a| a.og_image.as_ref().or(a.cover_uri.as_ref()))
         })
+        .cloned()
 }
 
 #[flutter_rust_bridge::frb(unignore)]
@@ -453,8 +454,67 @@ pub enum AppError {
     NotFound(String),
     #[error("Rate limited: too many requests")]
     RateLimited,
+    #[error("IO error: {0}")]
+    IoError(String),
     #[error("Unknown error: {0}")]
     Unknown(String),
+}
+
+impl From<yandex_music::error::ClientError> for AppError {
+    fn from(err: yandex_music::error::ClientError) -> Self {
+        match err {
+            yandex_music::error::ClientError::RequestError { error } => {
+                let s = error.to_string();
+                if s.contains("401") {
+                    AppError::Unauthorized
+                } else if s.contains("404") {
+                    AppError::NotFound(s)
+                } else if s.contains("429") {
+                    AppError::RateLimited
+                } else if s.contains("timeout") || s.contains("connection") {
+                    AppError::NetworkError
+                } else {
+                    AppError::ApiError(s)
+                }
+            }
+            yandex_music::error::ClientError::YandexMusicError { error } => {
+                AppError::ApiError(error.message.unwrap_or(error.name))
+            }
+            yandex_music::error::ClientError::JsonParseError { error } => {
+                AppError::Unknown(format!("Deserialization error: {}", error))
+            }
+            _ => AppError::Unknown(err.to_string()),
+        }
+    }
+}
+
+impl From<rusqlite::Error> for AppError {
+    fn from(err: rusqlite::Error) -> Self {
+        AppError::DbError(err.to_string())
+    }
+}
+
+impl From<reqwest::Error> for AppError {
+    fn from(err: reqwest::Error) -> Self {
+        let s = err.to_string();
+        if s.contains("401") {
+            AppError::Unauthorized
+        } else if s.contains("404") {
+            AppError::NotFound(s)
+        } else if s.contains("429") {
+            AppError::RateLimited
+        } else if s.contains("timeout") || s.contains("connection") {
+            AppError::NetworkError
+        } else {
+            AppError::ApiError(s)
+        }
+    }
+}
+
+impl From<std::io::Error> for AppError {
+    fn from(err: std::io::Error) -> Self {
+        AppError::IoError(err.to_string())
+    }
 }
 
 impl From<Box<dyn std::error::Error + Send + Sync>> for AppError {

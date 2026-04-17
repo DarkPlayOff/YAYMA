@@ -27,7 +27,7 @@ impl LikedCache {
                 .map(|t| t.track_id.to_base_id().to_string())
                 .collect();
             self.liked_ids_set = self.liked_ids.iter().cloned().collect();
-            
+
             self.disliked_ids = tracks
                 .disliked
                 .iter()

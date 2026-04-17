@@ -3,10 +3,10 @@ use std::cell::RefCell;
 use std::sync::atomic::{AtomicIsize, Ordering};
 use std::sync::{Arc, LazyLock};
 use windows::{
-    core::*, Win32::Foundation::*, Win32::Graphics::Dwm::*, Win32::Graphics::Gdi::*,
+    Win32::Foundation::*, Win32::Graphics::Dwm::*, Win32::Graphics::Gdi::*,
     Win32::Graphics::Imaging::*, Win32::System::Com::*,
     Win32::System::Threading::GetCurrentProcessId, Win32::UI::Shell::SetWindowSubclass,
-    Win32::UI::Shell::*, Win32::UI::WindowsAndMessaging::*,
+    Win32::UI::Shell::*, Win32::UI::WindowsAndMessaging::*, core::*,
 };
 
 const SUBCLASS_ID: usize = 1337;
@@ -48,7 +48,12 @@ impl ThumbnailManager {
             let thread_id = GetWindowThreadProcessId(target_hwnd, None);
             if let Ok(hook) = SetWindowsHookExW(WH_CALLWNDPROC, Some(hook_proc), None, thread_id) {
                 HOOK_HANDLE.store(hook.0 as isize, Ordering::Relaxed);
-                let _ = SendMessageW(target_hwnd, WM_APP_REMOTECALL, Some(WPARAM(0)), Some(LPARAM(0)));
+                let _ = SendMessageW(
+                    target_hwnd,
+                    WM_APP_REMOTECALL,
+                    Some(WPARAM(0)),
+                    Some(LPARAM(0)),
+                );
             }
         }
 
@@ -94,7 +99,9 @@ unsafe extern "system" fn enum_windows_proc(hwnd: HWND, lparam: LPARAM) -> BOOL 
         if pid == GetCurrentProcessId() {
             let mut class_name = [0u16; 256];
             let len = GetClassNameW(hwnd, &mut class_name);
-            if String::from_utf16_lossy(&class_name[..len as usize]) == "FLUTTER_RUNNER_WIN32_WINDOW" {
+            if String::from_utf16_lossy(&class_name[..len as usize])
+                == "FLUTTER_RUNNER_WIN32_WINDOW"
+            {
                 let ptr = lparam.0 as *mut HWND;
                 *ptr = hwnd;
                 return BOOL::from(false);
@@ -153,12 +160,18 @@ unsafe extern "system" fn subclass_proc(
         let mut hbitmap_ptr_to_set = None;
         {
             let mut cache_guard = CURRENT_BITMAP.lock();
-            if let Some(cache) = cache_guard.as_ref().filter(|c| c.width == tw && c.height == th) {
+            if let Some(cache) = cache_guard
+                .as_ref()
+                .filter(|c| c.width == tw && c.height == th)
+            {
                 hbitmap_ptr_to_set = Some(cache.hbitmap_ptr);
             }
 
             if hbitmap_ptr_to_set.is_none() {
-                let bytes_to_use = PENDING_BYTES.lock().as_ref().cloned()
+                let bytes_to_use = PENDING_BYTES
+                    .lock()
+                    .as_ref()
+                    .cloned()
                     .or_else(|| cache_guard.as_ref().map(|c| c.raw_bytes.clone()));
 
                 if let Some(bytes) = bytes_to_use {
@@ -197,13 +210,16 @@ fn create_hbitmap_from_wic(bytes: &[u8], target_w: u32, target_h: u32) -> Option
         let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
         let factory = WIC_FACTORY.with(|f| {
             if f.borrow().is_none() {
-                *f.borrow_mut() = CoCreateInstance(&CLSID_WICImagingFactory, None, CLSCTX_INPROC_SERVER).ok();
+                *f.borrow_mut() =
+                    CoCreateInstance(&CLSID_WICImagingFactory, None, CLSCTX_INPROC_SERVER).ok();
             }
             f.borrow().clone()
         })?;
 
         let stream = SHCreateMemStream(Some(bytes))?;
-        let decoder = factory.CreateDecoderFromStream(&stream, std::ptr::null(), WICDecodeMetadataCacheOnDemand).ok()?;
+        let decoder = factory
+            .CreateDecoderFromStream(&stream, std::ptr::null(), WICDecodeMetadataCacheOnDemand)
+            .ok()?;
         let frame = decoder.GetFrame(0).ok()?;
 
         let size = target_w.min(target_h);
@@ -211,17 +227,21 @@ fn create_hbitmap_from_wic(bytes: &[u8], target_w: u32, target_h: u32) -> Option
         let r_f = radius as f32;
 
         let scaler = factory.CreateBitmapScaler().ok()?;
-        scaler.Initialize(&frame, size, size, WICBitmapInterpolationModeFant).ok()?;
+        scaler
+            .Initialize(&frame, size, size, WICBitmapInterpolationModeFant)
+            .ok()?;
 
         let converter = factory.CreateFormatConverter().ok()?;
-        converter.Initialize(
-            &scaler,
-            &GUID_WICPixelFormat32bppPBGRA,
-            WICBitmapDitherTypeNone,
-            None,
-            0.0,
-            WICBitmapPaletteTypeCustom,
-        ).ok()?;
+        converter
+            .Initialize(
+                &scaler,
+                &GUID_WICPixelFormat32bppPBGRA,
+                WICBitmapDitherTypeNone,
+                None,
+                0.0,
+                WICBitmapPaletteTypeCustom,
+            )
+            .ok()?;
 
         let bmi = BITMAPINFO {
             bmiHeader: BITMAPINFOHEADER {
@@ -235,10 +255,11 @@ fn create_hbitmap_from_wic(bytes: &[u8], target_w: u32, target_h: u32) -> Option
             },
             ..Default::default()
         };
-        
+
         let hdc = GetDC(None);
         let mut bits_ptr = std::ptr::null_mut();
-        let hbitmap = CreateDIBSection(Some(hdc), &bmi, DIB_RGB_COLORS, &mut bits_ptr, None, 0).ok()?;
+        let hbitmap =
+            CreateDIBSection(Some(hdc), &bmi, DIB_RGB_COLORS, &mut bits_ptr, None, 0).ok()?;
         ReleaseDC(None, hdc);
 
         let dest_ptr = bits_ptr as *mut u8;
@@ -249,8 +270,15 @@ fn create_hbitmap_from_wic(bytes: &[u8], target_w: u32, target_h: u32) -> Option
         let mut row_buf = vec![0u8; stride as usize];
 
         for y in 0..size {
-            let prc = WICRect { X: 0, Y: y as i32, Width: size as i32, Height: 1 };
-            if converter.CopyPixels(&prc, stride, &mut row_buf).is_err() { continue; }
+            let prc = WICRect {
+                X: 0,
+                Y: y as i32,
+                Width: size as i32,
+                Height: 1,
+            };
+            if converter.CopyPixels(&prc, stride, &mut row_buf).is_err() {
+                continue;
+            }
 
             let dest_row_start = ((offset_y + y) * target_w * 4 + offset_x * 4) as usize;
             let is_top = y < radius as u32;
@@ -260,12 +288,19 @@ fn create_hbitmap_from_wic(bytes: &[u8], target_w: u32, target_h: u32) -> Option
                 let mut a = row_buf[(x * 4 + 3) as usize];
 
                 if (is_top || is_bottom) && (x < radius as u32 || x >= size - radius as u32) {
-                    let cx = if x < radius as u32 { r_f } else { size as f32 - r_f - 1.0 };
+                    let cx = if x < radius as u32 {
+                        r_f
+                    } else {
+                        size as f32 - r_f - 1.0
+                    };
                     let cy = if is_top { r_f } else { size as f32 - r_f - 1.0 };
                     let dist = ((x as f32 - cx).powi(2) + (y as f32 - cy).powi(2)).sqrt();
 
-                    if dist > r_f { a = 0; }
-                    else if dist > r_f - 1.0 { a = (a as f32 * (r_f - dist)) as u8; }
+                    if dist > r_f {
+                        a = 0;
+                    } else if dist > r_f - 1.0 {
+                        a = (a as f32 * (r_f - dist)) as u8;
+                    }
                 }
 
                 if a > 0 {
@@ -290,6 +325,8 @@ pub struct ThumbnailManager;
 
 #[cfg(not(target_os = "windows"))]
 impl ThumbnailManager {
-    pub fn new(_h: *mut std::ffi::c_void) -> Option<Self> { Some(Self) }
+    pub fn new(_h: *mut std::ffi::c_void) -> Option<Self> {
+        Some(Self)
+    }
     pub fn update_cover(&self, _b: Vec<u8>) {}
 }

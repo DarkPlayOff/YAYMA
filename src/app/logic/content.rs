@@ -14,76 +14,34 @@ async fn get_liked_snapshot(
     ctx.state.read().await.liked.snapshot()
 }
 
+macro_rules! map_results {
+    ($opt:expr, $f:expr) => {
+        $opt.map(|l| l.results.into_iter().map($f).collect())
+            .unwrap_or_default()
+    };
+}
+
 pub async fn search(ctx: &AppContext, query: String) -> Option<SearchResultsDto> {
     let (liked, disliked) = get_liked_snapshot(ctx).await;
+    let results = ctx.api.search(&query).await.ok()?;
 
-    match ctx.api.search(&query).await {
-        Ok(results) => {
-            let tracks = results
-                .tracks
-                .map(|t| {
-                    t.results
-                        .into_iter()
-                        .map(|track| SimpleTrackDto::from_yandex(&track, &liked, &disliked))
-                        .collect()
-                })
-                .unwrap_or_default();
-
-            let albums = results
-                .albums
-                .map(|a| {
-                    a.results
-                        .into_iter()
-                        .map(SimpleAlbumDto::from_yandex)
-                        .collect()
-                })
-                .unwrap_or_default();
-
-            let artists = results
-                .artists
-                .map(|a| {
-                    a.results
-                        .into_iter()
-                        .map(SimpleArtistDto::from_yandex)
-                        .collect()
-                })
-                .unwrap_or_default();
-
-            let playlists = results
-                .playlists
-                .map(|p| {
-                    p.results
-                        .into_iter()
-                        .map(SimplePlaylistDto::from_yandex)
-                        .collect()
-                })
-                .unwrap_or_default();
-
-            Some(SearchResultsDto {
-                tracks,
-                albums,
-                artists,
-                playlists,
-            })
-        }
-        Err(e) => {
-            tracing::error!("Search error: {:?}", e);
-            None
-        }
-    }
+    Some(SearchResultsDto {
+        tracks: map_results!(results.tracks, |t| {
+            SimpleTrackDto::from_yandex(&t, &liked, &disliked)
+        }),
+        albums: map_results!(results.albums, SimpleAlbumDto::from_yandex),
+        artists: map_results!(results.artists, SimpleArtistDto::from_yandex),
+        playlists: map_results!(results.playlists, SimplePlaylistDto::from_yandex),
+    })
 }
 
 pub async fn set_download_path(ctx: &AppContext, path: String) -> Result<(), AppError> {
-    let db = ctx.db.lock();
-    db.save_download_path(&path)
-        .map_err(|e| AppError::DbError(e.to_string()))?;
+    ctx.db.lock().save_download_path(&path)?;
     Ok(())
 }
 
 pub async fn get_download_path(ctx: &AppContext) -> Result<Option<String>, AppError> {
-    let db = ctx.db.lock();
-    db.load_download_path()
-        .map_err(|e| AppError::DbError(e.to_string()))
+    Ok(ctx.db.lock().load_download_path()?)
 }
 
 pub async fn get_downloads_size(_ctx: &AppContext) -> i64 {
@@ -96,18 +54,18 @@ pub async fn download_track(ctx: &AppContext, track_id: String) -> Result<String
 
     let track = api
         .fetch_tracks(vec![track_id.clone()])
-        .await
-        .map_err(|e| AppError::ApiError(e.to_string()))?
+        .await?
         .into_iter()
         .next()
-        .ok_or_else(|| AppError::ApiError("Track not found".to_string()))?;
+        .ok_or_else(|| AppError::NotFound(format!("Track {}", track_id)))?;
 
     let dto = SimpleTrackDto::from_yandex(&track, &liked, &disliked);
     let artist_name = dto
         .artists
         .first()
-        .map(|a| a.name.clone())
-        .unwrap_or_else(|| "Unknown Artist".into());
+        .map(|a| a.name.as_str())
+        .unwrap_or("Unknown Artist");
+
     let safe_base_name = format!("{} - {}", artist_name, dto.title)
         .chars()
         .map(|c| {
@@ -119,10 +77,7 @@ pub async fn download_track(ctx: &AppContext, track_id: String) -> Result<String
         })
         .collect::<String>();
 
-    let (url, codec) = api
-        .fetch_track_url_for_download(track_id)
-        .await
-        .map_err(|e| AppError::ApiError(e.to_string()))?;
+    let (url, codec) = api.fetch_track_url_for_download(track_id).await?;
 
     let ext = if codec.contains("flac") {
         "flac"
@@ -131,37 +86,29 @@ pub async fn download_track(ctx: &AppContext, track_id: String) -> Result<String
     } else {
         "mp3"
     };
+
     let dest_path = {
-        let db = ctx.db.lock();
-        let mut dir = db
+        let mut dir = ctx
+            .db
+            .lock()
             .load_download_path()
             .ok()
             .flatten()
             .map(std::path::PathBuf::from)
-            .unwrap_or_else(|| {
-                directories::UserDirs::new()
-                    .and_then(|u| u.download_dir().map(|p| p.to_path_buf()))
-                    .unwrap_or_default()
-            });
-        if dir.as_os_str().is_empty() {
-            return Err(AppError::Unknown(
-                "Could not find download directory".to_string(),
-            ));
-        }
+            .or_else(|| {
+                directories::UserDirs::new().and_then(|u| u.download_dir().map(|p| p.to_path_buf()))
+            })
+            .ok_or_else(|| AppError::Unknown("Could not find download directory".into()))?;
+
         dir.push(format!("{}.{}", safe_base_name, ext));
         dir
     };
 
-    let response = reqwest::get(url)
-        .await
-        .map_err(|_| AppError::NetworkError)?;
-    let bytes = response.bytes().await.map_err(|_| AppError::NetworkError)?;
+    let bytes = reqwest::get(url).await?.bytes().await?;
 
     if ext == "flac" && !bytes.starts_with(b"fLaC") {
         let temp_path = dest_path.with_extension("m4a_tmp");
-        tokio::fs::write(&temp_path, &bytes)
-            .await
-            .map_err(|e| AppError::DbError(e.to_string()))?;
+        tokio::fs::write(&temp_path, &bytes).await?;
 
         let input_path_str = temp_path.to_string_lossy().to_string();
         let output_path_str = dest_path.to_string_lossy().to_string();
@@ -176,14 +123,10 @@ pub async fn download_track(ctx: &AppContext, track_id: String) -> Result<String
 
         if let Err(e) = extraction_result {
             tracing::error!("Failed to extract native FLAC: {}", e);
-            tokio::fs::write(&dest_path, &bytes)
-                .await
-                .map_err(|e| AppError::DbError(e.to_string()))?;
+            tokio::fs::write(&dest_path, &bytes).await?;
         }
     } else {
-        tokio::fs::write(&dest_path, &bytes)
-            .await
-            .map_err(|e| AppError::DbError(e.to_string()))?;
+        tokio::fs::write(&dest_path, &bytes).await?;
     }
 
     let _ = embed_metadata(&dest_path, &dto).await;
@@ -265,22 +208,18 @@ pub async fn get_track_details(
 ) -> Result<TrackDetailsDto, AppError> {
     let track = ctx
         .api
-        .fetch_tracks(vec![track_id])
-        .await
-        .map_err(|e| AppError::ApiError(e.to_string()))?
+        .fetch_tracks(vec![track_id.clone()])
+        .await?
         .into_iter()
         .next()
-        .ok_or_else(|| AppError::ApiError("Track not found".to_string()))?;
+        .ok_or_else(|| AppError::NotFound(format!("Track {}", track_id)))?;
     Ok(TrackDetailsDto::from_yandex(track))
 }
 
 pub async fn get_album_details(ctx: &AppContext, album_id: u32) -> Option<AlbumDetailsDto> {
     let (liked, disliked) = get_liked_snapshot(ctx).await;
-    ctx.api
-        .fetch_album_with_tracks(album_id)
-        .await
-        .ok()
-        .map(|album| AlbumDetailsDto::from_yandex(album, &liked, &disliked))
+    let album = ctx.api.fetch_album_with_tracks(album_id).await.ok()?;
+    Some(AlbumDetailsDto::from_yandex(album, &liked, &disliked))
 }
 
 pub async fn get_artist_details(
@@ -296,22 +235,20 @@ pub async fn get_artist_details(
             .fetch_artist_tracks_paginated(artist_id.clone(), page, page_size)
     );
 
-    match (artist_res, tracks_res) {
-        (Ok(mut artist), Ok((tracks, pager))) => {
-            let mapped_tracks = tracks
-                .into_iter()
-                .map(|t| SimpleTrackDto::from_yandex(&t, &liked, &disliked))
-                .collect();
-            Some(ArtistDetailsDto {
-                id: artist_id,
-                name: artist.name.take().unwrap_or_default(),
-                cover_url: format_cover(artist.cover.and_then(|mut c| c.uri.take()), "400x400"),
-                tracks: mapped_tracks,
-                total_tracks: pager.total,
-            })
-        }
-        _ => None,
-    }
+    let (mut artist, (tracks, pager)) = (artist_res.ok()?, tracks_res.ok()?);
+
+    let mapped_tracks = tracks
+        .into_iter()
+        .map(|t| SimpleTrackDto::from_yandex(&t, &liked, &disliked))
+        .collect();
+
+    Some(ArtistDetailsDto {
+        id: artist_id,
+        name: artist.name.take().unwrap_or_default(),
+        cover_url: format_cover(artist.cover.and_then(|mut c| c.uri.take()), "400x400"),
+        tracks: mapped_tracks,
+        total_tracks: pager.total,
+    })
 }
 
 pub async fn get_playlist_details(
@@ -353,9 +290,7 @@ pub async fn get_playlist_details(
 }
 
 pub async fn fetch_wave_stations(ctx: &AppContext) -> Vec<StationCategoryDto> {
-    let Ok(stations) = ctx.api.fetch_stations().await else {
-        return vec![];
-    };
+    let stations = ctx.api.fetch_stations().await.unwrap_or_default();
     let mut grouped: foldhash::HashMap<String, Vec<StationItemDto>> = foldhash::HashMap::new();
 
     for rotor in stations {
@@ -374,26 +309,24 @@ pub async fn fetch_wave_stations(ctx: &AppContext) -> Vec<StationCategoryDto> {
 
     let mut cats: Vec<StationCategoryDto> = grouped
         .into_iter()
-        .map(|(k, mut v): (String, Vec<StationItemDto>)| {
+        .map(|(k, mut v)| {
             let title = if k == "Моя волна" {
                 k
             } else {
                 let mut chars = k.chars();
-                chars.next().map_or(String::new(), |f: char| {
+                chars.next().map_or(String::new(), |f| {
                     f.to_uppercase().collect::<String>() + chars.as_str()
                 })
             };
-            v.sort_by_key(|i: &StationItemDto| i.label.clone());
+            v.sort_by_key(|i| i.label.clone());
             StationCategoryDto { title, items: v }
         })
         .collect();
 
-    cats.sort_by(|a: &StationCategoryDto, b: &StationCategoryDto| {
-        match (a.title.as_str(), b.title.as_str()) {
-            ("Моя волна", _) => std::cmp::Ordering::Less,
-            (_, "Моя волна") => std::cmp::Ordering::Greater,
-            (a_str, b_str) => a_str.cmp(b_str),
-        }
+    cats.sort_by(|a, b| match (a.title.as_str(), b.title.as_str()) {
+        ("Моя волна", _) => std::cmp::Ordering::Less,
+        (_, "Моя волна") => std::cmp::Ordering::Greater,
+        (a_str, b_str) => a_str.cmp(b_str),
     });
     cats
 }

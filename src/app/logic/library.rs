@@ -232,8 +232,16 @@ pub async fn liked_tracks_stream(
                 // Для поиска используем метаданные из БД
                 if let Ok(metadata) = ctx.db.lock().get_track_metadata(&found_ids) {
                     let mut dtos = Vec::new();
-                    for (id, title, version, artists_names, album, album_id, cover_url, duration_ms) in
-                        metadata
+                    for (
+                        id,
+                        title,
+                        version,
+                        artists_names,
+                        album,
+                        album_id,
+                        cover_url,
+                        duration_ms,
+                    ) in metadata
                     {
                         let artists: Vec<crate::api::models::TrackArtistDto> = artists_names
                             .into_iter()
@@ -271,7 +279,10 @@ pub async fn liked_tracks_stream(
             // 2. Основной список (Local-First)
             if liked_ids.is_empty() {
                 // Если локально пусто, возможно еще не синхронизировались
-                let _ = ctx.audio_tx.send(crate::audio::commands::AudioMessage::SyncLiked).await;
+                let _ = ctx
+                    .audio_tx
+                    .send(crate::audio::commands::AudioMessage::SyncLiked)
+                    .await;
             }
 
             // Пытаемся достать метаданные из БД для всех лайкнутых ID
