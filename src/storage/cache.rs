@@ -157,7 +157,7 @@ impl HttpCache {
             .and_then(|v| v.to_str().ok())
             .map(|s| s.to_string());
 
-        let size = response.content_length().unwrap_or(0);
+        let mut size = response.content_length().unwrap_or(0);
 
         // Stream the response to file to avoid loading everything into RAM
         let mut file = fs::File::create(&file_path).await?;
@@ -166,6 +166,12 @@ impl HttpCache {
             tokio::io::AsyncWriteExt::write_all(&mut file, &chunk).await?;
         }
         tokio::io::AsyncWriteExt::flush(&mut file).await?;
+
+        if size == 0 {
+            if let Ok(metadata) = fs::metadata(&file_path).await {
+                size = metadata.len();
+            }
+        }
 
         // Update DB
         if let Some(db_arc) = get_db() {
@@ -200,9 +206,32 @@ impl HttpCache {
         Ok(())
     }
 
+    pub async fn get_size(&self) -> Result<i64, Box<dyn std::error::Error + Send + Sync>> {
+        if !self.cache_dir.exists() {
+            return Ok(0);
+        }
+
+        let mut total_size = 0;
+        let mut dir = fs::read_dir(&self.cache_dir).await?;
+        while let Some(entry) = dir.next_entry().await? {
+            if let Ok(metadata) = entry.metadata().await {
+                if metadata.is_file() {
+                    total_size += metadata.len() as i64;
+                }
+            }
+        }
+        Ok(total_size)
+    }
+
     pub async fn clear(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         if self.cache_dir.exists() {
             fs::remove_dir_all(&self.cache_dir).await?;
+        }
+        if let Some(db_arc) = get_db() {
+            tokio::task::block_in_place(|| {
+                let db = db_arc.lock();
+                let _ = db.clear_cache_metadata();
+            });
         }
         Ok(())
     }

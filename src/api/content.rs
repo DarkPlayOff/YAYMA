@@ -17,6 +17,10 @@ pub async fn get_download_path(ctx: &AppContext) -> Result<Option<String>, AppEr
     logic::get_download_path(ctx).await
 }
 
+pub async fn get_downloads_size(ctx: &AppContext) -> i64 {
+    logic::get_downloads_size(ctx).await
+}
+
 pub async fn download_track(ctx: &AppContext, track_id: String) -> Result<String, AppError> {
     logic::download_track(ctx, track_id).await
 }

@@ -29,3 +29,11 @@ pub async fn get_cached_image_path(url: String) -> Option<String> {
 pub async fn prune_expired_cache() {
     logic::prune_expired_cache().await
 }
+
+pub async fn get_cache_size() -> i64 {
+    logic::get_cache_size().await
+}
+
+pub async fn clear_cache() {
+    logic::clear_cache().await
+}

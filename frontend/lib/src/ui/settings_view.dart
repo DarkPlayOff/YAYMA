@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/providers/auth_provider.dart';
 import 'package:yayma/src/rust/api/content.dart' as rust;
+import 'package:yayma/src/rust/api/simple.dart' as simple;
 import 'package:yayma/src/ui/widgets/common_ui.dart';
 
 class SettingsView extends StatefulWidget {
@@ -16,6 +17,7 @@ class SettingsView extends StatefulWidget {
 
 class _SettingsViewState extends State<SettingsView> {
   late final FutureSignal<String?> _pathSignal;
+  late final FutureSignal<int> _cacheSizeSignal;
 
   @override
   void initState() {
@@ -24,6 +26,9 @@ class _SettingsViewState extends State<SettingsView> {
       final ctx = appContextSignal.value;
       if (ctx == null) return null;
       return rust.getDownloadPath(ctx: ctx);
+    });
+    _cacheSizeSignal = futureSignal(() async {
+      return simple.getCacheSize();
     });
   }
 
@@ -35,6 +40,31 @@ class _SettingsViewState extends State<SettingsView> {
         await rust.setDownloadPath(ctx: ctx, path: result);
         unawaited(_pathSignal.refresh());
       }
+    }
+  }
+
+  String _formatBytes(int bytes) {
+    if (bytes <= 0) return '0 Б';
+    const suffixes = ['Б', 'КБ', 'МБ', 'ГБ', 'ТБ'];
+    var i = 0;
+    double size = bytes.toDouble();
+    while (size >= 1024 && i < suffixes.length - 1) {
+      size /= 1024;
+      i++;
+    }
+    return '${size.toStringAsFixed(1)} ${suffixes[i]}';
+  }
+
+  Future<void> _clearCache() async {
+    await simple.clearCache();
+    unawaited(_cacheSizeSignal.refresh());
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Кэш успешно очищен'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     }
   }
 
@@ -67,18 +97,30 @@ class _SettingsViewState extends State<SettingsView> {
                   _buildSectionTitle(context, 'Загрузки'),
                   const SizedBox(height: 24),
                   Watch((context) {
-                    return CommonAsyncView<String?>(
-                      state: _pathSignal.value,
-                      loading: LinearProgressIndicator(
-                        color: Theme.of(context).colorScheme.primary,
+                    final path = _pathSignal.value;
+                    return _buildSettingItem(
+                      context,
+                      title: 'Путь для сохранения треков',
+                      subtitle: path.value ?? 'По умолчанию (Загрузки)',
+                      icon: Icons.folder_open_rounded,
+                      onTap: () => unawaited(_pickPath()),
+                    );
+                  }),
+                  const SizedBox(height: 48),
+                  _buildSectionTitle(context, 'Кэш'),
+                  const SizedBox(height: 24),
+                  Watch((context) {
+                    final size = _cacheSizeSignal.value;
+                    return _buildSettingItem(
+                      context,
+                      title: 'Очистить кэш изображений и данных',
+                      subtitle: size.map(
+                        data: (d) => 'Занято: ${_formatBytes(d)}',
+                        error: (e, s) => 'Ошибка при получении размера',
+                        loading: () => 'Подсчет...',
                       ),
-                      builder: (context, path) => _buildSettingItem(
-                        context,
-                        title: 'Путь для сохранения треков',
-                        subtitle: path ?? 'По умолчанию (папка Загрузки)',
-                        icon: Icons.folder_open_rounded,
-                        onTap: () => unawaited(_pickPath()),
-                      ),
+                      icon: Icons.delete_sweep_rounded,
+                      onTap: () => unawaited(_clearCache()),
                     );
                   }),
                   const SizedBox(height: 48),

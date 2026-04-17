@@ -86,6 +86,10 @@ pub async fn get_download_path(ctx: &AppContext) -> Result<Option<String>, AppEr
         .map_err(|e| AppError::DbError(e.to_string()))
 }
 
+pub async fn get_downloads_size(_ctx: &AppContext) -> i64 {
+    0
+}
+
 pub async fn download_track(ctx: &AppContext, track_id: String) -> Result<String, AppError> {
     let api = &ctx.api;
     let (liked, disliked) = get_liked_snapshot(ctx).await;

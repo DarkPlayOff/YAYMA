@@ -219,6 +219,20 @@ impl AppDatabase {
         Ok(to_delete)
     }
 
+    pub fn get_cache_size(&self) -> Result<i64> {
+        let size: i64 = self.conn.query_row(
+            "SELECT COALESCE(SUM(size), 0) FROM cache_metadata",
+            [],
+            |r| r.get(0),
+        )?;
+        Ok(size)
+    }
+
+    pub fn clear_cache_metadata(&self) -> Result<()> {
+        self.conn.execute("DELETE FROM cache_metadata", [])?;
+        Ok(())
+    }
+
     pub fn save_playback_state(
         &self,
         track_id: &str,

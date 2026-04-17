@@ -23,3 +23,13 @@ pub async fn prune_expired_cache() {
     let cache = crate::storage::cache::get_http_cache().await;
     let _ = cache.prune_expired().await;
 }
+
+pub async fn get_cache_size() -> i64 {
+    let cache = crate::storage::cache::get_http_cache().await;
+    cache.get_size().await.unwrap_or(0)
+}
+
+pub async fn clear_cache() {
+    let cache = crate::storage::cache::get_http_cache().await;
+    let _ = cache.clear().await;
+}

@@ -1,4 +1,3 @@
-#![cfg_attr(feature = "nightly", feature(core_intrinsics))]
 pub mod api;
 pub use crate::api::simple::*;
 pub mod app;

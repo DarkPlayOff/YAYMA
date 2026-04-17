@@ -90,6 +90,10 @@ class _AppLayoutState extends State<AppLayout> {
       final stack = rootStacksSignal.watch(context)[root] ?? [NavState(root)];
       final isVisible = activeRoot == root;
 
+      if (root == AppSection.account && !isVisible) {
+        return const SizedBox.shrink();
+      }
+
       return Offstage(
         offstage: !isVisible,
         child: TickerMode(
@@ -162,8 +166,14 @@ class _AppLayoutState extends State<AppLayout> {
 
   Widget _buildWindowContent(NavState state, int index) {
     final isRoot = state.section == AppSection.home;
+    // Для раздела аккаунта (настроек) не используем PageStorageKey, 
+    // чтобы не сохранять состояние скролла между заходами.
+    final key = state.section == AppSection.account
+        ? ValueKey('account_$index')
+        : PageStorageKey('scroll_${state.section}_${state.id}_$index');
+
     final child = KeyedSubtree(
-      key: PageStorageKey('scroll_${state.section}_${state.id}_$index'),
+      key: key,
       child: _mapSectionToWidget(state),
     );
 
