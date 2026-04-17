@@ -28,9 +28,3 @@ pub async fn try_auto_login() -> Option<AppContext> {
 pub async fn get_account_info(ctx: &AppContext) -> Option<UserAccountDto> {
     logic::get_account_info(ctx).await
 }
-
-/// Открывает нативное окно с браузером для авторизации в Яндекс.
-/// Возвращает токен или ошибку.
-pub async fn login_via_webview() -> Result<String, AppError> {
-    logic::login_via_webview().await
-}
