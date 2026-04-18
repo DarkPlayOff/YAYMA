@@ -58,18 +58,12 @@ class WaveBackground extends StatefulWidget {
 
 class _WaveBackgroundState extends State<WaveBackground> {
   ui.FragmentProgram? _shaderProgram;
-  late final ValueNotifier<Float32List?> _vibeNotifier;
-  late EffectCleanup _vibeEffectCleanup;
   late List<double>? _cachedThemePalette;
 
   @override
   void initState() {
     super.initState();
-    _vibeNotifier = ValueNotifier(null);
     unawaited(_loadShader());
-    _vibeEffectCleanup = effect(() {
-      _vibeNotifier.value = vibeTickSignal.value;
-    });
   }
 
   @override
@@ -105,20 +99,13 @@ class _WaveBackgroundState extends State<WaveBackground> {
   }
 
   @override
-  void dispose() {
-    _vibeEffectCleanup();
-    _vibeNotifier.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     if (_shaderProgram == null) return Container(color: Colors.black);
     return RepaintBoundary(
       child: CustomPaint(
         painter: PixelPerfectVibePainter(
           shader: _shaderProgram!.fragmentShader(),
-          notifier: _vibeNotifier,
+          signal: vibeTickSignal,
         ),
       ),
     );
@@ -127,14 +114,14 @@ class _WaveBackgroundState extends State<WaveBackground> {
 
 class PixelPerfectVibePainter extends CustomPainter {
   final ui.FragmentShader shader;
-  final ValueNotifier<Float32List?> notifier;
+  final FlutterSignal<Float32List> signal;
   static const _rotData = [-0.3, 0.3, 0.4, -0.3, -0.3, -0.4, -0.3, -0.3, 0.4];
-  PixelPerfectVibePainter({required this.shader, required this.notifier})
-    : super(repaint: notifier);
+  PixelPerfectVibePainter({required this.shader, required this.signal})
+    : super(repaint: signal);
   @override
   void paint(Canvas canvas, Size size) {
-    final u = notifier.value;
-    if (u == null || u.length < 26) return;
+    final u = signal.value;
+    if (u.length < 26) return;
     shader
       ..setFloat(0, size.width)
       ..setFloat(1, size.height)

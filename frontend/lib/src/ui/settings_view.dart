@@ -6,7 +6,6 @@ import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/providers/auth_provider.dart';
 import 'package:yayma/src/rust/api/content.dart' as rust;
 import 'package:yayma/src/rust/api/simple.dart' as simple;
-import 'package:yayma/src/ui/widgets/common_ui.dart';
 
 class SettingsView extends StatefulWidget {
   const SettingsView({super.key});
@@ -47,7 +46,7 @@ class _SettingsViewState extends State<SettingsView> {
     if (bytes <= 0) return '0 Б';
     const suffixes = ['Б', 'КБ', 'МБ', 'ГБ', 'ТБ'];
     var i = 0;
-    double size = bytes.toDouble();
+    var size = bytes.toDouble();
     while (size >= 1024 && i < suffixes.length - 1) {
       size /= 1024;
       i++;

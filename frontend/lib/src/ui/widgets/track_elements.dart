@@ -167,7 +167,7 @@ class TrackCover extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Widget image = url != null
+    final image = url != null
         ? RustCachedImage(
             imageUrl: url,
             width: size,

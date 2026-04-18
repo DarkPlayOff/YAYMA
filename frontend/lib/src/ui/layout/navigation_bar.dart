@@ -93,9 +93,8 @@ class _FloatingNavBarState extends State<FloatingNavBar>
                 _hideWaveSettings();
               },
               child: Watch((context) {
-                final metadata = trackMetadataSignal.watch(context);
-                final isWaveActive = metadata.currentWaveSeeds.isNotEmpty;
-                final isPlaying = metadata.isPlaying;
+                final isWaveActive = currentWaveSeedsSignal().isNotEmpty;
+                final isPlaying = isPlayingSignal();
 
                 return IconButton(
                   onPressed: () {

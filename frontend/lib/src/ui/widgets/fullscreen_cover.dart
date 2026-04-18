@@ -22,8 +22,6 @@ class FullscreenCoverDialog extends StatelessWidget {
         opaque: false,
         barrierColor: Colors.black.withValues(alpha: 0.9),
         barrierDismissible: true,
-        transitionDuration: const Duration(milliseconds: 300),
-        reverseTransitionDuration: const Duration(milliseconds: 300),
         pageBuilder: (context, animation, secondaryAnimation) {
           return FadeTransition(
             opacity: animation,

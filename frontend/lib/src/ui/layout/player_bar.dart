@@ -8,23 +8,6 @@ import 'package:yayma/src/ui/widgets/quality_selector.dart';
 import 'package:yayma/src/ui/widgets/rust_cached_image.dart';
 import 'package:yayma/src/ui/widgets/track_elements.dart';
 
-typedef _TrackMeta = ({
-  String? albumId,
-  List<TrackArtistDto> artists,
-  String? codec,
-  String? coverUrl,
-  List<String> currentWaveSeeds,
-  String? id,
-  bool isDisliked,
-  bool isLiked,
-  bool isPlaying,
-  bool isShuffled,
-  RepeatModeDto repeatMode,
-  String title,
-  String? version,
-  int volume,
-});
-
 class PlayerBar extends StatelessWidget {
   const PlayerBar({super.key});
 
@@ -35,7 +18,6 @@ class PlayerBar extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final width = constraints.maxWidth;
-        final meta = trackMetadataSignal.watch(context);
         final accentColor = accentColorSignal.watch(context);
 
         double coverSize = 64;
@@ -77,16 +59,15 @@ class PlayerBar extends StatelessWidget {
             children: [
               Expanded(
                 flex: 3,
-                child: _TrackInfo(coverSize: coverSize, meta: meta),
+                child: _TrackInfo(coverSize: coverSize),
               ),
               Expanded(
                 flex: 4,
-                child: _PlayerControls(meta: meta, accentColor: accentColor),
+                child: _PlayerControls(accentColor: accentColor),
               ),
               Expanded(
                 flex: 3,
                 child: _VolumeAndQuality(
-                  meta: meta,
                   accentColor: accentColor,
                   volumeWidth: volumeWidth,
                 ),
@@ -101,8 +82,7 @@ class PlayerBar extends StatelessWidget {
 
 class _TrackInfo extends StatefulWidget {
   final double coverSize;
-  final _TrackMeta meta;
-  const _TrackInfo({required this.coverSize, required this.meta});
+  const _TrackInfo({required this.coverSize});
 
   @override
   State<_TrackInfo> createState() => _TrackInfoState();
@@ -119,181 +99,189 @@ class _TrackInfoState extends State<_TrackInfo> {
 
   @override
   Widget build(BuildContext context) {
-    final meta = widget.meta;
-    if (meta.id == null) return const SizedBox();
+    return Watch((context) {
+      final meta = trackMetadataSignal();
+      if (meta.id == null) return const SizedBox();
 
-    return Row(
-      children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(12),
-          child: meta.coverUrl != null
-              ? RustCachedImage(
-                  imageUrl: meta.coverUrl,
-                  width: widget.coverSize,
-                  height: widget.coverSize,
-                  errorWidget: Container(
+      return Row(
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: meta.coverUrl != null
+                ? RustCachedImage(
+                    imageUrl: meta.coverUrl,
+                    width: widget.coverSize,
+                    height: widget.coverSize,
+                    errorWidget: Container(
+                      width: widget.coverSize,
+                      height: widget.coverSize,
+                      color: Colors.white10,
+                    ),
+                  )
+                : Container(
                     width: widget.coverSize,
                     height: widget.coverSize,
                     color: Colors.white10,
                   ),
-                )
-              : Container(
-                  width: widget.coverSize,
-                  height: widget.coverSize,
-                  color: Colors.white10,
-                ),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Flexible(
-                    child: MouseRegion(
-                      onEnter: (_) => _isTitleHovered.value = true,
-                      onExit: (_) => _isTitleHovered.value = false,
-                      cursor: meta.albumId != null
-                          ? SystemMouseCursors.click
-                          : SystemMouseCursors.basic,
-                      child: ValueListenableBuilder<bool>(
-                        valueListenable: _isTitleHovered,
-                        builder: (context, hovered, _) {
-                          return GestureDetector(
-                            onTap: () {
-                              if (meta.albumId != null) {
-                                navigateTo(AppSection.album, meta.albumId);
-                              }
-                            },
-                            child: Text(
-                              meta.title,
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 15,
-                                decoration: hovered && meta.albumId != null
-                                    ? TextDecoration.underline
-                                    : null,
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Flexible(
+                      child: MouseRegion(
+                        onEnter: (_) => _isTitleHovered.value = true,
+                        onExit: (_) => _isTitleHovered.value = false,
+                        cursor: meta.albumId != null
+                            ? SystemMouseCursors.click
+                            : SystemMouseCursors.basic,
+                        child: ValueListenableBuilder<bool>(
+                          valueListenable: _isTitleHovered,
+                          builder: (context, hovered, _) {
+                            return GestureDetector(
+                              onTap: () {
+                                if (meta.albumId != null) {
+                                  navigateTo(AppSection.album, meta.albumId);
+                                }
+                              },
+                              child: Text(
+                                meta.title,
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 15,
+                                  decoration: hovered && meta.albumId != null
+                                      ? TextDecoration.underline
+                                      : null,
+                                ),
+                                overflow: TextOverflow.ellipsis,
                               ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          );
-                        },
+                            );
+                          },
+                        ),
                       ),
                     ),
-                  ),
-                  TrackVersionWidget(
-                    version: meta.version,
-                    fontSize: 12,
-                  ),
-                ],
-              ),
-              ArtistNamesWidget(
-                artists: meta.artists,
-              ),
-            ],
+                    TrackVersionWidget(
+                      version: meta.version,
+                      fontSize: 12,
+                    ),
+                  ],
+                ),
+                ArtistNamesWidget(
+                  artists: meta.artists,
+                ),
+              ],
+            ),
           ),
-        ),
-      ],
-    );
+        ],
+      );
+    });
   }
 }
 
 class _PlayerControls extends StatelessWidget {
-  final _TrackMeta meta;
   final Color accentColor;
-  const _PlayerControls({required this.meta, required this.accentColor});
+  const _PlayerControls({required this.accentColor});
 
   @override
   Widget build(BuildContext context) {
-    var repeatIcon = Icons.repeat;
-    if (meta.repeatMode == RepeatModeDto.single) {
-      repeatIcon = Icons.repeat_one;
-    }
+    return Watch((context) {
+      final trackId = trackMetadataSignal().id;
+      final isPlaying = isPlayingSignal();
+      final isLiked = isLikedSignal();
+      final isDisliked = isDislikedSignal();
+      final isShuffled = isShuffledSignal();
+      final repeatMode = repeatModeSignal();
 
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            IconButton(
-              icon: Icon(
-                meta.isDisliked
-                    ? Icons.heart_broken
-                    : Icons.heart_broken_outlined,
-                size: 20,
-                color: meta.isDisliked ? Colors.blueGrey : Colors.white38,
+      var repeatIcon = Icons.repeat;
+      if (repeatMode == RepeatModeDto.single) {
+        repeatIcon = Icons.repeat_one;
+      }
+
+      return Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              IconButton(
+                icon: Icon(
+                  isDisliked
+                      ? Icons.heart_broken
+                      : Icons.heart_broken_outlined,
+                  size: 20,
+                  color: isDisliked ? Colors.blueGrey : Colors.white38,
+                ),
+                onPressed: () => trackId != null
+                    ? PlaybackController.toggleDislike(trackId: trackId)
+                    : null,
               ),
-              onPressed: () => meta.id != null
-                  ? PlaybackController.toggleDislike(trackId: meta.id!)
-                  : null,
-            ),
-            const SizedBox(width: 4),
-            IconButton(
-              icon: Icon(
-                Icons.shuffle,
-                size: 20,
-                color: meta.isShuffled ? accentColor : Colors.white38,
+              const SizedBox(width: 4),
+              IconButton(
+                icon: Icon(
+                  Icons.shuffle,
+                  size: 20,
+                  color: isShuffled ? accentColor : Colors.white38,
+                ),
+                onPressed: PlaybackController.toggleShuffle,
               ),
-              onPressed: PlaybackController.toggleShuffle,
-            ),
-            const SizedBox(width: 8),
-            const IconButton(
-              icon: Icon(Icons.skip_previous_rounded, size: 28),
-              onPressed: PlaybackController.prev,
-            ),
-            IconButton(
-              iconSize: 54,
-              icon: Icon(
-                meta.isPlaying
-                    ? Icons.pause_circle_filled_rounded
-                    : Icons.play_circle_filled_rounded,
+              const SizedBox(width: 8),
+              const IconButton(
+                icon: Icon(Icons.skip_previous_rounded, size: 28),
+                onPressed: PlaybackController.prev,
               ),
-              onPressed: PlaybackController.togglePlay,
-            ),
-            const IconButton(
-              icon: Icon(Icons.skip_next_rounded, size: 28),
-              onPressed: PlaybackController.next,
-            ),
-            const SizedBox(width: 8),
-            IconButton(
-              icon: Icon(
-                repeatIcon,
-                size: 20,
-                color: meta.repeatMode != RepeatModeDto.none
-                    ? accentColor
-                    : Colors.white38,
+              IconButton(
+                iconSize: 54,
+                icon: Icon(
+                  isPlaying
+                      ? Icons.pause_circle_filled_rounded
+                      : Icons.play_circle_filled_rounded,
+                ),
+                onPressed: PlaybackController.togglePlay,
               ),
-              onPressed: PlaybackController.toggleRepeat,
-            ),
-            const SizedBox(width: 4),
-            IconButton(
-              icon: Icon(
-                meta.isLiked ? Icons.favorite : Icons.favorite_border,
-                size: 20,
-                color: meta.isLiked ? Colors.red : Colors.white38,
+              const IconButton(
+                icon: Icon(Icons.skip_next_rounded, size: 28),
+                onPressed: PlaybackController.next,
               ),
-              onPressed: () => meta.id != null
-                  ? PlaybackController.toggleLike(trackId: meta.id!)
-                  : null,
-            ),
-          ],
-        ),
-        const SizedBox(height: 4),
-        CommonProgressSlider(accentColor: accentColor, compact: true),
-      ],
-    );
+              const SizedBox(width: 8),
+              IconButton(
+                icon: Icon(
+                  repeatIcon,
+                  size: 20,
+                  color: repeatMode != RepeatModeDto.none
+                      ? accentColor
+                      : Colors.white38,
+                ),
+                onPressed: PlaybackController.toggleRepeat,
+              ),
+              const SizedBox(width: 4),
+              IconButton(
+                icon: Icon(
+                  isLiked ? Icons.favorite : Icons.favorite_border,
+                  size: 20,
+                  color: isLiked ? Colors.red : Colors.white38,
+                ),
+                onPressed: () => trackId != null
+                    ? PlaybackController.toggleLike(trackId: trackId)
+                    : null,
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          CommonProgressSlider(accentColor: accentColor, compact: true),
+        ],
+      );
+    });
   }
 }
 
 class _VolumeAndQuality extends StatelessWidget {
-  final _TrackMeta meta;
   final Color accentColor;
   final double volumeWidth;
   const _VolumeAndQuality({
-    required this.meta,
     required this.accentColor,
     required this.volumeWidth,
   });
@@ -307,7 +295,6 @@ class _VolumeAndQuality extends StatelessWidget {
         const SizedBox(width: 16),
         const Icon(Icons.volume_up_rounded, size: 18, color: Colors.white38),
         CommonVolumeSlider(
-          initialVolume: meta.volume,
           width: volumeWidth,
           activeColor: accentColor,
         ),

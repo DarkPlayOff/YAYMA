@@ -34,7 +34,9 @@ Future<void> refreshLikedTracks({String? query, bool force = false}) async {
   if (!force &&
       query == null &&
       likedTracksSignal.value.isNotEmpty &&
-      _likedSub != null) return;
+      _likedSub != null) {
+    return;
+  }
 
   final ctx = appContextSignal.value;
   if (ctx == null) return;

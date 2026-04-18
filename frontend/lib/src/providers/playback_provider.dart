@@ -67,23 +67,63 @@ void _activatePersistentColorScheme() => _persistentColorSchemeEffect;
 void _activateVibePalette() => _vibePaletteEffect;
 void _activateTaskbarEffect() => _taskbarEffect;
 
-// Метаданные трека (без прогресса)
+// Сигнал только для ID текущего трека
+final FlutterComputed<String?> currentTrackIdSignal = computed(
+  () => playerStateSignal.value?.currentTrack?.id,
+  debugLabel: 'currentTrackIdSignal',
+);
+
+// Сигнал только для громкости
+final FlutterComputed<int> playerVolumeSignal = computed(
+  () => playerStateSignal.value?.volume ?? 100,
+  debugLabel: 'playerVolumeSignal',
+);
+
+// Сигнал только для статуса проигрывания
+final FlutterComputed<bool> isPlayingSignal = computed(
+  () => playerStateSignal.value?.isPlaying ?? false,
+  debugLabel: 'isPlayingSignal',
+);
+
+// Сигнал перемешивания
+final FlutterComputed<bool> isShuffledSignal = computed(
+  () => playerStateSignal.value?.isShuffled ?? false,
+  debugLabel: 'isShuffledSignal',
+);
+
+// Сигнал режима повтора
+final FlutterComputed<RepeatModeDto> repeatModeSignal = computed(
+  () => playerStateSignal.value?.repeatMode ?? RepeatModeDto.none,
+  debugLabel: 'repeatModeSignal',
+);
+
+// Сигналы лайка/дизлайка текущего трека
+final FlutterComputed<bool> isLikedSignal = computed(
+  () => playerStateSignal.value?.currentTrack?.isLiked ?? false,
+  debugLabel: 'isLikedSignal',
+);
+
+final FlutterComputed<bool> isDislikedSignal = computed(
+  () => playerStateSignal.value?.currentTrack?.isDisliked ?? false,
+  debugLabel: 'isDislikedSignal',
+);
+
+// Сигналы текущей волны
+final FlutterComputed<List<String>> currentWaveSeedsSignal = computed(
+  () => playerStateSignal.value?.currentWaveSeeds ?? [],
+  debugLabel: 'currentWaveSeedsSignal',
+);
+
+// Метаданные трека (только статические данные о самом треке)
 final FlutterComputed<
   ({
-    String? albumId,
-    List<TrackArtistDto> artists,
-    String? codec,
-    String? coverUrl,
-    List<String> currentWaveSeeds,
     String? id,
-    bool isDisliked,
-    bool isLiked,
-    bool isPlaying,
-    bool isShuffled,
-    RepeatModeDto repeatMode,
     String title,
     String? version,
-    int volume,
+    List<TrackArtistDto> artists,
+    String? coverUrl,
+    String? albumId,
+    String? codec,
   })
 >
 trackMetadataSignal = computed(() {
@@ -94,13 +134,6 @@ trackMetadataSignal = computed(() {
     version: state?.currentTrack?.version,
     artists: state?.currentTrack?.artists ?? [],
     coverUrl: state?.currentTrack?.coverUrl,
-    isPlaying: state?.isPlaying ?? false,
-    isLiked: state?.currentTrack?.isLiked ?? false,
-    isDisliked: state?.currentTrack?.isDisliked ?? false,
-    isShuffled: state?.isShuffled ?? false,
-    repeatMode: state?.repeatMode ?? RepeatModeDto.none,
-    volume: state?.volume ?? 100,
-    currentWaveSeeds: state?.currentWaveSeeds ?? [],
     albumId: state?.currentTrack?.albumId,
     codec: state?.codec,
   );
@@ -118,7 +151,7 @@ trackProgressSignal = computed(() {
 
 // Сигнал только для URL обложки, чтобы не триггерить расчет при лайках/паузе
 final FlutterComputed<String?> currentCoverUrlSignal = computed(
-  () => trackMetadataSignal().coverUrl,
+  () => playerStateSignal.value?.currentTrack?.coverUrl,
   debugLabel: 'currentCoverUrlSignal',
 );
 
@@ -198,47 +231,62 @@ final EffectCleanup _vibePaletteEffect = effect(() {
 // Храним последнее состояние, чтобы не спамить системными вызовами
 String? _lastTaskbarTrackId;
 bool? _lastTaskbarIsPlaying;
+bool? _lastTaskbarIsLiked;
+bool? _lastTaskbarIsDisliked;
+bool? _lastTaskbarIsShuffled;
+RepeatModeDto? _lastTaskbarRepeatMode;
 
 // Эффект для обновления кнопок в панели задач Windows
 final EffectCleanup _taskbarEffect = effect(() {
   if (!Platform.isWindows) return;
-  final metadata = trackMetadataSignal();
 
-  // Обновляем только если изменился трек или статус проигрывания
-  if (_lastTaskbarTrackId == metadata.id &&
-      _lastTaskbarIsPlaying == metadata.isPlaying) {
+  final meta = trackMetadataSignal();
+  final isPlaying = isPlayingSignal();
+  final isLiked = isLikedSignal();
+  final isDisliked = isDislikedSignal();
+  final isShuffled = isShuffledSignal();
+  final repeatMode = repeatModeSignal();
+
+  // Обновляем только если изменился трек или важный статус
+  if (_lastTaskbarTrackId == meta.id &&
+      _lastTaskbarIsPlaying == isPlaying &&
+      _lastTaskbarIsLiked == isLiked &&
+      _lastTaskbarIsDisliked == isDisliked &&
+      _lastTaskbarIsShuffled == isShuffled &&
+      _lastTaskbarRepeatMode == repeatMode) {
     return;
   }
-  _lastTaskbarTrackId = metadata.id;
-  _lastTaskbarIsPlaying = metadata.isPlaying;
+
+  _lastTaskbarTrackId = meta.id;
+  _lastTaskbarIsPlaying = isPlaying;
+  _lastTaskbarIsLiked = isLiked;
+  _lastTaskbarIsDisliked = isDisliked;
+  _lastTaskbarIsShuffled = isShuffled;
+  _lastTaskbarRepeatMode = repeatMode;
 
   unawaited(() async {
     try {
       await WindowsTaskbar.setThumbnailToolbar([
         ThumbnailToolbarButton(
           ThumbnailToolbarAssetIcon(
-            metadata.isDisliked
+            isDisliked
                 ? 'assets/icons/disliked.ico'
                 : 'assets/icons/dislike.ico',
           ),
-          metadata.isDisliked ? 'Убрать дизлайк' : 'Дизлайк',
+          isDisliked ? 'Убрать дизлайк' : 'Дизлайк',
           () {
-            if (metadata.id != null) {
-              unawaited(
-                PlaybackController.toggleDislike(trackId: metadata.id!),
-              );
+            if (meta.id != null) {
+              unawaited(PlaybackController.toggleDislike(trackId: meta.id!));
             }
           },
         ),
         ThumbnailToolbarButton(
           ThumbnailToolbarAssetIcon(
-            metadata.isShuffled
+            isShuffled
                 ? 'assets/icons/shuffle_on.ico'
                 : 'assets/icons/shuffle.ico',
           ),
-          metadata.isShuffled
-              ? 'Выключить перемешивание'
-              : 'Включить перемешивание',
+          isShuffled ? 'Выключить перемешивание' : 'Включить перемешивание',
           () => unawaited(PlaybackController.toggleShuffle()),
         ),
         ThumbnailToolbarButton(
@@ -248,11 +296,9 @@ final EffectCleanup _taskbarEffect = effect(() {
         ),
         ThumbnailToolbarButton(
           ThumbnailToolbarAssetIcon(
-            metadata.isPlaying
-                ? 'assets/icons/pause.ico'
-                : 'assets/icons/play.ico',
+            isPlaying ? 'assets/icons/pause.ico' : 'assets/icons/play.ico',
           ),
-          metadata.isPlaying ? 'Пауза' : 'Играть',
+          isPlaying ? 'Пауза' : 'Играть',
           () => unawaited(PlaybackController.togglePlay()),
         ),
         ThumbnailToolbarButton(
@@ -262,9 +308,9 @@ final EffectCleanup _taskbarEffect = effect(() {
         ),
         ThumbnailToolbarButton(
           ThumbnailToolbarAssetIcon(
-            metadata.repeatMode == RepeatModeDto.none
+            repeatMode == RepeatModeDto.none
                 ? 'assets/icons/repeat.ico'
-                : (metadata.repeatMode == RepeatModeDto.single
+                : (repeatMode == RepeatModeDto.single
                       ? 'assets/icons/repeat_one.ico'
                       : 'assets/icons/repeat_on.ico'),
           ),
@@ -273,21 +319,19 @@ final EffectCleanup _taskbarEffect = effect(() {
         ),
         ThumbnailToolbarButton(
           ThumbnailToolbarAssetIcon(
-            metadata.isLiked
-                ? 'assets/icons/liked.ico'
-                : 'assets/icons/like.ico',
+            isLiked ? 'assets/icons/liked.ico' : 'assets/icons/like.ico',
           ),
-          metadata.isLiked ? 'Убрать лайк' : 'Лайк',
+          isLiked ? 'Убрать лайк' : 'Лайк',
           () {
-            if (metadata.id != null) {
-              unawaited(PlaybackController.toggleLike(trackId: metadata.id!));
+            if (meta.id != null) {
+              unawaited(PlaybackController.toggleLike(trackId: meta.id!));
             }
           },
         ),
       ]);
 
-      final artistStr = metadata.artists.map((a) => a.name).join(', ');
-      var title = metadata.title;
+      final artistStr = meta.artists.map((a) => a.name).join(', ');
+      var title = meta.title;
       if (artistStr.isNotEmpty) {
         title = '$artistStr - $title';
       }

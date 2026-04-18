@@ -108,7 +108,7 @@ class _RustCachedImageState extends State<RustCachedImage> {
             AnimatedOpacity(
               opacity: _imageReady ? 0.0 : 1.0,
               duration: const Duration(milliseconds: 300),
-              child: widget.placeholder!,
+              child: widget.placeholder,
             )
           else if (!_imageReady)
             _buildShimmer(),

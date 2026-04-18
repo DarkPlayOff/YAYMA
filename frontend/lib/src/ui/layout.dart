@@ -26,7 +26,7 @@ class _AppLayoutState extends State<AppLayout> {
   @override
   Widget build(BuildContext context) {
     return Watch((context) {
-      final activeRoot = currentRootSignal.watch(context);
+      currentRootSignal.watch(context);
       final navState = currentNavStateSignal.watch(context);
       final isHome = navState.section == AppSection.home;
 

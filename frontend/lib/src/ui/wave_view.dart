@@ -13,7 +13,7 @@ class WaveSettingsPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Watch((context) {
-      final currentSeeds = trackMetadataSignal().currentWaveSeeds;
+      final currentSeeds = currentWaveSeedsSignal();
 
       return Material(
         color: Colors.transparent,
@@ -418,7 +418,7 @@ class _AllStationsSheetState extends State<_AllStationsSheet> {
         return const Center(child: CircularProgressIndicator());
       }
 
-      final currentSeeds = trackMetadataSignal().currentWaveSeeds;
+      final currentSeeds = currentWaveSeedsSignal();
       var cats = stationsFuture.value ?? [];
       final query = _searchQuery().toLowerCase();
 

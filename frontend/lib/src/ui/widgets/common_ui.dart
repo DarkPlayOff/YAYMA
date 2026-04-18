@@ -161,11 +161,9 @@ class CommonDetailHeader extends StatelessWidget {
 }
 
 class CommonVolumeSlider extends StatefulWidget {
-  final int initialVolume;
   final double width;
   final Color? activeColor;
   const CommonVolumeSlider({
-    required this.initialVolume,
     super.key,
     this.width = 120,
     this.activeColor,
@@ -176,43 +174,39 @@ class CommonVolumeSlider extends StatefulWidget {
 }
 
 class _CommonVolumeSliderState extends State<CommonVolumeSlider> {
-  late double _currentVolume;
-
-  @override
-  void initState() {
-    super.initState();
-    _currentVolume = widget.initialVolume.toDouble();
-  }
-
-  @override
-  void didUpdateWidget(CommonVolumeSlider oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    _currentVolume = widget.initialVolume.toDouble();
-  }
+  double? _dragVolume;
 
   @override
   Widget build(BuildContext context) {
     final activeColor =
         widget.activeColor ?? Theme.of(context).colorScheme.primary;
-    return SizedBox(
-      width: widget.width,
-      child: SliderTheme(
-        data: SliderTheme.of(context).copyWith(
-          trackHeight: 2,
-          activeTrackColor: activeColor,
-          thumbColor: activeColor,
-          thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 4),
+    return Watch((context) {
+      final volume = playerVolumeSignal().toDouble();
+      final displayVolume = _dragVolume ?? volume;
+
+      return SizedBox(
+        width: widget.width,
+        child: SliderTheme(
+          data: SliderTheme.of(context).copyWith(
+            trackHeight: 2,
+            activeTrackColor: activeColor,
+            thumbColor: activeColor,
+            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 4),
+          ),
+          child: Slider(
+            value: displayVolume.clamp(0, 100),
+            max: 100,
+            onChanged: (val) {
+              setState(() => _dragVolume = val);
+              unawaited(PlaybackController.changeVolume(val.toInt()));
+            },
+            onChangeEnd: (_) {
+              setState(() => _dragVolume = null);
+            },
+          ),
         ),
-        child: Slider(
-          value: _currentVolume.clamp(0, 100),
-          max: 100,
-          onChanged: (val) {
-            setState(() => _currentVolume = val);
-            unawaited(PlaybackController.changeVolume(val.toInt()));
-          },
-        ),
-      ),
-    );
+      );
+    });
   }
 }
 

@@ -19,9 +19,7 @@ class WaveController {
   }
 
   static Future<void> toggleStation(String seed) async {
-    final currentSeeds = List<String>.from(
-      trackMetadataSignal().currentWaveSeeds,
-    );
+    final currentSeeds = List<String>.from(currentWaveSeedsSignal());
 
     // В Яндекс Музыке каждое настроение (например, personal:never-heard) - это
     // самостоятельная станция.
