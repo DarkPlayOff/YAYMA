@@ -82,10 +82,8 @@ impl LikedCache {
                 // Add new likes to the beginning
                 self.liked_ids.insert(0, base_id);
             }
-        } else {
-            if self.liked_ids_set.remove(&base_id) {
-                self.liked_ids.retain(|id| id != &base_id);
-            }
+        } else if self.liked_ids_set.remove(&base_id) {
+            self.liked_ids.retain(|id| id != &base_id);
         }
     }
 

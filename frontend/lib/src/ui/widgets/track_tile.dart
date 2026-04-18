@@ -106,13 +106,14 @@ class _CommonTrackTileState extends State<CommonTrackTile> {
                                     widget.title,
                                     style: TextStyle(
                                       color: isPlaying
-                                          ? Theme.of(context)
-                                              .colorScheme
-                                              .primary
+                                          ? Theme.of(
+                                              context,
+                                            ).colorScheme.primary
                                           : Colors.white,
                                       fontWeight: FontWeight.bold,
                                       fontSize: 16,
-                                      decoration: _isTitleHovered &&
+                                      decoration:
+                                          _isTitleHovered &&
                                               widget.onTitleTap != null
                                           ? TextDecoration.underline
                                           : null,
@@ -160,10 +161,10 @@ class _CommonTrackTileState extends State<CommonTrackTile> {
                                 if (kind != null) {
                                   final success =
                                       await addTrackToPlaylistAction(
-                                    kind,
-                                    widget.trackId,
-                                    widget.albumId,
-                                  );
+                                        kind,
+                                        widget.trackId,
+                                        widget.albumId,
+                                      );
                                   messenger.showSnackBar(
                                     SnackBar(
                                       content: Text(

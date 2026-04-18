@@ -11,7 +11,11 @@ class FullscreenCoverDialog extends StatelessWidget {
     super.key,
   });
 
-  static Future<void> show(BuildContext context, String imageUrl, {String? heroTag}) {
+  static Future<void> show(
+    BuildContext context,
+    String imageUrl, {
+    String? heroTag,
+  }) {
     // Пытаемся получить версию высокого качества
     final highResUrl = imageUrl
         .replaceFirst('200x200', '1000x1000')
@@ -37,7 +41,7 @@ class FullscreenCoverDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // В качестве placeholder'а используем оригинальную (low-res) обложку, 
+    // В качестве placeholder'а используем оригинальную (low-res) обложку,
     // чтобы при загрузке high-res не было мерцания
     final placeholder = RustCachedImage(
       imageUrl: heroTag, // heroTag contains the original low-res url

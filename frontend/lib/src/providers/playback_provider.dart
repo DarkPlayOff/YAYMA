@@ -55,7 +55,7 @@ Future<void> initPlayback() async {
   });
 
   audioQualitySignal.value = await rust.getAudioQuality(ctx: ctx);
-  
+
   _activatePersistentColorScheme();
   _activateVibePalette();
   if (Platform.isWindows) {

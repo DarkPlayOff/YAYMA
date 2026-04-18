@@ -209,9 +209,7 @@ class _PlayerControls extends StatelessWidget {
             children: [
               IconButton(
                 icon: Icon(
-                  isDisliked
-                      ? Icons.heart_broken
-                      : Icons.heart_broken_outlined,
+                  isDisliked ? Icons.heart_broken : Icons.heart_broken_outlined,
                   size: 20,
                   color: isDisliked ? Colors.blueGrey : Colors.white38,
                 ),

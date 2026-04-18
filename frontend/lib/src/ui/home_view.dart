@@ -347,9 +347,7 @@ class _HomeMainControls extends StatelessWidget {
               SizedBox(width: small ? 8 : 12),
               IconButton(
                 icon: Icon(
-                  isDisliked
-                      ? Icons.heart_broken
-                      : Icons.heart_broken_outlined,
+                  isDisliked ? Icons.heart_broken : Icons.heart_broken_outlined,
                   size: small ? 20 : 24,
                   color: isDisliked ? Colors.blueGrey : Colors.white38,
                 ),

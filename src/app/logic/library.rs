@@ -381,11 +381,10 @@ pub async fn liked_tracks_stream(
                         is_disliked: disliked_ids_set.contains(id),
                     });
 
-                    if dtos.len() == 50 {
-                        if sink.add(std::mem::take(&mut dtos)).is_err() {
+                    if dtos.len() == 50
+                        && sink.add(std::mem::take(&mut dtos)).is_err() {
                             return;
                         }
-                    }
                 }
             }
             if !dtos.is_empty() {

@@ -174,8 +174,8 @@ unsafe extern "system" fn subclass_proc(
                     .cloned()
                     .or_else(|| cache_guard.as_ref().map(|c| c.raw_bytes.clone()));
 
-                if let Some(bytes) = bytes_to_use {
-                    if let Some(h) = create_hbitmap_from_wic(&bytes, tw, th) {
+                if let Some(bytes) = bytes_to_use
+                    && let Some(h) = create_hbitmap_from_wic(&bytes, tw, th) {
                         if let Some(old) = cache_guard.take() {
                             let _ = DeleteObject(HBITMAP(old.hbitmap_ptr as *mut _).into());
                         }
@@ -188,7 +188,6 @@ unsafe extern "system" fn subclass_proc(
                         });
                         hbitmap_ptr_to_set = Some(ptr);
                     }
-                }
             }
         }
 

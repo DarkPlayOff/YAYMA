@@ -21,7 +21,7 @@ class WaveController {
   static Future<void> toggleStation(String seed) async {
     final currentSeeds = List<String>.from(currentWaveSeedsSignal());
 
-    // In Yandex Music, each mood (e.g., personal:never-heard) is a 
+    // In Yandex Music, each mood (e.g., personal:never-heard) is a
     // standalone station.
     final wasSelected = currentSeeds.contains(seed);
     currentSeeds.clear();
