@@ -15,6 +15,10 @@ pub async fn load_persisted_settings(ctx: &AppContext) {
         ctx.api.set_quality(quality);
     }
 
+    if let Ok(rpc_enabled) = ctx.db.lock().load_discord_rpc() {
+        ctx.signals.discord_rpc.set(rpc_enabled);
+    }
+
     let db = ctx.db.lock();
     let guard = ctx.effect_handles.read();
 

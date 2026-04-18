@@ -33,3 +33,13 @@ pub async fn clear_cache() {
     let cache = crate::storage::cache::get_http_cache().await;
     let _ = cache.clear().await;
 }
+
+pub fn is_discord_rpc_enabled(ctx: &AppContext) -> bool {
+    ctx.signals.discord_rpc.get()
+}
+
+pub fn set_discord_rpc_enabled(ctx: &AppContext, enabled: bool) {
+    ctx.signals.discord_rpc.set(enabled);
+    let db = ctx.db.lock();
+    let _ = db.save_discord_rpc(enabled);
+}

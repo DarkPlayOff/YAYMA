@@ -33,6 +33,7 @@ pub struct AudioSignals {
     pub current_wave_seeds: Signal<Vec<String>>,
     pub amplitude: Signal<f32>,
     pub codec: Signal<Option<String>>,
+    pub discord_rpc: Signal<bool>,
     pub monitor: Arc<Monitor>,
     // Channel for notification of any signal change (except progress)
     pub changed: watch::Sender<()>,
@@ -74,6 +75,7 @@ impl AudioSignals {
             current_wave_seeds: Signal::new(Vec::new()),
             amplitude: Signal::new(0.0),
             codec: Signal::new(None),
+            discord_rpc: Signal::new(false),
             monitor: Arc::new(Monitor::new(1024)),
             changed: changed_tx,
             changed_rx,

@@ -539,4 +539,25 @@ impl AppDatabase {
             Ok(crate::api::models::AudioQuality::default())
         }
     }
+
+    pub fn save_discord_rpc(&self, enabled: bool) -> Result<()> {
+        self.conn.execute(
+            "INSERT INTO app_settings (key, value) VALUES ('discord_rpc', ?1) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            params![enabled.to_string()],
+        )?;
+        Ok(())
+    }
+
+    pub fn load_discord_rpc(&self) -> Result<bool> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT value FROM app_settings WHERE key = 'discord_rpc'")?;
+        let mut rows = stmt.query([])?;
+        if let Some(row) = rows.next()? {
+            let val: String = row.get(0)?;
+            Ok(val.parse().unwrap_or(false))
+        } else {
+            Ok(false)
+        }
+    }
 }

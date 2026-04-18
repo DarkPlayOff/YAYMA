@@ -168,9 +168,10 @@ impl HttpCache {
         tokio::io::AsyncWriteExt::flush(&mut file).await?;
 
         if size == 0
-            && let Ok(metadata) = fs::metadata(&file_path).await {
-                size = metadata.len();
-            }
+            && let Ok(metadata) = fs::metadata(&file_path).await
+        {
+            size = metadata.len();
+        }
 
         // Update DB
         if let Some(db_arc) = get_db() {
@@ -214,9 +215,10 @@ impl HttpCache {
         let mut dir = fs::read_dir(&self.cache_dir).await?;
         while let Some(entry) = dir.next_entry().await? {
             if let Ok(metadata) = entry.metadata().await
-                && metadata.is_file() {
-                    total_size += metadata.len() as i64;
-                }
+                && metadata.is_file()
+            {
+                total_size += metadata.len() as i64;
+            }
         }
         Ok(total_size)
     }

@@ -37,3 +37,11 @@ pub async fn get_cache_size() -> i64 {
 pub async fn clear_cache() {
     logic::clear_cache().await
 }
+
+pub fn is_discord_rpc_enabled(ctx: &AppContext) -> bool {
+    logic::is_discord_rpc_enabled(ctx)
+}
+
+pub fn set_discord_rpc_enabled(ctx: &AppContext, enabled: bool) {
+    logic::set_discord_rpc_enabled(ctx, enabled)
+}

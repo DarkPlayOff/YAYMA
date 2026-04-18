@@ -18,6 +18,7 @@ class _SettingsViewState extends State<SettingsView> {
   late final FutureSignal<String?> _pathSignal;
   late final FutureSignal<int> _cacheSizeSignal;
   late final FutureSignal<String> _versionSignal;
+  late final FutureSignal<bool> _discordRpcSignal;
 
   @override
   void initState() {
@@ -33,6 +34,19 @@ class _SettingsViewState extends State<SettingsView> {
     _versionSignal = futureSignal(() async {
       return simple.getAppVersion();
     });
+    _discordRpcSignal = futureSignal(() async {
+      final ctx = appContextSignal.value;
+      if (ctx == null) return false;
+      return simple.isDiscordRpcEnabled(ctx: ctx);
+    });
+  }
+
+  Future<void> _toggleDiscordRpc(bool enabled) async {
+    final ctx = appContextSignal.value;
+    if (ctx != null) {
+      await simple.setDiscordRpcEnabled(ctx: ctx, enabled: enabled);
+      unawaited(_discordRpcSignal.refresh());
+    }
   }
 
   Future<void> _pickPath() async {
@@ -107,6 +121,23 @@ class _SettingsViewState extends State<SettingsView> {
                       subtitle: path.value ?? 'По умолчанию (Загрузки)',
                       icon: Icons.folder_open_rounded,
                       onTap: () => unawaited(_pickPath()),
+                    );
+                  }),
+                  const SizedBox(height: 48),
+                  _buildSectionTitle(context, 'Интеграции'),
+                  const SizedBox(height: 24),
+                  Watch((context) {
+                    final enabled = _discordRpcSignal.value;
+                    return _buildSettingItem(
+                      context,
+                      title: 'Discord Rich Presence',
+                      subtitle: 'Показывать текущий трек в статусе Discord',
+                      icon: Icons.discord_rounded,
+                      onTap: () => unawaited(_toggleDiscordRpc(!(enabled.value ?? true))),
+                      trailing: Switch(
+                        value: enabled.value ?? true,
+                        onChanged: (v) => unawaited(_toggleDiscordRpc(v)),
+                      ),
                     );
                   }),
                   const SizedBox(height: 48),
@@ -188,6 +219,7 @@ class _SettingsViewState extends State<SettingsView> {
     required String subtitle,
     required IconData icon,
     required VoidCallback onTap,
+    Widget? trailing,
   }) {
     final primaryColor = Theme.of(context).colorScheme.primary;
     return InkWell(
@@ -234,11 +266,12 @@ class _SettingsViewState extends State<SettingsView> {
                 ],
               ),
             ),
-            const Icon(
-              Icons.chevron_right_rounded,
-              color: Colors.white24,
-              size: 32,
-            ),
+            trailing ??
+                const Icon(
+                  Icons.chevron_right_rounded,
+                  color: Colors.white24,
+                  size: 32,
+                ),
           ],
         ),
       ),

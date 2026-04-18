@@ -1,8 +1,8 @@
 use crate::audio::cache::UrlCache;
 use crate::{
     audio::{
-        commands::AudioMessage, controller::AudioController, events::Event,
-        playback::PlaybackEngine, progress::TrackProgress, queue::QueueManager,
+        commands::AudioMessage, controller::AudioController, discord::DiscordManager,
+        events::Event, playback::PlaybackEngine, progress::TrackProgress, queue::QueueManager,
         queue::as_wave_seed, signals::AudioSignals, smtc::SmtcManager, state::SystemState,
         stream_manager::StreamManager, yandex::YandexProvider,
     },
@@ -90,6 +90,9 @@ impl AudioSystem {
             smtc,
             tx: tx.clone(),
         };
+
+        // Start Discord integration
+        DiscordManager::spawn(signals.clone());
 
         // Background task for SMTC
         let tx_clone = tx.clone();
