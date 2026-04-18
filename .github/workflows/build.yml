@@ -1,7 +1,8 @@
-name: Manual Build
+name: Build Release
 
 on:
   workflow_dispatch:
+  workflow_call:
 
 jobs:
   build-linux:
@@ -37,11 +38,9 @@ jobs:
 
       - name: Install Tools
         run: |
-          # Install binstall if not present
           if [ ! -f "$HOME/.cargo/bin/cargo-binstall" ]; then
             curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
           fi
-          # Install others via binstall
           cargo binstall -y flutter_rust_bridge_codegen --version 2.12.0
           cargo binstall -y cargo-expand
 
@@ -61,14 +60,15 @@ jobs:
 
       - name: Archive
         run: |
-          tar -czvf linux_release.tar.gz -C frontend/build/linux/x64/release/bundle/ .
+          VERSION=${GITHUB_REF#refs/tags/v}
+          if [ "$VERSION" == "$GITHUB_REF" ]; then VERSION="manual"; fi
+          tar -czvf yayma-linux-${VERSION}.tar.gz -C frontend/build/linux/x64/release/bundle/ .
 
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: linux_release_tar
-          path: linux_release.tar.gz
-          compression-level: 0
+          name: linux_release
+          path: yayma-linux-*.tar.gz
 
   build-windows:
     runs-on: windows-latest
@@ -98,12 +98,10 @@ jobs:
 
       - name: Install Tools
         run: |
-          # Install binstall using curl to avoid PowerShell iwr issues
           if ((Test-Path "$HOME\.cargo\bin\cargo-binstall.exe") -eq $false) {
             curl.exe -L --proto "=https" --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.ps1 -o install-binstall.ps1
             powershell -ExecutionPolicy RemoteSigned -File install-binstall.ps1 -Force
           }
-          # Install others via binstall
           cargo binstall -y flutter_rust_bridge_codegen --version 2.12.0
           cargo binstall -y cargo-expand
         shell: powershell
@@ -125,13 +123,13 @@ jobs:
 
       - name: Archive
         run: |
-          Compress-Archive -Path "frontend\build\windows\x64\runner\Release\*" -DestinationPath "windows_release.zip"
+          $VERSION = $env:GITHUB_REF -replace 'refs/tags/v', ''
+          if ($VERSION -eq $env:GITHUB_REF) { $VERSION = "manual" }
+          Compress-Archive -Path "frontend\build\windows\x64\runner\Release\*" -DestinationPath "yayma-windows-$VERSION.zip"
         shell: powershell
 
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: windows_release_zip
-          path: windows_release.zip
-          compression-level: 0
-
+          name: windows_release
+          path: yayma-windows-*.zip
