@@ -17,6 +17,7 @@ class SettingsView extends StatefulWidget {
 class _SettingsViewState extends State<SettingsView> {
   late final FutureSignal<String?> _pathSignal;
   late final FutureSignal<int> _cacheSizeSignal;
+  late final FutureSignal<String> _versionSignal;
 
   @override
   void initState() {
@@ -28,6 +29,9 @@ class _SettingsViewState extends State<SettingsView> {
     });
     _cacheSizeSignal = futureSignal(() async {
       return simple.getCacheSize();
+    });
+    _versionSignal = futureSignal(() async {
+      return simple.getAppVersion();
     });
   }
 
@@ -132,10 +136,10 @@ class _SettingsViewState extends State<SettingsView> {
                       borderRadius: BorderRadius.circular(20),
                       border: Border.all(color: Colors.white10),
                     ),
-                    child: const Column(
+                    child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
+                        const Text(
                           'YAYMA',
                           style: TextStyle(
                             color: Colors.white,
@@ -143,11 +147,17 @@ class _SettingsViewState extends State<SettingsView> {
                             fontWeight: FontWeight.bold,
                           ),
                         ),
-                        SizedBox(height: 8),
-                        Text(
-                          'Альтернативный клиент для Яндекс Музыки.\nВерсия 0.1.0',
-                          style: TextStyle(color: Colors.white54, fontSize: 16),
-                        ),
+                        const SizedBox(height: 8),
+                        Watch((context) {
+                          final version = _versionSignal.value;
+                          return Text(
+                            'Альтернативный клиент для Яндекс Музыки.\nВерсия ${version.value ?? '...'}',
+                            style: const TextStyle(
+                              color: Colors.white54,
+                              fontSize: 16,
+                            ),
+                          );
+                        }),
                       ],
                     ),
                   ),

@@ -3,7 +3,7 @@ use crate::app::AppContext;
 use crate::frb_generated::StreamSink;
 
 pub fn get_app_version() -> String {
-    env!("CARGO_PKG_VERSION").to_string()
+    env!("PUBSPEC_VERSION").to_string()
 }
 
 pub fn app_event_stream(ctx: &AppContext, sink: StreamSink<AppEvent>) {
