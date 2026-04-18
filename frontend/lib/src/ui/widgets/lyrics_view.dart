@@ -58,8 +58,8 @@ class _LyricsWidgetState extends State<LyricsWidget> {
         }
 
         final currentHeight = lines[index] is LyricTimer ? 250 : _itemHeight;
-        // Т.к. у нас padding.top = viewportHeight / 2,
-        // начало списка уже в центре. Нам нужно прокрутить только на высоту элементов.
+        // Since padding.top = viewportHeight / 2, the start of the list is already centered.
+        // We only need to scroll by the total height of the preceding items.
         final targetScroll = offsetBefore + (currentHeight / 2);
 
         if (!_initialScrollDone) {
@@ -159,7 +159,7 @@ class _LyricsWidgetState extends State<LyricsWidget> {
                             currentMs;
                         final elapsedMs = currentMs - item.time.inMilliseconds;
 
-                        // Плавное появление в первые 500мс и исчезновение в последние 1000мс
+                        // Smooth fade-in during the first 500ms and fade-out during the last 1000ms
                         var timerOpacity = 1.0;
                         if (elapsedMs < 500) {
                           timerOpacity = (elapsedMs / 500).clamp(0.0, 1.0);

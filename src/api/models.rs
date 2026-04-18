@@ -129,11 +129,11 @@ impl TrackDetailsDto {
     pub fn from_yandex(mut t: Track) -> Self {
         let album_title = t.albums.get(0).and_then(|a| a.title.clone());
 
-        // В yandex-music-rs лейбл находится в major.name
+        // In yandex-music-rs, the label is located in major.name
         let label = t.major.as_ref().map(|m| m.name.clone());
 
-        // Авторы часто указываются как отдельные артисты или через метаданные,
-        // но в упрощенном виде мы берем всех артистов
+        // Authors are often listed as separate artists or via metadata,
+        // but in this simplified view, we take all artists
         let music_authors = t.artists.iter().filter_map(|a| a.name.clone()).collect();
 
         Self {

@@ -37,11 +37,11 @@ class _AppLayoutState extends State<AppLayout> {
           child: GlobalNotificationListener(
             child: Stack(
               children: [
-                // 1. Фон (шейдер + размытие)
+                // 1. Background (shader + blur)
                 const Positioned.fill(child: BlurredCoverBackground()),
                 const Positioned.fill(child: WaveBackground()),
 
-                // 2. Затемнение при уходе с главной
+                // 2. Dimming when leaving home
                 Positioned.fill(
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 500),
@@ -49,7 +49,7 @@ class _AppLayoutState extends State<AppLayout> {
                   ),
                 ),
 
-                // 3. Контент (набор независимых стеков для каждой вкладки)
+                // 3. Content (set of independent stacks for each tab)
                 Positioned.fill(
                   child: Column(
                     children: [
@@ -65,7 +65,7 @@ class _AppLayoutState extends State<AppLayout> {
                   ),
                 ),
 
-                // 4. Навигация (NavBar)
+                // 4. Navigation
                 const Align(
                   alignment: Alignment.centerLeft,
                   child: Padding(
@@ -74,7 +74,7 @@ class _AppLayoutState extends State<AppLayout> {
                   ),
                 ),
 
-                // 5. Кнопка "Назад"
+                // 5. Back button
                 _FloatingBackButton(),
               ],
             ),
@@ -142,7 +142,7 @@ class _AppLayoutState extends State<AppLayout> {
       final state = entry.value;
       final isLast = index == stack.length - 1;
 
-      // Оптимизация: оставляем только текущий и предыдущий экраны в стеке вкладки
+      // Keep only the current and previous screens in the tab stack
       final isDeeplyHidden = index < stack.length - 2;
 
       return Offstage(
@@ -166,8 +166,7 @@ class _AppLayoutState extends State<AppLayout> {
 
   Widget _buildWindowContent(NavState state, int index) {
     final isRoot = state.section == AppSection.home;
-    // Для раздела аккаунта (настроек) не используем PageStorageKey, 
-    // чтобы не сохранять состояние скролла между заходами.
+    // For the settings, do not use PageStorageKey to avoid saving state between visits.
     final key = state.section == AppSection.account
         ? ValueKey('account_$index')
         : PageStorageKey('scroll_${state.section}_${state.id}_$index');

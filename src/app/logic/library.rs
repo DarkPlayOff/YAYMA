@@ -9,12 +9,12 @@ pub async fn toggle_like(ctx: &AppContext, track_id: String) {
         state.liked.is_liked(&track_id)
     };
 
-    // Мгновенное локальное обновление (Оптимистичный UI)
+    // Instant local update (Optimistic UI)
     {
         let mut state = ctx.state.write().await;
         state.liked.set_like_status(&track_id, !is_liked);
 
-        // Обновляем БД сразу для поиска и оффлайн-доступа
+        // Update DB immediately for search and offline access
         let db = ctx.db.lock();
         if is_liked {
             let _ = db.remove_liked_track(&track_id);
@@ -26,7 +26,7 @@ pub async fn toggle_like(ctx: &AppContext, track_id: String) {
         ctx.signals.changed.send_replace(());
     }
 
-    // Выполняем запрос к API в фоне
+    // Perform API request in background
     let api = ctx.api.clone();
     let track_id_clone = track_id.clone();
     let audio_tx = ctx.audio_tx.clone();
@@ -48,7 +48,7 @@ pub async fn toggle_like(ctx: &AppContext, track_id: String) {
         }
     });
 
-    // Vibe эффект (если лайкаем)
+    // Vibe effect (if liking)
     if !is_liked && let Ok(mut vibe) = ctx.signals.monitor.vibe.try_lock() {
         vibe.trigger_like();
     }
@@ -60,7 +60,7 @@ pub async fn toggle_dislike(ctx: &AppContext, track_id: String) {
         state.liked.is_disliked(&track_id)
     };
 
-    // Мгновенное локальное обновление
+    // Instant local update
     {
         let mut state = ctx.state.write().await;
         state.liked.set_dislike_status(&track_id, !is_disliked);
@@ -68,7 +68,7 @@ pub async fn toggle_dislike(ctx: &AppContext, track_id: String) {
         ctx.signals.changed.send_replace(());
     }
 
-    // Выполняем запрос к API в фоне
+    // Perform API request in background
     let api = ctx.api.clone();
     let track_id_clone = track_id.clone();
     let audio_tx = ctx.audio_tx.clone();
@@ -103,10 +103,10 @@ pub async fn upload_user_track(
         .and_then(|n| n.to_str())
         .unwrap_or("track.mp3");
 
-    // Используем 1000 (Лайки) как дефолтный плейлист для загрузки
+    // Use 1000 (Likes) as default playlist for upload
     let kind = playlist_kind.unwrap_or(1000);
 
-    // 1. Получаем инфо для загрузки (целевой URL)
+    // 1. Get upload info (target URL)
     let upload_url = match api.fetch_ugc_upload_info(kind, file_name).await {
         Ok(url) => url,
         Err(e) => {
@@ -115,7 +115,7 @@ pub async fn upload_user_track(
         }
     };
 
-    // 2. Загружаем файл
+    // 2. Upload file
     let track_id = match api.upload_ugc_track(&upload_url, &file_path).await {
         Ok(id) => id,
         Err(e) => {
@@ -124,8 +124,8 @@ pub async fn upload_user_track(
         }
     };
 
-    // 3. Если мы загружали в конкретный плейлист (не Лайки), добавляем его туда явно
-    // Т.к. загрузка через loader может не привязывать трек автоматически.
+    // 3. If uploading to a specific playlist (not Likes), add it explicitly
+    // Since upload via loader might not bind the track automatically.
     if let Some(k) = playlist_kind {
         let _ = api.add_track_to_playlist(k, track_id, String::new()).await;
     }
@@ -214,22 +214,22 @@ pub async fn liked_tracks_stream(
     let mut changed_rx = ctx.signals.library_changed_rx.clone();
 
     loop {
-        // Отправляем пустой список как сигнал сброса для фронтенда,
-        // чтобы избежать дубликатов при обновлении.
+        // Send an empty list as a reset signal for the frontend
+        // to avoid duplicates during updates.
         if sink.add(vec![]).is_err() {
             return;
         }
 
         let (liked_ids, disliked_ids_set) = ctx.state.read().await.liked.ordered_snapshot();
 
-        // 1. Обработка поиска (используем БД)
+        // 1. Search processing (using DB)
         if let Some(ref q) = query
             && !q.trim().is_empty()
         {
             if let Ok(found_ids) = ctx.db.lock().search_liked_tracks(q)
                 && !found_ids.is_empty()
             {
-                // Для поиска используем метаданные из БД
+                // Use metadata from DB for search
                 if let Ok(metadata) = ctx.db.lock().get_track_metadata(&found_ids) {
                     let mut dtos = Vec::new();
                     for (
@@ -276,16 +276,16 @@ pub async fn liked_tracks_stream(
                 let _ = sink.add(vec![]);
             }
         } else {
-            // 2. Основной список (Local-First)
+            // 2. Main list (Local-First)
             if liked_ids.is_empty() {
-                // Если локально пусто, возможно еще не синхронизировались
+                // If local is empty, might not have synced yet
                 let _ = ctx
                     .audio_tx
                     .send(crate::audio::commands::AudioMessage::SyncLiked)
                     .await;
             }
 
-            // Пытаемся достать метаданные из БД для всех лайкнутых ID
+            // Try to fetch metadata from DB for all liked IDs
             let mut metadata_map = foldhash::HashMap::new();
             if let Ok(metadata) = ctx.db.lock().get_track_metadata(&liked_ids) {
                 for m in metadata {
@@ -293,7 +293,7 @@ pub async fn liked_tracks_stream(
                 }
             }
 
-            // Проверяем, для каких треков нет метаданных
+            // Check which tracks are missing metadata
             let missing_ids: Vec<String> = liked_ids
                 .iter()
                 .filter(|id| !metadata_map.contains_key(*id))
@@ -301,7 +301,7 @@ pub async fn liked_tracks_stream(
                 .collect();
 
             if !missing_ids.is_empty() {
-                // Дотягиваем недостающие метаданные из API (батчами по 50)
+                // Fetch missing metadata from API (batches of 50)
                 for chunk in missing_ids.chunks(50) {
                     if let Ok(tracks) = ctx.api.fetch_tracks(chunk.to_vec()).await {
                         for t in tracks {
@@ -326,7 +326,7 @@ pub async fn liked_tracks_stream(
                                 t.duration.map(|d| d.as_millis() as u64).unwrap_or(0),
                             );
 
-                            // Добавляем в текущую карту для мгновенного отображения
+                            // Add to current map for instant display
                             let duration_ms = t.duration.map(|d| d.as_millis() as u64).unwrap_or(0);
                             metadata_map.insert(
                                 t.id.clone(),
@@ -346,7 +346,7 @@ pub async fn liked_tracks_stream(
                 }
             }
 
-            // Формируем финальный список DTO в правильном порядке
+            // Build final DTO list in correct order
             let mut dtos = Vec::with_capacity(liked_ids.len());
             for id in &liked_ids {
                 if let Some((
@@ -393,7 +393,7 @@ pub async fn liked_tracks_stream(
             }
         }
 
-        // Ждем изменений в сигналах
+        // Wait for signal changes
         if changed_rx.changed().await.is_err() {
             break;
         }

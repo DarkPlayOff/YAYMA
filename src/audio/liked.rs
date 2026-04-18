@@ -79,7 +79,7 @@ impl LikedCache {
         let base_id = track_id.to_base_id().to_string();
         if liked {
             if self.liked_ids_set.insert(base_id.clone()) {
-                // Новые лайки добавляем в начало
+                // Add new likes to the beginning
                 self.liked_ids.insert(0, base_id);
             }
         } else {

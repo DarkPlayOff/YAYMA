@@ -370,7 +370,7 @@ impl Monitor {
         let abs_mono = mono.abs();
         self.waveform.push(mono);
 
-        // --- КАСКАД ФИЛЬТРОВ ДЛЯ ЧИСТОГО РАЗДЕЛЕНИЯ ---
+        // Filter cascade for clean separation
         let l_f = f32::from_bits(self.internal.low_filter.load(Ordering::Relaxed));
         let _m_f = f32::from_bits(self.internal.mid_filter.load(Ordering::Relaxed));
         let h_f = f32::from_bits(self.internal.high_filter.load(Ordering::Relaxed));
@@ -381,17 +381,17 @@ impl Monitor {
             .low_filter
             .store(low.to_bits(), Ordering::Relaxed);
 
-        // 2. High: Sample - LPF 4000Hz (High Pass эффект)
+        // 2. High: Sample - LPF 4000Hz (High Pass effect)
         let high_raw = abs_mono - (h_f + (abs_mono - h_f) * 0.4);
         let high = high_raw.abs();
         self.internal
             .high_filter
             .store((h_f + (abs_mono - h_f) * 0.4).to_bits(), Ordering::Relaxed);
 
-        // 3. Mid: Всё, что осталось между ними
+        // 3. Mid: Everything remaining between them
         let mid = (abs_mono - low - high).abs();
 
-        // Пик-холд (накапливаем максимум)
+        // Peak-hold (accumulate maximum)
         let update_peak = |atomic: &AtomicU32, val: f32| {
             let mut cur = atomic.load(Ordering::Relaxed);
             while val > f32::from_bits(cur) {

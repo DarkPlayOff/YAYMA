@@ -27,7 +27,7 @@ class HomeView extends StatelessWidget {
         var trackHeaderSpacing = 32.0;
         var controlsSpacing = 32.0;
 
-        // Адаптация под высоту
+        // Adaptation for height
         if (height < 800) {
           verticalSpacing = 24.0;
           trackHeaderSpacing = 24.0;
@@ -44,7 +44,7 @@ class HomeView extends StatelessWidget {
             Positioned.fill(
               child: Stack(
                 children: [
-                  // Левая часть: Интерфейс плеера
+                  // Left side: Player UI
                   AnimatedPositioned(
                     duration: const Duration(milliseconds: 600),
                     curve: Curves.easeInOutCubic,
@@ -88,7 +88,7 @@ class HomeView extends StatelessWidget {
                     ),
                   ),
 
-                  // Правая часть: Текст песен
+                  // Right side: Lyrics
                   AnimatedPositioned(
                     duration: const Duration(milliseconds: 600),
                     curve: Curves.easeInOutCubic,

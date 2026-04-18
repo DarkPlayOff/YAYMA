@@ -21,16 +21,16 @@ class WaveController {
   static Future<void> toggleStation(String seed) async {
     final currentSeeds = List<String>.from(currentWaveSeedsSignal());
 
-    // В Яндекс Музыке каждое настроение (например, personal:never-heard) - это
-    // самостоятельная станция.
+    // In Yandex Music, each mood (e.g., personal:never-heard) is a 
+    // standalone station.
     final wasSelected = currentSeeds.contains(seed);
     currentSeeds.clear();
 
     if (wasSelected) {
-      // Отжали кнопку - возвращаемся на базовую волну
+      // Button deselected - returning to the base wave
       currentSeeds.add('user:onyourwave');
     } else {
-      // Выбрали новое настроение
+      // New mood selected
       currentSeeds.add(seed);
     }
 

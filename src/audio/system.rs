@@ -143,7 +143,7 @@ impl AudioSystem {
         Ok((tx, signals, state, effect_handles))
     }
 
-    /// Универсальный spawn для загрузки контекста воспроизведения
+    /// Universal spawn for loading playback context
     fn spawn_fetch_context<F, Fut>(&self, fetcher: F)
     where
         F: FnOnce() -> Fut + Send + 'static,

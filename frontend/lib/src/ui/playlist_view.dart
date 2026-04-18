@@ -25,7 +25,7 @@ class PlaylistView extends StatefulWidget {
 
 class _PlaylistViewState extends State<PlaylistView> {
   late final FutureSignal<PlaylistDetailsDto?> _playlistAsync;
-  // Сигнал для хранения метаданных (заголовок), чтобы они не исчезали при поиске
+  // Signal to store metadata (title), so it doesn't disappear during search
   final FlutterSignal<PlaylistDetailsDto?> _playlistMetadata =
       signal<PlaylistDetailsDto?>(null);
   final FlutterSignal<String> _searchQuery = signal('');
@@ -57,7 +57,7 @@ class _PlaylistViewState extends State<PlaylistView> {
         query: query.isEmpty ? null : query,
       );
 
-      // Сохраняем метаданные, если загрузка успешна
+      // Store metadata if loading is successful
       if (result != null) {
         _playlistMetadata.value = result;
       }
@@ -86,7 +86,7 @@ class _PlaylistViewState extends State<PlaylistView> {
       final meta = _playlistMetadata.value;
       final state = _playlistAsync.value;
 
-      // Показываем полный лоадер только если у нас ВООБЩЕ еще нет никаких данных
+      // Show full loader only if we have NO data yet
       if (meta == null && state.isLoading) {
         return const Center(child: CommonLoadingWidget());
       }
@@ -130,7 +130,7 @@ class _PlaylistContent extends StatefulWidget {
 }
 
 class _PlaylistContentState extends State<_PlaylistContent> {
-  // Список треков для локальных манипуляций (reorder)
+  // List of tracks for local manipulations (reorder)
   late List<SimpleTrackDto> _localTracks;
 
   @override
@@ -142,7 +142,7 @@ class _PlaylistContentState extends State<_PlaylistContent> {
   @override
   void didUpdateWidget(_PlaylistContent oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Обновляем локальный список только когда пришли новые данные
+    // Update local list only when new data arrives
     if (widget.tracks != oldWidget.tracks) {
       _localTracks = List.from(widget.tracks);
     }

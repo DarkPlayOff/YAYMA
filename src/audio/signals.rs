@@ -34,13 +34,13 @@ pub struct AudioSignals {
     pub amplitude: Signal<f32>,
     pub codec: Signal<Option<String>>,
     pub monitor: Arc<Monitor>,
-    // Канал для уведомления об изменении любого из сигналов (кроме прогресса)
+    // Channel for notification of any signal change (except progress)
     pub changed: watch::Sender<()>,
     pub changed_rx: watch::Receiver<()>,
-    // Канал для уведомления об изменениях в библиотеке (лайки, плейлисты)
+    // Channel for notification of library changes (likes, playlists)
     pub library_changed: watch::Sender<()>,
     pub library_changed_rx: watch::Receiver<()>,
-    // Канал для уведомления об изменении прогресса
+    // Channel for notification of progress change
     pub progress_changed: watch::Sender<u32>,
     pub progress_rx: watch::Receiver<u32>,
 }
@@ -128,7 +128,7 @@ impl AudioSignals {
             0.0
         };
         self.progress_ratio.set(ratio);
-        // Уведомляем слушателей прогресса
+        // Notify progress listeners
         self.progress_changed.send_replace(position_ms as u32);
     }
 

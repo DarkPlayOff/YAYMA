@@ -90,7 +90,7 @@ pub fn spawn_bridge_worker(ctx: Arc<AppContext>, mut shutdown_rx: watch::Receive
                     let state = crate::app::logic::playback::get_playback_state_internal(&audio_signals, &liked, &disliked);
                     ctx.send_event(AppEvent::PlaybackStateChanged(state));
 
-                    // Сохраняем состояние при изменении is_playing (play/pause)
+                    // Save state when is_playing changes (play/pause)
                     let track_id = audio_signals.current_track_id.get();
                     let position_ms = audio_signals.position_ms.get();
                     let is_playing = audio_signals.is_playing.get();
@@ -118,11 +118,11 @@ pub fn spawn_bridge_worker(ctx: Arc<AppContext>, mut shutdown_rx: watch::Receive
                     }
                 }
                 _ = save_interval.tick() => {
-                    // Периодически сохраняем позицию при воспроизведении
+                    // Periodically save position during playback
                     if audio_signals.is_playing.get() {
                         let track_id = audio_signals.current_track_id.get();
                         let position_ms = audio_signals.position_ms.get();
-                        // Сохраняем только если позиция значительно изменилась (> 3 сек)
+                        // Save only if position changed significantly (> 3 sec)
                         if let (Some(track_id), db_lock) = (track_id, &ctx.db)
                             && position_ms.saturating_sub(last_saved_position_ms) > 3000 {
                                 let db = db_lock.lock();

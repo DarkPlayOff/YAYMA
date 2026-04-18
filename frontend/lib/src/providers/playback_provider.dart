@@ -14,7 +14,7 @@ import 'package:yayma/src/rust/api/models.dart';
 import 'package:yayma/src/rust/api/playback.dart' as rust;
 import 'package:yayma/src/rust/api/simple.dart' as rust;
 
-// Сигналы состояния
+// Player state signals
 final FlutterSignal<PlaybackState?> playerStateSignal = signal<PlaybackState?>(
   null,
 );
@@ -36,7 +36,7 @@ Future<void> initPlayback() async {
 
   await _eventSub?.cancel();
 
-  // Инициализация потока событий
+  // Initialize app event stream
   _eventSub = rust.appEventStream(ctx: ctx).listen((event) {
     switch (event) {
       case rust.AppEvent_PlaybackStateChanged(field0: final state):
@@ -55,7 +55,7 @@ Future<void> initPlayback() async {
   });
 
   audioQualitySignal.value = await rust.getAudioQuality(ctx: ctx);
-  // Активируем эффекты
+  
   _activatePersistentColorScheme();
   _activateVibePalette();
   if (Platform.isWindows) {
@@ -67,37 +67,37 @@ void _activatePersistentColorScheme() => _persistentColorSchemeEffect;
 void _activateVibePalette() => _vibePaletteEffect;
 void _activateTaskbarEffect() => _taskbarEffect;
 
-// Сигнал только для ID текущего трека
+// Signal for current track ID only
 final FlutterComputed<String?> currentTrackIdSignal = computed(
   () => playerStateSignal.value?.currentTrack?.id,
   debugLabel: 'currentTrackIdSignal',
 );
 
-// Сигнал только для громкости
+// Signal for volume only
 final FlutterComputed<int> playerVolumeSignal = computed(
   () => playerStateSignal.value?.volume ?? 100,
   debugLabel: 'playerVolumeSignal',
 );
 
-// Сигнал только для статуса проигрывания
+// Signal for playback status only
 final FlutterComputed<bool> isPlayingSignal = computed(
   () => playerStateSignal.value?.isPlaying ?? false,
   debugLabel: 'isPlayingSignal',
 );
 
-// Сигнал перемешивания
+// Shuffle signal
 final FlutterComputed<bool> isShuffledSignal = computed(
   () => playerStateSignal.value?.isShuffled ?? false,
   debugLabel: 'isShuffledSignal',
 );
 
-// Сигнал режима повтора
+// Repeat mode signal
 final FlutterComputed<RepeatModeDto> repeatModeSignal = computed(
   () => playerStateSignal.value?.repeatMode ?? RepeatModeDto.none,
   debugLabel: 'repeatModeSignal',
 );
 
-// Сигналы лайка/дизлайка текущего трека
+// Signals for liking/disliking the current track
 final FlutterComputed<bool> isLikedSignal = computed(
   () => playerStateSignal.value?.currentTrack?.isLiked ?? false,
   debugLabel: 'isLikedSignal',
@@ -108,13 +108,13 @@ final FlutterComputed<bool> isDislikedSignal = computed(
   debugLabel: 'isDislikedSignal',
 );
 
-// Сигналы текущей волны
+// Signal for current wave seeds
 final FlutterComputed<List<String>> currentWaveSeedsSignal = computed(
   () => playerStateSignal.value?.currentWaveSeeds ?? [],
   debugLabel: 'currentWaveSeedsSignal',
 );
 
-// Метаданные трека (только статические данные о самом треке)
+// Track metadata (static data only)
 final FlutterComputed<
   ({
     String? id,
@@ -139,7 +139,7 @@ trackMetadataSignal = computed(() {
   );
 }, debugLabel: 'trackMetadataSignal');
 
-// Прогресс трека (обновляется часто)
+// Track progress (updates frequently)
 final FlutterComputed<({double durationMs, double positionMs})>
 trackProgressSignal = computed(() {
   final progress = playerProgressSignal.value;
@@ -149,13 +149,13 @@ trackProgressSignal = computed(() {
   );
 }, debugLabel: 'trackProgressSignal');
 
-// Сигнал только для URL обложки, чтобы не триггерить расчет при лайках/паузе
+// Signal for cover URL only to avoid re-calculating on pause/likes
 final FlutterComputed<String?> currentCoverUrlSignal = computed(
   () => playerStateSignal.value?.currentTrack?.coverUrl,
   debugLabel: 'currentCoverUrlSignal',
 );
 
-// Цветовая схема из обложки
+// Color scheme generated from cover image
 final FutureSignal<ColorScheme?> colorSchemeSignal = computedAsync(() async {
   final url = currentCoverUrlSignal();
   if (url == null) return null;
@@ -163,19 +163,19 @@ final FutureSignal<ColorScheme?> colorSchemeSignal = computedAsync(() async {
   final path = await rust.getCachedImagePath(url: url);
   if (path == null) return null;
 
-  // Ограничиваем разрешение до минимума для квантования
+  // Resize to minimum for faster quantization
   return ColorScheme.fromImageProvider(
     provider: ResizeImage(FileImage(File(path)), width: 32, height: 32),
     brightness: Brightness.dark,
   );
 }, debugLabel: 'colorSchemeSignal');
 
-// Храним последнюю успешную цветовую схему, чтобы не было отката цветов при смене трека
+// Store last successful color scheme to prevent flickering during track changes
 final FlutterSignal<ColorScheme?> _persistentColorScheme = signal<ColorScheme?>(
   null,
 );
 
-// Эффект для обновления персистентной цветовой схемы
+// Effect to update persistent color scheme
 final EffectCleanup _persistentColorSchemeEffect = effect(() {
   final url = currentCoverUrlSignal();
   final scheme = colorSchemeSignal().value;
@@ -187,13 +187,13 @@ final EffectCleanup _persistentColorSchemeEffect = effect(() {
   }
 });
 
-// Акцентный цвет
+// Accent color
 final FlutterComputed<Color> accentColorSignal = computed(
   () => _persistentColorScheme()?.primary ?? Colors.deepOrange,
   debugLabel: 'accentColorSignal',
 );
 
-// Цвет панели плеера
+// Player bar background color
 final FlutterComputed<Color> playerBarColorSignal = computed(
   () =>
       Color.lerp(
@@ -205,7 +205,7 @@ final FlutterComputed<Color> playerBarColorSignal = computed(
   debugLabel: 'playerBarColorSignal',
 );
 
-// Синхронизация палитры с Rust (для Vibe-эффекта)
+// Sync palette with Rust for Vibe effect
 final EffectCleanup _vibePaletteEffect = effect(() {
   final scheme = colorSchemeSignal().value;
   final ctx = appContextSignal.value;
@@ -228,7 +228,7 @@ final EffectCleanup _vibePaletteEffect = effect(() {
   }
 });
 
-// Храним последнее состояние, чтобы не спамить системными вызовами
+// Cache last state to avoid redundant system calls
 String? _lastTaskbarTrackId;
 bool? _lastTaskbarIsPlaying;
 bool? _lastTaskbarIsLiked;
@@ -236,7 +236,7 @@ bool? _lastTaskbarIsDisliked;
 bool? _lastTaskbarIsShuffled;
 RepeatModeDto? _lastTaskbarRepeatMode;
 
-// Эффект для обновления кнопок в панели задач Windows
+// Windows taskbar thumbnail buttons update
 final EffectCleanup _taskbarEffect = effect(() {
   if (!Platform.isWindows) return;
 
@@ -247,7 +247,7 @@ final EffectCleanup _taskbarEffect = effect(() {
   final isShuffled = isShuffledSignal();
   final repeatMode = repeatModeSignal();
 
-  // Обновляем только если изменился трек или важный статус
+  // Update only if track or key status changed
   if (_lastTaskbarTrackId == meta.id &&
       _lastTaskbarIsPlaying == isPlaying &&
       _lastTaskbarIsLiked == isLiked &&
@@ -337,12 +337,12 @@ final EffectCleanup _taskbarEffect = effect(() {
       }
       await WindowsTaskbar.setThumbnailTooltip(title);
     } on Exception catch (_) {
-      // Игнорируем ошибки, если окно временно недоступно
+      // Ignore errors if window is temporarily unavailable
     }
   }());
 });
 
-// Позиция трека (теперь берется из прогресса)
+// Track position from progress
 final FlutterComputed<double> playerPositionMsSignal = computed(
   () => (playerProgressSignal.value?.positionMs ?? 0).toDouble(),
   debugLabel: 'playerPositionMsSignal',
@@ -368,7 +368,7 @@ Future<void> refreshAudioEffects() async {
   audioEffectsSignal.value = await rust.getAudioEffects(ctx: ctx);
 }
 
-// Глобальные методы управления
+// Global playback control methods
 class PlaybackController {
   static Future<void> playTrack(String trackId) =>
       runRustAction((ctx) => rust.playTrack(ctx: ctx, trackId: trackId));

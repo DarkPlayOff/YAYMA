@@ -4,7 +4,7 @@ use tokio::sync::watch;
 
 pub struct AppSession {
     pub context: Arc<AppContext>,
-    /// Сигнал для остановки всех фоновых задач этой сессии
+    /// Signal to stop all background tasks of this session
     pub shutdown_tx: watch::Sender<bool>,
 }
 

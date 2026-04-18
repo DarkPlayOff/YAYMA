@@ -8,7 +8,7 @@ use crate::http::ApiService;
 use parking_lot::Mutex;
 use std::sync::Arc;
 
-/// Полный цикл инициализации приложения
+/// Complete application initialization cycle
 pub async fn initialize_app(
     api: ApiService,
 ) -> Result<AppContext, Box<dyn std::error::Error + Send + Sync>> {
@@ -16,8 +16,8 @@ pub async fn initialize_app(
     initialize_services(api).await
 }
 
-/// Инициализация базовой инфраструктуры (логирование, паник-хук, БД)
-/// Вызывается один раз при старте FRB
+/// Initialize base infrastructure (logging, panic hook, DB)
+/// Called once at FRB startup
 pub fn initialize_infrastructure() {
     static ONCE: std::sync::Once = std::sync::Once::new();
 
