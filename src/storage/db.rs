@@ -1,5 +1,6 @@
 use chrono;
 use directories::ProjectDirs;
+use crate::api::models::{TrackArtistDto};
 use rusqlite::{Connection, Result, params};
 use std::path::PathBuf;
 
@@ -15,7 +16,7 @@ pub struct TrackMetadata {
     pub id: String,
     pub title: String,
     pub version: Option<String>,
-    pub artists: Vec<String>,
+    pub artists: Vec<TrackArtistDto>,
     pub album: Option<String>,
     pub album_id: Option<String>,
     pub cover_url: Option<String>,
@@ -41,6 +42,23 @@ impl AppDatabase {
         conn.pragma_update(None, "temp_store", "MEMORY")?;
         conn.pragma_update(None, "foreign_keys", "ON")?;
 
+        // --- MIGRATION: Simply drop old metadata table if schema is outdated ---
+        let has_old_metadata_column: bool = conn
+            .query_row(
+                "SELECT count(*) FROM pragma_table_info('track_metadata') WHERE name = 'artists'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap_or(0)
+            > 0;
+
+        if has_old_metadata_column {
+            tracing::info!("Outdated metadata schema detected. Dropping table for re-sync...");
+            let _ = conn.execute("DROP TABLE IF EXISTS track_metadata", []);
+            let _ = conn.execute("DROP TABLE IF EXISTS track_metadata_artists", []);
+        }
+        // -----------------------------------------------------------------------
+
         let migrations = [
             "CREATE TABLE IF NOT EXISTS playback_state (
                 id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -59,12 +77,22 @@ impl AppDatabase {
                 track_id TEXT PRIMARY KEY,
                 title TEXT NOT NULL,
                 version TEXT,
-                artists TEXT NOT NULL,
                 album TEXT,
                 album_id TEXT,
                 cover_url TEXT,
                 duration_ms INTEGER NOT NULL
             )",
+            "CREATE TABLE IF NOT EXISTS track_metadata_artists (
+                track_id TEXT NOT NULL,
+                artist_id TEXT NOT NULL,
+                name TEXT NOT NULL,
+                position INTEGER NOT NULL,
+                PRIMARY KEY (track_id, position),
+                FOREIGN KEY (track_id) REFERENCES track_metadata(track_id) ON DELETE CASCADE
+            )",
+            "CREATE INDEX IF NOT EXISTS idx_track_artists_id ON track_metadata_artists(track_id)",
+            "CREATE INDEX IF NOT EXISTS idx_track_artists_name ON track_metadata_artists(name)",
+            "CREATE INDEX IF NOT EXISTS idx_metadata_search_title ON track_metadata(title)",
             "CREATE TABLE IF NOT EXISTS equalizer_settings (
                 id INTEGER PRIMARY KEY CHECK (id = 1),
                 enabled INTEGER NOT NULL DEFAULT 0,
@@ -91,8 +119,6 @@ impl AppDatabase {
             "CREATE INDEX IF NOT EXISTS idx_cache_last_access ON cache_metadata(last_access_at)",
             "CREATE INDEX IF NOT EXISTS idx_cache_expires_at ON cache_metadata(expires_at)",
             "CREATE INDEX IF NOT EXISTS idx_liked_track_id ON liked_tracks(track_id)",
-            "CREATE INDEX IF NOT EXISTS idx_metadata_track_id ON track_metadata(track_id)",
-            "CREATE INDEX IF NOT EXISTS idx_metadata_search ON track_metadata(title, artists)",
         ];
 
         for m in migrations {
@@ -343,17 +369,17 @@ impl AppDatabase {
     }
 
     pub fn upsert_track_metadata(
-        &self,
+        &mut self,
         metadata: TrackMetadata,
     ) -> Result<()> {
-        let artists_str = metadata.artists.join("|");
-        self.conn.execute(
-            "INSERT INTO track_metadata (track_id, title, version, artists, album, album_id, cover_url, duration_ms)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+        let tx = self.conn.transaction()?;
+
+        tx.execute(
+            "INSERT INTO track_metadata (track_id, title, version, album, album_id, cover_url, duration_ms)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
              ON CONFLICT(track_id) DO UPDATE SET
              title = excluded.title,
              version = excluded.version,
-             artists = excluded.artists,
              album = excluded.album,
              album_id = excluded.album_id,
              cover_url = excluded.cover_url,
@@ -362,13 +388,30 @@ impl AppDatabase {
                 metadata.id,
                 metadata.title,
                 metadata.version,
-                artists_str,
                 metadata.album,
                 metadata.album_id,
                 metadata.cover_url,
                 metadata.duration_ms as i64
             ],
         )?;
+
+        // Update artists
+        tx.execute(
+            "DELETE FROM track_metadata_artists WHERE track_id = ?1",
+            params![metadata.id],
+        )?;
+
+        let mut stmt = tx.prepare(
+            "INSERT INTO track_metadata_artists (track_id, artist_id, name, position)
+             VALUES (?1, ?2, ?3, ?4)",
+        )?;
+
+        for (i, artist) in metadata.artists.into_iter().enumerate() {
+            stmt.execute(params![metadata.id, artist.id, artist.name, i as i64])?;
+        }
+
+        drop(stmt);
+        tx.commit()?;
         Ok(())
     }
 
@@ -376,9 +419,14 @@ impl AppDatabase {
         &self,
         track_ids: &[String],
     ) -> Result<Vec<TrackMetadata>> {
+        if track_ids.is_empty() {
+            return Ok(vec![]);
+        }
+
+        // 1. Get tracks
         let mut result = Vec::new();
         let mut stmt = self.conn.prepare(
-            "SELECT track_id, title, version, artists, album, album_id, cover_url, duration_ms 
+            "SELECT track_id, title, version, album, album_id, cover_url, duration_ms 
              FROM track_metadata WHERE track_id = ?1",
         )?;
 
@@ -388,18 +436,16 @@ impl AppDatabase {
                 let track_id: String = row.get(0)?;
                 let title: String = row.get(1)?;
                 let version: Option<String> = row.get(2)?;
-                let artists_str: String = row.get(3)?;
-                let album: Option<String> = row.get(4)?;
-                let album_id: Option<String> = row.get(5)?;
-                let cover_url: Option<String> = row.get(6)?;
-                let duration_ms: i64 = row.get(7)?;
+                let album: Option<String> = row.get(3)?;
+                let album_id: Option<String> = row.get(4)?;
+                let cover_url: Option<String> = row.get(5)?;
+                let duration_ms: i64 = row.get(6)?;
 
-                let artists: Vec<String> = artists_str.split('|').map(|s| s.to_string()).collect();
                 result.push(TrackMetadata {
                     id: track_id,
                     title,
                     version,
-                    artists,
+                    artists: Vec::new(), // Will be filled below
                     album,
                     album_id,
                     cover_url,
@@ -407,15 +453,38 @@ impl AppDatabase {
                 });
             }
         }
+
+        // 2. Get all artists for these tracks in one go
+        let mut artist_stmt = self.conn.prepare(
+            "SELECT track_id, artist_id, name 
+             FROM track_metadata_artists 
+             WHERE track_id = ?1 
+             ORDER BY position ASC",
+        )?;
+
+        for track in &mut result {
+            let rows = artist_stmt.query_map(params![track.id], |row| {
+                Ok(TrackArtistDto {
+                    id: row.get(1)?,
+                    name: row.get(2)?,
+                })
+            })?;
+
+            for artist in rows {
+                track.artists.push(artist?);
+            }
+        }
+
         Ok(result)
     }
 
     pub fn search_liked_tracks(&self, query: &str) -> Result<Vec<String>> {
         let mut stmt = self.conn.prepare(
-            "SELECT lt.track_id 
+            "SELECT DISTINCT lt.track_id 
              FROM liked_tracks lt
              JOIN track_metadata tm ON lt.track_id = tm.track_id
-             WHERE tm.title LIKE ?1 OR tm.artists LIKE ?1",
+             LEFT JOIN track_metadata_artists tma ON tm.track_id = tma.track_id
+             WHERE tm.title LIKE ?1 OR tma.name LIKE ?1",
         )?;
 
         let search_pattern = format!("%{}%", query);

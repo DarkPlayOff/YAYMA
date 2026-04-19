@@ -213,7 +213,11 @@ async fn fetch_and_save_missing_metadata(
     for chunk in missing_ids.chunks(50) {
         if let Ok(tracks) = ctx.api.fetch_tracks(chunk.to_vec()).await {
             for t in tracks {
-                let artists: Vec<String> = t.artists.into_iter().filter_map(|a| a.name).collect();
+                let artists: Vec<crate::api::models::TrackArtistDto> = t
+                    .artists
+                    .into_iter()
+                    .map(|a| crate::api::models::TrackArtistDto::from_yandex(&a))
+                    .collect();
                 let album = t.albums.first().and_then(|a| a.title.clone());
                 let album_id = t.albums.first().and_then(|a| a.id).map(|id| id.to_string());
                 let cover_url = t
@@ -246,20 +250,11 @@ fn metadata_to_dto(
     is_liked: bool,
     is_disliked: bool,
 ) -> SimpleTrackDto {
-    let artists: Vec<crate::api::models::TrackArtistDto> = m
-        .artists
-        .into_iter()
-        .map(|name| crate::api::models::TrackArtistDto {
-            id: String::new(),
-            name,
-        })
-        .collect();
-
     SimpleTrackDto {
         id: m.id,
         title: m.title,
         version: m.version,
-        artists,
+        artists: m.artists,
         album: m.album,
         album_id: m.album_id,
         cover_url: m.cover_url,
@@ -329,10 +324,19 @@ pub async fn liked_tracks_stream(
                 }
             }
 
-            // Check which tracks are missing metadata
+            // Check which tracks are missing metadata or have incomplete artist info (missing IDs)
             let missing_ids: Vec<String> = liked_ids
                 .iter()
-                .filter(|id| !metadata_map.contains_key(*id))
+                .filter(|id| {
+                    match metadata_map.get(*id) {
+                        None => true,
+                        Some(m) => {
+                            // If artists list is empty or any artist has an empty ID, 
+                            // we consider it incomplete/old metadata and trigger a refresh.
+                            m.artists.is_empty() || m.artists.iter().any(|a| a.id.is_empty())
+                        }
+                    }
+                })
                 .cloned()
                 .collect();
 
