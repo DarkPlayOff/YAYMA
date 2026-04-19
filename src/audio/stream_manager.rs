@@ -13,6 +13,7 @@ type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>
 
 pub type PrewarmResult = (stream::StreamingSession, Arc<TrackProgress>, String);
 
+#[derive(Clone)]
 pub struct StreamManager {
     api: Arc<ApiService>,
     url_cache: UrlCache,
@@ -101,16 +102,5 @@ impl StreamManager {
         .map_err(|e| Box::<dyn std::error::Error + Send + Sync>::from(e.to_string()))??;
 
         Ok((session, progress, codec))
-    }
-}
-
-impl Clone for StreamManager {
-    fn clone(&self) -> Self {
-        Self {
-            api: self.api.clone(),
-            url_cache: self.url_cache.clone(),
-            prewarm_cache: self.prewarm_cache.clone(),
-            http_client: self.http_client.clone(),
-        }
     }
 }

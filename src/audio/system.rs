@@ -539,17 +539,21 @@ impl AudioSystem {
     ) {
         if let Ok(ids) = api.fetch_liked_ids().await {
             let count = ids.len();
-            {
-                let mut state = state.write().await;
-                state.liked.set_liked_ids(ids.clone());
-            }
-            signals.library_changed.send_replace(());
 
             // Sync with DB
             if let Some(db_arc) = crate::app::get_db() {
-                let db = db_arc.lock();
-                let _ = db.save_liked_tracks(&ids);
+                let ids_for_db = ids.clone();
+                tokio::task::spawn_blocking(move || {
+                    let db = db_arc.lock();
+                    let _ = db.save_liked_tracks(&ids_for_db);
+                });
             }
+
+            {
+                let mut state = state.write().await;
+                state.liked.set_liked_ids(ids);
+            }
+            signals.library_changed.send_replace(());
 
             tracing::info!("Synced {} liked track IDs directly from API", count);
         } else {

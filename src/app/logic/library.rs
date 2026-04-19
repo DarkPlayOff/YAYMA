@@ -28,22 +28,17 @@ pub async fn toggle_like(ctx: &AppContext, track_id: String) {
 
     // Perform API request in background
     let api = ctx.api.clone();
-    let track_id_clone = track_id.clone();
     let audio_tx = ctx.audio_tx.clone();
     tokio::spawn(async move {
         if is_liked {
-            let _ = api.remove_like_track(track_id_clone.clone()).await;
+            let _ = api.remove_like_track(track_id.clone()).await;
             let _ = audio_tx
-                .send(crate::audio::commands::AudioMessage::WaveUnlike(
-                    track_id_clone,
-                ))
+                .send(crate::audio::commands::AudioMessage::WaveUnlike(track_id))
                 .await;
         } else {
-            let _ = api.add_like_track(track_id_clone.clone()).await;
+            let _ = api.add_like_track(track_id.clone()).await;
             let _ = audio_tx
-                .send(crate::audio::commands::AudioMessage::WaveLike(
-                    track_id_clone,
-                ))
+                .send(crate::audio::commands::AudioMessage::WaveLike(track_id))
                 .await;
         }
     });
@@ -206,6 +201,74 @@ pub async fn move_track_in_playlist(
         .is_ok()
 }
 
+async fn fetch_and_save_missing_metadata(
+    ctx: &AppContext,
+    missing_ids: Vec<String>,
+    metadata_map: &mut foldhash::HashMap<String, crate::storage::db::TrackMetadata>,
+) {
+    if missing_ids.is_empty() {
+        return;
+    }
+
+    for chunk in missing_ids.chunks(50) {
+        if let Ok(tracks) = ctx.api.fetch_tracks(chunk.to_vec()).await {
+            for t in tracks {
+                let artists: Vec<String> = t.artists.into_iter().filter_map(|a| a.name).collect();
+                let album = t.albums.first().and_then(|a| a.title.clone());
+                let album_id = t.albums.first().and_then(|a| a.id).map(|id| id.to_string());
+                let cover_url = t
+                    .og_image
+                    .as_ref()
+                    .map(|img| format!("https://{}", img.replace("%%", "200x200")));
+
+                let duration_ms = t.duration.map(|d| d.as_millis() as u64).unwrap_or(0);
+
+                let metadata_to_save = crate::storage::db::TrackMetadata {
+                    id: t.id.clone(),
+                    title: t.title.clone().unwrap_or_default(),
+                    version: t.version.clone(),
+                    artists,
+                    album,
+                    album_id,
+                    cover_url,
+                    duration_ms,
+                };
+
+                let _ = ctx.db.lock().upsert_track_metadata(metadata_to_save.clone());
+                metadata_map.insert(t.id, metadata_to_save);
+            }
+        }
+    }
+}
+
+fn metadata_to_dto(
+    m: crate::storage::db::TrackMetadata,
+    is_liked: bool,
+    is_disliked: bool,
+) -> SimpleTrackDto {
+    let artists: Vec<crate::api::models::TrackArtistDto> = m
+        .artists
+        .into_iter()
+        .map(|name| crate::api::models::TrackArtistDto {
+            id: String::new(),
+            name,
+        })
+        .collect();
+
+    SimpleTrackDto {
+        id: m.id,
+        title: m.title,
+        version: m.version,
+        artists,
+        album: m.album,
+        album_id: m.album_id,
+        cover_url: m.cover_url,
+        duration_ms: m.duration_ms as u32,
+        is_liked,
+        is_disliked,
+    }
+}
+
 pub async fn liked_tracks_stream(
     ctx: &AppContext,
     sink: StreamSink<Vec<SimpleTrackDto>>,
@@ -231,31 +294,14 @@ pub async fn liked_tracks_stream(
             {
                 // Use metadata from DB for search
                 if let Ok(metadata) = ctx.db.lock().get_track_metadata(&found_ids) {
-                    let mut dtos = Vec::new();
+                    let mut dtos = Vec::with_capacity(50);
                     for m in metadata {
-                        let artists: Vec<crate::api::models::TrackArtistDto> = m.artists
-                            .into_iter()
-                            .map(|name: String| crate::api::models::TrackArtistDto {
-                                id: "".to_string(),
-                                name,
-                            })
-                            .collect();
+                        dtos.push(metadata_to_dto(m, true, false));
 
-                        dtos.push(SimpleTrackDto {
-                            id: m.id,
-                            title: m.title,
-                            version: m.version,
-                            artists,
-                            album: m.album,
-                            album_id: m.album_id,
-                            cover_url: m.cover_url,
-                            duration_ms: m.duration_ms as u32,
-                            is_liked: true,
-                            is_disliked: false,
-                        });
-
-                        if dtos.len() == 50 && sink.add(std::mem::take(&mut dtos)).is_err() {
-                            return;
+                        if dtos.len() >= 50 {
+                            if sink.add(std::mem::take(&mut dtos)).is_err() {
+                                return;
+                            }
                         }
                     }
                     if !dtos.is_empty() {
@@ -290,74 +336,18 @@ pub async fn liked_tracks_stream(
                 .cloned()
                 .collect();
 
-            if !missing_ids.is_empty() {
-                // Fetch missing metadata from API (batches of 50)
-                for chunk in missing_ids.chunks(50) {
-                    if let Ok(tracks) = ctx.api.fetch_tracks(chunk.to_vec()).await {
-                        for t in tracks {
-                            let artists: Vec<String> =
-                                t.artists.iter().filter_map(|a| a.name.clone()).collect();
-                            let album = t.albums.first().and_then(|a| a.title.clone());
-                            let album_id =
-                                t.albums.first().and_then(|a| a.id).map(|id| id.to_string());
-                            let cover_url = t
-                                .og_image
-                                .as_ref()
-                                .map(|img| format!("https://{}", img.replace("%%", "200x200")));
-
-                            let duration_ms = t.duration.map(|d| d.as_millis() as u64).unwrap_or(0);
-                            
-                            let metadata_to_save = crate::storage::db::TrackMetadata {
-                                id: t.id.clone(),
-                                title: t.title.clone().unwrap_or_default(),
-                                version: t.version.clone(),
-                                artists: artists.clone(),
-                                album: album.clone(),
-                                album_id: album_id.clone(),
-                                cover_url: cover_url.clone(),
-                                duration_ms,
-                            };
-
-                            let _ = ctx.db.lock().upsert_track_metadata(metadata_to_save.clone());
-
-                            // Add to current map for instant display
-                            metadata_map.insert(
-                                t.id.clone(),
-                                metadata_to_save,
-                            );
-                        }
-                    }
-                }
-            }
+            fetch_and_save_missing_metadata(ctx, missing_ids, &mut metadata_map).await;
 
             // Build final DTO list in correct order
-            let mut dtos = Vec::with_capacity(liked_ids.len());
-            for id in &liked_ids {
-                if let Some(m) = metadata_map.get(id)
-                {
-                    let artists: Vec<crate::api::models::TrackArtistDto> = m.artists
-                        .iter()
-                        .map(|name: &String| crate::api::models::TrackArtistDto {
-                            id: "".to_string(),
-                            name: name.clone(),
-                        })
-                        .collect();
+            let mut dtos = Vec::with_capacity(50);
+            for id in liked_ids {
+                if let Some(m) = metadata_map.remove(&id) {
+                    dtos.push(metadata_to_dto(m, true, disliked_ids_set.contains(&id)));
 
-                    dtos.push(SimpleTrackDto {
-                        id: m.id.clone(),
-                        title: m.title.clone(),
-                        version: m.version.clone(),
-                        artists,
-                        album: m.album.clone(),
-                        album_id: m.album_id.clone(),
-                        cover_url: m.cover_url.clone(),
-                        duration_ms: m.duration_ms as u32,
-                        is_liked: true,
-                        is_disliked: disliked_ids_set.contains(id),
-                    });
-
-                    if dtos.len() == 50 && sink.add(std::mem::take(&mut dtos)).is_err() {
-                        return;
+                    if dtos.len() >= 50 {
+                        if sink.add(std::mem::take(&mut dtos)).is_err() {
+                            return;
+                        }
                     }
                 }
             }

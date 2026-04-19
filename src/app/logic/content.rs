@@ -66,16 +66,13 @@ pub async fn download_track(ctx: &AppContext, track_id: String) -> Result<String
         .map(|a| a.name.as_str())
         .unwrap_or("Unknown Artist");
 
-    let safe_base_name = format!("{} - {}", artist_name, dto.title)
+    let safe_base_name: String = format!("{} - {}", artist_name, dto.title)
         .chars()
-        .map(|c| {
-            if matches!(c, '?' | '/' | '\\' | '*' | '\"' | '<' | '>' | '|') {
-                '_'
-            } else {
-                c
-            }
+        .map(|c| match c {
+            '?' | '/' | '\\' | '*' | '\"' | '<' | '>' | '|' => '_',
+            _ => c,
         })
-        .collect::<String>();
+        .collect();
 
     let (url, codec) = api.fetch_track_url_for_download(track_id).await?;
 
@@ -318,7 +315,7 @@ pub async fn fetch_wave_stations(ctx: &AppContext) -> Vec<StationCategoryDto> {
                     f.to_uppercase().collect::<String>() + chars.as_str()
                 })
             };
-            v.sort_by_key(|i| i.label.clone());
+            v.sort_by(|a, b| a.label.cmp(&b.label));
             StationCategoryDto { title, items: v }
         })
         .collect();

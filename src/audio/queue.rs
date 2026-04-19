@@ -84,14 +84,13 @@ impl UrlPrefetcher {
                     if !batch.is_empty() {
                         let api = api.clone();
                         let cache = url_cache.clone();
-                        let batch_ids = batch.clone();
 
                         current_task_ids = batch.iter().cloned().collect();
 
                         current_task = Some(tokio::spawn(async move {
                             let result = tokio::time::timeout(
                                 Duration::from_secs(10),
-                                api.fetch_track_urls_batch(batch_ids.clone()),
+                                api.fetch_track_urls_batch(batch),
                             )
                             .await;
 
@@ -817,19 +816,8 @@ impl QueueManager {
             self.trigger_fetch();
         }
 
-        if let Some(next) = PlaybackPolicy::try_advance(current, queue_len) {
-            return self.advance_to(next);
-        }
-
-        let next = current + 1;
-        if self.fetch.is_fetching()
-            && let Some((new_tracks, _)) = self.fetch.await_task().await
-            && !new_tracks.is_empty()
-        {
-            self.wave_append(new_tracks);
-            if next < self.signals.queue().len() {
-                return self.advance_to(next);
-            }
+        if let Some(track) = self.try_advance_or_fetch(current + 1).await {
+            return Some(track);
         }
 
         if let Some(wrap) = PlaybackPolicy::repeat_wrap_index(
@@ -859,6 +847,23 @@ impl QueueManager {
         self.advance_to(index)
     }
 
+    async fn try_advance_or_fetch(&mut self, next: usize) -> Option<Track> {
+        if next < self.signals.queue().len() {
+            return self.advance_to(next);
+        }
+        
+        if self.fetch.is_fetching()
+            && let Some((new_tracks, _)) = self.fetch.await_task().await
+            && !new_tracks.is_empty()
+        {
+            self.wave_append(new_tracks);
+            if next < self.signals.queue().len() {
+                return self.advance_to(next);
+            }
+        }
+        None
+    }
+
     pub async fn skip_wave_track(&mut self) -> Option<Track> {
         if self.in_wave() && !self.wave_feedback_sent {
             if let Some(track) = self.signals.queue().get(self.signals.index()).cloned() {
@@ -875,24 +880,9 @@ impl QueueManager {
                 self.trigger_fetch();
             }
         }
+        
         let current = self.signals.index();
-        let queue_len = self.signals.queue().len();
-        if let Some(next) = PlaybackPolicy::try_advance(current, queue_len) {
-            return self.advance_to(next);
-        }
-
-        let next = current + 1;
-        if self.fetch.is_fetching()
-            && let Some((new_tracks, _)) = self.fetch.await_task().await
-            && !new_tracks.is_empty()
-        {
-            self.wave_append(new_tracks);
-            if next < self.signals.queue().len() {
-                return self.advance_to(next);
-            }
-        }
-
-        None
+        self.try_advance_or_fetch(current + 1).await
     }
 
     pub fn wave_finish_track(&mut self) {
@@ -989,7 +979,6 @@ impl QueueManager {
             let current_index = self.signals.index();
             if index < current_index {
                 self.signals.set_index(current_index.saturating_sub(1));
-            } else if index == current_index {
             }
             self.update_prefetch_interest();
         }
@@ -1176,7 +1165,7 @@ pub fn as_wave_seed(track: &Track) -> String {
     if let Some(album_id) = track
         .albums
         .first()
-        .and_then(|a| a.id.as_ref().map(|id| id.to_string()))
+        .and_then(|a| a.id.as_ref())
     {
         format!("{}:{}", track.id, album_id)
     } else {

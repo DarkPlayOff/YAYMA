@@ -23,37 +23,37 @@ impl LikedCache {
         if let Some(tracks) = collection.liked_tracks {
             self.liked_ids = tracks
                 .liked
-                .iter()
+                .into_iter()
                 .map(|t| t.track_id.to_base_id().to_string())
                 .collect();
             self.liked_ids_set = self.liked_ids.iter().cloned().collect();
 
             self.disliked_ids = tracks
                 .disliked
-                .iter()
+                .into_iter()
                 .map(|t| t.track_id.to_base_id().to_string())
                 .collect();
             self.revision = Some(tracks.info.revision);
         }
         if let Some(albums) = collection.liked_albums {
-            self.liked_albums_ids = albums.liked.iter().map(|a| a.album_id as u32).collect();
+            self.liked_albums_ids = albums.liked.into_iter().map(|a| a.album_id as u32).collect();
         }
         if let Some(artists) = collection.liked_artists {
             self.liked_artists_ids = artists
                 .liked
-                .iter()
+                .into_iter()
                 .map(|a| a.artist_id.to_string())
                 .collect();
             self.disliked_artists_ids = artists
                 .disliked
-                .iter()
+                .into_iter()
                 .map(|a| a.artist_id.to_string())
                 .collect();
         }
         if let Some(playlists) = collection.liked_playlists {
             self.liked_playlists_ids = playlists
                 .liked
-                .iter()
+                .into_iter()
                 .map(|p| format!("{}:{}", p.composite_data.uid, p.composite_data.kind))
                 .collect();
         }

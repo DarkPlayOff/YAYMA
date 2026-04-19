@@ -94,9 +94,12 @@ pub fn spawn_bridge_worker(ctx: Arc<AppContext>, mut shutdown_rx: watch::Receive
                     let track_id = audio_signals.current_track_id.get();
                     let position_ms = audio_signals.position_ms.get();
                     let is_playing = audio_signals.is_playing.get();
-                    if let (Some(track_id), db_lock) = (track_id, &ctx.db) {
-                        let db = db_lock.lock();
-                        let _ = db.save_playback_state(&track_id, position_ms, is_playing);
+                    if let Some(track_id) = track_id {
+                        let db_arc = ctx.db.clone();
+                        tokio::task::spawn_blocking(move || {
+                            let db = db_arc.lock();
+                            let _ = db.save_playback_state(&track_id, position_ms, is_playing);
+                        });
                     }
                 }
                 res = progress_rx.changed() => {
@@ -123,12 +126,16 @@ pub fn spawn_bridge_worker(ctx: Arc<AppContext>, mut shutdown_rx: watch::Receive
                         let track_id = audio_signals.current_track_id.get();
                         let position_ms = audio_signals.position_ms.get();
                         // Save only if position changed significantly (> 3 sec)
-                        if let (Some(track_id), db_lock) = (track_id, &ctx.db)
-                            && position_ms.saturating_sub(last_saved_position_ms) > 3000 {
-                                let db = db_lock.lock();
-                                let _ = db.save_playback_state(&track_id, position_ms, true);
+                        if let Some(track_id) = track_id {
+                            if position_ms.saturating_sub(last_saved_position_ms) > 3000 {
+                                let db_arc = ctx.db.clone();
+                                tokio::task::spawn_blocking(move || {
+                                    let db = db_arc.lock();
+                                    let _ = db.save_playback_state(&track_id, position_ms, true);
+                                });
                                 last_saved_position_ms = position_ms;
                             }
+                        }
                     }
                 }
             }
@@ -144,9 +151,10 @@ pub fn spawn_settings_worker(ctx: Arc<AppContext>, mut shutdown_rx: watch::Recei
                     tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
 
                     let ctx_clone = ctx.clone();
+                    let db_arc = ctx.db.clone();
                     tokio::task::spawn_blocking(move || {
                         let guard = ctx_clone.effect_handles.read();
-                        let db = ctx_clone.db.lock();
+                        let db = db_arc.lock();
 
                         if let Some(eq) = guard.get("eq") {
                             let bands: Vec<_> = (0..eq.param_count()).map(|i| eq.get_param(i)).collect();
