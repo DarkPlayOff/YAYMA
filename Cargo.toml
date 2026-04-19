@@ -8,6 +8,9 @@ name = "yayma"
 crate-type = ["cdylib", "staticlib"]
 
 [dependencies]
+
+mimalloc = { version = "*", features = ["v3"] }
+
 # Core 
 tokio = { version = "1.51.0", features = ["rt-multi-thread", "macros", "fs"] }
 reqwest = { version = "0.13.2", default-features = false, features = [
