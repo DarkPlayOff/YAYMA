@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/providers/auth_provider.dart';
 import 'package:yayma/src/providers/library_provider.dart';
@@ -199,6 +200,16 @@ class _CommonTrackTileState extends State<CommonTrackTile> {
                                     context,
                                     widget.trackId,
                                   );
+                                case 'copy_link':
+                                  final link = widget.albumId != null
+                                      ? 'https://music.yandex.ru/album/${widget.albumId}/track/${widget.trackId}'
+                                      : 'https://music.yandex.ru/track/${widget.trackId}';
+                                  await Clipboard.setData(ClipboardData(text: link));
+                                  if (mounted) {
+                                    messenger.showSnackBar(
+                                      const SnackBar(content: Text('Ссылка скопирована')),
+                                    );
+                                  }
                                 case 'download':
                                   messenger.showSnackBar(
                                     const SnackBar(
@@ -245,9 +256,9 @@ class _CommonTrackTileState extends State<CommonTrackTile> {
                                 icon: Icons.lyrics_rounded,
                               ),
                               const AppContextMenuItem(
-                                value: 'share',
-                                label: 'Поделиться',
-                                icon: Icons.share_rounded,
+                                value: 'copy_link',
+                                label: 'Скопировать ссылку',
+                                icon: Icons.link_rounded,
                               ),
                               const AppContextMenuItem(
                                 value: 'wave',
