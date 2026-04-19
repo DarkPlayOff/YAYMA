@@ -431,7 +431,7 @@ impl FetchState {
                         total_played: Some(e.total_played),
                         track_length: e.track_length,
                     },
-                    from: Some(session.from_id().to_string()),
+                    from: Some(session.source_id().to_string()),
                 })
                 .collect();
 

@@ -10,6 +10,18 @@ pub struct AppDatabase {
     conn: Connection,
 }
 
+#[derive(Debug, Clone)]
+pub struct TrackMetadata {
+    pub id: String,
+    pub title: String,
+    pub version: Option<String>,
+    pub artists: Vec<String>,
+    pub album: Option<String>,
+    pub album_id: Option<String>,
+    pub cover_url: Option<String>,
+    pub duration_ms: u64,
+}
+
 impl AppDatabase {
     pub fn init() -> Result<Self> {
         let db_path = if let Some(proj_dirs) = ProjectDirs::from("com", "yamusic", "yamusic") {
@@ -122,8 +134,6 @@ impl AppDatabase {
         Ok(())
     }
 
-    /// Returns (file_path, etag, is_expired).
-    /// If expired, caller should re-download and the TTL will be renewed on save.
     pub fn get_cache_metadata(&self, url: &str) -> Result<Option<(String, Option<String>, bool)>> {
         let mut stmt = self
             .conn
@@ -138,7 +148,6 @@ impl AppDatabase {
             let now = chrono::Utc::now().timestamp();
             let is_expired = now >= expires_at;
 
-            // Update last access time and renew TTL if still valid
             if !is_expired {
                 let new_expires = now + DEFAULT_CACHE_TTL_SECS;
                 let _ = self.conn.execute(
@@ -153,8 +162,6 @@ impl AppDatabase {
         }
     }
 
-    /// Delete all entries that have expired. Returns list of file paths to delete.
-    /// Gracefully handles missing table (before migration).
     pub fn prune_expired(&self) -> Result<Vec<String>> {
         let now = chrono::Utc::now().timestamp();
         let mut stmt = match self
@@ -162,7 +169,7 @@ impl AppDatabase {
             .prepare("SELECT file_path FROM cache_metadata WHERE expires_at <= ?1")
         {
             Ok(s) => s,
-            Err(_) => return Ok(vec![]), // Table might not exist yet
+            Err(_) => return Ok(vec![]),
         };
         let rows = stmt.query_map(params![now], |r| r.get(0))?;
         let mut paths = Vec::new();
@@ -200,7 +207,6 @@ impl AppDatabase {
             if current_size - deleted_size <= target_size {
                 break;
             }
-            let _url: String = row.get(0)?;
             let path: String = row.get(1)?;
             let size: i64 = row.get(2)?;
 
@@ -208,7 +214,6 @@ impl AppDatabase {
             deleted_size += size;
         }
 
-        // Batch delete from DB
         for path in &to_delete {
             let _ = self.conn.execute(
                 "DELETE FROM cache_metadata WHERE file_path = ?1",
@@ -220,12 +225,11 @@ impl AppDatabase {
     }
 
     pub fn get_cache_size(&self) -> Result<i64> {
-        let size: i64 = self.conn.query_row(
+        self.conn.query_row(
             "SELECT COALESCE(SUM(size), 0) FROM cache_metadata",
             [],
             |r| r.get(0),
-        )?;
-        Ok(size)
+        )
     }
 
     pub fn clear_cache_metadata(&self) -> Result<()> {
@@ -340,16 +344,9 @@ impl AppDatabase {
 
     pub fn upsert_track_metadata(
         &self,
-        id: &str,
-        title: &str,
-        version: Option<&str>,
-        artists: &[String],
-        album: Option<&str>,
-        album_id: Option<&str>,
-        cover_url: Option<&str>,
-        duration_ms: u64,
+        metadata: TrackMetadata,
     ) -> Result<()> {
-        let artists_str = artists.join("|");
+        let artists_str = metadata.artists.join("|");
         self.conn.execute(
             "INSERT INTO track_metadata (track_id, title, version, artists, album, album_id, cover_url, duration_ms)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
@@ -362,14 +359,14 @@ impl AppDatabase {
              cover_url = excluded.cover_url,
              duration_ms = excluded.duration_ms",
             params![
-                id,
-                title,
-                version,
+                metadata.id,
+                metadata.title,
+                metadata.version,
                 artists_str,
-                album,
-                album_id,
-                cover_url,
-                duration_ms as i64
+                metadata.album,
+                metadata.album_id,
+                metadata.cover_url,
+                metadata.duration_ms as i64
             ],
         )?;
         Ok(())
@@ -378,18 +375,7 @@ impl AppDatabase {
     pub fn get_track_metadata(
         &self,
         track_ids: &[String],
-    ) -> Result<
-        Vec<(
-            String,
-            String,
-            Option<String>,
-            Vec<String>,
-            Option<String>,
-            Option<String>,
-            Option<String>,
-            u64,
-        )>,
-    > {
+    ) -> Result<Vec<TrackMetadata>> {
         let mut result = Vec::new();
         let mut stmt = self.conn.prepare(
             "SELECT track_id, title, version, artists, album, album_id, cover_url, duration_ms 
@@ -409,16 +395,16 @@ impl AppDatabase {
                 let duration_ms: i64 = row.get(7)?;
 
                 let artists: Vec<String> = artists_str.split('|').map(|s| s.to_string()).collect();
-                result.push((
-                    track_id,
+                result.push(TrackMetadata {
+                    id: track_id,
                     title,
                     version,
                     artists,
                     album,
                     album_id,
                     cover_url,
-                    duration_ms as u64,
-                ));
+                    duration_ms: duration_ms as u64,
+                });
             }
         }
         Ok(result)

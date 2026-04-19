@@ -64,9 +64,9 @@ impl<const N: usize> AudioRingBuffer<N> {
     pub fn read_latest(&self, count: usize, out: &mut [f32]) {
         let head = self.write_head.load(Ordering::Acquire);
         let count = count.min(N).min(out.len());
-        for i in 0..count {
+        for (i, item) in out.iter_mut().enumerate().take(count) {
             let idx = (head + N - count + i) & (N - 1);
-            out[i] = f32::from_bits(self.buffer[idx].load(Ordering::Relaxed));
+            *item = f32::from_bits(self.buffer[idx].load(Ordering::Relaxed));
         }
     }
     #[inline]
@@ -264,8 +264,8 @@ impl<const N: usize> SpectrumBridge<N> {
     }
     pub fn read(&self, out: &mut [f32]) {
         let len = out.len().min(N);
-        for i in 0..len {
-            out[i] = f32::from_bits(self.magnitudes[i].load(Ordering::Relaxed));
+        for (item, magnitude) in out.iter_mut().zip(self.magnitudes.iter()).take(len) {
+            *item = f32::from_bits(magnitude.load(Ordering::Relaxed));
         }
     }
     #[inline]
@@ -294,8 +294,8 @@ impl<const N: usize> Default for SpectrumBridge<N> {
 impl<const N: usize> Clone for SpectrumBridge<N> {
     fn clone(&self) -> Self {
         let mut cloned_magnitudes: Vec<AtomicU32> = Vec::with_capacity(N);
-        for i in 0..N {
-            cloned_magnitudes.push(AtomicU32::new(self.magnitudes[i].load(Ordering::Relaxed)));
+        for magnitude in self.magnitudes.iter() {
+            cloned_magnitudes.push(AtomicU32::new(magnitude.load(Ordering::Relaxed)));
         }
         Self {
             magnitudes: cloned_magnitudes

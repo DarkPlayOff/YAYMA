@@ -85,7 +85,7 @@ impl Reverb {
     pub fn new(params: Arc<EffectParams>, sample_rate: f32) -> Self {
         let s = lush_scale(sample_rate);
         let room = params.get(0);
-        let rs = ((room / 10.0).powf(1.18)).max(0.25).min(7.0);
+        let rs = ((room / 10.0).powf(1.18)).clamp(0.25, 7.0);
 
         let input_diffs = [DIFF_COEFF_1, DIFF_COEFF_1, DIFF_COEFF_2, DIFF_COEFF_2];
         let input_diffusion =
@@ -170,7 +170,7 @@ impl Effect for Reverb {
         self.mod_ap_right.feedback = diff_fb;
 
         let s = lush_scale(self.sample_rate);
-        let rs = ((room / 10.0).powf(1.18)).max(0.25).min(7.0);
+        let rs = ((room / 10.0).powf(1.18)).clamp(0.25, 7.0);
 
         let tl_1 = scaled_tap(OUT_L_TAP_1, s, rs, self.tank_delay_r1.size());
         let tl_2 = scaled_tap(OUT_L_TAP_2, s, rs, self.tank_delay_r1.size());

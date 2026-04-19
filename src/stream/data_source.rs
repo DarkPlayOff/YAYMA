@@ -88,25 +88,23 @@ impl StreamingDataSource {
         let (tx_res, rx_res) = flume::unbounded();
         let generation = Arc::new(AtomicU64::new(0));
 
-        let buffer_clone = Arc::clone(&buffer);
-        let url_clone = url.clone();
-        let progress_clone = Arc::clone(&progress);
         let tx_res_clone = tx_res.clone();
         let generation_clone = Arc::clone(&generation);
 
+        let context = FetchContext {
+            client,
+            url: url.clone(),
+            buffer: Arc::clone(&buffer),
+            progress: Arc::clone(&progress),
+            generation: generation_clone,
+            rx_cmd,
+            tx_res: tx_res_clone,
+            progress_generation,
+        };
+
         let task_handle = {
             tokio::spawn(async move {
-                Self::fetch_loop_async(
-                    client,
-                    url_clone,
-                    buffer_clone,
-                    progress_clone,
-                    generation_clone,
-                    rx_cmd,
-                    tx_res_clone,
-                    progress_generation,
-                )
-                .await;
+                Self::fetch_loop_async(context).await;
             })
         };
 
@@ -124,17 +122,8 @@ impl StreamingDataSource {
         Ok(src)
     }
 
-    async fn fetch_loop_async(
-        client: Client,
-        url: String,
-        buffer: Arc<Mutex<BufferState>>,
-        prog: Arc<TrackProgress>,
-        generation: Arc<AtomicU64>,
-        rx_cmd: Receiver<FetchCommand>,
-        tx_res: Sender<()>,
-        progress_generation: u64,
-    ) {
-        while let Ok(cmd) = rx_cmd.recv_async().await {
+    async fn fetch_loop_async(ctx: FetchContext) {
+        while let Ok(cmd) = ctx.rx_cmd.recv_async().await {
             match cmd {
                 FetchCommand::Fetch {
                     start,
@@ -142,18 +131,18 @@ impl StreamingDataSource {
                     generation: request_generation,
                 } => {
                     {
-                        let mut buf = buffer.lock();
+                        let mut buf = ctx.buffer.lock();
                         buf.mark_pending(start, end);
                     }
-                    match Self::fetch_range_async(&client, &url, start, end).await {
+                    match Self::fetch_range_async(&ctx.client, &ctx.url, start, end).await {
                         Ok(data) => {
-                            if request_generation != generation.load(Ordering::SeqCst) {
-                                let _ = tx_res.send(());
+                            if request_generation != ctx.generation.load(Ordering::SeqCst) {
+                                let _ = ctx.tx_res.send(());
                                 continue;
                             }
 
                             let maybe_buffered = {
-                                let mut buf = buffer.lock();
+                                let mut buf = ctx.buffer.lock();
                                 if buf.append(&data, start) {
                                     Some(buf.max_buffered_from_start())
                                 } else {
@@ -161,18 +150,18 @@ impl StreamingDataSource {
                                 }
                             };
 
-                            if request_generation == generation.load(Ordering::SeqCst)
-                                && progress_generation == prog.get_generation()
+                            if request_generation == ctx.generation.load(Ordering::SeqCst)
+                                && ctx.progress_generation == ctx.progress.get_generation()
                                 && let Some(buffered_pos) = maybe_buffered
                             {
-                                prog.set_buffered_bytes(buffered_pos);
+                                ctx.progress.set_buffered_bytes(buffered_pos);
                             }
-                            let _ = tx_res.send(());
+                            let _ = ctx.tx_res.send(());
                         }
                         Err(err) => {
-                            let mut buf = buffer.lock();
+                            let mut buf = ctx.buffer.lock();
                             buf.clear_pending();
-                            let _ = tx_res.send(());
+                            let _ = ctx.tx_res.send(());
                             eprintln!("fetch_range_async error: {:?}", err);
                         }
                     }
@@ -286,6 +275,17 @@ impl StreamingDataSource {
     pub fn total_bytes(&self) -> u64 {
         self.total_bytes
     }
+}
+
+struct FetchContext {
+    client: Client,
+    url: String,
+    buffer: Arc<Mutex<BufferState>>,
+    progress: Arc<TrackProgress>,
+    generation: Arc<AtomicU64>,
+    rx_cmd: Receiver<FetchCommand>,
+    tx_res: Sender<()>,
+    progress_generation: u64,
 }
 
 impl Read for StreamingDataSource {

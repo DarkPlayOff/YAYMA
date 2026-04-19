@@ -69,7 +69,17 @@ impl DiscordManager {
                                 t.cover_uri.map(|uri| format!("https://{}", uri.replace("%%", "400x400")))
                             }).unwrap_or_else(|| "https://avatars.yandex.net/get-music-content/default/m/400x400".into());
 
-                            if let Err(e) = update_presence(c, id, &title, &artists, &cover_url, is_playing, position_ms, duration_ms) {
+                            let data = PresenceData {
+                                track_id: id,
+                                title: &title,
+                                artists: &artists,
+                                cover_url: &cover_url,
+                                is_playing,
+                                position_ms,
+                                duration_ms,
+                            };
+
+                            if let Err(e) = update_presence(c, data) {
                                 tracing::error!("Discord RPC error: {:?}", e);
                                 let _ = c.close();
                                 client = None; 
@@ -88,44 +98,48 @@ impl DiscordManager {
     }
 }
 
-fn update_presence(
-    client: &mut DiscordIpcClient,
-    track_id: &str,
-    title: &str,
-    artists: &str,
-    cover_url: &str,
+struct PresenceData<'a> {
+    track_id: &'a str,
+    title: &'a str,
+    artists: &'a str,
+    cover_url: &'a str,
     is_playing: bool,
     position_ms: u64,
     duration_ms: u64,
+}
+
+fn update_presence(
+    client: &mut DiscordIpcClient,
+    data: PresenceData,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut assets = activity::Assets::new()
-        .large_image(cover_url)
+        .large_image(data.cover_url)
         .large_text("Yandex Music");
 
-    if !is_playing {
+    if !data.is_playing {
         assets = assets.small_image("pause").small_text("Paused");
     }
 
-    let track_url = format!("https://music.yandex.ru/track/{}", track_id);
+    let track_url = format!("https://music.yandex.ru/track/{}", data.track_id);
     let buttons = vec![activity::Button::new("Listen on Yandex Music", &track_url)];
 
     let mut payload = activity::Activity::new()
-        .state(artists)
-        .details(title)
+        .state(data.artists)
+        .details(data.title)
         .assets(assets)
         .buttons(buttons)
         .activity_type(activity::ActivityType::Listening);
 
-    if is_playing {
+    if data.is_playing {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs();
-        let start_time = now.saturating_sub(position_ms / 1000);
+        let start_time = now.saturating_sub(data.position_ms / 1000);
         let mut timestamps = activity::Timestamps::new().start(start_time as i64);
 
-        if duration_ms > 0 {
-            let end_time = start_time + (duration_ms / 1000);
+        if data.duration_ms > 0 {
+            let end_time = start_time + (data.duration_ms / 1000);
             timestamps = timestamps.end(end_time as i64);
         }
         payload = payload.timestamps(timestamps);

@@ -15,6 +15,7 @@ use std::time::Duration;
 use tokio::sync::{Mutex, RwLock, mpsc};
 use yandex_music::model::track::Track;
 
+pub type EffectHandles = Arc<parking_lot::RwLock<foldhash::HashMap<String, crate::audio::fx::EffectHandle>>>;
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
 pub struct AudioSystem {
@@ -36,7 +37,7 @@ impl AudioSystem {
         mpsc::Sender<AudioMessage>,
         AudioSignals,
         Arc<RwLock<SystemState>>,
-        Arc<parking_lot::RwLock<foldhash::HashMap<String, crate::audio::fx::EffectHandle>>>,
+        EffectHandles,
     )> {
         let (tx, mut rx) = mpsc::channel(100);
 
@@ -179,7 +180,7 @@ impl AudioSystem {
 
     pub fn get_effect_handles(
         &self,
-    ) -> Arc<parking_lot::RwLock<foldhash::HashMap<String, crate::audio::fx::EffectHandle>>> {
+    ) -> EffectHandles {
         self.controller.get_effect_handles()
     }
 
@@ -468,7 +469,7 @@ impl AudioSystem {
         };
         let station_id = session.station_id().to_string();
         let batch_id = include_batch_id.then(|| session.batch_id.clone());
-        let from = Some(session.from_id().to_string());
+        let from = Some(session.source_id().to_string());
 
         let api = self.yandex.api.clone();
         tokio::spawn(async move {
@@ -522,22 +523,7 @@ impl AudioSystem {
         self.send_wave_feedback("dislike", Some(track_id), None, true);
         self.queue.refresh_wave_queue();
 
-        let next = if self.queue.in_wave() {
-            self.queue.skip_wave_track().await
-        } else {
-            self.queue.get_next_track().await
-        };
-
-        if let Some(next_track) = next {
-            if self.queue.in_wave() {
-                self.send_wave_track_started(&next_track);
-            }
-            self.controller
-                .handle_message(AudioMessage::PlayTrack(next_track))
-                .await;
-        } else {
-            let _ = self.event_tx.send(Event::QueueEnded);
-        }
+        self.play_next().await;
     }
 
     pub fn send_wave_undislike(&mut self, track: &Track) {

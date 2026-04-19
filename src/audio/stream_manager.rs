@@ -11,11 +11,13 @@ use yandex_music::model::track::Track;
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
+pub type PrewarmResult = (stream::StreamingSession, Arc<TrackProgress>, String);
+
 pub struct StreamManager {
     api: Arc<ApiService>,
     url_cache: UrlCache,
     prewarm_cache:
-        Arc<Mutex<HashMap<String, (stream::StreamingSession, Arc<TrackProgress>, String)>>>,
+        Arc<Mutex<HashMap<String, PrewarmResult>>>,
     http_client: reqwest::Client,
 }
 
@@ -61,7 +63,7 @@ impl StreamManager {
     pub async fn create_stream_session(
         &self,
         track: &Track,
-    ) -> Result<(stream::StreamingSession, Arc<TrackProgress>, String)> {
+    ) -> Result<PrewarmResult> {
         {
             let mut cache = self.prewarm_cache.lock();
             if let Some(res) = cache.remove(&track.id) {

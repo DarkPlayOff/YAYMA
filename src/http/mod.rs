@@ -67,7 +67,7 @@ use yandex_music::{
 
 pub trait SessionExt {
     fn station_id(&self) -> &str;
-    fn from_id(&self) -> &str;
+    fn source_id(&self) -> &str;
 }
 
 impl SessionExt for Session {
@@ -78,7 +78,7 @@ impl SessionExt for Session {
             .unwrap_or("user:onyourwave")
     }
 
-    fn from_id(&self) -> &str {
+    fn source_id(&self) -> &str {
         self.wave
             .as_ref()
             .map(|w| w.id_for_from.as_str())
@@ -341,7 +341,6 @@ impl ApiService {
         let mut fetch_tasks = Vec::new();
 
         for track_id in track_ids {
-            let quality = quality;
             let track_id = track_id.clone();
             fetch_tasks.push(async move {
                 let opts = GetFileInfoOptions::new(track_id.clone()).quality(quality);
