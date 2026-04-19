@@ -41,7 +41,7 @@ impl AudioSystem {
     )> {
         let (tx, mut rx) = mpsc::channel(100);
 
-        let engine = PlaybackEngine::new()?;
+        let engine = PlaybackEngine::new(tx.clone())?;
         let url_cache = UrlCache::new();
         let stream_manager = Arc::new(
             tokio::task::spawn_blocking({
@@ -408,6 +408,13 @@ impl AudioSystem {
                         self.send_wave_feedback("undislike", Some(track_id), None, true);
                         self.queue.refresh_wave_queue();
                     }
+                }
+            }
+            AudioMessage::RecreateStream => {
+                if let Err(e) = self.controller.recreate_engine() {
+                    tracing::error!("Failed to recreate stream: {}", e);
+                } else {
+                    let _ = self.tx.send(AudioMessage::ReloadCurrentTrack).await;
                 }
             }
             AudioMessage::ReloadCurrentTrack => {

@@ -116,6 +116,10 @@ impl AudioController {
         self.stream_manager.invalidate_track(track_id);
     }
 
+    pub fn recreate_engine(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        self.engine.recreate()
+    }
+
     pub async fn handle_message(&self, cmd: AudioMessage) {
         match cmd {
             AudioMessage::PlayTrack(track) => {

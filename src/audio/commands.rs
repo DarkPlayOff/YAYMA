@@ -44,4 +44,5 @@ pub enum AudioMessage {
     // Internal/Other
     ReloadCurrentTrack,
     TrackEnded,
+    RecreateStream,
 }

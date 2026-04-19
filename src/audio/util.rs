@@ -1,5 +1,3 @@
-use std::num::NonZero;
-
 use rodio::{
     Device, DeviceSinkBuilder, DeviceTrait, MixerDeviceSink, Player,
     cpal::{BufferSize, SampleFormat, StreamConfig, default_host, traits::HostTrait},
@@ -26,16 +24,18 @@ pub fn setup_device_config() -> (Device, StreamConfig, SampleFormat) {
     (device, config, sample_format)
 }
 
-pub fn construct_sink(
+pub fn construct_sink<F>(
     device: Device,
-    config: &StreamConfig,
-    sample_format: SampleFormat,
-) -> Result<(MixerDeviceSink, Player), Box<dyn std::error::Error + Send + Sync>> {
+    _config: &StreamConfig,
+    _sample_format: SampleFormat,
+    error_callback: F,
+) -> Result<(MixerDeviceSink, Player), Box<dyn std::error::Error + Send + Sync>>
+where
+    F: FnMut(rodio::cpal::StreamError) + Send + Clone + 'static,
+{
     let stream = DeviceSinkBuilder::default()
-        .with_buffer_size(config.buffer_size)
-        .with_sample_rate(NonZero::new(config.sample_rate).unwrap())
         .with_device(device)
-        .with_sample_format(sample_format)
+        .with_error_callback(error_callback)
         .open_sink_or_fallback()
         .map_err(|e| Box::<dyn std::error::Error + Send + Sync>::from(e.to_string()))?;
     let mixer = stream.mixer();
