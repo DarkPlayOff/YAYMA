@@ -12,6 +12,7 @@ class YandexIdView extends StatefulWidget {
 
 class _YandexIdViewState extends State<YandexIdView> {
   late final WebViewController _controller;
+  bool _isReady = false;
 
   @override
   void initState() {
@@ -19,7 +20,20 @@ class _YandexIdViewState extends State<YandexIdView> {
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setBackgroundColor(Colors.transparent)
+      ..setUserAgent(
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+      )
       ..loadRequest(Uri.parse('https://id.yandex.ru'));
+
+    // Задержка инициализации WebView, чтобы дождаться окончания анимации перехода
+    // Это предотвращает ошибку "Setting webview bounds failed" на Windows
+    Future.delayed(const Duration(milliseconds: 450), () {
+      if (mounted) {
+        setState(() {
+          _isReady = true;
+        });
+      }
+    });
   }
 
   @override
@@ -75,12 +89,16 @@ class _YandexIdViewState extends State<YandexIdView> {
             ),
           ),
           Expanded(
-            child: ClipRRect(
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(24),
-              ),
-              child: WebViewWidget(controller: _controller),
-            ),
+            child: _isReady
+                ? ClipRRect(
+                    borderRadius: const BorderRadius.vertical(
+                      top: Radius.circular(24),
+                    ),
+                    child: WebViewWidget(controller: _controller),
+                  )
+                : const Center(
+                    child: CircularProgressIndicator(),
+                  ),
           ),
         ],
       ),

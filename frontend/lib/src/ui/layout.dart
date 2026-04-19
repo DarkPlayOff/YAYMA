@@ -12,6 +12,7 @@ import 'package:yayma/src/ui/library_view.dart';
 import 'package:yayma/src/ui/playlist_view.dart';
 import 'package:yayma/src/ui/search_view.dart';
 import 'package:yayma/src/ui/settings_view.dart';
+import 'package:yayma/src/ui/yandex_id_view.dart';
 
 class AppLayout extends StatefulWidget {
   const AppLayout({super.key});
@@ -209,6 +210,8 @@ class _AppLayoutState extends State<AppLayout> {
         );
       case AppSection.account:
         return const SettingsView();
+      case AppSection.yandexId:
+        return const YandexIdView();
     }
   }
 }

@@ -321,7 +321,7 @@ class _AccountMenuDialog extends StatelessWidget {
               title: 'Управление аккаунтом',
               onTap: () {
                 Navigator.pop(context);
-                // Можно добавить переход на страницу профиля, если она будет
+                setSection(AppSection.yandexId);
               },
             ),
             _MenuTile(

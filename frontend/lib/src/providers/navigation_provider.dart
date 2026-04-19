@@ -11,6 +11,7 @@ enum AppSection {
   wave,
   playlist,
   account,
+  yandexId,
 }
 
 @immutable
