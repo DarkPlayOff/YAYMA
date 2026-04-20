@@ -22,8 +22,8 @@ jobs:
         id: changelog
         run: |
           VERSION=${GITHUB_REF#refs/tags/v}
-
-          NOTES=$(sed -n "/## \[$VERSION\]/,/## \[/p" CHANGELOG.md | sed '$d' | sed '1d')
+          
+          NOTES=$(awk "/## \[$VERSION\]/{flag=1; next} /## \[/{flag=0} flag" CHANGELOG.md)
           
           if [ -z "$NOTES" ]; then
             NOTES="Release for version $VERSION"
