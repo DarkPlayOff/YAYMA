@@ -52,16 +52,21 @@ class _AppLayoutState extends State<AppLayout> {
 
                 // 3. Content (set of independent stacks for each tab)
                 Positioned.fill(
-                  child: Column(
+                  child: Stack(
                     children: [
-                      Expanded(
+                      Positioned.fill(
                         child: Stack(
                           children: rootSections
                               .map((root) => _buildRootBucket(context, root))
                               .toList(),
                         ),
                       ),
-                      _buildAnimatedPlayerBar(isHome),
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        child: _buildAnimatedPlayerBar(isHome),
+                      ),
                     ],
                   ),
                 ),
@@ -108,32 +113,28 @@ class _AppLayoutState extends State<AppLayout> {
   }
 
   Widget _buildAnimatedPlayerBar(bool isHome) {
-    return AnimatedSize(
-      duration: const Duration(milliseconds: 500),
-      curve: Curves.easeOutCubic,
-      child: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 500),
-        reverseDuration: const Duration(milliseconds: 400),
-        switchInCurve: Curves.easeOutCubic,
-        switchOutCurve: Curves.easeInCubic,
-        transitionBuilder: (child, animation) {
-          final offsetAnimation = Tween<Offset>(
-            begin: const Offset(0, 1),
-            end: Offset.zero,
-          ).animate(animation);
-          return SlideTransition(
-            position: offsetAnimation,
-            child: child,
-          );
-        },
-        child: !isHome
-            ? const Padding(
-                padding: EdgeInsets.only(left: 96),
-                key: ValueKey('player_bar_visible'),
-                child: PlayerBar(),
-              )
-            : const SizedBox.shrink(key: ValueKey('player_bar_hidden')),
-      ),
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 600),
+      reverseDuration: const Duration(milliseconds: 500),
+      switchInCurve: Curves.easeOutCubic,
+      switchOutCurve: Curves.easeInCubic,
+      transitionBuilder: (child, animation) {
+        final offsetAnimation = Tween<Offset>(
+          begin: const Offset(0, 1),
+          end: Offset.zero,
+        ).animate(animation);
+        return SlideTransition(
+          position: offsetAnimation,
+          child: child,
+        );
+      },
+      child: !isHome
+          ? const Padding(
+              padding: EdgeInsets.only(left: 96),
+              key: ValueKey('player_bar_visible'),
+              child: PlayerBar(),
+            )
+          : const SizedBox.shrink(key: ValueKey('player_bar_hidden')),
     );
   }
 
@@ -142,6 +143,7 @@ class _AppLayoutState extends State<AppLayout> {
       final index = entry.key;
       final state = entry.value;
       final isLast = index == stack.length - 1;
+      final isHome = state.section == AppSection.home;
 
       // Keep only the current and previous screens in the tab stack
       final isDeeplyHidden = index < stack.length - 2;
@@ -152,12 +154,17 @@ class _AppLayoutState extends State<AppLayout> {
         child: TickerMode(
           enabled: !isDeeplyHidden,
           child: AnimatedOpacity(
-            duration: const Duration(milliseconds: 400),
+            duration: const Duration(milliseconds: 500),
             opacity: isLast ? 1.0 : 0.0,
-            curve: Curves.easeInOut,
-            child: IgnorePointer(
-              ignoring: !isLast,
-              child: _buildWindowContent(state, index),
+            curve: Curves.easeInOutCubic,
+            child: AnimatedSlide(
+              duration: const Duration(milliseconds: 500),
+              offset: isLast ? Offset.zero : (isHome ? const Offset(0, -0.05) : Offset.zero),
+              curve: Curves.easeOutCubic,
+              child: IgnorePointer(
+                ignoring: !isLast,
+                child: _buildWindowContent(state, index),
+              ),
             ),
           ),
         ),
@@ -166,7 +173,7 @@ class _AppLayoutState extends State<AppLayout> {
   }
 
   Widget _buildWindowContent(NavState state, int index) {
-    final isRoot = state.section == AppSection.home;
+    final isHome = state.section == AppSection.home;
     // For the settings, do not use PageStorageKey to avoid saving state between visits.
     final key = state.section == AppSection.account
         ? ValueKey('account_$index')
@@ -177,12 +184,13 @@ class _AppLayoutState extends State<AppLayout> {
       child: _mapSectionToWidget(state),
     );
 
-    return isRoot
-        ? child
-        : Padding(
-            padding: const EdgeInsets.only(left: 96),
-            child: child,
-          );
+    return Padding(
+      padding: EdgeInsets.only(
+        left: isHome ? 0 : 96,
+        bottom: isHome ? 0 : 116,
+      ),
+      child: child,
+    );
   }
 
   Widget _mapSectionToWidget(NavState state) {
