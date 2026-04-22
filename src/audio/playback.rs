@@ -1,10 +1,13 @@
 use crate::audio::util::{construct_sink, setup_device_config};
 use rodio::{MixerDeviceSink, Player, Source};
+use std::num::NonZero;
 use std::sync::Arc;
 
 struct EngineState {
     _stream: MixerDeviceSink,
     sink: Arc<Player>,
+    sample_rate: NonZero<u32>,
+    channels: NonZero<u16>,
 }
 
 pub struct PlaybackEngine {
@@ -24,6 +27,8 @@ impl PlaybackEngine {
 
     pub fn recreate(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let (device, stream_config, sample_format) = setup_device_config();
+        let sample_rate = NonZero::new(stream_config.sample_rate).unwrap();
+        let channels = NonZero::new(stream_config.channels).unwrap();
         
         let tx_clone = self.tx.clone();
         let error_callback = move |err: rodio::cpal::StreamError| {
@@ -36,6 +41,8 @@ impl PlaybackEngine {
         *self.state.write() = Some(EngineState {
             _stream: stream,
             sink: Arc::new(sink),
+            sample_rate,
+            channels,
         });
         Ok(())
     }
@@ -45,7 +52,8 @@ impl PlaybackEngine {
         S: Source<Item = f32> + Send + 'static,
     {
         if let Some(state) = self.state.read().as_ref() {
-            state.sink.append(source);
+            let resampled = rodio::source::UniformSourceIterator::new(source, state.channels, state.sample_rate);
+            state.sink.append(resampled);
         }
     }
 
