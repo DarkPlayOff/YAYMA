@@ -425,6 +425,9 @@ impl AudioSystem {
                     self.controller.replace_track(track, position_ms).await;
                 }
             }
+            AudioMessage::PrewarmNext => {
+                self.queue.prewarm_next();
+            }
         }
         Ok(())
     }

@@ -45,4 +45,5 @@ pub enum AudioMessage {
     ReloadCurrentTrack,
     TrackEnded,
     RecreateStream,
+    PrewarmNext,
 }

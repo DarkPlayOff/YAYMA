@@ -1094,6 +1094,23 @@ impl QueueManager {
         self.update_prefetch_interest();
     }
 
+    pub fn prewarm_next(&mut self) {
+        let queue = self.signals.queue();
+        let current_index = self.signals.index();
+
+        // If there's no next track in the visible queue
+        if queue.get(current_index + 1).is_none() {
+            // In Wave mode or if we have pending playlist tracks, trigger a fetch immediately
+            if self.in_wave() || !self.fetch.pending_track_ids.is_empty() {
+                if !self.fetch.is_fetching() {
+                    self.trigger_fetch();
+                }
+            }
+        }
+
+        self.update_prefetch_interest();
+    }
+
     fn update_prefetch_interest(&self) {
         let queue = self.signals.queue();
         if queue.is_empty() {

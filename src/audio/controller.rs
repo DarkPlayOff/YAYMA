@@ -26,6 +26,7 @@ pub struct AudioController {
     engine: Arc<PlaybackEngine>,
     stream_manager: Arc<StreamManager>,
     event_tx: Sender<Event>,
+    audio_tx: tokio::sync::mpsc::Sender<AudioMessage>,
     pub track_progress: Arc<RwLock<Arc<TrackProgress>>>,
     current_playback_task: Arc<Mutex<Option<tokio::task::JoinHandle<()>>>>,
     signals: AudioSignals,
@@ -37,6 +38,7 @@ impl AudioController {
         engine: PlaybackEngine,
         stream_manager: Arc<StreamManager>,
         event_tx: Sender<Event>,
+        audio_tx: tokio::sync::mpsc::Sender<AudioMessage>,
         signals: AudioSignals,
         track_progress: Arc<RwLock<Arc<TrackProgress>>>,
     ) -> Self {
@@ -45,6 +47,7 @@ impl AudioController {
             engine: Arc::new(engine),
             stream_manager,
             event_tx,
+            audio_tx,
             track_progress,
             current_playback_task: Arc::new(Mutex::new(None)),
             signals,
@@ -64,13 +67,23 @@ impl AudioController {
         let progress = self.track_progress.clone();
         let signals = self.signals.clone();
         let event_tx = self.event_tx.clone();
+        let audio_tx = self.audio_tx.clone();
 
         tokio::spawn(async move {
+            let mut prewarm_triggered = false;
+            let mut last_track_id = None;
+
             loop {
                 tokio::time::sleep(std::time::Duration::from_millis(125)).await;
 
                 let is_playing = signals.is_playing.get();
                 let is_buffering = signals.is_buffering.get();
+                let current_track_id = signals.current_track_id.get();
+
+                if current_track_id != last_track_id {
+                    last_track_id = current_track_id;
+                    prewarm_triggered = false;
+                }
 
                 if is_playing && !is_buffering {
                     if engine.is_empty() {
@@ -85,6 +98,15 @@ impl AudioController {
                         let dur = signals.duration_ms.get();
 
                         signals.update_progress(pos.as_millis() as u64, dur);
+
+                        // Trigger prewarm if less than 20 seconds remaining
+                        if !prewarm_triggered && dur > 0 {
+                            let remaining = dur.saturating_sub(pos.as_millis() as u64);
+                            if remaining < 20000 {
+                                let _ = audio_tx.send(AudioMessage::PrewarmNext).await;
+                                prewarm_triggered = true;
+                            }
+                        }
 
                         let guard = progress.read();
                         guard.set_current_position(pos);
