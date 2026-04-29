@@ -45,3 +45,11 @@ pub fn is_discord_rpc_enabled(ctx: &AppContext) -> bool {
 pub fn set_discord_rpc_enabled(ctx: &AppContext, enabled: bool) {
     logic::set_discord_rpc_enabled(ctx, enabled)
 }
+
+pub fn is_crossfade_enabled(ctx: &AppContext) -> bool {
+    logic::is_crossfade_enabled(ctx)
+}
+
+pub fn set_crossfade_enabled(ctx: &AppContext, enabled: bool) {
+    logic::set_crossfade_enabled(ctx, enabled)
+}

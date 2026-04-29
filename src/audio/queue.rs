@@ -797,6 +797,28 @@ impl QueueManager {
         });
     }
 
+    pub fn get_next_track_peek(&self) -> Option<Track> {
+        let queue = self.signals.queue();
+        let current = self.signals.index();
+        
+        if self.signals.repeat_mode() == RepeatMode::Single {
+            return queue.get(current).cloned();
+        }
+
+        if let Some(track) = queue.get(current + 1).cloned() {
+            return Some(track);
+        }
+
+        if let Some(wrap) = PlaybackPolicy::repeat_wrap_index(
+            self.signals.repeat_mode(),
+            queue.len(),
+        ) {
+            return queue.get(wrap).cloned();
+        }
+
+        None
+    }
+
     pub async fn get_next_track(&mut self) -> Option<Track> {
         if self.signals.queue().is_empty() {
             return None;

@@ -1,28 +1,34 @@
-use crate::audio::cache::UrlCache;
-use crate::{
-    audio::{
-        commands::AudioMessage, controller::AudioController, discord::DiscordManager,
-        events::Event, playback::PlaybackEngine, progress::TrackProgress, queue::QueueManager,
-        queue::as_wave_seed, signals::AudioSignals, smtc::SmtcManager, state::SystemState,
-        stream_manager::StreamManager, yandex::YandexProvider,
-    },
-    http::{ApiService, SessionExt},
-};
-use flume::Sender;
-use parking_lot::RwLock as PRwLock;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::{Mutex, RwLock, mpsc};
+
+use parking_lot::RwLock as PRwLock;
+use tokio::sync::{mpsc, Mutex, RwLock};
 use yandex_music::model::track::Track;
 
-pub type EffectHandles = Arc<parking_lot::RwLock<foldhash::HashMap<String, crate::audio::fx::EffectHandle>>>;
+use crate::http::{ApiService, SessionExt};
+use crate::audio::commands::AudioMessage;
+use crate::audio::controller::AudioController;
+use crate::audio::discord::DiscordManager;
+use crate::audio::events::Event;
+use crate::audio::queue::{QueueManager, as_wave_seed};
+use crate::audio::signals::AudioSignals;
+use crate::audio::smtc::SmtcManager;
+use crate::audio::stream_manager::StreamManager;
+use crate::audio::yandex::YandexProvider;
+use crate::audio::cache::UrlCache;
+use crate::audio::progress::TrackProgress;
+use crate::audio::fx::EffectHandle;
+use foldhash::HashMap;
+
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
+
+use crate::audio::state::SystemState;
 
 pub struct AudioSystem {
     controller: AudioController,
     queue: QueueManager,
     yandex: YandexProvider,
-    event_tx: Sender<Event>,
+    event_tx: flume::Sender<Event>,
     state: Arc<RwLock<SystemState>>,
     signals: AudioSignals,
     smtc: Arc<Mutex<SmtcManager>>,
@@ -31,18 +37,22 @@ pub struct AudioSystem {
 
 impl AudioSystem {
     pub async fn spawn(
-        event_tx: Sender<Event>,
+        event_tx: flume::Sender<Event>,
         api: Arc<ApiService>,
-    ) -> Result<(
-        mpsc::Sender<AudioMessage>,
-        AudioSignals,
-        Arc<RwLock<SystemState>>,
-        EffectHandles,
-    )> {
+    ) -> Result<(mpsc::Sender<AudioMessage>, AudioSignals, Arc<RwLock<SystemState>>, Arc<PRwLock<HashMap<String, EffectHandle>>>)> {
+        let url_cache = UrlCache::new();
+        Self::new(api, url_cache, event_tx).await
+    }
+
+    pub async fn new(
+        api: Arc<ApiService>,
+        url_cache: UrlCache,
+        event_tx: flume::Sender<Event>,
+    ) -> Result<(mpsc::Sender<AudioMessage>, AudioSignals, Arc<RwLock<SystemState>>, Arc<PRwLock<HashMap<String, EffectHandle>>>)> {
         let (tx, mut rx) = mpsc::channel(100);
 
-        let engine = PlaybackEngine::new(tx.clone())?;
-        let url_cache = UrlCache::new();
+        let engine = crate::audio::playback::PlaybackEngine::new(tx.clone())?;
+
         let stream_manager = Arc::new(
             tokio::task::spawn_blocking({
                 let api = api.clone();
@@ -50,7 +60,7 @@ impl AudioSystem {
                 move || StreamManager::new(api, url_cache)
             })
             .await
-            .map_err(|e| Box::<dyn std::error::Error + Send + Sync>::from(e.to_string()))?,
+            .map_err(|e| e.to_string())?,
         );
 
         let signals = AudioSignals::new();
@@ -61,6 +71,7 @@ impl AudioSystem {
             engine,
             stream_manager.clone(),
             event_tx.clone(),
+            tx.clone(),
             signals.clone(),
             track_progress.clone(),
         );
@@ -139,7 +150,7 @@ impl AudioSystem {
             while let Some(msg) = rx.recv().await {
                 if let Err(e) = system.handle_message(msg).await {
                     tracing::error!("Audio system error: {}", e);
-                    let _ = event_tx_clone.send(crate::audio::events::Event::Error(e.to_string()));
+                    let _ = event_tx_clone.send(Event::Error(e.to_string()));
                 }
             }
         });
@@ -147,7 +158,6 @@ impl AudioSystem {
         Ok((tx, signals, state, effect_handles))
     }
 
-    /// Universal spawn for loading playback context
     fn spawn_fetch_context<F, Fut>(&self, fetcher: F)
     where
         F: FnOnce() -> Fut + Send + 'static,
@@ -158,7 +168,7 @@ impl AudioSystem {
                         im::Vector<yandex_music::model::track::Track>,
                         usize,
                     ),
-                    String,
+                    Box<dyn std::error::Error + Send + Sync>,
                 >,
             > + Send
             + 'static,
@@ -172,16 +182,10 @@ impl AudioSystem {
                     let _ = tx.send(AudioMessage::LoadContext(ctx, tracks, index)).await;
                 }
                 Err(e) => {
-                    let _ = event_tx.send(Event::Error(e));
+                    let _ = event_tx.send(Event::Error(e.to_string()));
                 }
             }
         });
-    }
-
-    pub fn get_effect_handles(
-        &self,
-    ) -> EffectHandles {
-        self.controller.get_effect_handles()
     }
 
     async fn handle_message(&mut self, msg: AudioMessage) -> Result<()> {
@@ -204,9 +208,11 @@ impl AudioSystem {
             }
             AudioMessage::Prev => {
                 if let Some(prev_track) = self.queue.get_previous_track() {
-                    self.controller
-                        .handle_message(AudioMessage::PlayTrack(prev_track))
-                        .await;
+                    if self.signals.crossfade_enabled.get() {
+                        self.controller.handle_message(AudioMessage::PlayTrackFastFade(prev_track)).await;
+                    } else {
+                        self.controller.handle_message(AudioMessage::PlayTrack(prev_track)).await;
+                    }
                 }
             }
             AudioMessage::TrackEnded => {
@@ -230,10 +236,22 @@ impl AudioSystem {
                     )
                     .await
                 {
-                    self.controller
-                        .handle_message(AudioMessage::PlayTrack(playing_track))
-                        .await;
+                    if self.signals.crossfade_enabled.get() && self.signals.is_playing.get() {
+                        self.controller.handle_message(AudioMessage::PlayTrackFastFade(playing_track)).await;
+                    } else {
+                        self.controller.handle_message(AudioMessage::PlayTrack(playing_track)).await;
+                    }
                 }
+            }
+            AudioMessage::PlayTrackCrossfade(track) => {
+                self.controller
+                    .handle_message(AudioMessage::PlayTrackCrossfade(track))
+                    .await;
+            }
+            AudioMessage::PlayTrackFastFade(track) => {
+                self.controller
+                    .handle_message(AudioMessage::PlayTrackFastFade(track))
+                    .await;
             }
             AudioMessage::PlayTrackPaused(track, pos) => {
                 if let Some(playing_track) = self
@@ -256,9 +274,11 @@ impl AudioSystem {
                     if in_wave {
                         self.send_wave_started();
                     }
-                    self.controller
-                        .handle_message(AudioMessage::PlayTrack(track.clone()))
-                        .await;
+                    if self.signals.crossfade_enabled.get() && self.signals.is_playing.get() {
+                        self.controller.handle_message(AudioMessage::PlayTrackFastFade(track.clone())).await;
+                    } else {
+                        self.controller.handle_message(AudioMessage::PlayTrack(track.clone())).await;
+                    }
                     if in_wave {
                         self.send_wave_track_started(&track);
                     }
@@ -274,9 +294,11 @@ impl AudioSystem {
                     )
                     .await
                 {
-                    self.controller
-                        .handle_message(AudioMessage::PlayTrack(track))
-                        .await;
+                    if self.signals.crossfade_enabled.get() && self.signals.is_playing.get() {
+                        self.controller.handle_message(AudioMessage::PlayTrackFastFade(track)).await;
+                    } else {
+                        self.controller.handle_message(AudioMessage::PlayTrack(track)).await;
+                    }
                 }
             }
             AudioMessage::QueueTrack(track) => self.queue.queue_track(track),
@@ -292,7 +314,6 @@ impl AudioSystem {
                     yandex
                         .fetch_playlist_context(kind, None)
                         .await
-                        .map_err(|e| format!("Failed to load playlist: {e}"))
                 });
             }
             AudioMessage::PlayAlbum(album_id) => {
@@ -301,7 +322,6 @@ impl AudioSystem {
                     yandex
                         .fetch_album_context(album_id, None)
                         .await
-                        .map_err(|e| format!("Failed to load album: {e}"))
                 });
             }
             AudioMessage::PlayAlbumTrack(aid, tid) => {
@@ -310,16 +330,14 @@ impl AudioSystem {
                     yandex
                         .fetch_album_context(aid, Some(tid))
                         .await
-                        .map_err(|e| format!("Failed to load album: {e}"))
                 });
             }
-            AudioMessage::PlayPlaylistTrack(kind, tid) => {
+            AudioMessage::PlayPlaylistTrack(pid, tid) => {
                 let yandex = self.yandex.clone();
                 self.spawn_fetch_context(move || async move {
                     yandex
-                        .fetch_playlist_context(kind, Some(tid))
+                        .fetch_playlist_context(pid, Some(tid))
                         .await
-                        .map_err(|e| format!("Failed to load playlist track: {e}"))
                 });
             }
             AudioMessage::PlayLikedTrack(tid) => {
@@ -328,105 +346,63 @@ impl AudioSystem {
                     yandex
                         .fetch_liked_context(Some(tid))
                         .await
-                        .map_err(|e| format!("Failed to load liked track: {e}"))
                 });
             }
             AudioMessage::StartWave(seeds) => {
                 let yandex = self.yandex.clone();
-                let tx = self.tx.clone();
-                let event_tx = self.event_tx.clone();
-                self.signals.is_buffering.set(true);
-                tokio::spawn(async move {
-                    match yandex.fetch_wave_context(seeds).await {
-                        Ok((ctx, tracks, index)) => {
-                            let _ = tx.send(AudioMessage::LoadContext(ctx, tracks, index)).await;
-                        }
-                        Err(e) => {
-                            let _ =
-                                event_tx.send(Event::Error(format!("Failed to start wave: {e}")));
-                        }
-                    }
+                self.spawn_fetch_context(move || async move {
+                    yandex
+                        .fetch_wave_context(seeds)
+                        .await
                 });
             }
             AudioMessage::SyncLiked => {
-                Self::sync_liked_collection_with(
-                    self.yandex.api.clone(),
-                    self.state.clone(),
-                    self.signals.clone(),
-                )
-                .await;
-                self.signals.changed.send_replace(());
+                let yandex = self.yandex.clone();
+                let state = self.state.clone();
+                let signals = self.signals.clone();
+                tokio::spawn(async move {
+                    let _ = Self::sync_liked_collection_with(yandex, state, signals).await;
+                });
             }
-            AudioMessage::WaveLike(track_id) => {
-                if self.queue.in_wave() {
-                    let current = self.signals.current_track.get();
-                    if current.as_ref().map(|t| t.id.as_str()) == Some(&track_id) {
-                        if let Some(track) = current {
-                            self.send_wave_like(&track);
-                        }
+            AudioMessage::WaveLike(id) => self.send_wave_feedback("like", Some(id), None, true),
+            AudioMessage::WaveUnlike(id) => self.send_wave_feedback("unlike", Some(id), None, true),
+            AudioMessage::WaveDislike(id) => {
+                let track = self.signals.current_track.get();
+                if let Some(t) = track {
+                    if t.id == id {
+                        let mut system = self.clone_for_wave();
+                        tokio::spawn(async move {
+                            system.send_wave_dislike_skip(&t).await;
+                        });
                     } else {
-                        self.send_wave_feedback("like", Some(track_id), None, true);
-                        self.queue.refresh_wave_queue();
+                        self.send_wave_feedback("dislike", Some(id), None, true);
                     }
+                } else {
+                    self.send_wave_feedback("dislike", Some(id), None, true);
                 }
             }
-            AudioMessage::WaveUnlike(track_id) => {
-                if self.queue.in_wave() {
-                    let current = self.signals.current_track.get();
-                    if current.as_ref().map(|t| t.id.as_str()) == Some(&track_id) {
-                        if let Some(track) = current {
-                            self.send_wave_unlike(&track);
-                        }
-                    } else {
-                        self.send_wave_feedback("unlike", Some(track_id), None, true);
-                        self.queue.refresh_wave_queue();
-                    }
-                }
-            }
-            AudioMessage::WaveDislike(track_id) => {
-                if self.queue.in_wave() {
-                    let current = self.signals.current_track.get();
-                    if current.as_ref().map(|t| t.id.as_str()) == Some(&track_id) {
-                        if let Some(track) = current {
-                            self.send_wave_dislike_skip(&track).await;
-                        }
-                    } else {
-                        self.send_wave_feedback("dislike", Some(track_id), None, true);
-                        self.queue.refresh_wave_queue();
-                        let _ = self.tx.send(AudioMessage::Next).await;
-                    }
-                }
-            }
-            AudioMessage::WaveUndislike(track_id) => {
-                if self.queue.in_wave() {
-                    let current = self.signals.current_track.get();
-                    if current.as_ref().map(|t| t.id.as_str()) == Some(&track_id) {
-                        if let Some(track) = current {
-                            self.send_wave_undislike(&track);
-                        }
-                    } else {
-                        self.send_wave_feedback("undislike", Some(track_id), None, true);
-                        self.queue.refresh_wave_queue();
-                    }
+            AudioMessage::WaveUndislike(id) => self.send_wave_feedback("undislike", Some(id), None, true),
+
+            AudioMessage::ReloadCurrentTrack => {
+                if let Some(track) = self.signals.current_track.get() {
+                    let pos = self.signals.position_ms.get();
+                    self.controller.replace_track(track, pos).await;
                 }
             }
             AudioMessage::RecreateStream => {
-                if let Err(e) = self.controller.recreate_engine() {
-                    tracing::error!("Failed to recreate stream: {}", e);
-                } else {
-                    let _ = self.tx.send(AudioMessage::ReloadCurrentTrack).await;
-                }
-            }
-            AudioMessage::ReloadCurrentTrack => {
-                if let Some(track) = self.signals.current_track.get() {
-                    let position_ms = self.signals.position_ms.get();
-                    self.signals.is_buffering.set(true);
-                    self.controller.invalidate_track(&track.id);
-                    self.controller.replace_track(track, position_ms).await;
-                }
+                let _ = self.controller.recreate_engine();
             }
             AudioMessage::PrewarmNext => {
                 self.queue.prewarm_next();
+            }
+            AudioMessage::CrossfadeNext => {
+                self.queue.wave_finish_track();
+                if let Some(next_track) = self.queue.get_next_track().await {
+                    if self.queue.in_wave() {
+                        self.send_wave_track_started(&next_track);
+                    }
+                    let _ = self.tx.send(AudioMessage::PlayTrackCrossfade(next_track)).await;
+                }
             }
         }
         Ok(())
@@ -458,11 +434,26 @@ impl AudioSystem {
             if self.queue.in_wave() {
                 self.send_wave_track_started(&next_track);
             }
-            self.controller
-                .handle_message(AudioMessage::PlayTrack(next_track))
-                .await;
+            if self.signals.crossfade_enabled.get() {
+                self.controller.handle_message(AudioMessage::PlayTrackFastFade(next_track)).await;
+            } else {
+                self.controller.handle_message(AudioMessage::PlayTrack(next_track)).await;
+            }
         } else {
             let _ = self.event_tx.send(Event::QueueEnded);
+        }
+    }
+
+    fn clone_for_wave(&self) -> Self {
+        Self {
+            controller: self.controller.clone(),
+            queue: self.queue.clone(),
+            yandex: self.yandex.clone(),
+            event_tx: self.event_tx.clone(),
+            state: self.state.clone(),
+            signals: self.signals.clone(),
+            smtc: self.smtc.clone(),
+            tx: self.tx.clone(),
         }
     }
 
@@ -478,26 +469,23 @@ impl AudioSystem {
             None => return,
         };
         let station_id = session.station_id().to_string();
-        let batch_id = include_batch_id.then(|| session.batch_id.clone());
-        let from = Some(session.source_id().to_string());
+        let batch_id = if include_batch_id {
+            session.radio_session_id.clone()
+        } else {
+            None
+        };
 
         let api = self.yandex.api.clone();
         tokio::spawn(async move {
-            if let Err(e) = api
-                .send_rotor_feedback(
+            let _ = api.send_rotor_feedback(
                     station_id,
                     batch_id,
                     feedback_type,
                     track_id,
-                    from,
+                    None,
                     total_played,
                 )
-                .await
-            {
-                tracing::warn!(error = %e, feedback_type, "wave_feedback_failed");
-            } else {
-                tracing::info!(feedback_type, "wave_feedback_sent");
-            }
+                .await;
         });
     }
 
@@ -543,13 +531,11 @@ impl AudioSystem {
     }
 
     pub async fn sync_liked_collection_with(
-        api: Arc<ApiService>,
-        state: Arc<RwLock<SystemState>>,
+        yandex: YandexProvider,
+        _state: Arc<RwLock<SystemState>>,
         signals: AudioSignals,
-    ) {
-        if let Ok(ids) = api.fetch_liked_ids().await {
-            let count = ids.len();
-
+    ) -> Result<()> {
+        if let Ok(ids) = yandex.api.fetch_liked_ids().await {
             // Sync with DB
             if let Some(db_arc) = crate::app::get_db() {
                 let ids_for_db = ids.clone();
@@ -559,15 +545,8 @@ impl AudioSystem {
                 });
             }
 
-            {
-                let mut state = state.write().await;
-                state.liked.set_liked_ids(ids);
-            }
             signals.library_changed.send_replace(());
-
-            tracing::info!("Synced {} liked track IDs directly from API", count);
-        } else {
-            tracing::warn!("Failed to fetch liked track IDs");
         }
+        Ok(())
     }
 }

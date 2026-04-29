@@ -71,6 +71,7 @@ impl AudioController {
 
         tokio::spawn(async move {
             let mut prewarm_triggered = false;
+            let mut crossfade_triggered = false;
             let mut last_track_id = None;
 
             loop {
@@ -83,6 +84,7 @@ impl AudioController {
                 if current_track_id != last_track_id {
                     last_track_id = current_track_id;
                     prewarm_triggered = false;
+                    crossfade_triggered = false;
                 }
 
                 if is_playing && !is_buffering {
@@ -108,6 +110,27 @@ impl AudioController {
                             }
                         }
 
+                        // Trigger crossfade logic
+                        if !crossfade_triggered && dur > 10000 && signals.crossfade_enabled.get() {
+                            let current_track = signals.current_track.get();
+                            let pos_ms = pos.as_millis() as u64;
+
+                            let trigger_crossfade = if let Some(fade) = current_track.and_then(|t| t.fade) {
+                                // If track has metadata fade-out, trigger at out_start
+                                let out_start_ms = (fade.out_start * 1000.0) as u64;
+                                out_start_ms > 0 && pos_ms >= out_start_ms
+                            } else {
+                                // Fallback to 5 seconds before end
+                                let remaining = dur.saturating_sub(pos_ms);
+                                remaining < 5000
+                            };
+
+                            if trigger_crossfade {
+                                let _ = audio_tx.send(AudioMessage::CrossfadeNext).await;
+                                crossfade_triggered = true;
+                            }
+                        }
+
                         let guard = progress.read();
                         guard.set_current_position(pos);
                         let buffered = guard.get_buffered_ratio() as f32;
@@ -124,14 +147,14 @@ impl AudioController {
     pub async fn load(&self, track: Track, position_ms: u64) {
         let start_paused = !self.signals.is_playing.get();
         let start_pos = std::time::Duration::from_millis(position_ms);
-        self.play_track(track, start_paused, start_pos, false).await;
+        self.play_track(track, start_paused, start_pos, false, false, false).await;
     }
 
     pub async fn replace_track(&self, track: Track, position_ms: u64) {
         let start_paused = !self.signals.is_playing.get();
         let start_pos = std::time::Duration::from_millis(position_ms);
         // Use soft_reload = true to avoid resetting playback signals
-        self.play_track(track, start_paused, start_pos, true).await;
+        self.play_track(track, start_paused, start_pos, true, false, false).await;
     }
 
     pub fn invalidate_track(&self, track_id: &str) {
@@ -145,11 +168,19 @@ impl AudioController {
     pub async fn handle_message(&self, cmd: AudioMessage) {
         match cmd {
             AudioMessage::PlayTrack(track) => {
-                self.play_track(track, false, std::time::Duration::ZERO, false)
+                self.play_track(track, false, std::time::Duration::ZERO, false, false, false)
+                    .await
+            }
+            AudioMessage::PlayTrackCrossfade(track) => {
+                self.play_track(track, false, std::time::Duration::ZERO, true, true, false)
+                    .await
+            }
+            AudioMessage::PlayTrackFastFade(track) => {
+                self.play_track(track, false, std::time::Duration::ZERO, true, true, true)
                     .await
             }
             AudioMessage::PlayTrackPaused(track, start_pos) => {
-                self.play_track(track, true, start_pos, false).await
+                self.play_track(track, true, start_pos, false, false, false).await
             }
             AudioMessage::Pause => self.pause().await,
             AudioMessage::Resume => self.resume().await,
@@ -167,12 +198,14 @@ impl AudioController {
         start_paused: bool,
         start_pos: std::time::Duration,
         soft_reload: bool,
+        crossfade: bool,
+        fast_fade: bool,
     ) {
         self.signals.is_buffering.set(true);
 
-        if !soft_reload {
+        if !soft_reload && !crossfade {
             self.stop().await;
-        } else {
+        } else if !crossfade {
             // Only stop current task and clear engine, without resetting UI signals
             let mut task_guard = self.current_playback_task.lock().await;
             if let Some(task) = task_guard.take() {
@@ -181,7 +214,7 @@ impl AudioController {
             self.engine.stop();
         }
 
-        if !soft_reload {
+        if !soft_reload || crossfade {
             self.signals.is_stopped.set(false);
             self.signals.set_current_track(Some(track.clone()));
         }
@@ -255,7 +288,56 @@ impl AudioController {
                         *store = handles;
                     }
 
-                    engine.play_source(source);
+                    if crossfade {
+                        // CROSSFADE LOGIC (Equal Power / Logarithmic)
+                        
+                        // Calculate duration
+                        let crossfade_duration_ms = if fast_fade {
+                            // FAST FADE: Manual skip uses fixed 750ms
+                            750
+                        } else if let Some(ref fade) = track_clone.fade {
+                            // NATURAL FADE: Use metadata
+                            let diff = (fade.out_stop - fade.out_start) * 1000.0;
+                            if diff > 100.0 {
+                                diff as u64
+                            } else {
+                                5000
+                            }
+                        } else {
+                            5000
+                        };
+                        
+                        // Ensure secondary sink is ready but silent
+                        engine.set_crossfade_volume(0.0);
+                        engine.play(); // Ensure engine is playing
+                        engine.play_crossfade(source);
+                        
+                        // Reset progress signals to 0 immediately for the new track
+                        signals.update_progress(0, track_clone.duration.map(|d| d.as_millis() as u64).unwrap_or(0));
+                        
+                        let steps = 60;
+                        let step_duration = Duration::from_millis(crossfade_duration_ms / steps);
+                        
+                        use std::f32::consts::PI;
+                        
+                        for i in 1..=steps {
+                            let ratio = i as f32 / steps as f32;
+                            let gain_in = (ratio * PI / 2.0).sin();
+                            let gain_out = (ratio * PI / 2.0).cos();
+                            
+                            let current_target = signals.volume.get() as f32 / 100.0;
+                            engine.set_volume(current_target * gain_out);
+                            engine.set_crossfade_volume(current_target * gain_in);
+                            
+                            tokio::time::sleep(step_duration).await;
+                        }
+                        
+                        engine.stop_primary();
+                        engine.swap_sinks();
+                        engine.set_volume(signals.volume.get() as f32 / 100.0);
+                    } else {
+                        engine.play_source(source);
+                    }
 
                     if start_pos.as_millis() > 0 {
                         let _ = engine.try_seek(start_pos);
@@ -272,7 +354,7 @@ impl AudioController {
                         signals.set_playing(true);
                     }
 
-                    if !soft_reload {
+                    if !soft_reload || crossfade {
                         let _ = event_tx.send(Event::TrackStarted(track_clone, 0));
                     }
                 }
@@ -285,8 +367,16 @@ impl AudioController {
             }
         });
 
-        let mut task_guard = self.current_playback_task.lock().await;
-        *task_guard = Some(task);
+        if crossfade {
+            // In crossfade mode, we replace the previous playback task
+            let mut task_guard = self.current_playback_task.lock().await;
+            if let Some(old_task) = task_guard.replace(task) {
+                old_task.abort();
+            }
+        } else {
+            let mut task_guard = self.current_playback_task.lock().await;
+            *task_guard = Some(task);
+        }
     }
 
     async fn stop(&self) {

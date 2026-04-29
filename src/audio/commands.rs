@@ -18,6 +18,8 @@ pub enum AudioMessage {
 
     // Queue & Context
     PlayTrack(Track),
+    PlayTrackCrossfade(Track),
+    PlayTrackFastFade(Track),
     PlayTrackPaused(Track, Duration),
     LoadContext(PlaybackContext, Vector<Track>, usize),
     LoadTracks(Vec<Track>),
@@ -46,4 +48,5 @@ pub enum AudioMessage {
     TrackEnded,
     RecreateStream,
     PrewarmNext,
+    CrossfadeNext,
 }
