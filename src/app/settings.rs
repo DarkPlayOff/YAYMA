@@ -19,10 +19,6 @@ pub async fn load_persisted_settings(ctx: &AppContext) {
         ctx.signals.discord_rpc.set(rpc_enabled);
     }
 
-    if let Ok(crossfade_enabled) = ctx.db.lock().load_crossfade_enabled() {
-        ctx.signals.crossfade_enabled.set(crossfade_enabled);
-    }
-
     let db = ctx.db.lock();
     let guard = ctx.effect_handles.read();
 

@@ -43,13 +43,3 @@ pub fn set_discord_rpc_enabled(ctx: &AppContext, enabled: bool) {
     let db = ctx.db.lock();
     let _ = db.save_discord_rpc(enabled);
 }
-
-pub fn is_crossfade_enabled(ctx: &AppContext) -> bool {
-    ctx.signals.crossfade_enabled.get()
-}
-
-pub fn set_crossfade_enabled(ctx: &AppContext, enabled: bool) {
-    ctx.signals.crossfade_enabled.set(enabled);
-    let db = ctx.db.lock();
-    let _ = db.save_crossfade_enabled(enabled);
-}

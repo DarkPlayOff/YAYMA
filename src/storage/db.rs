@@ -615,25 +615,4 @@ impl AppDatabase {
             Ok(false)
         }
     }
-
-    pub fn save_crossfade_enabled(&self, enabled: bool) -> Result<()> {
-        self.conn.execute(
-            "INSERT INTO app_settings (key, value) VALUES ('crossfade_enabled', ?1) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-            params![enabled.to_string()],
-        )?;
-        Ok(())
-    }
-
-    pub fn load_crossfade_enabled(&self) -> Result<bool> {
-        let mut stmt = self
-            .conn
-            .prepare("SELECT value FROM app_settings WHERE key = 'crossfade_enabled'")?;
-        let mut rows = stmt.query([])?;
-        if let Some(row) = rows.next()? {
-            let val: String = row.get(0)?;
-            Ok(val.parse().unwrap_or(true))
-        } else {
-            Ok(true)
-        }
-    }
 }

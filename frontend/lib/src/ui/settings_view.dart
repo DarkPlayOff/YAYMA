@@ -19,7 +19,6 @@ class _SettingsViewState extends State<SettingsView> {
   late final FutureSignal<int> _cacheSizeSignal;
   late final FutureSignal<String> _versionSignal;
   late final FutureSignal<bool> _discordRpcSignal;
-  late final FutureSignal<bool> _crossfadeSignal;
 
   @override
   void initState() {
@@ -40,11 +39,6 @@ class _SettingsViewState extends State<SettingsView> {
       if (ctx == null) return false;
       return simple.isDiscordRpcEnabled(ctx: ctx);
     });
-    _crossfadeSignal = futureSignal(() async {
-      final ctx = appContextSignal.value;
-      if (ctx == null) return true;
-      return simple.isCrossfadeEnabled(ctx: ctx);
-    });
   }
 
   Future<void> _toggleDiscordRpc(bool enabled) async {
@@ -52,14 +46,6 @@ class _SettingsViewState extends State<SettingsView> {
     if (ctx != null) {
       await simple.setDiscordRpcEnabled(ctx: ctx, enabled: enabled);
       unawaited(_discordRpcSignal.refresh());
-    }
-  }
-
-  Future<void> _toggleCrossfade(bool enabled) async {
-    final ctx = appContextSignal.value;
-    if (ctx != null) {
-      await simple.setCrossfadeEnabled(ctx: ctx, enabled: enabled);
-      unawaited(_crossfadeSignal.refresh());
     }
   }
 
@@ -135,25 +121,6 @@ class _SettingsViewState extends State<SettingsView> {
                       subtitle: path.value ?? 'По умолчанию (Загрузки)',
                       icon: Icons.folder_open_rounded,
                       onTap: () => unawaited(_pickPath()),
-                    );
-                  }),
-                  const SizedBox(height: 48),
-                  _buildSectionTitle(context, 'Звук'),
-                  const SizedBox(height: 24),
-                  Watch((context) {
-                    final enabled = _crossfadeSignal.value;
-                    final isEnabled = enabled.value ?? true;
-
-                    return _buildSettingItem(
-                      context,
-                      title: 'Плавный переход между треками',
-                      subtitle: 'Плавное затухание звука между треками',
-                      icon: Icons.blur_on_rounded,
-                      onTap: () => unawaited(_toggleCrossfade(!isEnabled)),
-                      trailing: Switch(
-                        value: isEnabled,
-                        onChanged: (v) => unawaited(_toggleCrossfade(v)),
-                      ),
                     );
                   }),
                   const SizedBox(height: 48),
