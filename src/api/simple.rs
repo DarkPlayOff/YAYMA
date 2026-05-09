@@ -45,3 +45,16 @@ pub fn is_discord_rpc_enabled(ctx: &AppContext) -> bool {
 pub fn set_discord_rpc_enabled(ctx: &AppContext, enabled: bool) {
     logic::set_discord_rpc_enabled(ctx, enabled)
 }
+
+pub fn is_custom_titlebar_enabled(ctx: &AppContext) -> bool {
+    logic::is_custom_titlebar_enabled(ctx)
+}
+
+#[flutter_rust_bridge::frb(sync)]
+pub fn is_custom_titlebar_enabled_sync() -> bool {
+    logic::is_custom_titlebar_enabled_sync()
+}
+
+pub fn set_custom_titlebar_enabled(ctx: &AppContext, enabled: bool) {
+    logic::set_custom_titlebar_enabled(ctx, enabled)
+}

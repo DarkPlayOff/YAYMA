@@ -19,6 +19,7 @@ class _SettingsViewState extends State<SettingsView> {
   late final FutureSignal<int> _cacheSizeSignal;
   late final FutureSignal<String> _versionSignal;
   late final FutureSignal<bool> _discordRpcSignal;
+  late final FutureSignal<bool> _customTitlebarSignal;
 
   @override
   void initState() {
@@ -41,6 +42,11 @@ class _SettingsViewState extends State<SettingsView> {
       if (ctx == null) return false;
       return simple.isDiscordRpcEnabled(ctx: ctx);
     });
+    _customTitlebarSignal = futureSignal(() async {
+      final ctx = appContextSignal.value;
+      if (ctx == null) return true;
+      return simple.isCustomTitlebarEnabled(ctx: ctx);
+    });
   }
 
   Future<void> _toggleDiscordRpc(bool enabled) async {
@@ -48,6 +54,22 @@ class _SettingsViewState extends State<SettingsView> {
     if (ctx != null) {
       await simple.setDiscordRpcEnabled(ctx: ctx, enabled: enabled);
       unawaited(_discordRpcSignal.refresh());
+    }
+  }
+
+  Future<void> _toggleCustomTitlebar(bool enabled) async {
+    final ctx = appContextSignal.value;
+    if (ctx != null) {
+      await simple.setCustomTitlebarEnabled(ctx: ctx, enabled: enabled);
+      unawaited(_customTitlebarSignal.refresh());
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Изменения вступят в силу после перезапуска приложения'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
     }
   }
 
@@ -125,6 +147,25 @@ class _SettingsViewState extends State<SettingsView> {
                       subtitle: path.value ?? 'По умолчанию (Загрузки)',
                       icon: Icons.folder_open_rounded,
                       onTap: () => unawaited(_pickPath()),
+                    );
+                  }),
+                  const SizedBox(height: 48),
+                  _buildSectionTitle(context, 'Внешний вид'),
+                  const SizedBox(height: 24),
+                  Watch((context) {
+                    final enabled = _customTitlebarSignal.value;
+                    return _buildSettingItem(
+                      context,
+                      title: 'Собственная рамка окна',
+                      subtitle: 'Отключает стандартную рамку ОС',
+                      icon: Icons.web_asset_rounded,
+                      onTap: () => unawaited(
+                        _toggleCustomTitlebar(!(enabled.value ?? false)),
+                      ),
+                      trailing: Switch(
+                        value: enabled.value ?? false,
+                        onChanged: (v) => unawaited(_toggleCustomTitlebar(v)),
+                      ),
                     );
                   }),
                   const SizedBox(height: 48),

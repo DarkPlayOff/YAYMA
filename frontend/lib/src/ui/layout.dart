@@ -1,7 +1,12 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:signals_flutter/signals_flutter.dart';
+import 'package:window_manager/window_manager.dart';
+import 'package:yayma/src/providers/auth_provider.dart';
 import 'package:yayma/src/providers/navigation_provider.dart';
 import 'package:yayma/src/providers/notification_provider.dart';
+import 'package:yayma/src/rust/api/simple.dart' as simple;
 import 'package:yayma/src/ui/album_view.dart';
 import 'package:yayma/src/ui/artist_view.dart';
 import 'package:yayma/src/ui/home_view.dart';
@@ -30,6 +35,9 @@ class _AppLayoutState extends State<AppLayout> {
       currentRootSignal.watch(context);
       final navState = currentNavStateSignal.watch(context);
       final isHome = navState.section == AppSection.home;
+      
+      final isDesktop = Platform.isWindows || Platform.isLinux || Platform.isMacOS;
+      final isCustomTitlebar = isDesktop && simple.isCustomTitlebarEnabledSync();
 
       return Scaffold(
         backgroundColor: Colors.black,
@@ -52,22 +60,25 @@ class _AppLayoutState extends State<AppLayout> {
 
                 // 3. Content (set of independent stacks for each tab)
                 Positioned.fill(
-                  child: Stack(
-                    children: [
-                      Positioned.fill(
-                        child: Stack(
-                          children: rootSections
-                              .map((root) => _buildRootBucket(context, root))
-                              .toList(),
+                  child: Padding(
+                    padding: EdgeInsets.only(top: isCustomTitlebar ? 32.0 : 0),
+                    child: Stack(
+                      children: [
+                        Positioned.fill(
+                          child: Stack(
+                            children: rootSections
+                                .map((root) => _buildRootBucket(context, root))
+                                .toList(),
+                          ),
                         ),
-                      ),
-                      Positioned(
-                        left: 0,
-                        right: 0,
-                        bottom: 0,
-                        child: _buildAnimatedPlayerBar(isHome),
-                      ),
-                    ],
+                        Positioned(
+                          left: 0,
+                          right: 0,
+                          bottom: 0,
+                          child: _buildAnimatedPlayerBar(isHome),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
 
@@ -82,6 +93,21 @@ class _AppLayoutState extends State<AppLayout> {
 
                 // 5. Back button
                 _FloatingBackButton(),
+
+                // 6. Custom Titlebar
+                if (isCustomTitlebar)
+                  const Positioned(
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    child: SizedBox(
+                      height: 32,
+                      child: WindowCaption(
+                        brightness: Brightness.dark,
+                        backgroundColor: Colors.transparent,
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),

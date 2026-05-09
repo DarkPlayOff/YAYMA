@@ -27,6 +27,7 @@ dependencies:
   m3e_collection: ^0.3.7
   dynamic_color: ^1.8.1
   webview_all: ^1.0.3
+  window_manager: ^0.5.1
 
 dev_dependencies:
   flutter_test:

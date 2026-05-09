@@ -1,11 +1,36 @@
+import 'dart:io';
+
 import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:window_manager/window_manager.dart';
 import 'package:yayma/src/app/init.dart';
+import 'package:yayma/src/providers/auth_provider.dart';
+import 'package:yayma/src/rust/api/simple.dart' as simple;
 import 'package:yayma/src/ui/auth/auth_screens.dart';
 
 Future<void> main() async {
   await AppInit.initialize();
+  
+  if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+    await windowManager.ensureInitialized();
+    
+    final isCustom = simple.isCustomTitlebarEnabledSync();
+
+    WindowOptions windowOptions = WindowOptions(
+      size: const Size(1280, 720),
+      minimumSize: const Size(800, 600),
+      center: true,
+      backgroundColor: Colors.transparent,
+      skipTaskbar: false,
+      titleBarStyle: isCustom ? TitleBarStyle.hidden : TitleBarStyle.normal,
+    );
+    await windowManager.waitUntilReadyToShow(windowOptions, () async {
+      await windowManager.show();
+      await windowManager.focus();
+    });
+  }
+
   runApp(const MyApp());
 }
 

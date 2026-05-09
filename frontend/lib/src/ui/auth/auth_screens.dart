@@ -1,11 +1,14 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:webview_all/webview_all.dart';
+import 'package:window_manager/window_manager.dart';
 import 'package:yayma/src/providers/auth_provider.dart';
 import 'package:yayma/src/rust/api/auth.dart' as rust;
 import 'package:yayma/src/rust/api/playback.dart' as rust;
+import 'package:yayma/src/rust/api/simple.dart' as simple;
 import 'package:yayma/src/ui/layout.dart';
 
 class RootScreen extends StatefulWidget {
@@ -88,92 +91,114 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDesktop = Platform.isWindows || Platform.isLinux || Platform.isMacOS;
+    final isCustomTitlebar = isDesktop && simple.isCustomTitlebarEnabledSync();
+
     return Scaffold(
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              theme.colorScheme.surfaceContainerHighest,
-              theme.colorScheme.surface,
-            ],
-          ),
-        ),
-        child: Center(
-          child: Card(
-            elevation: 8,
+      body: Stack(
+        children: [
+          Positioned.fill(
             child: Container(
-              width: 400,
-              padding: const EdgeInsets.all(32),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.music_note_rounded,
-                    size: 64,
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
-                  const SizedBox(height: 24),
-                  const Text(
-                    'YAYMA',
-                    style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
-                  ),
-                  const Text(
-                    'Вход через Яндекс',
-                    style: TextStyle(color: Colors.white54),
-                  ),
-                  const SizedBox(height: 32),
-                  ElevatedButton.icon(
-                    onPressed: _showWebView,
-                    icon: const Icon(Icons.open_in_browser_rounded),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Theme.of(context).colorScheme.primary,
-                      foregroundColor: Colors.black,
-                      minimumSize: const Size(double.infinity, 56),
-                    ),
-                    label: const Text(
-                      'ОТКРЫТЬ ОКНО ВХОДА',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 24),
-                    child: Row(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    theme.colorScheme.surfaceContainerHighest,
+                    theme.colorScheme.surface,
+                  ],
+                ),
+              ),
+              child: Center(
+                child: Card(
+                  elevation: 8,
+                  child: Container(
+                    width: 400,
+                    padding: const EdgeInsets.all(32),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        Expanded(child: Divider()),
-                        Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 16),
-                          child: Text(
-                            'ИЛИ ВВЕДИТЕ ТОКЕН',
-                            style: TextStyle(
-                              color: Colors.white24,
-                              fontSize: 12,
-                            ),
+                        Icon(
+                          Icons.music_note_rounded,
+                          size: 64,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                        const SizedBox(height: 24),
+                        const Text(
+                          'YAYMA',
+                          style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
+                        ),
+                        const Text(
+                          'Вход через Яндекс',
+                          style: TextStyle(color: Colors.white54),
+                        ),
+                        const SizedBox(height: 32),
+                        ElevatedButton.icon(
+                          onPressed: _showWebView,
+                          icon: const Icon(Icons.open_in_browser_rounded),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Theme.of(context).colorScheme.primary,
+                            foregroundColor: Colors.black,
+                            minimumSize: const Size(double.infinity, 56),
+                          ),
+                          label: const Text(
+                            'ОТКРЫТЬ ОКНО ВХОДА',
+                            style: TextStyle(fontWeight: FontWeight.bold),
                           ),
                         ),
-                        Expanded(child: Divider()),
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 24),
+                          child: Row(
+                            children: [
+                              Expanded(child: Divider()),
+                              Padding(
+                                padding: EdgeInsets.symmetric(horizontal: 16),
+                                child: Text(
+                                  'ИЛИ ВВЕДИТЕ ТОКЕН',
+                                  style: TextStyle(
+                                    color: Colors.white24,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ),
+                              Expanded(child: Divider()),
+                            ],
+                          ),
+                        ),
+                        TextField(
+                          controller: _tokenController,
+                          decoration: InputDecoration(
+                            labelText: 'Ссылка или OAuth токен',
+                            hintText: 'https://music.yandex.ru/#access_token=y0_...',
+                            border: const OutlineInputBorder(),
+                            suffixIcon: IconButton(
+                              icon: const Icon(Icons.login_rounded),
+                              onPressed: () => _handleLogin(_tokenController.text),
+                            ),
+                          ),
+                          onSubmitted: _handleLogin,
+                        ),
                       ],
                     ),
                   ),
-                  TextField(
-                    controller: _tokenController,
-                    decoration: InputDecoration(
-                      labelText: 'Ссылка или OAuth токен',
-                      hintText: 'https://music.yandex.ru/#access_token=y0_...',
-                      border: const OutlineInputBorder(),
-                      suffixIcon: IconButton(
-                        icon: const Icon(Icons.login_rounded),
-                        onPressed: () => _handleLogin(_tokenController.text),
-                      ),
-                    ),
-                    onSubmitted: _handleLogin,
-                  ),
-                ],
+                ),
               ),
             ),
           ),
-        ),
+          if (isCustomTitlebar)
+            const Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: SizedBox(
+                height: 32,
+                child: WindowCaption(
+                  brightness: Brightness.dark,
+                  backgroundColor: Colors.transparent,
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }

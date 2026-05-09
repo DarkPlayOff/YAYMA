@@ -43,3 +43,21 @@ pub fn set_discord_rpc_enabled(ctx: &AppContext, enabled: bool) {
     let db = ctx.core.db.lock();
     let _ = db.save_discord_rpc(enabled);
 }
+
+pub fn is_custom_titlebar_enabled(ctx: &AppContext) -> bool {
+    let db = ctx.core.db.lock();
+    db.load_custom_titlebar().unwrap_or(false)
+}
+
+pub fn is_custom_titlebar_enabled_sync() -> bool {
+    if let Ok(db) = crate::storage::db::AppDatabase::init() {
+        db.load_custom_titlebar().unwrap_or(false)
+    } else {
+        false
+    }
+}
+
+pub fn set_custom_titlebar_enabled(ctx: &AppContext, enabled: bool) {
+    let db = ctx.core.db.lock();
+    let _ = db.save_custom_titlebar(enabled);
+}

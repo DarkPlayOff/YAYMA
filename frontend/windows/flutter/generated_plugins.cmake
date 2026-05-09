@@ -4,7 +4,9 @@
 
 list(APPEND FLUTTER_PLUGIN_LIST
   dynamic_color
+  screen_retriever_windows
   webview_all_windows
+  window_manager
   windows_taskbar
 )
 
