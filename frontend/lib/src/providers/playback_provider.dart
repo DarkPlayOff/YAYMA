@@ -58,6 +58,7 @@ Future<void> initPlayback() async {
 
   _activatePersistentColorScheme();
   _activateVibePalette();
+  _activateLyricsOverlayReset();
   if (Platform.isWindows) {
     _activateTaskbarEffect();
   }
@@ -66,6 +67,7 @@ Future<void> initPlayback() async {
 void _activatePersistentColorScheme() => _persistentColorSchemeEffect;
 void _activateVibePalette() => _vibePaletteEffect;
 void _activateTaskbarEffect() => _taskbarEffect;
+void _activateLyricsOverlayReset() => _lyricsOverlayResetEffect;
 
 // Signal for current track ID only
 final FlutterComputed<String?> currentTrackIdSignal = computed(
@@ -350,6 +352,13 @@ final FlutterComputed<double> playerPositionMsSignal = computed(
 );
 
 final FlutterSignal<bool> showLyricsSignal = signal<bool>(false);
+final FlutterSignal<bool> hideLyricsOverlaySignal = signal<bool>(false);
+
+// Reset overlay visibility on track change
+final EffectCleanup _lyricsOverlayResetEffect = effect(() {
+  currentTrackIdSignal(); // Just call to track dependency
+  hideLyricsOverlaySignal.value = false;
+});
 
 final FlutterSignal<EqualizerDto?> equalizerSignal = signal<EqualizerDto?>(
   null,

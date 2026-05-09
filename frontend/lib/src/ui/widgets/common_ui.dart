@@ -266,7 +266,7 @@ class CommonDetailSliverLayout extends StatelessWidget {
       slivers: [
         SliverToBoxAdapter(child: header),
         ...slivers,
-        const SliverToBoxAdapter(child: SizedBox(height: 100)),
+        const SliverToBoxAdapter(child: SizedBox(height: 140)),
       ],
     );
   }

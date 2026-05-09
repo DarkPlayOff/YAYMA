@@ -116,11 +116,11 @@ class _GlobalNotificationListenerState
                         : Colors.white.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(100),
                       border: Border.all(color: Colors.white10),
-                      boxShadow: [
+                      boxShadow: const [
                         BoxShadow(
                           color: Colors.black26,
                           blurRadius: 20,
-                          offset: const Offset(0, 10),
+                          offset: Offset(0, 10),
                         ),
                       ],
                     ),

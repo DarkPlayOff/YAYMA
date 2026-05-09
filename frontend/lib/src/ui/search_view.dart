@@ -124,7 +124,7 @@ class _SearchViewState extends State<SearchView> {
 
   Widget _buildResults(SearchResultsDto results) {
     return ListView(
-      padding: const EdgeInsets.only(bottom: 100),
+      padding: const EdgeInsets.only(bottom: 140),
       children: [
         if (results.artists.isNotEmpty) ...[
           const CommonSectionTitle(title: 'Артисты'),

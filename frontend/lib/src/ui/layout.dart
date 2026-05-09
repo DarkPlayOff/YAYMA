@@ -3,9 +3,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:window_manager/window_manager.dart';
-import 'package:yayma/src/providers/auth_provider.dart';
 import 'package:yayma/src/providers/navigation_provider.dart';
-import 'package:yayma/src/providers/notification_provider.dart';
+import 'package:yayma/src/providers/playback_provider.dart';
 import 'package:yayma/src/rust/api/simple.dart' as simple;
 import 'package:yayma/src/ui/album_view.dart';
 import 'package:yayma/src/ui/artist_view.dart';
@@ -49,13 +48,21 @@ class _AppLayoutState extends State<AppLayout> {
               const Positioned.fill(child: BlurredCoverBackground()),
               const Positioned.fill(child: WaveBackground()),
 
-              // 2. Dimming when leaving home
-              Positioned.fill(
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 500),
-                  color: isHome ? Colors.transparent : Colors.black87,
-                ),
-              ),
+              // 2. Dimming when leaving home or showing lyrics
+              Watch((context) {
+                final showLyrics = showLyricsSignal.watch(context);
+                final hideOverlay = hideLyricsOverlaySignal.watch(context);
+                final isDimmed = isHome
+                    ? (showLyrics && !hideOverlay)
+                    : true;
+
+                return Positioned.fill(
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 500),
+                    color: isDimmed ? (isHome ? Colors.black54 : Colors.black87) : Colors.transparent,
+                  ),
+                );
+              }),
 
               // 3. Content (set of independent stacks for each tab)
               Positioned.fill(
@@ -137,29 +144,34 @@ class _AppLayoutState extends State<AppLayout> {
   }
 
   Widget _buildAnimatedPlayerBar(bool isHome) {
-    return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 600),
-      reverseDuration: const Duration(milliseconds: 500),
-      switchInCurve: Curves.easeOutCubic,
-      switchOutCurve: Curves.easeInCubic,
-      transitionBuilder: (child, animation) {
-        final offsetAnimation = Tween<Offset>(
-          begin: const Offset(0, 1),
-          end: Offset.zero,
-        ).animate(animation);
-        return SlideTransition(
-          position: offsetAnimation,
-          child: child,
-        );
-      },
-      child: !isHome
-          ? const Padding(
-              padding: EdgeInsets.only(left: 96),
-              key: ValueKey('player_bar_visible'),
-              child: PlayerBar(),
-            )
-          : const SizedBox.shrink(key: ValueKey('player_bar_hidden')),
-    );
+    return Watch((context) {
+      final showLyrics = showLyricsSignal.watch(context);
+      final shouldShowBar = !isHome || showLyrics;
+
+      return AnimatedSwitcher(
+        duration: const Duration(milliseconds: 600),
+        reverseDuration: const Duration(milliseconds: 500),
+        switchInCurve: Curves.easeOutCubic,
+        switchOutCurve: Curves.easeInCubic,
+        transitionBuilder: (child, animation) {
+          final offsetAnimation = Tween<Offset>(
+            begin: const Offset(0, 1),
+            end: Offset.zero,
+          ).animate(animation);
+          return SlideTransition(
+            position: offsetAnimation,
+            child: child,
+          );
+        },
+        child: shouldShowBar
+            ? const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16),
+                key: ValueKey('player_bar_visible'),
+                child: PlayerBar(),
+              )
+            : const SizedBox.shrink(key: ValueKey('player_bar_hidden')),
+      );
+    });
   }
 
   List<Widget> _buildWindowStack(List<NavState> stack) {
@@ -199,24 +211,27 @@ class _AppLayoutState extends State<AppLayout> {
   }
 
   Widget _buildWindowContent(NavState state, int index) {
-    final isHome = state.section == AppSection.home;
-    // For the settings, do not use PageStorageKey to avoid saving state between visits.
-    final key = state.section == AppSection.account
-        ? ValueKey('account_$index')
-        : PageStorageKey('scroll_${state.section}_${state.id}_$index');
+    return Watch((context) {
+      final isHome = state.section == AppSection.home;
 
-    final child = KeyedSubtree(
-      key: key,
-      child: _mapSectionToWidget(state),
-    );
+      // For the settings, do not use PageStorageKey to avoid saving state between visits.
+      final key = state.section == AppSection.account
+          ? ValueKey('account_$index')
+          : PageStorageKey('scroll_${state.section}_${state.id}_$index');
 
-    return Padding(
-      padding: EdgeInsets.only(
-        left: isHome ? 0 : 96,
-        bottom: isHome ? 0 : 116,
-      ),
-      child: child,
-    );
+      final child = KeyedSubtree(
+        key: key,
+        child: _mapSectionToWidget(state),
+      );
+
+      return Padding(
+        padding: EdgeInsets.only(
+          left: isHome ? 0 : 96,
+          bottom: 0,
+        ),
+        child: child,
+      );
+    });
   }
 
   Widget _mapSectionToWidget(NavState state) {

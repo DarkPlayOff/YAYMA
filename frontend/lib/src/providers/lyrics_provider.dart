@@ -18,7 +18,6 @@ class LyricTimer extends LyricItem {
   LyricTimer(super.time, this.duration);
 }
 
-// Кэш сигналов для текстов песен (чтобы не перекачивать одно и то же)
 final Map<String, FutureSignal<List<LyricItem>>> _lyricsCache = {};
 
 FutureSignal<List<LyricItem>> lyricsSignal(String trackId) {
@@ -55,12 +54,10 @@ List<LyricItem> _parseLrc(String lrc) {
 
   if (rawLines.isEmpty) return [];
 
-  // Сортируем по времени на всякий случай
   rawLines.sort((a, b) => a.time.compareTo(b.time));
 
   final result = <LyricItem>[];
 
-  // Проверяем паузу в самом начале трека
   if (rawLines.isNotEmpty && rawLines.first.time > const Duration(seconds: 5)) {
     result.add(
       LyricTimer(
@@ -78,21 +75,16 @@ List<LyricItem> _parseLrc(String lrc) {
 
     final duration = nextTime - current.time;
 
-    // Если пауза до следующей строки большая (больше 7 секунд),
-    // разделяем это время на показ текста и таймер ожидания.
     if (duration > const Duration(seconds: 7)) {
-      // Даем тексту побыть активным 3 секунды (хватит, чтобы допеть фразу)
-      const textDuration = Duration(seconds: 3);
+      const textDuration = Duration(seconds: 4);
       result.add(LyricLine(current.time, current.text, textDuration));
 
-      // Остальное время (за вычетом 1 сек перед следующей строкой) — таймер
       final timerStart = current.time + textDuration;
       final timerDuration =
           duration - textDuration - const Duration(seconds: 1);
 
       result.add(LyricTimer(timerStart, timerDuration));
     } else {
-      // Обычная последовательность
       result.add(LyricLine(current.time, current.text, duration));
     }
   }

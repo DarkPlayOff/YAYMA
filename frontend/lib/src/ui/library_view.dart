@@ -240,7 +240,7 @@ class _LikedTracksTab extends StatelessWidget {
       }
 
       return ListView.builder(
-        padding: const EdgeInsets.only(bottom: 100),
+        padding: const EdgeInsets.only(bottom: 140),
         itemCount: tracks.length,
         itemBuilder: (context, index) {
           final track = tracks[index];
@@ -295,7 +295,7 @@ class _PlaylistsTab extends StatelessWidget {
       }
 
       return GridView.builder(
-        padding: const EdgeInsets.all(40),
+        padding: const EdgeInsets.fromLTRB(40, 40, 40, 140),
         gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
           maxCrossAxisExtent: 200,
           mainAxisSpacing: 24,

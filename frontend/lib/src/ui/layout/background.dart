@@ -34,8 +34,8 @@ class BlurredCoverBackground extends StatelessWidget {
                       ),
                       child: RustCachedImage(
                         imageUrl: coverUrl,
-                        width: 160,
-                        height: 160,
+                        width: 250,
+                        height: 250,
                         color: Colors.black.withValues(alpha: 0.3),
                         colorBlendMode: BlendMode.darken,
                         errorWidget: Container(color: Colors.black),

@@ -48,8 +48,8 @@ class HomeView extends StatelessWidget {
                   AnimatedPositioned(
                     duration: const Duration(milliseconds: 600),
                     curve: Curves.easeInOutCubic,
-                    left: 0,
-                    right: showLyrics ? width * 0.5 : 0,
+                    left: showLyrics ? -width : 0,
+                    right: showLyrics ? width : 0,
                     top: 0,
                     bottom: 0,
                     child: Center(
@@ -92,15 +92,14 @@ class HomeView extends StatelessWidget {
                   AnimatedPositioned(
                     duration: const Duration(milliseconds: 600),
                     curve: Curves.easeInOutCubic,
-                    left: showLyrics ? width * 0.5 : width,
-                    right: 0,
+                    left: showLyrics ? 0 : width,
+                    right: showLyrics ? 0 : -width,
                     top: 0,
                     bottom: 0,
                     child: Container(
-                      padding: const EdgeInsets.only(
-                        right: 60,
-                        top: 40,
-                        bottom: 40,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 60,
+                        vertical: 40,
                       ),
                       child: Watch((context) {
                         final trackId = trackMetadataSignal().id;
@@ -178,13 +177,6 @@ class _HomeCoverWidgetState extends State<_HomeCoverWidget> {
                 height: size,
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(32),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.8),
-                      blurRadius: hovered ? 100 : 80,
-                      spreadRadius: hovered ? 8 : 5,
-                    ),
-                  ],
                 ),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(32),
