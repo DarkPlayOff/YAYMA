@@ -27,12 +27,15 @@ pub struct AudioSystem {
     signals: AudioSignals,
     smtc: Arc<Mutex<SmtcManager>>,
     tx: mpsc::Sender<AudioMessage>,
+    db: Arc<parking_lot::Mutex<crate::db::AppDatabase>>,
 }
 
 impl AudioSystem {
     pub async fn spawn(
         event_tx: Sender<Event>,
         api: Arc<ApiService>,
+        db: Arc<parking_lot::Mutex<crate::db::AppDatabase>>,
+        http_cache: Arc<crate::storage::cache::HttpCache>,
     ) -> Result<(
         mpsc::Sender<AudioMessage>,
         AudioSignals,
@@ -76,7 +79,7 @@ impl AudioSystem {
 
         let state = Arc::new(RwLock::new(SystemState::default()));
         let (smtc_cmd_tx, mut smtc_cmd_rx) = mpsc::unbounded_channel();
-        let smtc = Arc::new(Mutex::new(SmtcManager::new(event_tx.clone(), smtc_cmd_tx)?));
+        let smtc = Arc::new(Mutex::new(SmtcManager::new(event_tx.clone(), smtc_cmd_tx, http_cache)?));
         let yandex = YandexProvider::new(api.clone(), event_tx.clone(), signals.clone());
 
         let effect_handles = controller.get_effect_handles();
@@ -90,6 +93,7 @@ impl AudioSystem {
             signals: signals.clone(),
             smtc,
             tx: tx.clone(),
+            db,
         };
 
         // Start Discord integration
@@ -353,6 +357,7 @@ impl AudioSystem {
                     self.yandex.api.clone(),
                     self.state.clone(),
                     self.signals.clone(),
+                    self.db.clone(),
                 )
                 .await;
                 self.signals.changed.send_replace(());
@@ -543,18 +548,17 @@ impl AudioSystem {
         api: Arc<ApiService>,
         state: Arc<RwLock<SystemState>>,
         signals: AudioSignals,
+        db_arc: Arc<parking_lot::Mutex<crate::db::AppDatabase>>,
     ) {
         if let Ok(ids) = api.fetch_liked_ids().await {
             let count = ids.len();
 
             // Sync with DB
-            if let Some(db_arc) = crate::app::get_db() {
-                let ids_for_db = ids.clone();
-                tokio::task::spawn_blocking(move || {
-                    let db = db_arc.lock();
-                    let _ = db.save_liked_tracks(&ids_for_db);
-                });
-            }
+            let ids_for_db = ids.clone();
+            tokio::task::spawn_blocking(move || {
+                let db = db_arc.lock();
+                let _ = db.save_liked_tracks(&ids_for_db);
+            });
 
             {
                 let mut state = state.write().await;

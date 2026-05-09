@@ -4,7 +4,8 @@ use crate::api::models::{
     StationItemDto, TrackDetailsDto, format_cover,
 };
 use crate::app::AppContext;
-use crate::storage::cache::get_http_cache;
+use crate::storage::cache::HttpCache;
+use std::sync::Arc;
 use crate::util::flac::extract_native_flac;
 use foldhash::HashMapExt;
 
@@ -126,13 +127,15 @@ pub async fn download_track(ctx: &AppContext, track_id: String) -> Result<String
         tokio::fs::write(&dest_path, &bytes).await?;
     }
 
-    let _ = embed_metadata(&dest_path, &dto).await;
+    let cache = ctx.core.http_cache.clone();
+    let _ = embed_metadata(&dest_path, &dto, cache).await;
     Ok(dest_path.to_string_lossy().to_string())
 }
 
 async fn embed_metadata(
     path: &std::path::Path,
     dto: &SimpleTrackDto,
+    cache: Arc<HttpCache>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     use lofty::config::{ParseOptions, WriteOptions};
     use lofty::file::TaggedFileExt;
@@ -156,7 +159,6 @@ async fn embed_metadata(
         } else {
             url.clone()
         };
-        let cache = get_http_cache().await;
         if let Ok(path) = cache.get_file(&https_url).await {
             tokio::fs::read(path).await.ok()
         } else {

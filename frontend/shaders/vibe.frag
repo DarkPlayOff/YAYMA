@@ -1,4 +1,4 @@
-#version 320 es
+#extension GL_GOOGLE_include_directive : enable
 
 precision highp float;
 
@@ -43,17 +43,15 @@ float snoise3(vec3 v) {
   vec3 i1 = min(g.xyz, l.zxy);
   vec3 i2 = max(g.xyz, l.zxy);
 
-  // [OPT-8] убран бессмысленный множитель 1.0 *
   vec3 x1 = x0 - i1 + C.xxx;
   vec3 x2 = x0 - i2 + 2.0 * C.xxx;
   vec3 x3 = x0 - 1.0 + 3.0 * C.xxx;
 
   i = mod289(i);
 
-  vec4 p = permute(permute(permute(
-    i.z + vec4(0.0, i1.z, i2.z, 1.0))
-    + i.y + vec4(0.0, i1.y, i2.y, 1.0))
-    + i.x + vec4(0.0, i1.x, i2.x, 1.0));
+  vec4 p = permute(permute(permute(i.z + vec4(0.0, i1.z, i2.z, 1.0)) + i.y +
+                           vec4(0.0, i1.y, i2.y, 1.0)) +
+                   i.x + vec4(0.0, i1.x, i2.x, 1.0));
 
   float n_ = 0.142857142857;
   vec3 ns = n_ * D.wyz - D.xzx;
@@ -75,24 +73,32 @@ float snoise3(vec3 v) {
   vec3 p2 = vec3(a1.xy, h.z);
   vec3 p3 = vec3(a1.zw, h.w);
 
-  // [OPT-2] аппаратный inversesqrt
-  vec4 norm = inversesqrt(vec4(dot(p0,p0), dot(p1,p1), dot(p2,p2), dot(p3,p3)));
-  p0 *= norm.x; p1 *= norm.y; p2 *= norm.z; p3 *= norm.w;
+  vec4 norm =
+      inversesqrt(vec4(dot(p0, p0), dot(p1, p1), dot(p2, p2), dot(p3, p3)));
+  p0 *= norm.x;
+  p1 *= norm.y;
+  p2 *= norm.z;
+  p3 *= norm.w;
 
-  vec4 m = max(0.6 - vec4(dot(x0,x0), dot(x1,x1), dot(x2,x2), dot(x3,x3)), 0.0);
+  vec4 m =
+      max(0.6 - vec4(dot(x0, x0), dot(x1, x1), dot(x2, x2), dot(x3, x3)), 0.0);
   m = m * m;
-  return 42.0 * dot(m * m, vec4(dot(p0,x0), dot(p1,x1), dot(p2,x2), dot(p3,x3)));
+  return 42.0 *
+         dot(m * m, vec4(dot(p0, x0), dot(p1, x1), dot(p2, x2), dot(p3, x3)));
 }
 
 float tri(float x) { return abs(fract(x) - 0.5); }
-vec3 tri3(vec3 p) { return vec3(tri(p.z+tri(p.y*20.0)), tri(p.z+tri(p.x)), tri(p.y+tri(p.x))); }
+vec3 tri3(vec3 p) {
+  return vec3(tri(p.z + tri(p.y * 20.0)), tri(p.z + tri(p.x)),
+              tri(p.y + tri(p.x)));
+}
 float triNoise3D(vec3 p, float spd) {
   float z = 0.4;
   float rz = 0.1;
   vec3 bp = p;
-  float timeOffset = vTime * 0.1 * spd;  // [OPT-7]
+  float timeOffset = vTime * 0.1 * spd;
 
-  for (int i = 0; i < 5; i++) {           // ← ВОЗВРАЩЕНО: 5 итераций
+  for (int i = 0; i < 5; i++) {
     vec3 dg = tri3(bp * 0.01);
     p += (dg + timeOffset);
     bp *= 4.0;
@@ -104,7 +110,8 @@ float triNoise3D(vec3 p, float spd) {
 }
 
 vec2 rotate(vec2 p, float a) {
-  float s = sin(a); float c = cos(a);
+  float s = sin(a);
+  float c = cos(a);
   return vec2(p.x * c - p.y * s, p.x * s + p.y * c);
 }
 
@@ -112,39 +119,36 @@ float light(float intensity, float dist) {
   return intensity / (1.0 + dist * 11.0);
 }
 
-vec4 makeNoiseBlob2(vec2 uv, vec3 color1, vec3 color2,
-                    float strength, float offset) {
+vec4 makeNoiseBlob2(vec2 uv, vec3 color1, vec3 color2, float strength,
+                    float offset) {
   float len = length(uv);
   float n0 = snoise3(vec3(uv * 1.2 + offset, vTime * 0.5 + offset)) * 0.5 + 0.5;
 
   float d0 = abs(len - n0);
   float v0 = smoothstep(n0 + 0.1 + (sin(vTime + offset) + 1.0), n0, len);
-
-  // [OPT-7] алгебраическое упрощение
   float v1 = light(
-    0.15 - 0.1125 * sin(vTime * 2.0 + offset * 0.5) + 0.3 * strength,
-    d0
-  );
+      0.15 - 0.1125 * sin(vTime * 2.0 + offset * 0.5) + 0.3 * strength, d0);
 
   vec3 col = mix(color1, color2, clamp(uv.y * 2.0, 0.0, 1.0));
   return vec4(clamp(col + v1, 0.0, 1.0), v0);
 }
 
-vec4 makeBlob(vec2 uv, float blob, vec3 color1, vec3 color2,
-              float width, float baseReaction, float likeReaction,
-              float audioStrength, float offset, vec2 noiseOffset) {
+vec4 makeBlob(vec2 uv, float blob, vec3 color1, vec3 color2, float width,
+              float baseReaction, float likeReaction, float audioStrength,
+              float offset, vec2 noiseOffset) {
   float len = length(uv);
-  float outerRadius = blob + width * 0.5 +
-    baseReaction * (1.0 + max(likeReaction, audioStrength * 0.6) * 50.0 * baseReaction);
+  float outerRadius =
+      blob + width * 0.5 +
+      baseReaction *
+          (1.0 + max(likeReaction, audioStrength * 0.6) * 50.0 * baseReaction);
 
   float strength = max(likeReaction, audioStrength);
-  vec4 noise = makeNoiseBlob2(
-    uv * (1.0 - likeReaction * 0.5) + noiseOffset,
-    color1, color2, strength, offset
-  );
+  vec4 noise = makeNoiseBlob2(uv * (1.0 - likeReaction * 0.5) + noiseOffset,
+                              color1, color2, strength, offset);
 
   noise.a *= smoothstep(outerRadius, 0.5, len);
-  noise.rgb += 0.6 * likeReaction * (1.0 - smoothstep(0.2, outerRadius * 0.8, len));
+  noise.rgb +=
+      0.6 * likeReaction * (1.0 - smoothstep(0.2, outerRadius * 0.8, len));
 
   return noise;
 }
@@ -185,17 +189,11 @@ void main() {
     float fi = float(i);
     float radius = CIRCLE_RADIUS_BASE - CIRCLE_RADIUS_STEP * fi;
     vec4 blobColor = makeBlob(
-      uv,
-      mix(radius, radius + 0.3, n0),
-      vColor[i],
-      vColor[i + 3],
-      CIRCLE_WIDTH_BASE - CIRCLE_WIDTH_STEP * fi,
-      (SPARK_STRENGTH_BASE - SPARK_STRENGTH_STEP * fi) * spark,
-      vReact[i],
-      vAudio[i],
-      CIRCLE_OFFSET_BASE + CIRCLE_OFFSET_STEP * fi,
-      rotate(vRotation[i].xy, vTime * vRotation[i].z)
-    );
+        uv, mix(radius, radius + 0.3, n0), vColor[i], vColor[i + 3],
+        CIRCLE_WIDTH_BASE - CIRCLE_WIDTH_STEP * fi,
+        (SPARK_STRENGTH_BASE - SPARK_STRENGTH_STEP * fi) * spark, vReact[i],
+        vAudio[i], CIRCLE_OFFSET_BASE + CIRCLE_OFFSET_STEP * fi,
+        rotate(vRotation[i].xy, vTime * vRotation[i].z));
     color = mix(color, blobColor.rgb, blobColor.a);
   }
 

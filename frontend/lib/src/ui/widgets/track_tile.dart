@@ -204,10 +204,14 @@ class _CommonTrackTileState extends State<CommonTrackTile> {
                                   final link = widget.albumId != null
                                       ? 'https://music.yandex.ru/album/${widget.albumId}/track/${widget.trackId}'
                                       : 'https://music.yandex.ru/track/${widget.trackId}';
-                                  await Clipboard.setData(ClipboardData(text: link));
+                                  await Clipboard.setData(
+                                    ClipboardData(text: link),
+                                  );
                                   if (mounted) {
                                     messenger.showSnackBar(
-                                      const SnackBar(content: Text('Ссылка скопирована')),
+                                      const SnackBar(
+                                        content: Text('Ссылка скопирована'),
+                                      ),
                                     );
                                   }
                                 case 'download':

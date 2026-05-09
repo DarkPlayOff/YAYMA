@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:yayma/src/rust/api/simple.dart';
 
+import 'package:yayma/src/providers/auth_provider.dart';
+
 class RustCachedImage extends StatefulWidget {
   final String? imageUrl;
   final double? width;
@@ -65,7 +67,18 @@ class _RustCachedImageState extends State<RustCachedImage> {
 
   Future<void> _resolvePathAsync(String url) async {
     try {
-      final path = await getCachedImagePath(url: url);
+      final ctx = appContextSignal.value;
+      if (ctx == null) {
+        if (mounted && _lastUrl == url) {
+          setState(() {
+            _resolvedPath = null;
+            _isLoading = false;
+          });
+        }
+        return;
+      }
+
+      final path = await getCachedImagePath(ctx: ctx, url: url);
       if (mounted && _lastUrl == url) {
         if (path != null) {
           _pathCache[url] = path;

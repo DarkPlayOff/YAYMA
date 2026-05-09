@@ -159,7 +159,9 @@ class _AppLayoutState extends State<AppLayout> {
             curve: Curves.easeInOutCubic,
             child: AnimatedSlide(
               duration: const Duration(milliseconds: 500),
-              offset: isLast ? Offset.zero : (isHome ? const Offset(0, -0.05) : Offset.zero),
+              offset: isLast
+                  ? Offset.zero
+                  : (isHome ? const Offset(0, -0.05) : Offset.zero),
               curve: Curves.easeOutCubic,
               child: IgnorePointer(
                 ignoring: !isLast,

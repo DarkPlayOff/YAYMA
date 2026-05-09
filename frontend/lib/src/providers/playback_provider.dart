@@ -158,9 +158,10 @@ final FlutterComputed<String?> currentCoverUrlSignal = computed(
 // Color scheme generated from cover image
 final FutureSignal<ColorScheme?> colorSchemeSignal = computedAsync(() async {
   final url = currentCoverUrlSignal();
-  if (url == null) return null;
+  final ctx = appContextSignal.value;
+  if (url == null || ctx == null) return null;
 
-  final path = await rust.getCachedImagePath(url: url);
+  final path = await rust.getCachedImagePath(ctx: ctx, url: url);
   if (path == null) return null;
 
   // Resize to minimum for faster quantization

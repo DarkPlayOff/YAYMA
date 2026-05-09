@@ -180,7 +180,7 @@ pub fn spawn_settings_worker(ctx: Arc<AppContext>, mut shutdown_rx: watch::Recei
     });
 }
 
-pub fn spawn_cache_worker(mut shutdown_rx: watch::Receiver<bool>) {
+pub fn spawn_cache_worker(ctx: Arc<AppContext>, mut shutdown_rx: watch::Receiver<bool>) {
     tokio::spawn(async move {
         // Wait a bit after startup
         tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
@@ -189,7 +189,7 @@ pub fn spawn_cache_worker(mut shutdown_rx: watch::Receiver<bool>) {
         loop {
             tokio::select! {
                 _ = interval.tick() => {
-                    let cache = crate::storage::cache::get_http_cache().await;
+                    let cache = &ctx.core.http_cache;
                     // Prune to 512 MB
                     let _ = cache.prune(1024 * 1024 * 512).await;
                 }

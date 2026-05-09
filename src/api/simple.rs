@@ -22,20 +22,20 @@ pub fn app_event_stream(ctx: &AppContext, sink: StreamSink<AppEvent>) {
     logic::app_event_stream(ctx, sink)
 }
 
-pub async fn get_cached_image_path(url: String) -> Option<String> {
-    logic::get_cached_image_path(url).await
+pub async fn get_cached_image_path(ctx: &AppContext, url: String) -> Option<String> {
+    logic::get_cached_image_path(ctx, url).await
 }
 
-pub async fn prune_expired_cache() {
-    logic::prune_expired_cache().await
+pub async fn prune_expired_cache(ctx: &AppContext) {
+    logic::prune_expired_cache(ctx).await
 }
 
-pub async fn get_cache_size() -> i64 {
-    logic::get_cache_size().await
+pub async fn get_cache_size(ctx: &AppContext) -> i64 {
+    logic::get_cache_size(ctx).await
 }
 
-pub async fn clear_cache() {
-    logic::clear_cache().await
+pub async fn clear_cache(ctx: &AppContext) {
+    logic::clear_cache(ctx).await
 }
 
 pub fn is_discord_rpc_enabled(ctx: &AppContext) -> bool {

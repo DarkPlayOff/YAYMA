@@ -15,6 +15,7 @@ use crate::audio::thumbnail::ThumbnailManager;
 pub struct SmtcManager {
     controls: MediaControls,
     _cmd_tx: mpsc::UnboundedSender<AudioMessage>,
+    http_cache: std::sync::Arc<crate::storage::cache::HttpCache>,
     #[cfg(target_os = "windows")]
     thumbnail_manager: Option<ThumbnailManager>,
 }
@@ -23,6 +24,7 @@ impl SmtcManager {
     pub fn new(
         _event_tx: Sender<Event>,
         cmd_tx: mpsc::UnboundedSender<AudioMessage>,
+        http_cache: std::sync::Arc<crate::storage::cache::HttpCache>,
     ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         #[cfg(target_os = "windows")]
         unsafe {
@@ -88,6 +90,7 @@ impl SmtcManager {
         Ok(Self {
             controls,
             _cmd_tx: cmd_tx,
+            http_cache,
             #[cfg(target_os = "windows")]
             thumbnail_manager,
         })
@@ -113,8 +116,8 @@ impl SmtcManager {
         #[cfg(target_os = "windows")]
         if let (Some(url), Some(thumb_mgr)) = (&cover_url, self.thumbnail_manager) {
             let url_clone = url.clone();
+            let cache = self.http_cache.clone();
             tokio::spawn(async move {
-                let cache = crate::storage::cache::get_http_cache().await;
                 if let Ok(path) = cache.get_file(&url_clone).await
                     && let Ok(bytes) = tokio::fs::read(path).await
                 {

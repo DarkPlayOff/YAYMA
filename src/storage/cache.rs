@@ -1,4 +1,3 @@
-use crate::app::get_db;
 use directories::ProjectDirs;
 use foldhash::HashMap;
 use foldhash::HashMapExt;
@@ -9,6 +8,9 @@ use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 use tokio::fs;
 use tokio::sync::broadcast;
+use crate::db::AppDatabase;
+use parking_lot::Mutex;
+use std::sync::Arc;
 
 pub struct ActiveDownloads {
     pub map: SyncMutex<HashMap<String, broadcast::Sender<Result<PathBuf, String>>>>,
@@ -25,16 +27,11 @@ fn get_active_downloads() -> &'static ActiveDownloads {
 pub struct HttpCache {
     cache_dir: PathBuf,
     client: reqwest::Client,
-}
-
-impl Default for HttpCache {
-    fn default() -> Self {
-        Self::new()
-    }
+    db: Arc<Mutex<AppDatabase>>,
 }
 
 impl HttpCache {
-    pub fn new() -> Self {
+    pub fn new(db: Arc<Mutex<AppDatabase>>) -> Self {
         let cache_dir = if let Some(proj_dirs) = ProjectDirs::from("com", "yamusic", "yamusic") {
             proj_dirs.cache_dir().join("http_cache")
         } else {
@@ -50,7 +47,7 @@ impl HttpCache {
             .build()
             .unwrap_or_else(|_| reqwest::Client::new());
 
-        Self { cache_dir, client }
+        Self { cache_dir, client, db }
     }
 
     pub fn get_cache_dir(&self) -> &Path {
@@ -69,19 +66,17 @@ impl HttpCache {
     ) -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
         // 1. Check DB for existing cache
         {
-            if let Some(db_arc) = get_db() {
-                let path_opt = tokio::task::block_in_place(|| {
-                    let db = db_arc.lock();
-                    db.get_cache_metadata(url).ok().flatten()
-                });
+            let path_opt = tokio::task::block_in_place(|| {
+                let db = self.db.lock();
+                db.get_cache_metadata(url).ok().flatten()
+            });
 
-                if let Some((path, _, is_expired)) = path_opt {
-                    let path = PathBuf::from(&path);
-                    if path.exists() && !is_expired {
-                        return Ok(path);
-                    }
-                    // Expired or missing file — will re-download below
+            if let Some((path, _, is_expired)) = path_opt {
+                let path = PathBuf::from(&path);
+                if path.exists() && !is_expired {
+                    return Ok(path);
                 }
+                // Expired or missing file — will re-download below
             }
         }
 
@@ -174,10 +169,10 @@ impl HttpCache {
         }
 
         // Update DB
-        if let Some(db_arc) = get_db() {
+        {
             let path_str = file_path.to_string_lossy().to_string();
             tokio::task::block_in_place(|| {
-                let db = db_arc.lock();
+                let db = self.db.lock();
                 let _ = db.update_cache_metadata(url, &path_str, size, etag.as_deref());
             });
         }
@@ -190,11 +185,8 @@ impl HttpCache {
         max_size_bytes: i64,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let to_delete = {
-            let Some(db_arc) = get_db() else {
-                return Ok(()); // DB not initialized
-            };
             tokio::task::block_in_place(|| {
-                let db = db_arc.lock();
+                let db = self.db.lock();
                 db.prune_cache(max_size_bytes)
             })?
         };
@@ -227,23 +219,18 @@ impl HttpCache {
         if self.cache_dir.exists() {
             fs::remove_dir_all(&self.cache_dir).await?;
         }
-        if let Some(db_arc) = get_db() {
-            tokio::task::block_in_place(|| {
-                let db = db_arc.lock();
-                let _ = db.clear_cache_metadata();
-            });
-        }
+        tokio::task::block_in_place(|| {
+            let db = self.db.lock();
+            let _ = db.clear_cache_metadata();
+        });
         Ok(())
     }
 
     /// Prune all expired entries from cache.
     pub async fn prune_expired(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let to_delete = {
-            let Some(db_arc) = get_db() else {
-                return Ok(()); // DB not initialized, nothing to prune
-            };
             tokio::task::block_in_place(|| {
-                let db = db_arc.lock();
+                let db = self.db.lock();
                 db.prune_expired()
             })?
         };
@@ -254,10 +241,4 @@ impl HttpCache {
 
         Ok(())
     }
-}
-
-pub static HTTP_CACHE: tokio::sync::OnceCell<HttpCache> = tokio::sync::OnceCell::const_new();
-
-pub async fn get_http_cache() -> &'static HttpCache {
-    HTTP_CACHE.get_or_init(|| async { HttpCache::new() }).await
 }

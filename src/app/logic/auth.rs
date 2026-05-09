@@ -1,10 +1,10 @@
 use crate::api::models::{AppError, SavedStateDto, UserAccountDto};
-use crate::app::{APP_DB, AppContext, initialize_app};
+use crate::app::{AppContext, initialize_app};
 use crate::auth::TokenProvider;
 use crate::http::ApiService;
 
-pub async fn restore_saved_state(_ctx: &AppContext) -> Option<SavedStateDto> {
-    let db = APP_DB.get()?.lock();
+pub async fn restore_saved_state(ctx: &AppContext) -> Option<SavedStateDto> {
+    let db = ctx.core.db.lock();
     db.load_playback_state()
         .ok()
         .flatten()

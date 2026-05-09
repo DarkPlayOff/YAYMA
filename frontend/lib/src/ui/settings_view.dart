@@ -29,7 +29,9 @@ class _SettingsViewState extends State<SettingsView> {
       return rust.getDownloadPath(ctx: ctx);
     });
     _cacheSizeSignal = futureSignal(() async {
-      return simple.getCacheSize();
+      final ctx = appContextSignal.value;
+      if (ctx == null) return 0;
+      return simple.getCacheSize(ctx: ctx);
     });
     _versionSignal = futureSignal(() async {
       return simple.getAppVersion();
@@ -73,7 +75,9 @@ class _SettingsViewState extends State<SettingsView> {
   }
 
   Future<void> _clearCache() async {
-    await simple.clearCache();
+    final ctx = appContextSignal.value;
+    if (ctx == null) return;
+    await simple.clearCache(ctx: ctx);
     unawaited(_cacheSizeSignal.refresh());
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -133,7 +137,9 @@ class _SettingsViewState extends State<SettingsView> {
                       title: 'Discord Rich Presence',
                       subtitle: 'Показывать текущий трек в статусе Discord',
                       icon: Icons.discord_rounded,
-                      onTap: () => unawaited(_toggleDiscordRpc(!(enabled.value ?? true))),
+                      onTap: () => unawaited(
+                        _toggleDiscordRpc(!(enabled.value ?? true)),
+                      ),
                       trailing: Switch(
                         value: enabled.value ?? true,
                         onChanged: (v) => unawaited(_toggleDiscordRpc(v)),
