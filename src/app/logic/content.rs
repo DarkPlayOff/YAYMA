@@ -11,7 +11,7 @@ use foldhash::HashMapExt;
 async fn get_liked_snapshot(
     ctx: &AppContext,
 ) -> (foldhash::HashSet<String>, foldhash::HashSet<String>) {
-    ctx.state.read().await.liked.snapshot()
+    ctx.audio.state.read().await.liked.snapshot()
 }
 
 macro_rules! map_results {
@@ -23,7 +23,7 @@ macro_rules! map_results {
 
 pub async fn search(ctx: &AppContext, query: String) -> Option<SearchResultsDto> {
     let (liked, disliked) = get_liked_snapshot(ctx).await;
-    let results = ctx.api.search(&query).await.ok()?;
+    let results = ctx.core.api.search(&query).await.ok()?;
 
     Some(SearchResultsDto {
         tracks: map_results!(results.tracks, |t| {
@@ -36,12 +36,12 @@ pub async fn search(ctx: &AppContext, query: String) -> Option<SearchResultsDto>
 }
 
 pub async fn set_download_path(ctx: &AppContext, path: String) -> Result<(), AppError> {
-    ctx.db.lock().save_download_path(&path)?;
+    ctx.core.db.lock().save_download_path(&path)?;
     Ok(())
 }
 
 pub async fn get_download_path(ctx: &AppContext) -> Result<Option<String>, AppError> {
-    Ok(ctx.db.lock().load_download_path()?)
+    Ok(ctx.core.db.lock().load_download_path()?)
 }
 
 pub async fn get_downloads_size(_ctx: &AppContext) -> i64 {
@@ -49,7 +49,7 @@ pub async fn get_downloads_size(_ctx: &AppContext) -> i64 {
 }
 
 pub async fn download_track(ctx: &AppContext, track_id: String) -> Result<String, AppError> {
-    let api = &ctx.api;
+    let api = &ctx.core.api;
     let (liked, disliked) = get_liked_snapshot(ctx).await;
 
     let track = api
@@ -86,7 +86,7 @@ pub async fn download_track(ctx: &AppContext, track_id: String) -> Result<String
 
     let dest_path = {
         let mut dir = ctx
-            .db
+            .core.db
             .lock()
             .load_download_path()
             .ok()
@@ -204,7 +204,7 @@ pub async fn get_track_details(
     track_id: String,
 ) -> Result<TrackDetailsDto, AppError> {
     let track = ctx
-        .api
+        .core.api
         .fetch_tracks(vec![track_id.clone()])
         .await?
         .into_iter()
@@ -215,7 +215,7 @@ pub async fn get_track_details(
 
 pub async fn get_album_details(ctx: &AppContext, album_id: u32) -> Option<AlbumDetailsDto> {
     let (liked, disliked) = get_liked_snapshot(ctx).await;
-    let album = ctx.api.fetch_album_with_tracks(album_id).await.ok()?;
+    let album = ctx.core.api.fetch_album_with_tracks(album_id).await.ok()?;
     Some(AlbumDetailsDto::from_yandex(album, &liked, &disliked))
 }
 
@@ -227,8 +227,8 @@ pub async fn get_artist_details(
 ) -> Option<ArtistDetailsDto> {
     let (liked, disliked) = get_liked_snapshot(ctx).await;
     let (artist_res, tracks_res) = tokio::join!(
-        ctx.api.fetch_artist(artist_id.clone()),
-        ctx.api
+        ctx.core.api.fetch_artist(artist_id.clone()),
+        ctx.core.api
             .fetch_artist_tracks_paginated(artist_id.clone(), page, page_size)
     );
 
@@ -255,12 +255,12 @@ pub async fn get_playlist_details(
     query: Option<String>,
 ) -> Option<PlaylistDetailsDto> {
     let (liked, disliked) = get_liked_snapshot(ctx).await;
-    let mut playlist = ctx.api.fetch_playlist(kind).await.ok()?;
+    let mut playlist = ctx.core.api.fetch_playlist(kind).await.ok()?;
     let tracks_enum = playlist
         .tracks
         .take()
         .unwrap_or_else(|| yandex_music::model::playlist::PlaylistTracks::Full(vec![]));
-    let tracks_vec = crate::util::track::fetch_full_tracks(&ctx.api, tracks_enum).await;
+    let tracks_vec = crate::util::track::fetch_full_tracks(&ctx.core.api, tracks_enum).await;
 
     let query_lower = query.map(|q| q.to_lowercase());
     let mapped_tracks: Vec<SimpleTrackDto> = tracks_vec
@@ -287,7 +287,7 @@ pub async fn get_playlist_details(
 }
 
 pub async fn fetch_wave_stations(ctx: &AppContext) -> Vec<StationCategoryDto> {
-    let stations = ctx.api.fetch_stations().await.unwrap_or_default();
+    let stations = ctx.core.api.fetch_stations().await.unwrap_or_default();
     let mut grouped: foldhash::HashMap<String, Vec<StationItemDto>> = foldhash::HashMap::new();
 
     for rotor in stations {
@@ -329,7 +329,7 @@ pub async fn fetch_wave_stations(ctx: &AppContext) -> Vec<StationCategoryDto> {
 }
 
 pub async fn get_lyrics(ctx: &AppContext, track_id: String) -> Option<String> {
-    ctx.api
+    ctx.core.api
         .fetch_lyrics(
             track_id,
             yandex_music::model::info::lyrics::LyricsFormat::LRC,

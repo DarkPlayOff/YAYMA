@@ -7,7 +7,7 @@ pub fn get_app_version() -> String {
 }
 
 pub fn app_event_stream(ctx: &AppContext, sink: StreamSink<AppEvent>) {
-    let _ = ctx.event_sink.set(sink);
+    let _ = ctx.system.event_sink.set(sink);
 }
 
 pub async fn get_cached_image_path(url: String) -> Option<String> {
@@ -35,11 +35,11 @@ pub async fn clear_cache() {
 }
 
 pub fn is_discord_rpc_enabled(ctx: &AppContext) -> bool {
-    ctx.signals.discord_rpc.get()
+    ctx.audio.signals.discord_rpc.get()
 }
 
 pub fn set_discord_rpc_enabled(ctx: &AppContext, enabled: bool) {
-    ctx.signals.discord_rpc.set(enabled);
-    let db = ctx.db.lock();
+    ctx.audio.signals.discord_rpc.set(enabled);
+    let db = ctx.core.db.lock();
     let _ = db.save_discord_rpc(enabled);
 }

@@ -41,5 +41,5 @@ pub async fn try_auto_login() -> Option<AppContext> {
 }
 
 pub async fn get_account_info(ctx: &AppContext) -> Option<UserAccountDto> {
-    ctx.api.get_account_info().await.ok()
+    ctx.core.api.get_account_info().await.ok()
 }

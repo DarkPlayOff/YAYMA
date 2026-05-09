@@ -5,30 +5,30 @@ use foldhash::HashMapExt;
 
 pub async fn toggle_like(ctx: &AppContext, track_id: String) {
     let is_liked = {
-        let state = ctx.state.read().await;
+        let state = ctx.audio.state.read().await;
         state.liked.is_liked(&track_id)
     };
 
     // Instant local update (Optimistic UI)
     {
-        let mut state = ctx.state.write().await;
+        let mut state = ctx.audio.state.write().await;
         state.liked.set_like_status(&track_id, !is_liked);
 
         // Update DB immediately for search and offline access
-        let db = ctx.db.lock();
+        let db = ctx.core.db.lock();
         if is_liked {
             let _ = db.remove_liked_track(&track_id);
         } else {
             let _ = db.add_liked_track(&track_id);
         }
 
-        ctx.signals.library_changed.send_replace(());
-        ctx.signals.changed.send_replace(());
+        ctx.audio.signals.library_changed.send_replace(());
+        ctx.audio.signals.changed.send_replace(());
     }
 
     // Perform API request in background
-    let api = ctx.api.clone();
-    let audio_tx = ctx.audio_tx.clone();
+    let api = ctx.core.api.clone();
+    let audio_tx = ctx.audio.tx.clone();
     tokio::spawn(async move {
         if is_liked {
             let _ = api.remove_like_track(track_id.clone()).await;
@@ -44,29 +44,29 @@ pub async fn toggle_like(ctx: &AppContext, track_id: String) {
     });
 
     // Vibe effect (if liking)
-    if !is_liked && let Ok(mut vibe) = ctx.signals.monitor.vibe.try_lock() {
+    if !is_liked && let Ok(mut vibe) = ctx.audio.signals.monitor.vibe.try_lock() {
         vibe.trigger_like();
     }
 }
 
 pub async fn toggle_dislike(ctx: &AppContext, track_id: String) {
     let is_disliked = {
-        let state = ctx.state.read().await;
+        let state = ctx.audio.state.read().await;
         state.liked.is_disliked(&track_id)
     };
 
     // Instant local update
     {
-        let mut state = ctx.state.write().await;
+        let mut state = ctx.audio.state.write().await;
         state.liked.set_dislike_status(&track_id, !is_disliked);
-        ctx.signals.library_changed.send_replace(());
-        ctx.signals.changed.send_replace(());
+        ctx.audio.signals.library_changed.send_replace(());
+        ctx.audio.signals.changed.send_replace(());
     }
 
     // Perform API request in background
-    let api = ctx.api.clone();
+    let api = ctx.core.api.clone();
     let track_id_clone = track_id.clone();
-    let audio_tx = ctx.audio_tx.clone();
+    let audio_tx = ctx.audio.tx.clone();
     tokio::spawn(async move {
         if is_disliked {
             let _ = api.remove_dislike_track(track_id_clone.clone()).await;
@@ -91,7 +91,7 @@ pub async fn upload_user_track(
     file_path: String,
     playlist_kind: Option<u32>,
 ) -> bool {
-    let api = &ctx.api;
+    let api = &ctx.core.api;
 
     let file_name = std::path::Path::new(&file_path)
         .file_name()
@@ -129,7 +129,7 @@ pub async fn upload_user_track(
 }
 
 pub async fn get_playlists(ctx: &AppContext) -> Vec<SimplePlaylistDto> {
-    match ctx.api.fetch_all_playlists().await {
+    match ctx.core.api.fetch_all_playlists().await {
         Ok(playlists) => playlists
             .into_iter()
             .map(SimplePlaylistDto::from_yandex)
@@ -144,7 +144,7 @@ pub async fn add_track_to_playlist(
     track_id: String,
     album_id: Option<String>,
 ) -> bool {
-    ctx.api
+    ctx.core.api
         .add_track_to_playlist(kind, track_id, album_id.unwrap_or_default())
         .await
         .is_ok()
@@ -156,26 +156,26 @@ pub async fn remove_track_from_playlist(
     track_id: String,
     album_id: Option<String>,
 ) -> bool {
-    ctx.api
+    ctx.core.api
         .remove_track_from_playlist(kind, track_id, album_id.unwrap_or_default())
         .await
         .is_ok()
 }
 
 pub async fn create_playlist(ctx: &AppContext, title: String, is_public: bool) -> bool {
-    ctx.api.create_playlist(title, is_public).await.is_ok()
+    ctx.core.api.create_playlist(title, is_public).await.is_ok()
 }
 
 pub async fn delete_playlist(ctx: &AppContext, kind: u32) -> bool {
-    ctx.api.delete_playlist(kind).await.is_ok()
+    ctx.core.api.delete_playlist(kind).await.is_ok()
 }
 
 pub async fn rename_playlist(ctx: &AppContext, kind: u32, new_title: String) -> bool {
-    ctx.api.rename_playlist(kind, new_title).await.is_ok()
+    ctx.core.api.rename_playlist(kind, new_title).await.is_ok()
 }
 
 pub async fn set_playlist_visibility(ctx: &AppContext, kind: u32, is_public: bool) -> bool {
-    ctx.api
+    ctx.core.api
         .change_playlist_visibility(kind, is_public)
         .await
         .is_ok()
@@ -189,7 +189,7 @@ pub async fn move_track_in_playlist(
     track_id: String,
     album_id: Option<String>,
 ) -> bool {
-    ctx.api
+    ctx.core.api
         .move_track_in_playlist(
             kind,
             from_index as usize,
@@ -211,7 +211,7 @@ async fn fetch_and_save_missing_metadata(
     }
 
     for chunk in missing_ids.chunks(50) {
-        if let Ok(tracks) = ctx.api.fetch_tracks(chunk.to_vec()).await {
+        if let Ok(tracks) = ctx.core.api.fetch_tracks(chunk.to_vec()).await {
             for t in tracks {
                 let artists: Vec<crate::api::models::TrackArtistDto> = t
                     .artists
@@ -238,7 +238,7 @@ async fn fetch_and_save_missing_metadata(
                     duration_ms,
                 };
 
-                let _ = ctx.db.lock().upsert_track_metadata(metadata_to_save.clone());
+                let _ = ctx.core.db.lock().upsert_track_metadata(metadata_to_save.clone());
                 metadata_map.insert(t.id, metadata_to_save);
             }
         }
@@ -269,7 +269,7 @@ pub async fn liked_tracks_stream(
     sink: StreamSink<Vec<SimpleTrackDto>>,
     query: Option<String>,
 ) {
-    let mut changed_rx = ctx.signals.library_changed_rx.clone();
+    let mut changed_rx = ctx.audio.signals.library_changed_rx.clone();
 
     loop {
         // Send an empty list as a reset signal for the frontend
@@ -278,17 +278,17 @@ pub async fn liked_tracks_stream(
             return;
         }
 
-        let (liked_ids, disliked_ids_set) = ctx.state.read().await.liked.ordered_snapshot();
+        let (liked_ids, disliked_ids_set) = ctx.audio.state.read().await.liked.ordered_snapshot();
 
         // 1. Search processing (using DB)
         if let Some(ref q) = query
             && !q.trim().is_empty()
         {
-            if let Ok(found_ids) = ctx.db.lock().search_liked_tracks(q)
+            if let Ok(found_ids) = ctx.core.db.lock().search_liked_tracks(q)
                 && !found_ids.is_empty()
             {
                 // Use metadata from DB for search
-                if let Ok(metadata) = ctx.db.lock().get_track_metadata(&found_ids) {
+                if let Ok(metadata) = ctx.core.db.lock().get_track_metadata(&found_ids) {
                     let mut dtos = Vec::with_capacity(50);
                     for m in metadata {
                         dtos.push(metadata_to_dto(m, true, false));
@@ -311,14 +311,14 @@ pub async fn liked_tracks_stream(
             if liked_ids.is_empty() {
                 // If local is empty, might not have synced yet
                 let _ = ctx
-                    .audio_tx
+                    .audio.tx
                     .send(crate::audio::commands::AudioMessage::SyncLiked)
                     .await;
             }
 
             // Try to fetch metadata from DB for all liked IDs
             let mut metadata_map = foldhash::HashMap::new();
-            if let Ok(metadata) = ctx.db.lock().get_track_metadata(&liked_ids) {
+            if let Ok(metadata) = ctx.core.db.lock().get_track_metadata(&liked_ids) {
                 for m in metadata {
                     metadata_map.insert(m.id.clone(), m);
                 }

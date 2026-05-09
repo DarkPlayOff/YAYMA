@@ -37,20 +37,20 @@ pub fn get_playback_state(
 }
 
 pub async fn toggle_play_pause(ctx: &AppContext) {
-    let _ = ctx.audio_tx.send(AudioMessage::PlayPause).await;
+    let _ = ctx.audio.tx.send(AudioMessage::PlayPause).await;
 }
 
 pub async fn play_next(ctx: &AppContext) {
-    let _ = ctx.audio_tx.send(AudioMessage::Next).await;
+    let _ = ctx.audio.tx.send(AudioMessage::Next).await;
 }
 
 pub async fn play_prev(ctx: &AppContext) {
-    let _ = ctx.audio_tx.send(AudioMessage::Prev).await;
+    let _ = ctx.audio.tx.send(AudioMessage::Prev).await;
 }
 
 pub async fn seek(ctx: &AppContext, position_ms: u32) {
     let _ = ctx
-        .audio_tx
+        .audio.tx
         .send(AudioMessage::Seek(std::time::Duration::from_millis(
             position_ms as u64,
         )))
@@ -58,8 +58,8 @@ pub async fn seek(ctx: &AppContext, position_ms: u32) {
 }
 
 pub async fn set_volume(ctx: &AppContext, volume: u8) {
-    let _ = ctx.audio_tx.send(AudioMessage::SetVolume(volume)).await;
-    let db = ctx.db.clone();
+    let _ = ctx.audio.tx.send(AudioMessage::SetVolume(volume)).await;
+    let db = ctx.core.db.clone();
     tokio::task::spawn_blocking(move || {
         let db = db.lock();
         let _ = db.save_volume(volume);
@@ -67,20 +67,20 @@ pub async fn set_volume(ctx: &AppContext, volume: u8) {
 }
 
 pub async fn toggle_shuffle(ctx: &AppContext) {
-    let _ = ctx.audio_tx.send(AudioMessage::ToggleShuffle).await;
+    let _ = ctx.audio.tx.send(AudioMessage::ToggleShuffle).await;
 }
 
 pub async fn toggle_repeat_mode(ctx: &AppContext) {
-    let _ = ctx.audio_tx.send(AudioMessage::ToggleRepeatMode).await;
+    let _ = ctx.audio.tx.send(AudioMessage::ToggleRepeatMode).await;
 }
 
 pub async fn stop(ctx: &AppContext) {
-    let _ = ctx.audio_tx.send(AudioMessage::Stop).await;
+    let _ = ctx.audio.tx.send(AudioMessage::Stop).await;
 }
 
 pub async fn get_queue(ctx: &AppContext) -> Vec<SimpleTrackDto> {
-    let (liked_ids, disliked_ids) = ctx.state.read().await.liked.snapshot();
-    ctx.signals.queue.with(|q| {
+    let (liked_ids, disliked_ids) = ctx.audio.state.read().await.liked.snapshot();
+    ctx.audio.signals.queue.with(|q| {
         q.iter()
             .map(|t| SimpleTrackDto::from_yandex(t, &liked_ids, &disliked_ids))
             .collect()
@@ -88,8 +88,8 @@ pub async fn get_queue(ctx: &AppContext) -> Vec<SimpleTrackDto> {
 }
 
 pub async fn get_history(ctx: &AppContext) -> Vec<SimpleTrackDto> {
-    let (liked_ids, disliked_ids) = ctx.state.read().await.liked.snapshot();
-    ctx.signals.history.with(|h| {
+    let (liked_ids, disliked_ids) = ctx.audio.state.read().await.liked.snapshot();
+    ctx.audio.signals.history.with(|h| {
         h.iter()
             .map(|t| SimpleTrackDto::from_yandex(t, &liked_ids, &disliked_ids))
             .collect()
@@ -97,10 +97,10 @@ pub async fn get_history(ctx: &AppContext) -> Vec<SimpleTrackDto> {
 }
 
 pub async fn play_track(ctx: &AppContext, track_id: String) {
-    if let Ok(tracks) = ctx.api.fetch_tracks(vec![track_id]).await
+    if let Ok(tracks) = ctx.core.api.fetch_tracks(vec![track_id]).await
         && let Some(track) = tracks.into_iter().next()
     {
-        let _ = ctx.audio_tx.send(AudioMessage::PlayTrack(track)).await;
+        let _ = ctx.audio.tx.send(AudioMessage::PlayTrack(track)).await;
     }
 }
 
@@ -110,49 +110,49 @@ pub async fn restore_and_play(
     position_ms: u32,
     is_playing: bool,
 ) {
-    if let Ok(tracks) = ctx.api.fetch_tracks(vec![track_id]).await
+    if let Ok(tracks) = ctx.core.api.fetch_tracks(vec![track_id]).await
         && let Some(track) = tracks.into_iter().next()
     {
         let pos = std::time::Duration::from_millis(position_ms as u64);
         let _ = ctx
-            .audio_tx
+            .audio.tx
             .send(AudioMessage::PlayTrackPaused(track, pos))
             .await;
         if is_playing {
-            let _ = ctx.audio_tx.send(AudioMessage::Resume).await;
+            let _ = ctx.audio.tx.send(AudioMessage::Resume).await;
         }
     }
 }
 
 pub async fn play_playlist(ctx: &AppContext, _uid: String, kind: u32) {
-    let _ = ctx.audio_tx.send(AudioMessage::PlayPlaylist(kind)).await;
+    let _ = ctx.audio.tx.send(AudioMessage::PlayPlaylist(kind)).await;
 }
 
 pub async fn play_album(ctx: &AppContext, album_id: u32) {
-    let _ = ctx.audio_tx.send(AudioMessage::PlayAlbum(album_id)).await;
+    let _ = ctx.audio.tx.send(AudioMessage::PlayAlbum(album_id)).await;
 }
 
 pub async fn play_album_track(ctx: &AppContext, album_id: u32, track_id: String) {
     let _ = ctx
-        .audio_tx
+        .audio.tx
         .send(AudioMessage::PlayAlbumTrack(album_id, track_id))
         .await;
 }
 
 pub async fn play_playlist_track(ctx: &AppContext, _uid: String, kind: u32, track_id: String) {
     let _ = ctx
-        .audio_tx
+        .audio.tx
         .send(AudioMessage::PlayPlaylistTrack(kind, track_id))
         .await;
 }
 
 pub async fn play_liked_track(ctx: &AppContext, track_id: String) {
     let _ = ctx
-        .audio_tx
+        .audio.tx
         .send(AudioMessage::PlayLikedTrack(track_id))
         .await;
 }
 
 pub async fn start_wave(ctx: &AppContext, seeds: Vec<String>) {
-    let _ = ctx.audio_tx.send(AudioMessage::StartWave(seeds)).await;
+    let _ = ctx.audio.tx.send(AudioMessage::StartWave(seeds)).await;
 }

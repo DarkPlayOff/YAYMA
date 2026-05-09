@@ -64,7 +64,7 @@ async fn initialize_services(
     );
 
     load_persisted_settings(&context).await;
-    context.signals.monitor.set_enabled(true);
+    context.audio.signals.monitor.set_enabled(true);
 
     let context_arc = Arc::new(context.clone());
 

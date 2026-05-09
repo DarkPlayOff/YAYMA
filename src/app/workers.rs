@@ -6,12 +6,12 @@ use tokio::sync::watch;
 
 pub fn spawn_sync_worker(ctx: Arc<AppContext>, mut shutdown_rx: watch::Receiver<bool>) {
     tokio::spawn(async move {
-        let _ = ctx.audio_tx.send(AudioMessage::SyncLiked).await;
+        let _ = ctx.audio.tx.send(AudioMessage::SyncLiked).await;
 
         loop {
             tokio::select! {
                 _ = tokio::time::sleep(tokio::time::Duration::from_secs(300)) => {
-                    let _ = ctx.audio_tx.send(AudioMessage::SyncLiked).await;
+                    let _ = ctx.audio.tx.send(AudioMessage::SyncLiked).await;
                 }
                 _ = shutdown_rx.changed() => {
                     if *shutdown_rx.borrow() { break; }
@@ -34,7 +34,7 @@ pub fn spawn_event_worker(
                     let Ok(event) = res else { break };
                     match event {
                         Event::TrackEnded => {
-                            let _ = ctx.audio_tx.send(AudioMessage::TrackEnded).await;
+                            let _ = ctx.audio.tx.send(AudioMessage::TrackEnded).await;
                         }
                         Event::Error(msg) => {
                             ctx.send_event(crate::api::simple::AppEvent::Error(msg));
@@ -52,8 +52,8 @@ pub fn spawn_event_worker(
 
 pub fn spawn_bridge_worker(ctx: Arc<AppContext>, mut shutdown_rx: watch::Receiver<bool>) {
     tokio::spawn(async move {
-        let audio_signals = ctx.signals.clone();
-        let audio_state = ctx.state.clone();
+        let audio_signals = ctx.audio.signals.clone();
+        let audio_state = ctx.audio.state.clone();
 
         // Send initial state
         {
@@ -95,7 +95,7 @@ pub fn spawn_bridge_worker(ctx: Arc<AppContext>, mut shutdown_rx: watch::Receive
                     let position_ms = audio_signals.position_ms.get();
                     let is_playing = audio_signals.is_playing.get();
                     if let Some(track_id) = track_id {
-                        let db_arc = ctx.db.clone();
+                        let db_arc = ctx.core.db.clone();
                         tokio::task::spawn_blocking(move || {
                             let db = db_arc.lock();
                             let _ = db.save_playback_state(&track_id, position_ms, is_playing);
@@ -128,7 +128,7 @@ pub fn spawn_bridge_worker(ctx: Arc<AppContext>, mut shutdown_rx: watch::Receive
                         // Save only if position changed significantly (> 3 sec)
                         if let Some(track_id) = track_id {
                             if position_ms.saturating_sub(last_saved_position_ms) > 3000 {
-                                let db_arc = ctx.db.clone();
+                                let db_arc = ctx.core.db.clone();
                                 tokio::task::spawn_blocking(move || {
                                     let db = db_arc.lock();
                                     let _ = db.save_playback_state(&track_id, position_ms, true);
@@ -151,9 +151,9 @@ pub fn spawn_settings_worker(ctx: Arc<AppContext>, mut shutdown_rx: watch::Recei
                     tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
 
                     let ctx_clone = ctx.clone();
-                    let db_arc = ctx.db.clone();
+                    let db_arc = ctx.core.db.clone();
                     tokio::task::spawn_blocking(move || {
-                        let guard = ctx_clone.effect_handles.read();
+                        let guard = ctx_clone.audio.effect_handles.read();
                         let db = db_arc.lock();
 
                         if let Some(eq) = guard.get("eq") {
@@ -161,7 +161,7 @@ pub fn spawn_settings_worker(ctx: Arc<AppContext>, mut shutdown_rx: watch::Recei
                             let _ = db.save_equalizer(eq.is_enabled(), &bands);
                         }
 
-                        let _ = db.save_audio_quality(ctx_clone.api.get_quality());
+                        let _ = db.save_audio_quality(ctx_clone.core.api.get_quality());
 
                         for (id, handle) in guard.iter() {
                             if matches!(id.as_str(), "eq" | "monitor" | "fade") {

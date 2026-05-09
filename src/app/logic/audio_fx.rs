@@ -3,29 +3,29 @@ use crate::app::{AppContext, SETTINGS_CHANGED};
 use crate::audio::commands::AudioMessage;
 
 pub async fn get_audio_quality(ctx: &AppContext) -> AudioQuality {
-    ctx.api.get_quality()
+    ctx.core.api.get_quality()
 }
 
 pub async fn set_audio_quality(ctx: &AppContext, quality: AudioQuality) {
-    ctx.api.set_quality(quality);
+    ctx.core.api.set_quality(quality);
     SETTINGS_CHANGED.notify_one();
-    let _ = ctx.audio_tx.send(AudioMessage::ReloadCurrentTrack).await;
+    let _ = ctx.audio.tx.send(AudioMessage::ReloadCurrentTrack).await;
 }
 
 pub async fn trigger_vibe_like(ctx: &AppContext) {
-    if let Ok(mut vibe) = ctx.signals.monitor.vibe.try_lock() {
+    if let Ok(mut vibe) = ctx.audio.signals.monitor.vibe.try_lock() {
         vibe.trigger_like();
     }
 }
 
 pub async fn set_vibe_palette(ctx: &AppContext, colors: Vec<f32>) {
-    if let Ok(mut vibe) = ctx.signals.monitor.vibe.try_lock() {
+    if let Ok(mut vibe) = ctx.audio.signals.monitor.vibe.try_lock() {
         vibe.set_palette(colors);
     }
 }
 
 pub async fn get_equalizer(ctx: &AppContext) -> Option<EqualizerDto> {
-    let guard = ctx.effect_handles.read();
+    let guard = ctx.audio.effect_handles.read();
     let eq = guard.get("eq")?;
 
     let mut bands = Vec::new();
@@ -44,7 +44,7 @@ pub async fn get_equalizer(ctx: &AppContext) -> Option<EqualizerDto> {
 }
 
 pub async fn set_equalizer_enabled(ctx: &AppContext, enabled: bool) {
-    let guard = ctx.effect_handles.read();
+    let guard = ctx.audio.effect_handles.read();
     if let Some(eq) = guard.get("eq") {
         eq.set_enabled(enabled);
         SETTINGS_CHANGED.notify_one();
@@ -52,7 +52,7 @@ pub async fn set_equalizer_enabled(ctx: &AppContext, enabled: bool) {
 }
 
 pub async fn set_equalizer_band(ctx: &AppContext, index: u32, gain_db: f32) {
-    let guard = ctx.effect_handles.read();
+    let guard = ctx.audio.effect_handles.read();
     if let Some(eq) = guard.get("eq") {
         eq.set_param(index as usize, gain_db);
         SETTINGS_CHANGED.notify_one();
@@ -60,7 +60,7 @@ pub async fn set_equalizer_band(ctx: &AppContext, index: u32, gain_db: f32) {
 }
 
 pub async fn get_audio_effects(ctx: &AppContext) -> Vec<AudioEffectDto> {
-    let guard = ctx.effect_handles.read();
+    let guard = ctx.audio.effect_handles.read();
 
     let mut effects = Vec::new();
     for (id, handle) in guard.iter() {
@@ -93,7 +93,7 @@ pub async fn get_audio_effects(ctx: &AppContext) -> Vec<AudioEffectDto> {
 }
 
 pub async fn reset_effect(ctx: &AppContext, id: String) {
-    let guard = ctx.effect_handles.read();
+    let guard = ctx.audio.effect_handles.read();
     if let Some(h) = guard.get(&id) {
         let info = h.params.info();
         for (i, p) in info.iter().enumerate() {
@@ -104,7 +104,7 @@ pub async fn reset_effect(ctx: &AppContext, id: String) {
 }
 
 pub async fn set_effect_enabled(ctx: &AppContext, id: String, enabled: bool) {
-    let guard = ctx.effect_handles.read();
+    let guard = ctx.audio.effect_handles.read();
     if let Some(h) = guard.get(&id) {
         h.set_enabled(enabled);
         SETTINGS_CHANGED.notify_one();
@@ -112,7 +112,7 @@ pub async fn set_effect_enabled(ctx: &AppContext, id: String, enabled: bool) {
 }
 
 pub async fn set_effect_param(ctx: &AppContext, id: String, index: u32, value: f32) {
-    let guard = ctx.effect_handles.read();
+    let guard = ctx.audio.effect_handles.read();
     if let Some(h) = guard.get(&id) {
         h.set_param(index as usize, value);
         SETTINGS_CHANGED.notify_one();
