@@ -34,18 +34,16 @@ vec4 mod289(vec4 x) { return x - floor(x * INV_289) * 289.0; }
 vec4 permute(vec4 x) { return mod289((x * 34.0 + 1.0) * x); }
 
 float snoise3(vec3 v) {
-  const vec2 C = vec2(0.1666667, 0.3333333);
-  const vec4 D = vec4(0.0, 0.5, 1.0, 2.0);
-  vec3 i = floor(v + dot(v, C.yyy));
-  vec3 x0 = v - i + dot(i, C.xxx);
+  vec3 i = floor(v + dot(v, vec3(0.3333333)));
+  vec3 x0 = v - i + dot(i, vec3(0.1666667));
   vec3 g = step(x0.yzx, x0.xyz);
   vec3 l = 1.0 - g;
   vec3 i1 = min(g.xyz, l.zxy);
   vec3 i2 = max(g.xyz, l.zxy);
 
-  vec3 x1 = x0 - i1 + C.xxx;
-  vec3 x2 = x0 - i2 + 2.0 * C.xxx;
-  vec3 x3 = x0 - 1.0 + 3.0 * C.xxx;
+  vec3 x1 = x0 - i1 + 0.1666667;
+  vec3 x2 = x0 - i2 + 0.3333333;
+  vec3 x3 = x0 - 0.5;
 
   i = mod289(i);
 
@@ -53,8 +51,7 @@ float snoise3(vec3 v) {
                            vec4(0.0, i1.y, i2.y, 1.0)) +
                    i.x + vec4(0.0, i1.x, i2.x, 1.0));
 
-  float n_ = 0.142857142857;
-  vec3 ns = n_ * D.wyz - D.xzx;
+  const vec3 ns = vec3(0.285714285714, -0.928571428571, 0.142857142857);
   vec4 j = p - 49.0 * floor(p * ns.z * ns.z);
   vec4 x_ = floor(j * ns.z);
   vec4 y_ = floor(j - 7.0 * x_);
@@ -73,40 +70,35 @@ float snoise3(vec3 v) {
   vec3 p2 = vec3(a1.xy, h.z);
   vec3 p3 = vec3(a1.zw, h.w);
 
-  vec4 norm =
-      inversesqrt(vec4(dot(p0, p0), dot(p1, p1), dot(p2, p2), dot(p3, p3)));
+  vec4 norm = inversesqrt(vec4(dot(p0, p0), dot(p1, p1), dot(p2, p2), dot(p3, p3)));
   p0 *= norm.x;
   p1 *= norm.y;
   p2 *= norm.z;
   p3 *= norm.w;
 
-  vec4 m =
-      max(0.6 - vec4(dot(x0, x0), dot(x1, x1), dot(x2, x2), dot(x3, x3)), 0.0);
+  vec4 m = max(0.6 - vec4(dot(x0, x0), dot(x1, x1), dot(x2, x2), dot(x3, x3)), 0.0);
   m = m * m;
-  return 42.0 *
-         dot(m * m, vec4(dot(p0, x0), dot(p1, x1), dot(p2, x2), dot(p3, x3)));
+  return 42.0 * dot(m * m, vec4(dot(p0, x0), dot(p1, x1), dot(p2, x2), dot(p3, x3)));
 }
 
 float tri(float x) { return abs(fract(x) - 0.5); }
-vec3 tri3(vec3 p) {
-  return vec3(tri(p.z + tri(p.y * 20.0)), tri(p.z + tri(p.x)),
-              tri(p.y + tri(p.x)));
-}
+
 float triNoise3D(vec3 p, float spd) {
-  float z = 0.4;
   float rz = 0.1;
   vec3 bp = p;
   float timeOffset = vTime * 0.1 * spd;
+  float z_inv = 2.7777778;
 
   for (int i = 0; i < 5; i++) {
-    vec3 dg = tri3(bp * 0.01);
+    vec3 bp_01 = bp * 0.01;
+    vec3 dg = vec3(tri(bp_01.z + 0.5), tri(bp_01.z + tri(bp_01.x)), tri(tri(bp_01.x)));
     p += (dg + timeOffset);
     bp *= 4.0;
-    z *= 0.9;
     p *= 1.6;
-    rz += tri(p.z + tri(0.6 * p.x + 0.1 * tri(p.y))) / z;
+    rz += tri(p.z + tri(0.6 * p.x + 0.1 * tri(p.y))) * z_inv;
+    z_inv *= 1.1111111;
   }
-  return smoothstep(0.0, 8.0, rz + sin(rz + sin(z) * 2.8) * 2.2);
+  return smoothstep(0.0, 8.0, rz + sin(rz + 0.655213) * 2.2);
 }
 
 vec2 rotate(vec2 p, float a) {
@@ -133,10 +125,9 @@ vec4 makeNoiseBlob2(vec2 uv, vec3 color1, vec3 color2, float strength,
   return vec4(clamp(col + v1, 0.0, 1.0), v0);
 }
 
-vec4 makeBlob(vec2 uv, float blob, vec3 color1, vec3 color2, float width,
+vec4 makeBlob(vec2 uv, float len, float blob, vec3 color1, vec3 color2, float width,
               float baseReaction, float likeReaction, float audioStrength,
               float offset, vec2 noiseOffset) {
-  float len = length(uv);
   float outerRadius =
       blob + width * 0.5 +
       baseReaction *
@@ -155,11 +146,7 @@ vec4 makeBlob(vec2 uv, float blob, vec3 color1, vec3 color2, float width,
 
 void main() {
   vec2 fragCoord = FlutterFragCoord().xy;
-  vec2 uv = fragCoord / vScreenSize.xy;
-  uv = uv * 2.0 - 1.0;
-
-  float minRes = min(vScreenSize.x, vScreenSize.y);
-  uv *= vScreenSize / minRes / vScale;
+  vec2 uv = (fragCoord * 2.0 - vScreenSize) / (min(vScreenSize.x, vScreenSize.y) * vScale);
 
   float pa = atan(uv.y, uv.x);
   float idx = pa * INV_TWO_PI;
@@ -184,12 +171,14 @@ void main() {
 
   vec3 color = vColorBackground;
   float n0 = snoise3(vec3(uv * 1.2, vTime * 0.5));
+  float n0_03 = n0 * 0.3;
+  float mainLen = length(uv);
 
   for (int i = 0; i < 3; i++) {
     float fi = float(i);
     float radius = CIRCLE_RADIUS_BASE - CIRCLE_RADIUS_STEP * fi;
     vec4 blobColor = makeBlob(
-        uv, mix(radius, radius + 0.3, n0), vColor[i], vColor[i + 3],
+        uv, mainLen, radius + n0_03, vColor[i], vColor[i + 3],
         CIRCLE_WIDTH_BASE - CIRCLE_WIDTH_STEP * fi,
         (SPARK_STRENGTH_BASE - SPARK_STRENGTH_STEP * fi) * spark, vReact[i],
         vAudio[i], CIRCLE_OFFSET_BASE + CIRCLE_OFFSET_STEP * fi,
