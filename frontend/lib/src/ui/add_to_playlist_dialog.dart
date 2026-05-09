@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/providers/library_provider.dart';
+import 'package:yayma/src/providers/notification_provider.dart';
 import 'package:yayma/src/rust/api/models.dart';
 import 'package:yayma/src/ui/widgets/rust_cached_image.dart';
 
@@ -84,18 +85,11 @@ class AddToPlaylistDialog extends StatelessWidget {
 
                       if (context.mounted) {
                         Navigator.pop(context);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              success
-                                  ? "Трек добавлен в '${playlist.title}'"
-                                  : 'Ошибка при добавлении трека',
-                            ),
-                            backgroundColor: success
-                                ? Colors.green
-                                : Colors.red,
-                          ),
-                        );
+                        if (success) {
+                          showAppSuccess("Трек добавлен в '${playlist.title}'");
+                        } else {
+                          showAppError('Ошибка при добавлении трека');
+                        }
                       }
                     },
                   );

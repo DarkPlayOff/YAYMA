@@ -6,6 +6,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:yayma/src/app/init.dart';
 import 'package:yayma/src/providers/auth_provider.dart';
+import 'package:yayma/src/providers/notification_provider.dart';
 import 'package:yayma/src/rust/api/simple.dart' as simple;
 import 'package:yayma/src/ui/auth/auth_screens.dart';
 
@@ -55,6 +56,11 @@ class MyApp extends StatelessWidget {
             fontFamily: 'Inter',
           ),
           localizationsDelegates: GlobalMaterialLocalizations.delegates,
+          builder: (context, child) {
+            return GlobalNotificationListener(
+              child: child ?? const SizedBox.shrink(),
+            );
+          },
           home: const RootScreen(),
         );
       },

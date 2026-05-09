@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/providers/library_provider.dart';
 import 'package:yayma/src/providers/navigation_provider.dart';
+import 'package:yayma/src/providers/notification_provider.dart';
 import 'package:yayma/src/providers/playback_provider.dart';
 import 'package:yayma/src/rust/api/models.dart';
 import 'package:yayma/src/ui/widgets/common_ui.dart';
@@ -112,12 +113,9 @@ class _LibraryViewState extends State<LibraryView>
                     if (!context.mounted) return;
                     Navigator.pop(context);
                     if (!success) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Ошибка при создании плейлиста'),
-                          backgroundColor: Colors.red,
-                        ),
-                      );
+                      showAppError('Ошибка при создании плейлиста');
+                    } else {
+                      showAppSuccess('Плейлист "${controller.text}" создан');
                     }
                   }
                 },

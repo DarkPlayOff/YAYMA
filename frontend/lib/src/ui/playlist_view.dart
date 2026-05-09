@@ -6,6 +6,7 @@ import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/providers/auth_provider.dart';
 import 'package:yayma/src/providers/library_provider.dart';
 import 'package:yayma/src/providers/navigation_provider.dart';
+import 'package:yayma/src/providers/notification_provider.dart';
 import 'package:yayma/src/providers/playback_provider.dart';
 import 'package:yayma/src/rust/api/content.dart' as rust;
 import 'package:yayma/src/rust/api/models.dart';
@@ -158,9 +159,7 @@ class _PlaylistContentState extends State<_PlaylistContent> {
 
     final filePath = result.files.single.path!;
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Загрузка трека началась...')),
-      );
+      showAppSuccess('Загрузка трека началась...');
     }
 
     final success = await uploadTrackAction(
@@ -169,16 +168,11 @@ class _PlaylistContentState extends State<_PlaylistContent> {
     );
 
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            success ? 'Трек успешно загружен' : 'Ошибка при загрузке трека',
-          ),
-          backgroundColor: success ? Colors.green : Colors.red,
-        ),
-      );
       if (success) {
+        showAppSuccess('Трек успешно загружен');
         widget.refresh();
+      } else {
+        showAppError('Ошибка при загрузке трека');
       }
     }
   }

@@ -4,6 +4,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/providers/auth_provider.dart';
+import 'package:yayma/src/providers/notification_provider.dart';
 import 'package:yayma/src/rust/api/content.dart' as rust;
 import 'package:yayma/src/rust/api/simple.dart' as simple;
 
@@ -62,14 +63,7 @@ class _SettingsViewState extends State<SettingsView> {
     if (ctx != null) {
       await simple.setCustomTitlebarEnabled(ctx: ctx, enabled: enabled);
       unawaited(_customTitlebarSignal.refresh());
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Изменения вступят в силу после перезапуска приложения'),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
+      showAppSuccess('Изменения вступят в силу после перезапуска приложения');
     }
   }
 
@@ -101,14 +95,7 @@ class _SettingsViewState extends State<SettingsView> {
     if (ctx == null) return;
     await simple.clearCache(ctx: ctx);
     unawaited(_cacheSizeSignal.refresh());
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Кэш успешно очищен'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-    }
+    showAppSuccess('Кэш успешно очищен');
   }
 
   @override

@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/providers/auth_provider.dart';
 import 'package:yayma/src/providers/library_provider.dart';
+import 'package:yayma/src/providers/notification_provider.dart';
 import 'package:yayma/src/providers/playback_provider.dart';
 import 'package:yayma/src/rust/api/content.dart' as rust;
 import 'package:yayma/src/rust/api/models.dart';
@@ -153,9 +154,6 @@ class _CommonTrackTileState extends State<CommonTrackTile> {
                             onSelected: (value) async {
                               if (!mounted) return;
 
-                              // Store the messenger from a stable component context
-                              final messenger = ScaffoldMessenger.of(context);
-
                               if (value.startsWith('add_to_')) {
                                 final kindStr = value.substring(7);
                                 final kind = int.tryParse(kindStr);
@@ -166,18 +164,11 @@ class _CommonTrackTileState extends State<CommonTrackTile> {
                                         widget.trackId,
                                         widget.albumId,
                                       );
-                                  messenger.showSnackBar(
-                                    SnackBar(
-                                      content: Text(
-                                        success
-                                            ? 'Добавлено в плейлист'
-                                            : 'Ошибка при добавлении',
-                                      ),
-                                      backgroundColor: success
-                                          ? Colors.green
-                                          : Colors.red,
-                                    ),
-                                  );
+                                  if (success) {
+                                    showAppSuccess('Добавлено в плейлист');
+                                  } else {
+                                    showAppError('Ошибка при добавлении');
+                                  }
                                 }
                                 return;
                               }
@@ -207,19 +198,9 @@ class _CommonTrackTileState extends State<CommonTrackTile> {
                                   await Clipboard.setData(
                                     ClipboardData(text: link),
                                   );
-                                  if (mounted) {
-                                    messenger.showSnackBar(
-                                      const SnackBar(
-                                        content: Text('Ссылка скопирована'),
-                                      ),
-                                    );
-                                  }
+                                  showAppSuccess('Ссылка скопирована');
                                 case 'download':
-                                  messenger.showSnackBar(
-                                    const SnackBar(
-                                      content: Text('Скачивание началось...'),
-                                    ),
-                                  );
+                                  showAppSuccess('Скачивание началось...');
                                   final ctx = appContextSignal.value;
                                   if (ctx != null) {
                                     try {
@@ -227,15 +208,9 @@ class _CommonTrackTileState extends State<CommonTrackTile> {
                                         ctx: ctx,
                                         trackId: widget.trackId,
                                       );
-                                      messenger.showSnackBar(
-                                        SnackBar(
-                                          content: Text('Трек сохранен: $path'),
-                                        ),
-                                      );
+                                      showAppSuccess('Трек сохранен: $path');
                                     } on Object catch (e) {
-                                      messenger.showSnackBar(
-                                        SnackBar(content: Text('Ошибка: $e')),
-                                      );
+                                      showAppError('Ошибка: $e');
                                     }
                                   }
                               }

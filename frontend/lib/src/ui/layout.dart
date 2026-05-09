@@ -43,73 +43,71 @@ class _AppLayoutState extends State<AppLayout> {
         backgroundColor: Colors.black,
         body: PageStorage(
           bucket: _bucket,
-          child: GlobalNotificationListener(
-            child: Stack(
-              children: [
-                // 1. Background (shader + blur)
-                const Positioned.fill(child: BlurredCoverBackground()),
-                const Positioned.fill(child: WaveBackground()),
+          child: Stack(
+            children: [
+              // 1. Background (shader + blur)
+              const Positioned.fill(child: BlurredCoverBackground()),
+              const Positioned.fill(child: WaveBackground()),
 
-                // 2. Dimming when leaving home
-                Positioned.fill(
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 500),
-                    color: isHome ? Colors.transparent : Colors.black87,
-                  ),
+              // 2. Dimming when leaving home
+              Positioned.fill(
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 500),
+                  color: isHome ? Colors.transparent : Colors.black87,
                 ),
+              ),
 
-                // 3. Content (set of independent stacks for each tab)
-                Positioned.fill(
-                  child: Padding(
-                    padding: EdgeInsets.only(top: isCustomTitlebar ? 32.0 : 0),
-                    child: Stack(
-                      children: [
-                        Positioned.fill(
-                          child: Stack(
-                            children: rootSections
-                                .map((root) => _buildRootBucket(context, root))
-                                .toList(),
-                          ),
+              // 3. Content (set of independent stacks for each tab)
+              Positioned.fill(
+                child: Padding(
+                  padding: EdgeInsets.only(top: isCustomTitlebar ? 32.0 : 0),
+                  child: Stack(
+                    children: [
+                      Positioned.fill(
+                        child: Stack(
+                          children: rootSections
+                              .map((root) => _buildRootBucket(context, root))
+                              .toList(),
                         ),
-                        Positioned(
-                          left: 0,
-                          right: 0,
-                          bottom: 0,
-                          child: _buildAnimatedPlayerBar(isHome),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-
-                // 4. Navigation
-                const Align(
-                  alignment: Alignment.centerLeft,
-                  child: Padding(
-                    padding: EdgeInsets.only(left: 16),
-                    child: FloatingNavBar(),
-                  ),
-                ),
-
-                // 5. Back button
-                _FloatingBackButton(),
-
-                // 6. Custom Titlebar
-                if (isCustomTitlebar)
-                  const Positioned(
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    child: SizedBox(
-                      height: 32,
-                      child: WindowCaption(
-                        brightness: Brightness.dark,
-                        backgroundColor: Colors.transparent,
                       ),
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        child: _buildAnimatedPlayerBar(isHome),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              // 4. Navigation
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Padding(
+                  padding: EdgeInsets.only(left: 16),
+                  child: FloatingNavBar(),
+                ),
+              ),
+
+              // 5. Back button
+              _FloatingBackButton(),
+
+              // 6. Custom Titlebar
+              if (isCustomTitlebar)
+                const Positioned(
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  child: SizedBox(
+                    height: 32,
+                    child: WindowCaption(
+                      brightness: Brightness.dark,
+                      backgroundColor: Colors.transparent,
                     ),
                   ),
-              ],
-            ),
+                ),
+            ],
           ),
         ),
       );
