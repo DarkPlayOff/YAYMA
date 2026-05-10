@@ -18,12 +18,15 @@ class WaveSettingsPanel extends StatelessWidget {
       return Material(
         color: Colors.transparent,
         child: Container(
-          width: 450,
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.sizeOf(context).height - 64,
+          ),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
               const Text(
                 'Настроить Мою волну',
                 style: TextStyle(
@@ -127,6 +130,7 @@ class WaveSettingsPanel extends StatelessWidget {
             ],
           ),
         ),
+        )
       );
     });
   }

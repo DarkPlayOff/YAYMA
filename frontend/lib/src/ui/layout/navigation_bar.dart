@@ -85,29 +85,29 @@ class _FloatingNavBarState extends State<FloatingNavBar>
           child: AnimatedOpacity(
             opacity: isVisible ? 1.0 : 0.0,
             duration: const Duration(milliseconds: 200),
-            child: Container(
-              width: 64,
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              decoration: BoxDecoration(
-                color: isHome
-                    ? Colors.black.withValues(alpha: 0.5)
-                    : const Color(0xFF1E1E1E),
-                borderRadius: BorderRadius.circular(32),
-                border: Border.all(color: Colors.white10),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: isHome ? 0.8 : 0.4),
-                    blurRadius: 30,
-                    spreadRadius: 2,
-                  ),
-                ],
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  CompositedTransformTarget(
-                    link: _layerLink,
-                    child: MouseRegion(
+            child: CompositedTransformTarget(
+              link: _layerLink,
+              child: Container(
+                width: 64,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                decoration: BoxDecoration(
+                  color: isHome
+                      ? Colors.black.withValues(alpha: 0.5)
+                      : const Color(0xFF1E1E1E),
+                  borderRadius: BorderRadius.circular(32),
+                  border: Border.all(color: Colors.white10),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: isHome ? 0.8 : 0.4),
+                      blurRadius: 30,
+                      spreadRadius: 2,
+                    ),
+                  ],
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    MouseRegion(
                       onEnter: (_) {
                         setState(() {
                           _isHovered = true;
@@ -150,7 +150,6 @@ class _FloatingNavBarState extends State<FloatingNavBar>
                         );
                       }),
                     ),
-                  ),
                   const SizedBox(height: 12),
                   _NavIcon(
                     icon: Icons.home_rounded,
@@ -180,6 +179,7 @@ class _FloatingNavBarState extends State<FloatingNavBar>
           ),
         ),
       ),
+      )
     );
   }
 }
@@ -465,12 +465,17 @@ class _WaveOverlayState extends State<_WaveOverlay>
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final isNarrow = screenWidth < 600;
+
     return Positioned(
-      width: 480,
+      width: isNarrow ? screenWidth - 100 : 480,
       child: CompositedTransformFollower(
         link: widget.layerLink,
         showWhenUnlinked: false,
-        offset: const Offset(80, -300),
+        targetAnchor: Alignment.centerRight,
+        followerAnchor: Alignment.centerLeft,
+        offset: const Offset(32, 0),
         child: MouseRegion(
           onEnter: (_) => widget.onHover(isHovered: true),
           onExit: (_) => widget.onHover(isHovered: false),
