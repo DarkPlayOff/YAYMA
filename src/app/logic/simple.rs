@@ -51,13 +51,31 @@ pub fn is_custom_titlebar_enabled(ctx: &AppContext) -> bool {
 
 pub fn is_custom_titlebar_enabled_sync() -> bool {
     if let Ok(db) = crate::storage::db::AppDatabase::init() {
-        db.load_custom_titlebar().unwrap_or(false)
+        db.load_custom_titlebar().unwrap_or(true)
     } else {
-        false
+        true
     }
 }
 
 pub fn set_custom_titlebar_enabled(ctx: &AppContext, enabled: bool) {
     let db = ctx.core.db.lock();
     let _ = db.save_custom_titlebar(enabled);
+}
+
+pub fn is_auto_hide_navbar_enabled(ctx: &AppContext) -> bool {
+    let db = ctx.core.db.lock();
+    db.load_auto_hide_navbar().unwrap_or(true)
+}
+
+pub fn is_auto_hide_navbar_enabled_sync() -> bool {
+    if let Ok(db) = crate::storage::db::AppDatabase::init() {
+        db.load_auto_hide_navbar().unwrap_or(true)
+    } else {
+        true
+    }
+}
+
+pub fn set_auto_hide_navbar_enabled(ctx: &AppContext, enabled: bool) {
+    let db = ctx.core.db.lock();
+    let _ = db.save_auto_hide_navbar(enabled);
 }

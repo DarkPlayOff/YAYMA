@@ -91,10 +91,7 @@ class _AppLayoutState extends State<AppLayout> {
               // 4. Navigation
               const Align(
                 alignment: Alignment.centerLeft,
-                child: Padding(
-                  padding: EdgeInsets.only(left: 16),
-                  child: FloatingNavBar(),
-                ),
+                child: FloatingNavBar(),
               ),
 
               // 5. Back button

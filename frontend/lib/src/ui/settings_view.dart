@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/providers/auth_provider.dart';
 import 'package:yayma/src/providers/notification_provider.dart';
+import 'package:yayma/src/providers/navigation_provider.dart';
 import 'package:yayma/src/rust/api/content.dart' as rust;
 import 'package:yayma/src/rust/api/simple.dart' as simple;
 
@@ -21,6 +22,7 @@ class _SettingsViewState extends State<SettingsView> {
   late final FutureSignal<String> _versionSignal;
   late final FutureSignal<bool> _discordRpcSignal;
   late final FutureSignal<bool> _customTitlebarSignal;
+  late final FutureSignal<bool> _autoHideNavbarSignal;
 
   @override
   void initState() {
@@ -48,6 +50,9 @@ class _SettingsViewState extends State<SettingsView> {
       if (ctx == null) return true;
       return simple.isCustomTitlebarEnabled(ctx: ctx);
     });
+    _autoHideNavbarSignal = futureSignal(() async {
+      return autoHideNavbarSignal.value;
+    });
   }
 
   Future<void> _toggleDiscordRpc(bool enabled) async {
@@ -64,6 +69,15 @@ class _SettingsViewState extends State<SettingsView> {
       await simple.setCustomTitlebarEnabled(ctx: ctx, enabled: enabled);
       unawaited(_customTitlebarSignal.refresh());
       showAppSuccess('Изменения вступят в силу после перезапуска приложения');
+    }
+  }
+
+  Future<void> _toggleAutoHideNavbar(bool enabled) async {
+    final ctx = appContextSignal.value;
+    if (ctx != null) {
+      await simple.setAutoHideNavbarEnabled(ctx: ctx, enabled: enabled);
+      autoHideNavbarSignal.value = enabled;
+      unawaited(_autoHideNavbarSignal.refresh());
     }
   }
 
@@ -152,6 +166,23 @@ class _SettingsViewState extends State<SettingsView> {
                       trailing: Switch(
                         value: enabled.value ?? false,
                         onChanged: (v) => unawaited(_toggleCustomTitlebar(v)),
+                      ),
+                    );
+                  }),
+                  const SizedBox(height: 16),
+                  Watch((context) {
+                    final enabled = _autoHideNavbarSignal.value;
+                    return _buildSettingItem(
+                      context,
+                      title: 'Скрывать боковую панель',
+                      subtitle: 'Автоматически скрывать навигацию на главном экране',
+                      icon: Icons.vertical_split_rounded,
+                      onTap: () => unawaited(
+                        _toggleAutoHideNavbar(!(enabled.value ?? false)),
+                      ),
+                      trailing: Switch(
+                        value: enabled.value ?? false,
+                        onChanged: (v) => unawaited(_toggleAutoHideNavbar(v)),
                       ),
                     );
                   }),

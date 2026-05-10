@@ -21,6 +21,8 @@ class _FloatingNavBarState extends State<FloatingNavBar>
   final LayerLink _layerLink = LayerLink();
   OverlayEntry? _overlayEntry;
   bool _isHovered = false;
+  bool _isNavbarHovered = false;
+  bool _isAccountMenuOpen = false;
 
   void _showWaveSettings() {
     if (_overlayEntry != null) return;
@@ -28,11 +30,15 @@ class _FloatingNavBarState extends State<FloatingNavBar>
       builder: (context) => _WaveOverlay(
         layerLink: _layerLink,
         onHover: ({required isHovered}) {
-          _isHovered = isHovered;
+          setState(() {
+            _isHovered = isHovered;
+          });
           if (!isHovered) _hideWaveSettings();
         },
         onSelected: () {
-          _isHovered = false;
+          setState(() {
+            _isHovered = false;
+          });
           _hideWaveSettings(immediate: true);
         },
       ),
@@ -51,6 +57,7 @@ class _FloatingNavBarState extends State<FloatingNavBar>
         if (!_isHovered && mounted) {
           _overlayEntry?.remove();
           _overlayEntry = null;
+          if (!_isNavbarHovered) setState(() {});
         }
       }),
     );
@@ -61,96 +68,127 @@ class _FloatingNavBarState extends State<FloatingNavBar>
     final currentState = currentNavStateSignal.watch(context);
     final currentSection = currentState.section;
     final isHome = currentSection == AppSection.home;
-    return Container(
-      width: 64,
-      padding: const EdgeInsets.symmetric(vertical: 12),
-      decoration: BoxDecoration(
-        color: isHome
-            ? Colors.black.withValues(alpha: 0.5)
-            : const Color(0xFF1E1E1E),
-        borderRadius: BorderRadius.circular(32),
-        border: Border.all(color: Colors.white10),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isHome ? 0.8 : 0.4),
-            blurRadius: 30,
-            spreadRadius: 2,
-          ),
-        ],
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          CompositedTransformTarget(
-            link: _layerLink,
-            child: MouseRegion(
-              onEnter: (_) {
-                _isHovered = true;
-                _showWaveSettings();
-              },
-              onExit: (_) {
-                _isHovered = false;
-                _hideWaveSettings();
-              },
-              child: Watch((context) {
-                final isWaveActive = currentWaveSeedsSignal().isNotEmpty;
-                final isPlaying = isPlayingSignal();
+    final isAutoHideEnabled = autoHideNavbarSignal.watch(context);
 
-                return IconButton(
-                  onPressed: () {
-                    if (isWaveActive) {
-                      unawaited(PlaybackController.togglePlay());
-                    } else {
-                      unawaited(HomeController.startMyWave());
-                    }
-                  },
-                  style: IconButton.styleFrom(
-                    backgroundColor: Theme.of(
-                      context,
-                    ).colorScheme.primary.withValues(alpha: 0.1),
-                    hoverColor: Theme.of(
-                      context,
-                    ).colorScheme.primary.withValues(alpha: 0.2),
+    final isVisible = !isHome || !isAutoHideEnabled || _isNavbarHovered || _isHovered || _isAccountMenuOpen;
+
+    return MouseRegion(
+      opaque: false,
+      onEnter: (_) => setState(() => _isNavbarHovered = true),
+      onExit: (_) => setState(() => _isNavbarHovered = false),
+      child: Padding(
+        padding: const EdgeInsets.only(left: 16, right: 48, top: 48, bottom: 48),
+        child: AnimatedSlide(
+          offset: isVisible ? Offset.zero : const Offset(-1.5, 0),
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOutCubic,
+          child: AnimatedOpacity(
+            opacity: isVisible ? 1.0 : 0.0,
+            duration: const Duration(milliseconds: 200),
+            child: Container(
+              width: 64,
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              decoration: BoxDecoration(
+                color: isHome
+                    ? Colors.black.withValues(alpha: 0.5)
+                    : const Color(0xFF1E1E1E),
+                borderRadius: BorderRadius.circular(32),
+                border: Border.all(color: Colors.white10),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: isHome ? 0.8 : 0.4),
+                    blurRadius: 30,
+                    spreadRadius: 2,
                   ),
-                  icon: Icon(
-                    isWaveActive && isPlaying
-                        ? Icons.pause_rounded
-                        : Icons.play_arrow_rounded,
-                    size: 32,
-                    color: Theme.of(context).colorScheme.primary,
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CompositedTransformTarget(
+                    link: _layerLink,
+                    child: MouseRegion(
+                      onEnter: (_) {
+                        setState(() {
+                          _isHovered = true;
+                        });
+                        _showWaveSettings();
+                      },
+                      onExit: (_) {
+                        setState(() {
+                          _isHovered = false;
+                        });
+                        _hideWaveSettings();
+                      },
+                      child: Watch((context) {
+                        final isWaveActive = currentWaveSeedsSignal().isNotEmpty;
+                        final isPlaying = isPlayingSignal();
+
+                        return IconButton(
+                          onPressed: () {
+                            if (isWaveActive) {
+                              unawaited(PlaybackController.togglePlay());
+                            } else {
+                              unawaited(HomeController.startMyWave());
+                            }
+                          },
+                          style: IconButton.styleFrom(
+                            backgroundColor: Theme.of(
+                              context,
+                            ).colorScheme.primary.withValues(alpha: 0.1),
+                            hoverColor: Theme.of(
+                              context,
+                            ).colorScheme.primary.withValues(alpha: 0.2),
+                          ),
+                          icon: Icon(
+                            isWaveActive && isPlaying
+                                ? Icons.pause_rounded
+                                : Icons.play_arrow_rounded,
+                            size: 32,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                        );
+                      }),
+                    ),
                   ),
-                );
-              }),
+                  const SizedBox(height: 12),
+                  _NavIcon(
+                    icon: Icons.home_rounded,
+                    isSelected: currentSection == AppSection.home,
+                    onTap: () => setSection(AppSection.home),
+                  ),
+                  _NavIcon(
+                    icon: Icons.search_rounded,
+                    isSelected: currentSection == AppSection.search,
+                    onTap: () => setSection(AppSection.search),
+                  ),
+                  _NavIcon(
+                    icon: Icons.library_music_rounded,
+                    isSelected:
+                        currentSection == AppSection.liked ||
+                        currentSection == AppSection.playlists,
+                    onTap: () => setSection(AppSection.liked),
+                  ),
+                  const SizedBox(height: 12),
+                  _AccountButton(
+                    onOpened: () => setState(() => _isAccountMenuOpen = true),
+                    onClosed: () => setState(() => _isAccountMenuOpen = false),
+                  ),
+                ],
+              ),
             ),
           ),
-          const SizedBox(height: 12),
-          _NavIcon(
-            icon: Icons.home_rounded,
-            isSelected: currentSection == AppSection.home,
-            onTap: () => setSection(AppSection.home),
-          ),
-          _NavIcon(
-            icon: Icons.search_rounded,
-            isSelected: currentSection == AppSection.search,
-            onTap: () => setSection(AppSection.search),
-          ),
-          _NavIcon(
-            icon: Icons.library_music_rounded,
-            isSelected:
-                currentSection == AppSection.liked ||
-                currentSection == AppSection.playlists,
-            onTap: () => setSection(AppSection.liked),
-          ),
-          const SizedBox(height: 12),
-          const _AccountButton(),
-        ],
+        ),
       ),
     );
   }
 }
 
 class _AccountButton extends StatelessWidget {
-  const _AccountButton();
+  final VoidCallback onOpened;
+  final VoidCallback onClosed;
+
+  const _AccountButton({required this.onOpened, required this.onClosed});
 
   @override
   Widget build(BuildContext context) {
@@ -158,11 +196,15 @@ class _AccountButton extends StatelessWidget {
     if (account == null) return const SizedBox();
 
     return InkWell(
-      onTap: () => showDialog<void>(
-        context: context,
-        barrierColor: Colors.black54,
-        builder: (context) => _AccountMenuDialog(account: account),
-      ),
+      onTap: () async {
+        onOpened();
+        await showDialog<void>(
+          context: context,
+          barrierColor: Colors.black54,
+          builder: (context) => _AccountMenuDialog(account: account),
+        );
+        onClosed();
+      },
       borderRadius: BorderRadius.circular(20),
       child: Container(
         padding: const EdgeInsets.all(2),

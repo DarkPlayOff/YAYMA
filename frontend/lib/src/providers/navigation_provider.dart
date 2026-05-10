@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:signals_flutter/signals_flutter.dart';
+import 'package:yayma/src/rust/api/simple.dart' as simple;
 
 enum AppSection {
   home,
@@ -52,6 +53,11 @@ final FlutterSignal<Map<AppSection, List<NavState>>> rootStacksSignal =
     signal<Map<AppSection, List<NavState>>>({
       for (var root in rootSections) root: [NavState(root)],
     });
+
+/// Настройка скрытия навбара
+final FlutterSignal<bool> autoHideNavbarSignal = signal<bool>(
+  simple.isAutoHideNavbarEnabledSync(),
+);
 
 /// Вычисляемый текущий стек
 final FlutterComputed<List<NavState>> navStackSignal = computed(

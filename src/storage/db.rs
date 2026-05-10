@@ -636,4 +636,25 @@ impl AppDatabase {
             Ok(true)
         }
     }
+
+    pub fn save_auto_hide_navbar(&self, enabled: bool) -> Result<()> {
+        self.conn.execute(
+            "INSERT INTO app_settings (key, value) VALUES ('auto_hide_navbar', ?1) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            params![enabled.to_string()],
+        )?;
+        Ok(())
+    }
+
+    pub fn load_auto_hide_navbar(&self) -> Result<bool> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT value FROM app_settings WHERE key = 'auto_hide_navbar'")?;
+        let mut rows = stmt.query([])?;
+        if let Some(row) = rows.next()? {
+            let val: String = row.get(0)?;
+            Ok(val.parse().unwrap_or(false))
+        } else {
+            Ok(false)
+        }
+    }
 }

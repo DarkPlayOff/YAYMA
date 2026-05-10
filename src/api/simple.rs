@@ -58,3 +58,16 @@ pub fn is_custom_titlebar_enabled_sync() -> bool {
 pub fn set_custom_titlebar_enabled(ctx: &AppContext, enabled: bool) {
     logic::set_custom_titlebar_enabled(ctx, enabled)
 }
+
+pub fn is_auto_hide_navbar_enabled(ctx: &AppContext) -> bool {
+    logic::is_auto_hide_navbar_enabled(ctx)
+}
+
+#[flutter_rust_bridge::frb(sync)]
+pub fn is_auto_hide_navbar_enabled_sync() -> bool {
+    logic::is_auto_hide_navbar_enabled_sync()
+}
+
+pub fn set_auto_hide_navbar_enabled(ctx: &AppContext, enabled: bool) {
+    logic::set_auto_hide_navbar_enabled(ctx, enabled)
+}
