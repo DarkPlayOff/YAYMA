@@ -270,53 +270,30 @@ pub async fn liked_tracks_stream(
     query: Option<String>,
 ) {
     let mut changed_rx = ctx.audio.signals.library_changed_rx.clone();
+    let query_lower = query
+        .as_ref()
+        .filter(|q| !q.trim().is_empty())
+        .map(|q| q.to_lowercase());
 
     loop {
-        // Send an empty list as a reset signal for the frontend
-        // to avoid duplicates during updates.
-        if sink.add(vec![]).is_err() {
+        let (liked_ids, disliked_ids_set) = ctx.audio.state.read().await.liked.ordered_snapshot();
+        
+        // Signal a reset to the frontend ONLY if we have no tracks at all.
+        // Otherwise, the frontend will replace the list when the first data chunk arrives.
+        if liked_ids.is_empty() && sink.add(vec![]).is_err() {
             return;
         }
 
-        let (liked_ids, disliked_ids_set) = ctx.audio.state.read().await.liked.ordered_snapshot();
-
-        // 1. Search processing (using DB)
-        if let Some(ref q) = query
-            && !q.trim().is_empty()
-        {
-            if let Ok(found_ids) = ctx.core.db.lock().search_liked_tracks(q)
-                && !found_ids.is_empty()
-            {
-                // Use metadata from DB for search
-                if let Ok(metadata) = ctx.core.db.lock().get_track_metadata(&found_ids) {
-                    let mut dtos = Vec::with_capacity(50);
-                    for m in metadata {
-                        dtos.push(metadata_to_dto(m, true, false));
-
-                        if dtos.len() >= 50 {
-                            if sink.add(std::mem::take(&mut dtos)).is_err() {
-                                return;
-                            }
-                        }
-                    }
-                    if !dtos.is_empty() {
-                        let _ = sink.add(dtos);
-                    }
-                }
-            } else {
-                let _ = sink.add(vec![]);
-            }
-        } else {
-            // 2. Main list (Local-First)
-            if liked_ids.is_empty() {
-                // If local is empty, might not have synced yet
+        if liked_ids.is_empty() {
+            // If local is empty and not searching, might need sync
+            if query_lower.is_none() {
                 let _ = ctx
                     .audio.tx
                     .send(crate::audio::commands::AudioMessage::SyncLiked)
                     .await;
             }
-
-            // Try to fetch metadata from DB for all liked IDs
+        } else {
+            // 1. Fetch available metadata from DB
             let mut metadata_map = foldhash::HashMap::new();
             if let Ok(metadata) = ctx.core.db.lock().get_track_metadata(&liked_ids) {
                 for m in metadata {
@@ -324,17 +301,13 @@ pub async fn liked_tracks_stream(
                 }
             }
 
-            // Check which tracks are missing metadata or have incomplete artist info (missing IDs)
+            // 2. Fetch missing metadata if any
             let missing_ids: Vec<String> = liked_ids
                 .iter()
                 .filter(|id| {
                     match metadata_map.get(*id) {
                         None => true,
-                        Some(m) => {
-                            // If artists list is empty or any artist has an empty ID, 
-                            // we consider it incomplete/old metadata and trigger a refresh.
-                            m.artists.is_empty() || m.artists.iter().any(|a| a.id.is_empty())
-                        }
+                        Some(m) => m.artists.is_empty() || m.artists.iter().any(|a| a.id.is_empty()),
                     }
                 })
                 .cloned()
@@ -342,21 +315,54 @@ pub async fn liked_tracks_stream(
 
             fetch_and_save_missing_metadata(ctx, missing_ids, &mut metadata_map).await;
 
-            // Build final DTO list in correct order
+            // 3. Filter and build DTOs
             let mut dtos = Vec::with_capacity(50);
+            let mut sent_any = false;
+
             for id in liked_ids {
                 if let Some(m) = metadata_map.remove(&id) {
-                    dtos.push(metadata_to_dto(m, true, disliked_ids_set.contains(&id)));
+                    // Apply search filter if active
+                    if let Some(ref q) = query_lower {
+                        let title = m.title.to_lowercase();
+                        let artists = m.artists
+                            .iter()
+                            .map(|a| a.name.to_lowercase())
+                            .collect::<Vec<_>>()
+                            .join(" ");
+                        let album = m.album.as_ref().map(|a| a.to_lowercase()).unwrap_or_default();
+
+                        if !title.contains(q) && !artists.contains(q) && !album.contains(q) {
+                            continue;
+                        }
+                    }
+
+                    dtos.push(metadata_to_dto(
+                        m,
+                        true,
+                        disliked_ids_set.contains(&id),
+                    ));
 
                     if dtos.len() >= 50 {
                         if sink.add(std::mem::take(&mut dtos)).is_err() {
                             return;
                         }
+                        sent_any = true;
                     }
                 }
             }
+
             if !dtos.is_empty() {
-                let _ = sink.add(dtos);
+                if sink.add(dtos).is_err() {
+                    return;
+                }
+                sent_any = true;
+            }
+
+            // If we were searching but found nothing, send empty list to show "No results"
+            if !sent_any && query_lower.is_some() {
+                if sink.add(vec![]).is_err() {
+                    return;
+                }
             }
         }
 

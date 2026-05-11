@@ -41,45 +41,78 @@ Future<void> refreshLikedTracks({String? query, bool force = false}) async {
   final ctx = appContextSignal.value;
   if (ctx == null) return;
 
-  await _likedSub?.cancel();
-  likedTracksSignal.value = [];
+  // Cancel previous subscription immediately
+  final oldSub = _likedSub;
+  _likedSub = null;
+  unawaited(oldSub?.cancel());
+
+  // НЕ ОЧИЩАЕМ список сразу, чтобы избежать мерцания. 
+  // Мы очистим его только при получении первого чанка или сигнала сброса.
   isLibraryLoadingSignal.value = true;
 
-  _likedSub = likedTracksStream(ctx: ctx, query: query).listen(
+  StreamSubscription<List<SimpleTrackDto>>? sub;
+  var isFirstChunk = true;
+
+  sub = likedTracksStream(ctx: ctx, query: query).listen(
     (chunk) {
+      if (sub != _likedSub) {
+        unawaited(sub?.cancel());
+        return;
+      }
+
       if (chunk.isEmpty) {
         // Пустой чанк служит сигналом сброса (reset) от Rust
         likedTracksSignal.value = [];
+        isFirstChunk = false;
       } else {
-        likedTracksSignal.value = [...likedTracksSignal.value, ...chunk];
+        if (isFirstChunk) {
+          // Пришел первый результат нового поиска - теперь можно заменить старый список
+          likedTracksSignal.value = chunk;
+          isFirstChunk = false;
+        } else {
+          // Гарантируем отсутствие дубликатов при добавлении чанка
+          final existingIds = likedTracksSignal.value.map((t) => t.id).toSet();
+          final uniqueNewTracks =
+              chunk.where((t) => !existingIds.contains(t.id)).toList();
+
+          if (uniqueNewTracks.isNotEmpty) {
+            likedTracksSignal.value = [
+              ...likedTracksSignal.value,
+              ...uniqueNewTracks
+            ];
+          }
+        }
       }
     },
     onDone: () {
+      if (sub != _likedSub) return;
       isLibraryLoadingSignal.value = false;
     },
     onError: (_) {
+      if (sub != _likedSub) return;
       isLibraryLoadingSignal.value = false;
     },
   );
+  _likedSub = sub;
 }
 
 void setLibrarySearchQuery(String query) {
-  librarySearchQuerySignal.value = query;
+  final trimmedQuery = query.trim();
+  librarySearchQuerySignal.value = trimmedQuery;
 
   _librarySearchDebounce?.cancel();
 
-  if (query.trim().isEmpty) {
-    unawaited(refreshLikedTracks(force: true));
+  if (trimmedQuery.isEmpty) {
+    // Немедленно сбрасываем поиск и запрашиваем полный список
+    unawaited(refreshLikedTracks(query: null, force: true));
     return;
   }
 
-  _librarySearchDebounce = Timer(const Duration(milliseconds: 500), () {
-    unawaited(
-      refreshLikedTracks(
-        query: query.trim().isEmpty ? null : query,
-        force: true,
-      ),
-    );
+  _librarySearchDebounce = Timer(const Duration(milliseconds: 300), () {
+    // Проверяем, не изменился ли запрос за время ожидания
+    if (librarySearchQuerySignal.value == trimmedQuery) {
+      unawaited(refreshLikedTracks(query: trimmedQuery, force: true));
+    }
   });
 }
 

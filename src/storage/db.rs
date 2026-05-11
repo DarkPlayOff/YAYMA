@@ -484,9 +484,8 @@ impl AppDatabase {
              FROM liked_tracks lt
              JOIN track_metadata tm ON lt.track_id = tm.track_id
              LEFT JOIN track_metadata_artists tma ON tm.track_id = tma.track_id
-             WHERE tm.title LIKE ?1 OR tma.name LIKE ?1",
-        )?;
-
+             WHERE tm.title LIKE ?1 OR tma.name LIKE ?1 OR tm.album LIKE ?1",
+             )?;
         let search_pattern = format!("%{}%", query);
         let rows = stmt.query_map(params![search_pattern], |row| row.get(0))?;
 

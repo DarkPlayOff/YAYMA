@@ -229,12 +229,13 @@ class _LikedTracksTab extends StatelessWidget {
   Widget build(BuildContext context) {
     return Watch((context) {
       final tracks = likedTracksSignal.value;
+      final query = librarySearchQuerySignal.value;
 
       if (tracks.isEmpty) {
-        return const Center(
+        return Center(
           child: Text(
-            'Нет любимых треков',
-            style: TextStyle(color: Colors.white38),
+            query.isEmpty ? 'Нет любимых треков' : 'Ничего не найдено',
+            style: const TextStyle(color: Colors.white38),
           ),
         );
       }
