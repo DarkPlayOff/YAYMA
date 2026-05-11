@@ -25,8 +25,8 @@ class _YandexIdViewState extends State<YandexIdView> {
       )
       ..loadRequest(Uri.parse('https://id.yandex.ru'));
 
-    // Задержка инициализации WebView, чтобы дождаться окончания анимации перехода
-    // Это предотвращает ошибку "Setting webview bounds failed" на Windows
+    // Delay WebView initialization to wait for the transition animation to finish.
+    // This prevents "Setting webview bounds failed" error on Windows.
     Future.delayed(const Duration(milliseconds: 450), () {
       if (mounted) {
         setState(() {

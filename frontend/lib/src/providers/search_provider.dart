@@ -3,10 +3,9 @@ import 'package:yayma/src/providers/auth_provider.dart';
 import 'package:yayma/src/rust/api/content.dart';
 import 'package:yayma/src/rust/api/models.dart';
 
-// Сигнал поискового запроса
 final FlutterSignal<String> searchQuerySignal = signal<String>('');
 
-// Сигнал результатов поиска (автоматически обновляется при изменении запроса с задержкой)
+/// Search results signal (automatically updates with debounce)
 final FutureSignal<SearchResultsDto?>
 searchResultsSignal = futureSignal<SearchResultsDto?>(() async {
   final query = searchQuerySignal.value;
@@ -15,10 +14,10 @@ searchResultsSignal = futureSignal<SearchResultsDto?>(() async {
   final ctx = appContextSignal.value;
   if (ctx == null) return null;
 
-  // Добавляем искусственную задержку (debounce)
+  // Artificial delay (debounce)
   await Future<void>.delayed(const Duration(milliseconds: 500));
 
-  // Если за это время запрос изменился, этот фьючер будет отменен автоматически сигналами
+  // If the query changes during this time, this future is automatically cancelled
   return search(ctx: ctx, query: query);
 });
 

@@ -4,7 +4,7 @@ import 'package:yayma/src/providers/notification_provider.dart';
 import 'package:yayma/src/rust/api/models.dart';
 import 'package:yayma/src/rust/app/context.dart';
 
-// Сигналы состояния
+// State signals
 final FlutterSignal<AsyncState<bool>> authSignal = signal<AsyncState<bool>>(
   const AsyncLoading(),
 );
@@ -13,16 +13,16 @@ final FlutterSignal<UserAccountDto?> accountSignal = signal<UserAccountDto?>(
 );
 final FlutterSignal<AppContext?> appContextSignal = signal<AppContext?>(null);
 
-// Переопределение функций инициализации для обратной совместимости
-// Реальная логика теперь в AppInit
+// Redefinition of initialization functions for backward compatibility
+// Real logic is now in AppInit
 Future<void> initAuth() => app_init.AppInit.initialize();
 
-// Экспорт login/logout для UI
+// Export login/logout for UI
 Future<void> login(String token) => app_init.AppInit.login(token);
 Future<void> logout() => app_init.AppInit.logout();
 
-/// Выполняет действие Rust безопасно, ловит ошибки и показывает уведомление.
-/// Возвращает true при успехе или если действие вернуло true, иначе false.
+/// Executes a Rust action safely, catches errors and shows a notification.
+/// Returns true on success or if the action returned true, otherwise false.
 Future<bool> runRustAction(
   Future<dynamic> Function(AppContext ctx) action,
 ) async {
@@ -38,8 +38,8 @@ Future<bool> runRustAction(
   }
 }
 
-/// Выполняет получение данных из Rust безопасно.
-/// Возвращает null при отсутствии контекста или ошибке.
+/// Safely fetches data from Rust.
+/// Returns null if there is no context or on error.
 Future<T?> runRustFetch<T>(Future<T> Function(AppContext ctx) fetcher) async {
   final ctx = appContextSignal.value;
   if (ctx == null) return null;

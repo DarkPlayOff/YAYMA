@@ -245,7 +245,7 @@ class _YandexLoginDialogState extends State<YandexLoginDialog> {
   Future<void> _parseToken(String urlString) async {
     if (_isFinalized) return;
 
-    // 1. ПЕРЕХВАТ ИЗ URL (OAuth редирект)
+    // 1. Intercept from URL (OAuth redirect)
     final match = _tokenRegExp.firstMatch(urlString);
     if (match != null) {
       final token = match.group(1);
@@ -255,7 +255,7 @@ class _YandexLoginDialogState extends State<YandexLoginDialog> {
       }
     }
 
-    // 2. ЕСЛИ В ПРОФИЛЕ И ЕЩЕ НЕ ПОШЛИ ЗА ТОКЕНОМ - ИДЕМ ЗА ТОКЕНОМ
+    // 2. Fetch token if already in profile but not yet authorized
     if (!_isFetchingToken &&
         (urlString.startsWith('https://id.yandex.ru') ||
             urlString.startsWith('https://passport.yandex.ru/profile'))) {

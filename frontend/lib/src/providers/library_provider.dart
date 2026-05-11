@@ -6,7 +6,6 @@ import 'package:yayma/src/providers/playback_provider.dart';
 import 'package:yayma/src/rust/api/library.dart';
 import 'package:yayma/src/rust/api/models.dart';
 
-// Сигналы
 final FlutterSignal<List<SimpleTrackDto>> likedTracksSignal =
     signal<List<SimpleTrackDto>>([]);
 final FlutterSignal<List<SimplePlaylistDto>> playlistsSignal =
@@ -18,9 +17,9 @@ StreamSubscription<List<SimpleTrackDto>>? _likedSub;
 Timer? _librarySearchDebounce;
 
 Future<void> initLibrary() async {
-  // Грузим только плейлисты, так как они легкие и могут быть нужны в навигации
+  // Load only playlists as they are lightweight and might be needed for navigation
   await refreshPlaylists();
-  // Лайки НЕ ГРУЗИМ при старте. refreshLikedTracks() вызовет сам экран библиотеки при открытии.
+  // Liked tracks are loaded on demand when the library screen is opened
 }
 
 Future<void> refreshPlaylists() async {
@@ -46,8 +45,8 @@ Future<void> refreshLikedTracks({String? query, bool force = false}) async {
   _likedSub = null;
   unawaited(oldSub?.cancel());
 
-  // НЕ ОЧИЩАЕМ список сразу, чтобы избежать мерцания. 
-  // Мы очистим его только при получении первого чанка или сигнала сброса.
+  // Do not clear the list immediately to avoid flickering.
+  // It will be cleared upon receiving the first chunk or reset signal.
   isLibraryLoadingSignal.value = true;
 
   StreamSubscription<List<SimpleTrackDto>>? sub;
@@ -61,16 +60,16 @@ Future<void> refreshLikedTracks({String? query, bool force = false}) async {
       }
 
       if (chunk.isEmpty) {
-        // Пустой чанк служит сигналом сброса (reset) от Rust
+        // Empty chunk serves as a reset signal from Rust
         likedTracksSignal.value = [];
         isFirstChunk = false;
       } else {
         if (isFirstChunk) {
-          // Пришел первый результат нового поиска - теперь можно заменить старый список
+          // Replace old list with the first result of a new search
           likedTracksSignal.value = chunk;
           isFirstChunk = false;
         } else {
-          // Гарантируем отсутствие дубликатов при добавлении чанка
+          // Avoid duplicates when adding a chunk
           final existingIds = likedTracksSignal.value.map((t) => t.id).toSet();
           final uniqueNewTracks =
               chunk.where((t) => !existingIds.contains(t.id)).toList();
@@ -103,13 +102,13 @@ void setLibrarySearchQuery(String query) {
   _librarySearchDebounce?.cancel();
 
   if (trimmedQuery.isEmpty) {
-    // Немедленно сбрасываем поиск и запрашиваем полный список
+    // Immediately reset search and request the full list
     unawaited(refreshLikedTracks(query: null, force: true));
     return;
   }
 
   _librarySearchDebounce = Timer(const Duration(milliseconds: 300), () {
-    // Проверяем, не изменился ли запрос за время ожидания
+    // Check if the query changed while waiting
     if (librarySearchQuerySignal.value == trimmedQuery) {
       unawaited(refreshLikedTracks(query: trimmedQuery, force: true));
     }
@@ -124,7 +123,6 @@ Future<void> playLikedTrackById(String trackId) async {
   await PlaybackController.playLikedTrack(trackId);
 }
 
-// Экшены
 Future<bool> addTrackToPlaylistAction(
   int kind,
   String trackId,

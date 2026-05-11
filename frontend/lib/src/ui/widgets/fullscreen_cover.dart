@@ -16,7 +16,7 @@ class FullscreenCoverDialog extends StatelessWidget {
     String imageUrl, {
     String? heroTag,
   }) {
-    // Пытаемся получить версию высокого качества
+    // Try to get high-quality version
     final highResUrl = imageUrl
         .replaceFirst('200x200', '1000x1000')
         .replaceFirst('400x400', '1000x1000');
@@ -41,8 +41,7 @@ class FullscreenCoverDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // В качестве placeholder'а используем оригинальную (low-res) обложку,
-    // чтобы при загрузке high-res не было мерцания
+    // Use original low-res cover as placeholder to prevent flickering when loading high-res version
     final placeholder = RustCachedImage(
       imageUrl: heroTag, // heroTag contains the original low-res url
       fit: BoxFit.contain,

@@ -34,7 +34,7 @@ class NavState {
   int get hashCode => section.hashCode ^ (id?.hashCode ?? 0);
 }
 
-/// Список "корневых" разделов (вкладок)
+/// List of root sections (tabs)
 const List<AppSection> rootSections = [
   AppSection.home,
   AppSection.search,
@@ -43,23 +43,23 @@ const List<AppSection> rootSections = [
   AppSection.account,
 ];
 
-/// Текущая активная корневая вкладка
+/// Currently active root tab
 final FlutterSignal<AppSection> currentRootSignal = signal<AppSection>(
   AppSection.home,
 );
 
-/// Стэки навигации для каждой вкладки
+/// Navigation stacks for each tab
 final FlutterSignal<Map<AppSection, List<NavState>>> rootStacksSignal =
     signal<Map<AppSection, List<NavState>>>({
       for (var root in rootSections) root: [NavState(root)],
     });
 
-/// Настройка скрытия навбара
+/// Navbar auto-hide setting
 final FlutterSignal<bool> autoHideNavbarSignal = signal<bool>(
   simple.isAutoHideNavbarEnabledSync(),
 );
 
-/// Вычисляемый текущий стек
+/// Computed current navigation stack
 final FlutterComputed<List<NavState>> navStackSignal = computed(
   () =>
       rootStacksSignal()[currentRootSignal()] ??
@@ -67,40 +67,39 @@ final FlutterComputed<List<NavState>> navStackSignal = computed(
   debugLabel: 'navStackSignal',
 );
 
-/// Сигнал доступности кнопки "Назад"
+/// Back button availability signal
 final FlutterComputed<bool> canGoBackSignal = computed(
   () => navStackSignal().length > 1,
   debugLabel: 'canGoBackSignal',
 );
 
-/// Текущее состояние (верхушка стека активной вкладки)
+/// Top of the active tab stack
 final FlutterComputed<NavState> currentNavStateSignal = computed(
   () => navStackSignal().last,
   debugLabel: 'currentNavStateSignal',
 );
 
-/// Переход на новую страницу
+/// Navigates to a new page
 void navigateTo(AppSection section, [String? id]) {
   final newState = NavState(section, id);
   final activeRoot = currentRootSignal.value;
 
-  // Если мы кликаем на корневой раздел (например, в сайдбаре)
+  // Handle root section clicks
   if (rootSections.contains(section) && id == null) {
     if (activeRoot == section) {
-      // Если кликнули на уже активную вкладку - сбрасываем её стек к корню
+      // Reset stack to root if already active
       final newStacks = Map<AppSection, List<NavState>>.from(
         rootStacksSignal.value,
       );
       newStacks[section] = [NavState(section)];
       rootStacksSignal.value = newStacks;
     } else {
-      // Иначе просто переключаем вкладку
       currentRootSignal.value = section;
     }
     return;
   }
 
-  // Обычный переход (Push) в текущей вкладке
+  // Regular push transition
   final currentStack =
       rootStacksSignal.value[activeRoot] ?? [NavState(activeRoot)];
   if (currentStack.last == newState) return;
@@ -112,7 +111,7 @@ void navigateTo(AppSection section, [String? id]) {
   rootStacksSignal.value = newStacks;
 }
 
-/// Возврат на предыдущую страницу (Pop)
+/// Returns to the previous page (Pop)
 void goBack() {
   final activeRoot = currentRootSignal.value;
   final currentStack = rootStacksSignal.value[activeRoot] ?? [];
