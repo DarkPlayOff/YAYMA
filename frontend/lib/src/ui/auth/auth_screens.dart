@@ -227,23 +227,35 @@ class _YandexLoginDialogState extends State<YandexLoginDialog> {
       )
       ..setNavigationDelegate(
         NavigationDelegate(
-          onPageStarted: _parseToken,
+          onPageStarted: (url) {
+            unawaited(_parseToken(url));
+          },
           onUrlChange: (change) {
             if (change.url != null) {
-              _parseToken(change.url!);
+              unawaited(_parseToken(change.url!));
             }
           },
-          onNavigationRequest: (request) {
-            _parseToken(request.url);
-            return NavigationDecision.navigate;
+          onNavigationRequest: (request) async {
+            return await _parseToken(request.url);
+          },
+          onPageFinished: (url) async {
+            if (url != null) {
+              await _parseToken(url);
+            }
+            final currentUrl = await _controller.currentUrl();
+            if (currentUrl != null) {
+              await _parseToken(currentUrl);
+            }
           },
         ),
       )
       ..loadRequest(Uri.parse('https://passport.yandex.ru/pwl-yandex/auth/'));
   }
 
-  Future<void> _parseToken(String urlString) async {
-    if (_isFinalized) return;
+  Future<NavigationDecision> _parseToken(String urlString) async {
+    if (_isFinalized) return NavigationDecision.navigate;
+
+    debugPrint('🌐 URL: $urlString');
 
     // 1. Intercept from URL (OAuth redirect)
     final match = _tokenRegExp.firstMatch(urlString);
@@ -251,7 +263,7 @@ class _YandexLoginDialogState extends State<YandexLoginDialog> {
       final token = match.group(1);
       if (token != null) {
         await _handleFoundToken(token);
-        return;
+        return NavigationDecision.prevent;
       }
     }
 
@@ -262,12 +274,18 @@ class _YandexLoginDialogState extends State<YandexLoginDialog> {
       debugPrint('🔍 Authorized! Getting token via official desktop client...');
       _isFetchingToken = true;
 
-      await _controller.loadRequest(
-        Uri.parse(
-          'https://oauth.yandex.ru/authorize?response_type=token&client_id=97fe03033fa34407ac9bcf91d5afed5b',
+      unawaited(
+        _controller.loadRequest(
+          Uri.parse(
+            'https://oauth.yandex.ru/authorize?response_type=token&client_id=97fe03033fa34407ac9bcf91d5afed5b',
+          ),
         ),
       );
+
+      return NavigationDecision.prevent;
     }
+
+    return NavigationDecision.navigate;
   }
 
   Future<void> _handleFoundToken(String token) async {

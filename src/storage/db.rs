@@ -138,6 +138,41 @@ impl AppDatabase {
         Ok(Self { conn })
     }
 
+    pub fn save_auth_token(&self, token: &str, user_id: u64) -> rusqlite::Result<()> {
+        let val = format!("{}:{}", token, user_id);
+        self.conn.execute(
+            "INSERT INTO app_settings (key, value) VALUES ('auth_token', ?1) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            params![val],
+        )?;
+        Ok(())
+    }
+
+    pub fn load_auth_token(&self) -> rusqlite::Result<Option<(String, u64)>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT value FROM app_settings WHERE key = 'auth_token'")?;
+        let mut rows = stmt.query([])?;
+        if let Some(row) = rows.next()? {
+            let val: String = row.get(0)?;
+            let mut parts = val.split(':');
+            let token = parts.next().ok_or(rusqlite::Error::InvalidQuery)?.to_string();
+            let uid = parts
+                .next()
+                .ok_or(rusqlite::Error::InvalidQuery)?
+                .parse()
+                .map_err(|_| rusqlite::Error::InvalidQuery)?;
+            Ok(Some((token, uid)))
+        } else {
+            Ok(None)
+        }
+    }
+
+    pub fn delete_auth_token(&self) -> rusqlite::Result<()> {
+        self.conn
+            .execute("DELETE FROM app_settings WHERE key = 'auth_token'", [])?;
+        Ok(())
+    }
+
     pub fn update_cache_metadata(
         &self,
         url: &str,

@@ -45,12 +45,12 @@ android {
     }
 
     defaultConfig {
-        minSdkVersion 19
+        minSdkVersion 26
     }
 }
 
 apply from: "../cargokit/gradle/plugin.gradle"
 cargokit {
     manifestDir = "../../../"
-    libname = "rust_lib_frontend"
+    libname = "yayma"
 }
