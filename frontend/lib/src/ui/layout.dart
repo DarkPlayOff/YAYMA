@@ -37,6 +37,9 @@ class _AppLayoutState extends State<AppLayout> {
       
       final isDesktop = Platform.isWindows || Platform.isLinux || Platform.isMacOS;
       final isCustomTitlebar = isDesktop && simple.isCustomTitlebarEnabledSync();
+      
+      final screenWidth = MediaQuery.sizeOf(context).width;
+      final isNarrow = screenWidth < 600;
 
       return Scaffold(
         backgroundColor: Colors.black,
@@ -80,7 +83,7 @@ class _AppLayoutState extends State<AppLayout> {
                       Positioned(
                         left: 0,
                         right: 0,
-                        bottom: 0,
+                        bottom: isNarrow ? 96 : 0,
                         child: _buildAnimatedPlayerBar(isHome),
                       ),
                     ],
@@ -89,9 +92,9 @@ class _AppLayoutState extends State<AppLayout> {
               ),
 
               // 4. Navigation
-              const Align(
-                alignment: Alignment.centerLeft,
-                child: FloatingNavBar(),
+              Align(
+                alignment: isNarrow ? Alignment.bottomCenter : Alignment.centerLeft,
+                child: const FloatingNavBar(),
               ),
 
               // 5. Back button
@@ -210,6 +213,8 @@ class _AppLayoutState extends State<AppLayout> {
   Widget _buildWindowContent(NavState state, int index) {
     return Watch((context) {
       final isHome = state.section == AppSection.home;
+      final screenWidth = MediaQuery.sizeOf(context).width;
+      final isNarrow = screenWidth < 600;
 
       // For the settings, do not use PageStorageKey to avoid saving state between visits.
       final key = state.section == AppSection.account
@@ -223,8 +228,8 @@ class _AppLayoutState extends State<AppLayout> {
 
       return Padding(
         padding: EdgeInsets.only(
-          left: isHome ? 0 : 96,
-          bottom: 0,
+          left: (isHome || isNarrow) ? 0 : 96,
+          bottom: (isHome || !isNarrow) ? 0 : 96,
         ),
         child: child,
       );

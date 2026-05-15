@@ -71,15 +71,92 @@ class _FloatingNavBarState extends State<FloatingNavBar>
     final isAutoHideEnabled = autoHideNavbarSignal.watch(context);
 
     final isVisible = !isHome || !isAutoHideEnabled || _isNavbarHovered || _isHovered || _isAccountMenuOpen;
+    final isNarrow = MediaQuery.sizeOf(context).width < 600;
+
+    final children = [
+      MouseRegion(
+        onEnter: (_) {
+          setState(() {
+            _isHovered = true;
+          });
+          _showWaveSettings();
+        },
+        onExit: (_) {
+          setState(() {
+            _isHovered = false;
+          });
+          _hideWaveSettings();
+        },
+        child: Watch((context) {
+          final isWaveActive = currentWaveSeedsSignal().isNotEmpty;
+          final isPlaying = isPlayingSignal();
+
+          return IconButton(
+            onPressed: () {
+              if (isWaveActive) {
+                unawaited(PlaybackController.togglePlay());
+              } else {
+                unawaited(HomeController.startMyWave());
+              }
+            },
+            style: IconButton.styleFrom(
+              backgroundColor: Theme.of(
+                context,
+              ).colorScheme.primary.withValues(alpha: 0.1),
+              hoverColor: Theme.of(
+                context,
+              ).colorScheme.primary.withValues(alpha: 0.2),
+            ),
+            icon: Icon(
+              isWaveActive && isPlaying
+                  ? Icons.pause_rounded
+                  : Icons.play_arrow_rounded,
+              size: 32,
+              color: Theme.of(context).colorScheme.primary,
+            ),
+          );
+        }),
+      ),
+      SizedBox(height: isNarrow ? 0 : 12, width: isNarrow ? 12 : 0),
+      _NavIcon(
+        icon: Icons.home_rounded,
+        isSelected: currentSection == AppSection.home,
+        onTap: () => setSection(AppSection.home),
+        isNarrow: isNarrow,
+      ),
+      _NavIcon(
+        icon: Icons.search_rounded,
+        isSelected: currentSection == AppSection.search,
+        onTap: () => setSection(AppSection.search),
+        isNarrow: isNarrow,
+      ),
+      _NavIcon(
+        icon: Icons.library_music_rounded,
+        isSelected:
+            currentSection == AppSection.liked ||
+            currentSection == AppSection.playlists,
+        onTap: () => setSection(AppSection.liked),
+        isNarrow: isNarrow,
+      ),
+      SizedBox(height: isNarrow ? 0 : 12, width: isNarrow ? 12 : 0),
+      _AccountButton(
+        onOpened: () => setState(() => _isAccountMenuOpen = true),
+        onClosed: () => setState(() => _isAccountMenuOpen = false),
+      ),
+    ];
 
     return MouseRegion(
       opaque: false,
       onEnter: (_) => setState(() => _isNavbarHovered = true),
       onExit: (_) => setState(() => _isNavbarHovered = false),
       child: Padding(
-        padding: const EdgeInsets.only(left: 16, right: 48, top: 48, bottom: 48),
+        padding: isNarrow 
+            ? const EdgeInsets.only(bottom: 24, left: 24, right: 24)
+            : const EdgeInsets.only(left: 16, right: 48, top: 48, bottom: 48),
         child: AnimatedSlide(
-          offset: isVisible ? Offset.zero : const Offset(-1.5, 0),
+          offset: isVisible 
+              ? Offset.zero 
+              : (isNarrow ? const Offset(0, 1.5) : const Offset(-1.5, 0)),
           duration: const Duration(milliseconds: 300),
           curve: Curves.easeOutCubic,
           child: AnimatedOpacity(
@@ -88,8 +165,12 @@ class _FloatingNavBarState extends State<FloatingNavBar>
             child: CompositedTransformTarget(
               link: _layerLink,
               child: Container(
-                width: 64,
-                padding: const EdgeInsets.symmetric(vertical: 12),
+                width: isNarrow ? null : 64,
+                height: isNarrow ? 64 : null,
+                padding: EdgeInsets.symmetric(
+                  vertical: isNarrow ? 0 : 12,
+                  horizontal: isNarrow ? 12 : 0,
+                ),
                 decoration: BoxDecoration(
                   color: isHome
                       ? Colors.black.withValues(alpha: 0.5)
@@ -104,82 +185,21 @@ class _FloatingNavBarState extends State<FloatingNavBar>
                     ),
                   ],
                 ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    MouseRegion(
-                      onEnter: (_) {
-                        setState(() {
-                          _isHovered = true;
-                        });
-                        _showWaveSettings();
-                      },
-                      onExit: (_) {
-                        setState(() {
-                          _isHovered = false;
-                        });
-                        _hideWaveSettings();
-                      },
-                      child: Watch((context) {
-                        final isWaveActive = currentWaveSeedsSignal().isNotEmpty;
-                        final isPlaying = isPlayingSignal();
-
-                        return IconButton(
-                          onPressed: () {
-                            if (isWaveActive) {
-                              unawaited(PlaybackController.togglePlay());
-                            } else {
-                              unawaited(HomeController.startMyWave());
-                            }
-                          },
-                          style: IconButton.styleFrom(
-                            backgroundColor: Theme.of(
-                              context,
-                            ).colorScheme.primary.withValues(alpha: 0.1),
-                            hoverColor: Theme.of(
-                              context,
-                            ).colorScheme.primary.withValues(alpha: 0.2),
-                          ),
-                          icon: Icon(
-                            isWaveActive && isPlaying
-                                ? Icons.pause_rounded
-                                : Icons.play_arrow_rounded,
-                            size: 32,
-                            color: Theme.of(context).colorScheme.primary,
-                          ),
-                        );
-                      }),
-                    ),
-                  const SizedBox(height: 12),
-                  _NavIcon(
-                    icon: Icons.home_rounded,
-                    isSelected: currentSection == AppSection.home,
-                    onTap: () => setSection(AppSection.home),
-                  ),
-                  _NavIcon(
-                    icon: Icons.search_rounded,
-                    isSelected: currentSection == AppSection.search,
-                    onTap: () => setSection(AppSection.search),
-                  ),
-                  _NavIcon(
-                    icon: Icons.library_music_rounded,
-                    isSelected:
-                        currentSection == AppSection.liked ||
-                        currentSection == AppSection.playlists,
-                    onTap: () => setSection(AppSection.liked),
-                  ),
-                  const SizedBox(height: 12),
-                  _AccountButton(
-                    onOpened: () => setState(() => _isAccountMenuOpen = true),
-                    onClosed: () => setState(() => _isAccountMenuOpen = false),
-                  ),
-                ],
+                child: isNarrow 
+                    ? Row(
+                        mainAxisSize: MainAxisSize.min,
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: children,
+                      )
+                    : Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: children,
+                      ),
               ),
             ),
           ),
         ),
       ),
-      )
     );
   }
 }
@@ -260,13 +280,17 @@ class _AccountMenuDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isNarrow = MediaQuery.sizeOf(context).width < 600;
+
     return Dialog(
-      alignment: Alignment.centerLeft,
-      insetPadding: const EdgeInsets.only(left: 96),
+      alignment: isNarrow ? Alignment.bottomCenter : Alignment.centerLeft,
+      insetPadding: isNarrow
+          ? const EdgeInsets.symmetric(horizontal: 16, vertical: 24)
+          : const EdgeInsets.only(left: 96),
       backgroundColor: const Color(0xFF18181B),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
       child: Container(
-        width: 320,
+        width: isNarrow ? double.infinity : 320,
         padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -469,13 +493,13 @@ class _WaveOverlayState extends State<_WaveOverlay>
     final isNarrow = screenWidth < 600;
 
     return Positioned(
-      width: isNarrow ? screenWidth - 100 : 480,
+      width: isNarrow ? screenWidth - 48 : 480,
       child: CompositedTransformFollower(
         link: widget.layerLink,
         showWhenUnlinked: false,
-        targetAnchor: Alignment.centerRight,
-        followerAnchor: Alignment.centerLeft,
-        offset: const Offset(32, 0),
+        targetAnchor: isNarrow ? Alignment.topCenter : Alignment.centerRight,
+        followerAnchor: isNarrow ? Alignment.bottomCenter : Alignment.centerLeft,
+        offset: isNarrow ? const Offset(0, -24) : const Offset(32, 0),
         child: MouseRegion(
           onEnter: (_) => widget.onHover(isHovered: true),
           onExit: (_) => widget.onHover(isHovered: false),
@@ -504,17 +528,22 @@ class _NavIcon extends StatelessWidget {
   final IconData icon;
   final bool isSelected;
   final VoidCallback onTap;
+  final bool isNarrow;
 
   const _NavIcon({
     required this.icon,
     required this.isSelected,
     required this.onTap,
+    this.isNarrow = false,
   });
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: EdgeInsets.symmetric(
+        vertical: isNarrow ? 0 : 4,
+        horizontal: isNarrow ? 4 : 0,
+      ),
       child: IconButton(
         onPressed: onTap,
         icon: Icon(
