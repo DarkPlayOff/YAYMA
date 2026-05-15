@@ -31,8 +31,10 @@ pub struct HttpCache {
 }
 
 impl HttpCache {
-    pub fn new(db: Arc<Mutex<AppDatabase>>) -> Self {
-        let cache_dir = if let Some(proj_dirs) = ProjectDirs::from("com", "yamusic", "yamusic") {
+    pub fn new(db: Arc<Mutex<AppDatabase>>, base_path: Option<PathBuf>) -> Self {
+        let cache_dir = if let Some(path) = base_path {
+            path.join("http_cache")
+        } else if let Some(proj_dirs) = ProjectDirs::from("com", "yamusic", "yamusic") {
             proj_dirs.cache_dir().join("http_cache")
         } else {
             std::env::current_dir()

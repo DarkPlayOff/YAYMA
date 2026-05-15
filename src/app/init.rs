@@ -8,6 +8,14 @@ use crate::http::ApiService;
 use crate::storage::cache::HttpCache;
 use parking_lot::Mutex;
 use std::sync::Arc;
+use std::path::PathBuf;
+use std::sync::OnceLock;
+
+static DATA_DIR: OnceLock<PathBuf> = OnceLock::new();
+
+pub fn get_data_dir() -> Option<PathBuf> {
+    DATA_DIR.get().cloned()
+}
 
 /// Complete application initialization cycle
 pub async fn initialize_app(
@@ -18,9 +26,14 @@ pub async fn initialize_app(
 
 /// Initialize base infrastructure (logging, panic hook, DB)
 /// Called once at FRB startup
-pub fn initialize_infrastructure() {
-    static ONCE: std::sync::Once = std::sync::Once::new();
+pub fn initialize_infrastructure(base_path: Option<String>) {
+    if let Some(path) = base_path {
+        let p = PathBuf::from(path);
+        std::fs::create_dir_all(&p).ok();
+        DATA_DIR.set(p).ok();
+    }
 
+    static ONCE: std::sync::Once = std::sync::Once::new();
     ONCE.call_once(|| {
         flutter_rust_bridge::setup_default_user_utils();
         crate::util::hook::set_panic_hook();
@@ -34,9 +47,9 @@ async fn initialize_services(
     let api_arc = Arc::new(api);
     let (event_tx, event_rx) = flume::unbounded();
 
-    let db = AppDatabase::init()?;
+    let db = AppDatabase::init(DATA_DIR.get().cloned())?;
     let db_arc = Arc::new(Mutex::new(db));
-    let http_cache = Arc::new(HttpCache::new(db_arc.clone()));
+    let http_cache = Arc::new(HttpCache::new(db_arc.clone(), DATA_DIR.get().cloned()));
 
     let (audio_tx, signals, state, effect_handles) =
         AudioSystem::spawn(event_tx.clone(), api_arc.clone(), db_arc.clone(), http_cache.clone()).await?;

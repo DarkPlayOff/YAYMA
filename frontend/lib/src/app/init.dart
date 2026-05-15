@@ -1,12 +1,14 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/providers/auth_provider.dart'
     show accountSignal, appContextSignal, authSignal;
 import 'package:yayma/src/providers/library_provider.dart';
 import 'package:yayma/src/providers/playback_provider.dart';
 import 'package:yayma/src/rust/api/auth.dart';
+import 'package:yayma/src/rust/api/simple.dart' as simple;
 import 'package:yayma/src/rust/app/context.dart';
 import 'package:yayma/src/rust/frb_generated.dart';
 
@@ -20,6 +22,10 @@ class AppInit {
     WidgetsFlutterBinding.ensureInitialized();
     SignalsObserver.instance = null;
     await RustLib.init();
+
+    final appDir = await getApplicationDocumentsDirectory();
+    await simple.initAppInfrastructure(basePath: appDir.path);
+
     unawaited(_initializeAuthAndServices());
   }
 

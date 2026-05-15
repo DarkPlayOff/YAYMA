@@ -5,7 +5,7 @@ use flutter_rust_bridge::frb;
 
 #[frb(init)]
 pub fn init_app() {
-    initialize_infrastructure();
+    initialize_infrastructure(None);
 }
 
 pub async fn restore_saved_state(ctx: &AppContext) -> Option<SavedStateDto> {

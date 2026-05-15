@@ -50,7 +50,7 @@ pub fn is_custom_titlebar_enabled(ctx: &AppContext) -> bool {
 }
 
 pub fn is_custom_titlebar_enabled_sync() -> bool {
-    if let Ok(db) = crate::storage::db::AppDatabase::init() {
+    if let Ok(db) = crate::storage::db::AppDatabase::init(crate::app::get_data_dir()) {
         db.load_custom_titlebar().unwrap_or(true)
     } else {
         true
@@ -68,7 +68,7 @@ pub fn is_auto_hide_navbar_enabled(ctx: &AppContext) -> bool {
 }
 
 pub fn is_auto_hide_navbar_enabled_sync() -> bool {
-    if let Ok(db) = crate::storage::db::AppDatabase::init() {
+    if let Ok(db) = crate::storage::db::AppDatabase::init(crate::app::get_data_dir()) {
         db.load_auto_hide_navbar().unwrap_or(true)
     } else {
         true

@@ -23,7 +23,7 @@ impl TokenProvider {
         }
         #[cfg(target_os = "android")]
         {
-            let db = crate::storage::db::AppDatabase::init().ok()?;
+            let db = crate::storage::db::AppDatabase::init(crate::app::get_data_dir()).ok()?;
             db.load_auth_token().ok().flatten()
         }
         #[cfg(not(any(
@@ -44,7 +44,7 @@ impl TokenProvider {
         }
         #[cfg(target_os = "android")]
         {
-            let db = crate::storage::db::AppDatabase::init()?;
+            let db = crate::storage::db::AppDatabase::init(crate::app::get_data_dir())?;
             db.save_auth_token(token, user_id)?;
             Ok(())
         }
@@ -72,7 +72,7 @@ impl TokenProvider {
         }
         #[cfg(target_os = "android")]
         {
-            let db = crate::storage::db::AppDatabase::init()?;
+            let db = crate::storage::db::AppDatabase::init(crate::app::get_data_dir())?;
             db.delete_auth_token()?;
             Ok(())
         }

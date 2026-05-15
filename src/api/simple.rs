@@ -14,6 +14,10 @@ pub enum AppEvent {
     Error(String),
 }
 
+pub fn init_app_infrastructure(base_path: Option<String>) {
+    crate::app::initialize_infrastructure(base_path)
+}
+
 pub fn get_app_version() -> String {
     logic::get_app_version()
 }

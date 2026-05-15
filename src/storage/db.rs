@@ -24,8 +24,11 @@ pub struct TrackMetadata {
 }
 
 impl AppDatabase {
-    pub fn init() -> Result<Self> {
-        let db_path = if let Some(proj_dirs) = ProjectDirs::from("com", "yamusic", "yamusic") {
+    pub fn init(base_path: Option<PathBuf>) -> Result<Self> {
+        let db_path = if let Some(path) = base_path {
+            std::fs::create_dir_all(&path).ok();
+            path.join("yamusic.db")
+        } else if let Some(proj_dirs) = ProjectDirs::from("com", "yamusic", "yamusic") {
             let data_dir = proj_dirs.data_dir();
             std::fs::create_dir_all(data_dir).ok();
             data_dir.join("yamusic.db")
