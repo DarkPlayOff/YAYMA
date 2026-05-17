@@ -11,6 +11,7 @@ import 'package:yayma/src/rust/api/content.dart' as rust;
 import 'package:yayma/src/rust/api/models.dart';
 import 'package:yayma/src/ui/widgets/app_context_menu.dart';
 import 'package:yayma/src/ui/widgets/lyrics_view.dart';
+import 'package:yayma/src/ui/widgets/responsive.dart';
 import 'package:yayma/src/ui/widgets/track_details_dialog.dart';
 import 'package:yayma/src/ui/widgets/track_elements.dart';
 
@@ -24,7 +25,7 @@ class CommonTrackTile extends StatefulWidget {
   final List<Widget>? hoverActions;
   final VoidCallback? onTap;
   final VoidCallback? onTitleTap;
-  final EdgeInsetsGeometry contentPadding;
+  final EdgeInsetsGeometry? contentPadding;
   final String? albumId;
 
   const CommonTrackTile({
@@ -38,10 +39,7 @@ class CommonTrackTile extends StatefulWidget {
     this.hoverActions,
     this.onTap,
     this.onTitleTap,
-    this.contentPadding = const EdgeInsets.symmetric(
-      horizontal: 40,
-      vertical: 8,
-    ),
+    this.contentPadding,
     this.albumId,
   });
 
@@ -54,9 +52,31 @@ class _CommonTrackTileState extends State<CommonTrackTile> {
   bool _isTitleHovered = false;
   bool _isMenuOpen = false;
 
+  Widget _adjustLeading(Widget leading, bool isNarrow) {
+    if (isNarrow && leading is TrackCover && leading.size == 64) {
+      return TrackCover(
+        url: leading.url,
+        size: 48,
+        borderRadius: leading.borderRadius,
+        isCircle: leading.isCircle,
+        canExpand: leading.canExpand,
+        heroTag: leading.heroTag,
+      );
+    }
+    return leading;
+  }
+
   @override
   Widget build(BuildContext context) {
     final showHighlighted = _isHovered || _isMenuOpen;
+    final isNarrow = context.isNarrow;
+
+    final effectivePadding =
+        widget.contentPadding ??
+        EdgeInsets.symmetric(
+          horizontal: context.horizontalPadding,
+          vertical: isNarrow ? 4 : 8,
+        );
 
     return Watch((context) {
       final currentTrackId = currentTrackIdSignal.watch(context);
@@ -72,7 +92,7 @@ class _CommonTrackTileState extends State<CommonTrackTile> {
             borderRadius: BorderRadius.circular(12),
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 150),
-              padding: widget.contentPadding,
+              padding: effectivePadding,
               decoration: BoxDecoration(
                 color: showHighlighted
                     ? Colors.white.withValues(alpha: 0.05)
@@ -82,8 +102,8 @@ class _CommonTrackTileState extends State<CommonTrackTile> {
               child: Row(
                 children: [
                   if (widget.leading != null) ...[
-                    widget.leading!,
-                    const SizedBox(width: 16),
+                    _adjustLeading(widget.leading!, isNarrow),
+                    SizedBox(width: isNarrow ? 12 : 16),
                   ],
                   Expanded(
                     child: Column(
@@ -113,7 +133,7 @@ class _CommonTrackTileState extends State<CommonTrackTile> {
                                             ).colorScheme.primary
                                           : Colors.white,
                                       fontWeight: FontWeight.bold,
-                                      fontSize: 16,
+                                      fontSize: isNarrow ? 14 : 16,
                                       decoration:
                                           _isTitleHovered &&
                                               widget.onTitleTap != null
@@ -126,18 +146,21 @@ class _CommonTrackTileState extends State<CommonTrackTile> {
                                 ),
                               ),
                             ),
-                            TrackVersionWidget(version: widget.version),
+                            TrackVersionWidget(
+                              version: widget.version,
+                              fontSize: isNarrow ? 12 : 14,
+                            ),
                           ],
                         ),
-                        const SizedBox(height: 4),
+                        const SizedBox(height: 2),
                         ArtistNamesWidget(
                           artists: widget.artists,
-                          fontSize: 15,
+                          fontSize: isNarrow ? 13 : 15,
                         ),
                       ],
                     ),
                   ),
-                  const SizedBox(width: 16),
+                  SizedBox(width: isNarrow ? 12 : 16),
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [

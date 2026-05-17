@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -7,6 +6,7 @@ import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/providers/auth_provider.dart';
 import 'package:yayma/src/providers/playback_provider.dart';
 import 'package:yayma/src/rust/api/audio_fx.dart' as rust_api;
+import 'package:yayma/src/rust/lib.dart';
 import 'package:yayma/src/ui/widgets/rust_cached_image.dart';
 
 class BlurredCoverBackground extends StatelessWidget {
@@ -114,7 +114,7 @@ class _WaveBackgroundState extends State<WaveBackground> {
 
 class PixelPerfectVibePainter extends CustomPainter {
   final ui.FragmentShader shader;
-  final FlutterSignal<Float32List> signal;
+  final FlutterSignal<F32Array26> signal;
   static const _rotData = [-0.3, 0.3, 0.4, -0.3, -0.3, -0.4, -0.3, -0.3, 0.4];
   PixelPerfectVibePainter({required this.shader, required this.signal})
     : super(repaint: signal);

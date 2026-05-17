@@ -64,7 +64,7 @@ impl VibeEngine {
         }
     }
 
-    pub fn tick(&mut self, bands: [f32; 3]) -> Vec<f32> {
+    pub fn tick(&mut self, bands: [f32; 3]) -> [f32; 26] {
         let now = Instant::now();
         let dt = now.duration_since(self.last_tick).as_secs_f32();
         self.last_tick = now;
@@ -126,12 +126,12 @@ impl VibeEngine {
             self.current_colors[i] += (self.target_colors[i] - self.current_colors[i]) * color_lerp;
         }
 
-        let mut out = Vec::with_capacity(26);
-        out.push(self.time);
-        out.push(self.smoothed_energy);
-        out.extend_from_slice(&self.audio_values);
-        out.extend_from_slice(&self.react);
-        out.extend_from_slice(&self.current_colors);
+        let mut out = [0.0f32; 26];
+        out[0] = self.time;
+        out[1] = self.smoothed_energy;
+        out[2..5].copy_from_slice(&self.audio_values);
+        out[5..8].copy_from_slice(&self.react);
+        out[8..26].copy_from_slice(&self.current_colors);
         out
     }
 }

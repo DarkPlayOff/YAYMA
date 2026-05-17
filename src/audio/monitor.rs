@@ -363,35 +363,58 @@ impl Monitor {
 
     #[inline]
     pub fn process_stereo(&self, left: f32, right: f32) {
+        self.process_block(&[left], &[right]);
+    }
+
+    #[inline]
+    pub fn process_block(&self, left: &[f32], right: &[f32]) {
         if !self.internal.enabled.load(Ordering::Relaxed) {
             return;
         }
-        let mono = (left + right) * 0.5;
-        let abs_mono = mono.abs();
-        self.waveform.push(mono);
 
-        // Filter cascade for clean separation
-        let l_f = f32::from_bits(self.internal.low_filter.load(Ordering::Relaxed));
-        let _m_f = f32::from_bits(self.internal.mid_filter.load(Ordering::Relaxed));
-        let h_f = f32::from_bits(self.internal.high_filter.load(Ordering::Relaxed));
+        let len = left.len().min(right.len());
+        if len == 0 {
+            return;
+        }
 
-        // 1. Bass: LPF 150Hz
-        let low = l_f + (abs_mono - l_f) * 0.05;
-        self.internal
-            .low_filter
-            .store(low.to_bits(), Ordering::Relaxed);
+        let mut local_bass_peak = 0.0f32;
+        let mut local_mid_peak = 0.0f32;
+        let mut local_high_peak = 0.0f32;
+        let mut local_combined_amp_sum = 0.0f32;
 
-        // 2. High: Sample - LPF 4000Hz (High Pass effect)
-        let high_raw = abs_mono - (h_f + (abs_mono - h_f) * 0.4);
-        let high = high_raw.abs();
-        self.internal
-            .high_filter
-            .store((h_f + (abs_mono - h_f) * 0.4).to_bits(), Ordering::Relaxed);
+        let mut l_f = f32::from_bits(self.internal.low_filter.load(Ordering::Relaxed));
+        let mut h_f = f32::from_bits(self.internal.high_filter.load(Ordering::Relaxed));
 
-        // 3. Mid: Everything remaining between them
-        let mid = (abs_mono - low - high).abs();
+        for i in 0..len {
+            let l = left[i];
+            let r = right[i];
+            let mono = (l + r) * 0.5;
+            let abs_mono = mono.abs();
+            
+            self.waveform.push(mono);
 
-        // Peak-hold (accumulate maximum)
+            // Filter cascade
+            let low = l_f + (abs_mono - l_f) * 0.05;
+            l_f = low;
+
+            let h_val = h_f + (abs_mono - h_f) * 0.4;
+            let high = (abs_mono - h_val).abs();
+            h_f = h_val;
+
+            let mid = (abs_mono - low - high).abs();
+
+            local_bass_peak = local_bass_peak.max(low);
+            local_mid_peak = local_mid_peak.max(mid);
+            local_high_peak = local_high_peak.max(high);
+
+            self.amplitude_left.process(l);
+            self.amplitude_right.process(r);
+            local_combined_amp_sum += (self.amplitude_left.amplitude() + self.amplitude_right.amplitude()) * 0.5;
+        }
+
+        self.internal.low_filter.store(l_f.to_bits(), Ordering::Relaxed);
+        self.internal.high_filter.store(h_f.to_bits(), Ordering::Relaxed);
+
         let update_peak = |atomic: &AtomicU32, val: f32| {
             let mut cur = atomic.load(Ordering::Relaxed);
             while val > f32::from_bits(cur) {
@@ -407,17 +430,13 @@ impl Monitor {
             }
         };
 
-        update_peak(&self.internal.bass_amp, low);
-        update_peak(&self.internal.mid_amp, mid);
-        update_peak(&self.internal.high_amp, high);
+        update_peak(&self.internal.bass_amp, local_bass_peak);
+        update_peak(&self.internal.mid_amp, local_mid_peak);
+        update_peak(&self.internal.high_amp, local_high_peak);
 
-        self.amplitude_left.process(left);
-        self.amplitude_right.process(right);
-        self.internal.combined_amplitude.store(
-            ((self.amplitude_left.amplitude() + self.amplitude_right.amplitude()) * 0.5).to_bits(),
-            Ordering::Relaxed,
-        );
-        self.internal.position.fetch_add(1, Ordering::Relaxed);
+        let avg_combined = local_combined_amp_sum / len as f32;
+        self.internal.combined_amplitude.store(avg_combined.to_bits(), Ordering::Relaxed);
+        self.internal.position.fetch_add(len as u64, Ordering::Relaxed);
     }
 
     #[inline]

@@ -7,6 +7,7 @@ import 'package:yayma/src/rust/api/models.dart';
 import 'package:yayma/src/ui/add_to_playlist_dialog.dart';
 import 'package:yayma/src/ui/widgets/common_ui.dart';
 import 'package:yayma/src/ui/widgets/media_card.dart';
+import 'package:yayma/src/ui/widgets/responsive.dart';
 import 'package:yayma/src/ui/widgets/track_elements.dart';
 import 'package:yayma/src/ui/widgets/track_tile.dart';
 
@@ -35,44 +36,55 @@ class _SearchViewState extends State<SearchView> {
   @override
   Widget build(BuildContext context) {
     final searchResultsAsync = searchResultsSignal.watch(context);
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final isNarrow = screenWidth < 600;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(40, 60, 40, 20),
+          padding: context.viewPadding,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
+              Text(
                 'Поиск',
                 style: TextStyle(
-                  fontSize: 48,
+                  fontSize: isNarrow ? 32 : 48,
                   fontWeight: FontWeight.w900,
                   color: Colors.white,
                   letterSpacing: -1,
                 ),
               ),
-              const SizedBox(height: 24),
+              SizedBox(height: isNarrow ? 16 : 24),
               TextField(
                 controller: _controller,
                 onChanged: setSearchQuery,
-                style: const TextStyle(fontSize: 24, color: Colors.white),
+                style: TextStyle(
+                  fontSize: isNarrow ? 18 : 24,
+                  color: Colors.white,
+                ),
                 decoration: InputDecoration(
                   hintText: 'Треки, альбомы, артисты...',
                   hintStyle: const TextStyle(color: Colors.white38),
-                  prefixIcon: const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 16),
-                    child: Icon(Icons.search, color: Colors.white54, size: 32),
+                  prefixIcon: Padding(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: isNarrow ? 12 : 16,
+                    ),
+                    child: Icon(
+                      Icons.search,
+                      color: Colors.white54,
+                      size: isNarrow ? 24 : 32,
+                    ),
                   ),
                   filled: true,
                   fillColor: Colors.white.withValues(alpha: 0.05),
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(24),
+                    borderRadius: BorderRadius.circular(isNarrow ? 16 : 24),
                     borderSide: BorderSide.none,
                   ),
-                  contentPadding: const EdgeInsets.symmetric(
-                    vertical: 24,
+                  contentPadding: EdgeInsets.symmetric(
+                    vertical: isNarrow ? 16 : 24,
                     horizontal: 20,
                   ),
                 ),

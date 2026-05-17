@@ -4,10 +4,11 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/providers/auth_provider.dart';
-import 'package:yayma/src/providers/notification_provider.dart';
 import 'package:yayma/src/providers/navigation_provider.dart';
+import 'package:yayma/src/providers/notification_provider.dart';
 import 'package:yayma/src/rust/api/content.dart' as rust;
 import 'package:yayma/src/rust/api/simple.dart' as simple;
+import 'package:yayma/src/ui/widgets/responsive.dart';
 
 class SettingsView extends StatefulWidget {
   const SettingsView({super.key});
@@ -114,17 +115,25 @@ class _SettingsViewState extends State<SettingsView> {
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final isNarrow = screenWidth < 600;
+
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: CustomScrollView(
         slivers: [
-          const SliverToBoxAdapter(
+          SliverToBoxAdapter(
             child: Padding(
-              padding: EdgeInsets.fromLTRB(40, 60, 40, 40),
+              padding: EdgeInsets.fromLTRB(
+                isNarrow ? 20 : 40,
+                isNarrow ? 40 : 60,
+                isNarrow ? 20 : 40,
+                isNarrow ? 20 : 40,
+              ),
               child: Text(
                 'Настройки',
                 style: TextStyle(
-                  fontSize: 48,
+                  fontSize: isNarrow ? 32 : 48,
                   fontWeight: FontWeight.w900,
                   color: Colors.white,
                   letterSpacing: -1,
@@ -134,7 +143,9 @@ class _SettingsViewState extends State<SettingsView> {
           ),
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 40),
+              padding: EdgeInsets.symmetric(
+                horizontal: context.horizontalPadding,
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -153,59 +164,64 @@ class _SettingsViewState extends State<SettingsView> {
                   const SizedBox(height: 48),
                   _buildSectionTitle(context, 'Внешний вид'),
                   const SizedBox(height: 24),
-                  Watch((context) {
-                    final enabled = _customTitlebarSignal.value;
-                    return _buildSettingItem(
-                      context,
-                      title: 'Собственная рамка окна',
-                      subtitle: 'Отключает стандартную рамку ОС',
-                      icon: Icons.web_asset_rounded,
-                      onTap: () => unawaited(
-                        _toggleCustomTitlebar(!(enabled.value ?? false)),
-                      ),
-                      trailing: Switch(
-                        value: enabled.value ?? false,
-                        onChanged: (v) => unawaited(_toggleCustomTitlebar(v)),
-                      ),
-                    );
-                  }),
-                  const SizedBox(height: 16),
-                  Watch((context) {
-                    final enabled = _autoHideNavbarSignal.value;
-                    return _buildSettingItem(
-                      context,
-                      title: 'Скрывать боковую панель',
-                      subtitle: 'Автоматически скрывать навигацию на главном экране',
-                      icon: Icons.vertical_split_rounded,
-                      onTap: () => unawaited(
-                        _toggleAutoHideNavbar(!(enabled.value ?? false)),
-                      ),
-                      trailing: Switch(
-                        value: enabled.value ?? false,
-                        onChanged: (v) => unawaited(_toggleAutoHideNavbar(v)),
-                      ),
-                    );
-                  }),
-                  const SizedBox(height: 48),
-                  _buildSectionTitle(context, 'Интеграции'),
-                  const SizedBox(height: 24),
-                  Watch((context) {
-                    final enabled = _discordRpcSignal.value;
-                    return _buildSettingItem(
-                      context,
-                      title: 'Discord Rich Presence',
-                      subtitle: 'Показывать текущий трек в статусе Discord',
-                      icon: Icons.discord_rounded,
-                      onTap: () => unawaited(
-                        _toggleDiscordRpc(!(enabled.value ?? true)),
-                      ),
-                      trailing: Switch(
-                        value: enabled.value ?? true,
-                        onChanged: (v) => unawaited(_toggleDiscordRpc(v)),
-                      ),
-                    );
-                  }),
-                  const SizedBox(height: 48),
+                  if (context.isDesktop) ...[
+                    Watch((context) {
+                      final enabled = _customTitlebarSignal.value;
+                      return _buildSettingItem(
+                        context,
+                        title: 'Собственная рамка окна',
+                        subtitle: 'Отключает стандартную рамку ОС',
+                        icon: Icons.web_asset_rounded,
+                        onTap: () => unawaited(
+                          _toggleCustomTitlebar(!(enabled.value ?? false)),
+                        ),
+                        trailing: Switch(
+                          value: enabled.value ?? false,
+                          onChanged: (v) => unawaited(_toggleCustomTitlebar(v)),
+                        ),
+                      );
+                    }),
+                    const SizedBox(height: 16),
+                    Watch((context) {
+                      final enabled = _autoHideNavbarSignal.value;
+                      return _buildSettingItem(
+                        context,
+                        title: 'Скрывать боковую панель',
+                        subtitle:
+                            'Автоматически скрывать навигацию на главном экране',
+                        icon: Icons.vertical_split_rounded,
+                        onTap: () => unawaited(
+                          _toggleAutoHideNavbar(!(enabled.value ?? false)),
+                        ),
+                        trailing: Switch(
+                          value: enabled.value ?? false,
+                          onChanged: (v) => unawaited(_toggleAutoHideNavbar(v)),
+                        ),
+                      );
+                    }),
+                    const SizedBox(height: 48),
+                  ],
+                  if (context.isDesktop) ...[
+                    _buildSectionTitle(context, 'Интеграции'),
+                    const SizedBox(height: 24),
+                    Watch((context) {
+                      final enabled = _discordRpcSignal.value;
+                      return _buildSettingItem(
+                        context,
+                        title: 'Discord Rich Presence',
+                        subtitle: 'Показывать текущий трек в статусе Discord',
+                        icon: Icons.discord_rounded,
+                        onTap: () => unawaited(
+                          _toggleDiscordRpc(!(enabled.value ?? true)),
+                        ),
+                        trailing: Switch(
+                          value: enabled.value ?? true,
+                          onChanged: (v) => unawaited(_toggleDiscordRpc(v)),
+                        ),
+                      );
+                    }),
+                    const SizedBox(height: 48),
+                  ],
                   _buildSectionTitle(context, 'Кэш'),
                   const SizedBox(height: 24),
                   Watch((context) {

@@ -1,13 +1,17 @@
 use crate::audio::cache::UrlCache;
 use crate::{
     audio::{
-        commands::AudioMessage, controller::AudioController, discord::DiscordManager,
+        commands::AudioMessage, controller::AudioController,
         events::Event, playback::PlaybackEngine, progress::TrackProgress, queue::QueueManager,
-        queue::as_wave_seed, signals::AudioSignals, smtc::SmtcManager, state::SystemState,
+        queue::as_wave_seed, signals::AudioSignals, state::SystemState,
         stream_manager::StreamManager, yandex::YandexProvider,
     },
     http::{ApiService, SessionExt},
 };
+
+#[cfg(not(any(target_os = "android")))]
+use crate::audio::{discord::DiscordManager, smtc::SmtcManager};
+
 use flume::Sender;
 use parking_lot::RwLock as PRwLock;
 use std::sync::Arc;
@@ -25,6 +29,7 @@ pub struct AudioSystem {
     event_tx: Sender<Event>,
     state: Arc<RwLock<SystemState>>,
     signals: AudioSignals,
+    #[cfg(not(any(target_os = "android")))]
     smtc: Arc<Mutex<SmtcManager>>,
     tx: mpsc::Sender<AudioMessage>,
     db: Arc<parking_lot::Mutex<crate::db::AppDatabase>>,
@@ -78,70 +83,87 @@ impl AudioSystem {
         queue.set_event_tx(event_tx.clone());
 
         let state = Arc::new(RwLock::new(SystemState::default()));
-        let (smtc_cmd_tx, mut smtc_cmd_rx) = mpsc::unbounded_channel();
-        let smtc = Arc::new(Mutex::new(SmtcManager::new(event_tx.clone(), smtc_cmd_tx, http_cache)?));
+        
+        #[cfg(not(any(target_os = "android")))]
+        let (smtc, smtc_cmd_rx) = {
+            let (smtc_cmd_tx, smtc_cmd_rx) = mpsc::unbounded_channel();
+            let smtc = Arc::new(Mutex::new(SmtcManager::new(event_tx.clone(), smtc_cmd_tx, http_cache.clone())?));
+            (smtc, smtc_cmd_rx)
+        };
+        
         let yandex = YandexProvider::new(api.clone(), event_tx.clone(), signals.clone());
 
         let effect_handles = controller.get_effect_handles();
 
-        let mut system = Self {
+        let system = Self {
             controller,
             queue,
             yandex,
             event_tx: event_tx.clone(),
             state: state.clone(),
             signals: signals.clone(),
-            smtc,
+            #[cfg(not(any(target_os = "android")))]
+            smtc: smtc.clone(),
             tx: tx.clone(),
             db,
         };
+        
+        let mut system_loop = system;
 
         // Start Discord integration
+        #[cfg(not(any(target_os = "android")))]
         DiscordManager::spawn(signals.clone());
 
         // Background task for SMTC
-        let tx_clone = tx.clone();
-        tokio::spawn(async move {
-            while let Some(msg) = smtc_cmd_rx.recv().await {
-                let _ = tx_clone.send(msg).await;
-            }
-        });
+        #[cfg(not(any(target_os = "android")))]
+        {
+            let tx_clone = tx.clone();
+            let mut rx_smtc = smtc_cmd_rx;
+            tokio::spawn(async move {
+                while let Some(msg) = rx_smtc.recv().await {
+                    let _ = tx_clone.send(msg).await;
+                }
+            });
+        }
 
         // Monitor signals to update SMTC
-        let smtc_clone = system.smtc.clone();
-        let signals_clone = signals.clone();
-        tokio::spawn(async move {
-            let mut last_track_id = None;
-            let mut last_playing = false;
+        #[cfg(not(any(target_os = "android")))]
+        {
+            let smtc_clone = smtc.clone();
+            let signals_clone = signals.clone();
+            tokio::spawn(async move {
+                let mut last_track_id = None;
+                let mut last_playing = false;
 
-            loop {
-                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                loop {
+                    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
-                let current_track = signals_clone.current_track.get();
-                let current_track_id = current_track.as_ref().map(|t| t.id.clone());
-                let is_playing = signals_clone.is_playing.get();
+                    let current_track = signals_clone.current_track.get();
+                    let current_track_id = current_track.as_ref().map(|t| t.id.clone());
+                    let is_playing = signals_clone.is_playing.get();
 
-                let mut smtc = smtc_clone.lock().await;
+                    let mut smtc_guard: tokio::sync::MutexGuard<SmtcManager> = smtc_clone.lock().await;
 
-                if current_track_id != last_track_id {
-                    if let Some(track) = current_track {
-                        smtc.update_metadata(&track);
+                    if current_track_id != last_track_id {
+                        if let Some(track) = current_track {
+                            smtc_guard.update_metadata(&track);
+                        }
+                        last_track_id = current_track_id;
                     }
-                    last_track_id = current_track_id;
-                }
 
-                if is_playing != last_playing {
-                    smtc.update_playback_status(is_playing);
-                    last_playing = is_playing;
+                    if is_playing != last_playing {
+                        smtc_guard.update_playback_status(is_playing);
+                        last_playing = is_playing;
+                    }
                 }
-            }
-        });
+            });
+        }
 
         // Main Audio Loop
         let event_tx_clone = event_tx.clone();
         tokio::spawn(async move {
             while let Some(msg) = rx.recv().await {
-                if let Err(e) = system.handle_message(msg).await {
+                if let Err(e) = system_loop.handle_message(msg).await {
                     tracing::error!("Audio system error: {}", e);
                     let _ = event_tx_clone.send(crate::audio::events::Event::Error(e.to_string()));
                 }

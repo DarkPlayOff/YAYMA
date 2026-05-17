@@ -10,11 +10,15 @@ import 'package:yayma/src/rust/api/simple.dart' as simple;
 import 'package:yayma/src/ui/auth/auth_screens.dart';
 
 Future<void> main() async {
-  await AppInit.initialize();
-  
+  WidgetsFlutterBinding.ensureInitialized();
+
+  await Future.wait([
+    AppInit.initialize(),
+    if (Platform.isWindows || Platform.isLinux || Platform.isMacOS)
+      windowManager.ensureInitialized(),
+  ]);
+
   if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
-    await windowManager.ensureInitialized();
-    
     final isCustom = simple.isCustomTitlebarEnabledSync();
 
     final windowOptions = WindowOptions(
@@ -25,7 +29,7 @@ Future<void> main() async {
       skipTaskbar: false,
       titleBarStyle: isCustom ? TitleBarStyle.hidden : TitleBarStyle.normal,
     );
-    await windowManager.waitUntilReadyToShow(windowOptions, () async {
+    windowManager.waitUntilReadyToShow(windowOptions, () async {
       await windowManager.show();
       await windowManager.focus();
     });

@@ -91,10 +91,12 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isDesktop = Platform.isWindows || Platform.isLinux || Platform.isMacOS;
+    final isDesktop =
+        Platform.isWindows || Platform.isLinux || Platform.isMacOS;
     final isCustomTitlebar = isDesktop && simple.isCustomTitlebarEnabledSync();
 
     return Scaffold(
+      resizeToAvoidBottomInset: false,
       body: Stack(
         children: [
           Positioned.fill(
@@ -126,7 +128,10 @@ class _LoginScreenState extends State<LoginScreen> {
                         const SizedBox(height: 24),
                         const Text(
                           'YAYMA',
-                          style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
+                          style: TextStyle(
+                            fontSize: 32,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                         const Text(
                           'Вход через Яндекс',
@@ -137,7 +142,9 @@ class _LoginScreenState extends State<LoginScreen> {
                           onPressed: _showWebView,
                           icon: const Icon(Icons.open_in_browser_rounded),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Theme.of(context).colorScheme.primary,
+                            backgroundColor: Theme.of(
+                              context,
+                            ).colorScheme.primary,
                             foregroundColor: Colors.black,
                             minimumSize: const Size(double.infinity, 56),
                           ),
@@ -169,11 +176,13 @@ class _LoginScreenState extends State<LoginScreen> {
                           controller: _tokenController,
                           decoration: InputDecoration(
                             labelText: 'Ссылка или OAuth токен',
-                            hintText: 'https://music.yandex.ru/#access_token=y0_...',
+                            hintText:
+                                'https://music.yandex.ru/#access_token=y0_...',
                             border: const OutlineInputBorder(),
                             suffixIcon: IconButton(
                               icon: const Icon(Icons.login_rounded),
-                              onPressed: () => _handleLogin(_tokenController.text),
+                              onPressed: () =>
+                                  _handleLogin(_tokenController.text),
                             ),
                           ),
                           onSubmitted: _handleLogin,
@@ -236,12 +245,10 @@ class _YandexLoginDialogState extends State<YandexLoginDialog> {
             }
           },
           onNavigationRequest: (request) async {
-            return await _parseToken(request.url);
+            return _parseToken(request.url);
           },
           onPageFinished: (url) async {
-            if (url != null) {
-              await _parseToken(url);
-            }
+            await _parseToken(url);
             final currentUrl = await _controller.currentUrl();
             if (currentUrl != null) {
               await _parseToken(currentUrl);

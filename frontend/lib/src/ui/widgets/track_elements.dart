@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 import 'package:yayma/src/providers/navigation_provider.dart';
 import 'package:yayma/src/rust/api/models.dart';
@@ -40,6 +42,8 @@ class ArtistNamesWidget extends StatelessWidget {
   final double fontSize;
   final Color color;
   final Color hoverColor;
+  final WrapAlignment alignment;
+  final int? maxLines;
 
   const ArtistNamesWidget({
     required this.artists,
@@ -47,11 +51,46 @@ class ArtistNamesWidget extends StatelessWidget {
     this.fontSize = 14,
     this.color = Colors.white54,
     this.hoverColor = Colors.white,
+    this.alignment = WrapAlignment.start,
+    this.maxLines,
   });
 
   @override
   Widget build(BuildContext context) {
     if (artists.isEmpty) return const SizedBox.shrink();
+
+    if (maxLines == 1) {
+      return Text.rich(
+        TextSpan(
+          children: [
+            for (var i = 0; i < artists.length; i++) ...[
+              WidgetSpan(
+                alignment: ui.PlaceholderAlignment.baseline,
+                baseline: TextBaseline.alphabetic,
+                child: _SingleArtistName(
+                  key: ValueKey('nav_artist_${artists[i].id}_$i'),
+                  artist: artists[i],
+                  onTap: () => navigateTo(AppSection.artist, artists[i].id),
+                  fontSize: fontSize,
+                  color: color,
+                  hoverColor: hoverColor,
+                ),
+              ),
+              if (i < artists.length - 1)
+                TextSpan(
+                  text: ', ',
+                  style: TextStyle(color: color, fontSize: fontSize),
+                ),
+            ],
+          ],
+        ),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        textAlign: alignment == WrapAlignment.center
+            ? TextAlign.center
+            : TextAlign.start,
+      );
+    }
 
     final children = <Widget>[];
     for (var i = 0; i < artists.length; i++) {
@@ -78,6 +117,7 @@ class ArtistNamesWidget extends StatelessWidget {
 
     return Wrap(
       crossAxisAlignment: WrapCrossAlignment.center,
+      alignment: alignment,
       children: children,
     );
   }

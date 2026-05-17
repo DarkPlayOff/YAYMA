@@ -34,15 +34,18 @@ class _AppLayoutState extends State<AppLayout> {
       currentRootSignal.watch(context);
       final navState = currentNavStateSignal.watch(context);
       final isHome = navState.section == AppSection.home;
-      
-      final isDesktop = Platform.isWindows || Platform.isLinux || Platform.isMacOS;
-      final isCustomTitlebar = isDesktop && simple.isCustomTitlebarEnabledSync();
-      
+
+      final isDesktop =
+          Platform.isWindows || Platform.isLinux || Platform.isMacOS;
+      final isCustomTitlebar =
+          isDesktop && simple.isCustomTitlebarEnabledSync();
+
       final screenWidth = MediaQuery.sizeOf(context).width;
       final isNarrow = screenWidth < 600;
 
       return Scaffold(
-        backgroundColor: Colors.black,
+        backgroundColor: Colors.transparent,
+        resizeToAvoidBottomInset: false,
         body: PageStorage(
           bucket: _bucket,
           child: Stack(
@@ -55,65 +58,81 @@ class _AppLayoutState extends State<AppLayout> {
               Watch((context) {
                 final showLyrics = showLyricsSignal.watch(context);
                 final hideOverlay = hideLyricsOverlaySignal.watch(context);
-                final isDimmed = isHome
-                    ? (showLyrics && !hideOverlay)
-                    : true;
+                final isDimmed = !isHome || (showLyrics && !hideOverlay);
 
                 return Positioned.fill(
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 500),
-                    color: isDimmed ? (isHome ? Colors.black54 : Colors.black87) : Colors.transparent,
+                    color: isDimmed
+                        ? (isHome
+                              ? Colors.black54
+                              : Colors.black.withValues(alpha: 0.6))
+                        : Colors.transparent,
                   ),
                 );
               }),
 
-              // 3. Content (set of independent stacks for each tab)
               Positioned.fill(
-                child: Padding(
-                  padding: EdgeInsets.only(top: isCustomTitlebar ? 32.0 : 0),
+                child: SafeArea(
+                  top: !isCustomTitlebar,
+                  bottom: false,
                   child: Stack(
                     children: [
+                      // 3. Content (set of independent stacks for each tab)
                       Positioned.fill(
-                        child: Stack(
-                          children: rootSections
-                              .map((root) => _buildRootBucket(context, root))
-                              .toList(),
+                        child: Padding(
+                          padding:
+                              EdgeInsets.only(top: isCustomTitlebar ? 32.0 : 0),
+                          child: Stack(
+                            children: [
+                              Positioned.fill(
+                                child: Stack(
+                                  children: rootSections
+                                      .map((root) =>
+                                          _buildRootBucket(context, root))
+                                      .toList(),
+                                ),
+                              ),
+                              Positioned(
+                                left: 0,
+                                right: 0,
+                                bottom: isNarrow ? 80 : 0,
+                                child: _buildAnimatedPlayerBar(isHome),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
-                      Positioned(
-                        left: 0,
-                        right: 0,
-                        bottom: isNarrow ? 96 : 0,
-                        child: _buildAnimatedPlayerBar(isHome),
+
+                      // 4. Navigation
+                      Align(
+                        alignment: isNarrow
+                            ? Alignment.bottomCenter
+                            : Alignment.centerLeft,
+                        child: const FloatingNavBar(),
                       ),
+
+                      // 5. Back button
+                      _FloatingBackButton(),
+
+                      // 6. Custom Titlebar
+                      if (isCustomTitlebar)
+                        const Positioned(
+                          top: 0,
+                          left: 0,
+                          right: 0,
+                          child: SizedBox(
+                            height: 32,
+                            child: WindowCaption(
+                              brightness: Brightness.dark,
+                              backgroundColor: Colors.transparent,
+                            ),
+                          ),
+                        ),
                     ],
                   ),
                 ),
               ),
-
-              // 4. Navigation
-              Align(
-                alignment: isNarrow ? Alignment.bottomCenter : Alignment.centerLeft,
-                child: const FloatingNavBar(),
-              ),
-
-              // 5. Back button
-              _FloatingBackButton(),
-
-              // 6. Custom Titlebar
-              if (isCustomTitlebar)
-                const Positioned(
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  child: SizedBox(
-                    height: 32,
-                    child: WindowCaption(
-                      brightness: Brightness.dark,
-                      backgroundColor: Colors.transparent,
-                    ),
-                  ),
-                ),
             ],
           ),
         ),
@@ -164,10 +183,8 @@ class _AppLayoutState extends State<AppLayout> {
           );
         },
         child: shouldShowBar
-            ? const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 16),
+            ? const PlayerBar(
                 key: ValueKey('player_bar_visible'),
-                child: PlayerBar(),
               )
             : const SizedBox.shrink(key: ValueKey('player_bar_hidden')),
       );
@@ -213,10 +230,24 @@ class _AppLayoutState extends State<AppLayout> {
   Widget _buildWindowContent(NavState state, int index) {
     return Watch((context) {
       final isHome = state.section == AppSection.home;
+      final showLyrics = showLyricsSignal.watch(context);
       final screenWidth = MediaQuery.sizeOf(context).width;
       final isNarrow = screenWidth < 600;
 
-      // For the settings, do not use PageStorageKey to avoid saving state between visits.
+      // Bottom padding calculation to avoid overlap with PlayerBar and NavBar
+      // We only apply it to the browser (yandexId) to prevent it from being covered,
+      // while other views scroll under the player for the blur effect.
+      final hasPlayerBar = !isHome || showLyrics;
+
+      double bottomPadding = 0;
+      if (state.section == AppSection.yandexId) {
+        if (isNarrow) {
+          bottomPadding = hasPlayerBar ? 180 : 96;
+        } else {
+          bottomPadding = hasPlayerBar ? 116 : 0;
+        }
+      }
+
       final key = state.section == AppSection.account
           ? ValueKey('account_$index')
           : PageStorageKey('scroll_${state.section}_${state.id}_$index');
@@ -229,7 +260,7 @@ class _AppLayoutState extends State<AppLayout> {
       return Padding(
         padding: EdgeInsets.only(
           left: (isHome || isNarrow) ? 0 : 96,
-          bottom: (isHome || !isNarrow) ? 0 : 96,
+          bottom: bottomPadding,
         ),
         child: child,
       );

@@ -36,7 +36,19 @@ pub async fn login_with_token(token: String) -> Result<AppContext, AppError> {
 }
 
 pub async fn try_auto_login() -> Option<AppContext> {
-    let (token, _) = TokenProvider::resolve()?;
+    let (token, user_id) = TokenProvider::resolve()?;
+    
+    // Fast path: bypass token validation on auto-login to speed up startup.
+    // We must initialize the Yandex client with the builder so it receives the token.
+    if let Ok(client) = yandex_music::YandexMusicClient::builder(&token).build() {
+        if let Ok(api) = ApiService::new(token.clone(), Some(std::sync::Arc::new(client)), Some(user_id)).await {
+            if let Ok(ctx) = initialize_app(api).await {
+                return Some(ctx);
+            }
+        }
+    }
+
+    // Fallback if the fast path fails for any reason
     login_with_token(token).await.ok()
 }
 

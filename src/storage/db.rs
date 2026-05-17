@@ -3,6 +3,7 @@ use directories::ProjectDirs;
 use crate::api::models::{TrackArtistDto};
 use rusqlite::{Connection, Result, params};
 use std::path::PathBuf;
+use foldhash::HashMapExt;
 
 /// Default TTL for cached images: 7 days in seconds
 const DEFAULT_CACHE_TTL_SECS: i64 = 7 * 24 * 60 * 60;
@@ -461,59 +462,80 @@ impl AppDatabase {
             return Ok(vec![]);
         }
 
-        // 1. Get tracks
-        let mut result = Vec::new();
-        let mut stmt = self.conn.prepare(
-            "SELECT track_id, title, version, album, album_id, cover_url, duration_ms 
-             FROM track_metadata WHERE track_id = ?1",
-        )?;
+        // Chunking to avoid SQLite parameter limit (usually 999)
+        let mut all_results = Vec::new();
+        for chunk in track_ids.chunks(900) {
+            let placeholders = chunk.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+            
+            // 1. Get tracks
+            let query = format!(
+                "SELECT track_id, title, version, album, album_id, cover_url, duration_ms 
+                 FROM track_metadata WHERE track_id IN ({})",
+                placeholders
+            );
 
-        for id in track_ids {
-            let mut rows = stmt.query(params![id])?;
-            if let Some(row) = rows.next()? {
-                let track_id: String = row.get(0)?;
-                let title: String = row.get(1)?;
-                let version: Option<String> = row.get(2)?;
-                let album: Option<String> = row.get(3)?;
-                let album_id: Option<String> = row.get(4)?;
-                let cover_url: Option<String> = row.get(5)?;
-                let duration_ms: i64 = row.get(6)?;
-
-                result.push(TrackMetadata {
-                    id: track_id,
-                    title,
-                    version,
-                    artists: Vec::new(), // Will be filled below
-                    album,
-                    album_id,
-                    cover_url,
-                    duration_ms: duration_ms as u64,
-                });
-            }
-        }
-
-        // 2. Get all artists for these tracks in one go
-        let mut artist_stmt = self.conn.prepare(
-            "SELECT track_id, artist_id, name 
-             FROM track_metadata_artists 
-             WHERE track_id = ?1 
-             ORDER BY position ASC",
-        )?;
-
-        for track in &mut result {
-            let rows = artist_stmt.query_map(params![track.id], |row| {
-                Ok(TrackArtistDto {
-                    id: row.get(1)?,
-                    name: row.get(2)?,
+            let mut stmt = self.conn.prepare(&query)?;
+            let track_rows = stmt.query_map(rusqlite::params_from_iter(chunk), |row| {
+                Ok(TrackMetadata {
+                    id: row.get(0)?,
+                    title: row.get(1)?,
+                    version: row.get(2)?,
+                    artists: Vec::new(),
+                    album: row.get(3)?,
+                    album_id: row.get(4)?,
+                    cover_url: row.get(5)?,
+                    duration_ms: row.get::<_, i64>(6)? as u64,
                 })
             })?;
 
-            for artist in rows {
-                track.artists.push(artist?);
+            let mut tracks = Vec::new();
+            for t in track_rows {
+                tracks.push(t?);
+            }
+
+            // 2. Get all artists for these tracks
+            let artist_query = format!(
+                "SELECT track_id, artist_id, name 
+                 FROM track_metadata_artists 
+                 WHERE track_id IN ({}) 
+                 ORDER BY track_id, position ASC",
+                placeholders
+            );
+
+            let mut artist_stmt = self.conn.prepare(&artist_query)?;
+            let artist_rows = artist_stmt.query_map(rusqlite::params_from_iter(chunk), |row| {
+                Ok((row.get::<_, String>(0)?, TrackArtistDto {
+                    id: row.get(1)?,
+                    name: row.get(2)?,
+                }))
+            })?;
+
+            let mut artists_map: foldhash::HashMap<String, Vec<TrackArtistDto>> = foldhash::HashMap::new();
+            for res in artist_rows {
+                let (tid, artist) = res?;
+                artists_map.entry(tid).or_default().push(artist);
+            }
+
+            // 3. Attach artists to tracks
+            for mut track in tracks {
+                if let Some(artists) = artists_map.remove(&track.id) {
+                    track.artists = artists;
+                }
+                all_results.push(track);
             }
         }
 
-        Ok(result)
+        // Restore original order
+        let mut sorted_results = Vec::with_capacity(track_ids.len());
+        let results_map: foldhash::HashMap<String, TrackMetadata> = all_results.into_iter().map(|t| (t.id.clone(), t)).collect();
+        
+        for id in track_ids {
+            if let Some(metadata) = results_map.get(id) {
+                sorted_results.push(metadata.clone());
+            }
+        }
+
+        Ok(sorted_results)
     }
 
     pub fn search_liked_tracks(&self, query: &str) -> Result<Vec<String>> {

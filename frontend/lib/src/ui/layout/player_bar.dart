@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -14,7 +15,7 @@ class PlayerBar extends StatelessWidget {
   const PlayerBar({super.key});
 
   @override
-    Widget build(BuildContext context) {
+  Widget build(BuildContext context) {
     return Watch((context) {
       final barColor = playerBarColorSignal.watch(context);
       final navState = currentNavStateSignal.watch(context);
@@ -29,6 +30,7 @@ class PlayerBar extends StatelessWidget {
         builder: (context, constraints) {
           final width = constraints.maxWidth;
           final accentColor = accentColorSignal.watch(context);
+          final isNarrow = width < 600;
 
           double coverSize = 75;
           double volumeWidth = 120;
@@ -51,8 +53,16 @@ class PlayerBar extends StatelessWidget {
 
           return AnimatedContainer(
             duration: const Duration(milliseconds: 600),
-            height: 100,            padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
-            margin: const EdgeInsets.fromLTRB(0, 0, 16, 16),
+            height: isNarrow ? 80 : 100,
+            padding: EdgeInsets.symmetric(
+              horizontal: isNarrow ? 12 : horizontalPadding,
+            ),
+            margin: EdgeInsets.fromLTRB(
+              isNarrow ? 24 : 16,
+              0,
+              isNarrow ? 24 : 32,
+              isNarrow ? 8 : 16,
+            ),
             decoration: BoxDecoration(
               color: barColor.withValues(alpha: alpha),
               borderRadius: BorderRadius.circular(24),
@@ -70,21 +80,28 @@ class PlayerBar extends StatelessWidget {
                 filter: ui.ImageFilter.blur(sigmaX: blur, sigmaY: blur),
                 child: Row(
                   children: [
-                    Expanded(
-                      flex: 3,
-                      child: _TrackInfo(coverSize: coverSize),
-                    ),
-                    Expanded(
-                      flex: 4,
-                      child: _PlayerControls(accentColor: accentColor),
-                    ),
-                    Expanded(
-                      flex: 3,
-                      child: _VolumeAndQuality(
-                        accentColor: accentColor,
-                        volumeWidth: volumeWidth,
+                    if (isNarrow) ...[
+                      Expanded(
+                        child: _TrackInfo(coverSize: coverSize),
                       ),
-                    ),
+                      const _PlayPauseButton(),
+                    ] else ...[
+                      Expanded(
+                        flex: 3,
+                        child: _TrackInfo(coverSize: coverSize),
+                      ),
+                      Expanded(
+                        flex: 4,
+                        child: _PlayerControls(accentColor: accentColor),
+                      ),
+                      Expanded(
+                        flex: 3,
+                        child: _VolumeAndQuality(
+                          accentColor: accentColor,
+                          volumeWidth: volumeWidth,
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -188,6 +205,7 @@ class _TrackInfoState extends State<_TrackInfo> {
                 ),
                 ArtistNamesWidget(
                   artists: meta.artists,
+                  maxLines: 1,
                 ),
               ],
             ),
@@ -220,96 +238,81 @@ class _PlayerControls extends StatelessWidget {
       return Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    IconButton(
-                      icon: Icon(
-                        Icons.lyrics_rounded,
-                        size: 20,
-                        color: showLyricsSignal.watch(context)
-                            ? accentColor
-                            : Colors.white38,
-                      ),
-                      onPressed: () =>
-                          showLyricsSignal.value = !showLyricsSignal.value,
-                    ),
-                    const SizedBox(width: 4),
-                    IconButton(
-                      icon: Icon(
-                        isDisliked
-                            ? Icons.heart_broken
-                            : Icons.heart_broken_outlined,
-                        size: 20,
-                        color: isDisliked ? Colors.blueGrey : Colors.white38,
-                      ),
-                      onPressed: () => trackId != null
-                          ? PlaybackController.toggleDislike(trackId: trackId)
-                          : null,
-                    ),
-                    const SizedBox(width: 4),
-                    IconButton(
-                      icon: Icon(
-                        Icons.shuffle,
-                        size: 20,
-                        color: isShuffled ? accentColor : Colors.white38,
-                      ),
-                      onPressed: PlaybackController.toggleShuffle,
-                    ),
-                    const SizedBox(width: 8),
-                    const IconButton(
-                      icon: Icon(Icons.skip_previous_rounded, size: 28),
-                      onPressed: PlaybackController.prev,
-                    ),
-                  ],
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  icon: Icon(
+                    Icons.lyrics_rounded,
+                    size: 20,
+                    color: showLyricsSignal.watch(context)
+                        ? accentColor
+                        : Colors.white38,
+                  ),
+                  onPressed: () =>
+                      showLyricsSignal.value = !showLyricsSignal.value,
                 ),
-              ),
-              IconButton(
-                iconSize: 54,
-                icon: Icon(
-                  isPlaying
-                      ? Icons.pause_circle_filled_rounded
-                      : Icons.play_circle_filled_rounded,
+                IconButton(
+                  icon: Icon(
+                    Icons.shuffle,
+                    size: 20,
+                    color: isShuffled ? accentColor : Colors.white38,
+                  ),
+                  onPressed: PlaybackController.toggleShuffle,
                 ),
-                onPressed: PlaybackController.togglePlay,
-              ),
-              Expanded(
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.start,
-                  children: [
-                    const IconButton(
-                      icon: Icon(Icons.skip_next_rounded, size: 28),
-                      onPressed: PlaybackController.next,
-                    ),
-                    const SizedBox(width: 8),
-                    IconButton(
-                      icon: Icon(
-                        repeatIcon,
-                        size: 20,
-                        color: repeatMode != RepeatModeDto.none
-                            ? accentColor
-                            : Colors.white38,
-                      ),
-                      onPressed: PlaybackController.toggleRepeat,
-                    ),
-                    const SizedBox(width: 4),
-                    IconButton(
-                      icon: Icon(
-                        isLiked ? Icons.favorite : Icons.favorite_border,
-                        size: 20,
-                        color: isLiked ? Colors.red : Colors.white38,
-                      ),
-                      onPressed: () => trackId != null
-                          ? PlaybackController.toggleLike(trackId: trackId)
-                          : null,
-                    ),
-                  ],
+                IconButton(
+                  icon: Icon(
+                    isDisliked
+                        ? Icons.heart_broken
+                        : Icons.heart_broken_outlined,
+                    size: 20,
+                    color: isDisliked ? Colors.blueGrey : Colors.white38,
+                  ),
+                  onPressed: () => trackId != null
+                      ? PlaybackController.toggleDislike(trackId: trackId)
+                      : null,
                 ),
-              ),
-            ],
+                const IconButton(
+                  icon: Icon(Icons.skip_previous_rounded, size: 28),
+                  onPressed: PlaybackController.prev,
+                ),
+                IconButton(
+                  iconSize: 54,
+                  icon: Icon(
+                    isPlaying
+                        ? Icons.pause_circle_filled_rounded
+                        : Icons.play_circle_filled_rounded,
+                  ),
+                  onPressed: PlaybackController.togglePlay,
+                ),
+                const IconButton(
+                  icon: Icon(Icons.skip_next_rounded, size: 28),
+                  onPressed: PlaybackController.next,
+                ),
+                IconButton(
+                  icon: Icon(
+                    isLiked ? Icons.favorite : Icons.favorite_border,
+                    size: 20,
+                    color: isLiked ? Colors.red : Colors.white38,
+                  ),
+                  onPressed: () => trackId != null
+                      ? PlaybackController.toggleLike(trackId: trackId)
+                      : null,
+                ),
+                IconButton(
+                  icon: Icon(
+                    repeatIcon,
+                    size: 20,
+                    color: repeatMode != RepeatModeDto.none
+                        ? accentColor
+                        : Colors.white38,
+                  ),
+                  onPressed: PlaybackController.toggleRepeat,
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 4),
           CommonProgressSlider(accentColor: accentColor, compact: true),
@@ -329,17 +332,48 @@ class _VolumeAndQuality extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.end,
-      children: [
-        CommonQualitySelector(accentColor: accentColor),
-        const SizedBox(width: 16),
-        const Icon(Icons.volume_up_rounded, size: 18, color: Colors.white38),
-        CommonVolumeSlider(
-          width: volumeWidth,
-          activeColor: accentColor,
-        ),
-      ],
+    final showVolume = !Platform.isAndroid;
+
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          CommonQualitySelector(accentColor: accentColor),
+          if (showVolume) ...[
+            const SizedBox(width: 16),
+            const Icon(
+              Icons.volume_up_rounded,
+              size: 18,
+              color: Colors.white38,
+            ),
+            CommonVolumeSlider(
+              width: volumeWidth,
+              activeColor: accentColor,
+            ),
+          ],
+        ],
+      ),
     );
+  }
+}
+
+class _PlayPauseButton extends StatelessWidget {
+  const _PlayPauseButton();
+
+  @override
+  Widget build(BuildContext context) {
+    return Watch((context) {
+      final isPlaying = isPlayingSignal();
+      return IconButton(
+        iconSize: 48,
+        icon: Icon(
+          isPlaying
+              ? Icons.pause_circle_filled_rounded
+              : Icons.play_circle_filled_rounded,
+        ),
+        onPressed: PlaybackController.togglePlay,
+      );
+    });
   }
 }

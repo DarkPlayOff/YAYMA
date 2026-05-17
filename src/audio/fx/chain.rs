@@ -84,8 +84,17 @@ impl EffectChain {
             return;
         }
 
-        self.left.resize(frames, 0.0);
-        self.right.resize(frames, 0.0);
+        if self.left.capacity() < frames {
+            self.left.reserve(frames - self.left.capacity());
+        }
+        if self.right.capacity() < frames {
+            self.right.reserve(frames - self.right.capacity());
+        }
+        
+        unsafe {
+            self.left.set_len(frames);
+            self.right.set_len(frames);
+        }
 
         for i in 0..frames {
             let base = i * ch;

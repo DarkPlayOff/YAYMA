@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:signals_flutter/signals_flutter.dart';
@@ -8,6 +9,7 @@ import 'package:yayma/src/providers/notification_provider.dart';
 import 'package:yayma/src/providers/playback_provider.dart';
 import 'package:yayma/src/rust/api/models.dart';
 import 'package:yayma/src/ui/widgets/common_ui.dart';
+import 'package:yayma/src/ui/widgets/responsive.dart';
 import 'package:yayma/src/ui/widgets/track_elements.dart';
 import 'package:yayma/src/ui/widgets/track_tile.dart';
 
@@ -130,33 +132,44 @@ class _LibraryViewState extends State<LibraryView>
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final isNarrow = screenWidth < 600;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(40, 60, 40, 20),
+          padding: EdgeInsets.fromLTRB(
+            isNarrow ? 20 : 40,
+            isNarrow ? 40 : 60,
+            isNarrow ? 20 : 40,
+            isNarrow ? 12 : 20,
+          ),
           child: Row(
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
             children: [
-              const Text(
-                'Библиотека',
-                style: TextStyle(
-                  fontSize: 48,
-                  fontWeight: FontWeight.w900,
-                  color: Colors.white,
-                  letterSpacing: -1,
+              Expanded(
+                child: Text(
+                  'Библиотека',
+                  style: TextStyle(
+                    fontSize: isNarrow ? 32 : 48,
+                    fontWeight: FontWeight.w900,
+                    color: Colors.white,
+                    letterSpacing: -1,
+                  ),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
-              const Spacer(),
+              const SizedBox(width: 16),
               TextButton.icon(
                 onPressed: () => _showCreatePlaylistDialog(context),
                 icon: const Icon(Icons.add_rounded),
-                label: const Text('Создать плейлист'),
+                label: isNarrow
+                    ? const SizedBox.shrink()
+                    : const Text('Создать плейлист'),
                 style: TextButton.styleFrom(
                   foregroundColor: Theme.of(context).colorScheme.primary,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
+                  padding: EdgeInsets.symmetric(
+                    horizontal: isNarrow ? 12 : 16,
                     vertical: 12,
                   ),
                 ),
@@ -168,7 +181,7 @@ class _LibraryViewState extends State<LibraryView>
           controller: _tabController,
           isScrollable: true,
           tabAlignment: TabAlignment.start,
-          padding: const EdgeInsets.symmetric(horizontal: 40),
+          padding: EdgeInsets.symmetric(horizontal: isNarrow ? 20 : 40),
           indicatorColor: Theme.of(context).colorScheme.primary,
           labelColor: Colors.white,
           unselectedLabelColor: Colors.white38,
@@ -178,43 +191,13 @@ class _LibraryViewState extends State<LibraryView>
             Tab(text: 'Плейлисты'),
           ],
         ),
-        if (_tabController.index == 0)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(40, 16, 40, 8),
-            child: TextField(
-              controller: _searchController,
-              onChanged: setLibrarySearchQuery,
-              style: const TextStyle(color: Colors.white),
-              decoration: InputDecoration(
-                hintText: 'Поиск в любимых треках...',
-                hintStyle: const TextStyle(color: Colors.white24),
-                prefixIcon: const Icon(Icons.search, color: Colors.white38),
-                suffixIcon: _searchController.text.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.clear, color: Colors.white38),
-                        onPressed: () {
-                          _searchController.clear();
-                          setLibrarySearchQuery('');
-                        },
-                      )
-                    : null,
-                filled: true,
-                fillColor: Colors.white.withValues(alpha: 0.05),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none,
-                ),
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
-                ),
-              ),
-            ),
-          ),
         Expanded(
           child: TabBarView(
             controller: _tabController,
-            children: const [_LikedTracksTab(), _PlaylistsTab()],
+            children: [
+              _LikedTracksTab(searchController: _searchController),
+              const _PlaylistsTab(),
+            ],
           ),
         ),
       ],
@@ -223,56 +206,146 @@ class _LibraryViewState extends State<LibraryView>
 }
 
 class _LikedTracksTab extends StatelessWidget {
-  const _LikedTracksTab();
+  final TextEditingController searchController;
+  const _LikedTracksTab({required this.searchController});
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final isNarrow = screenWidth < 600;
+
     return Watch((context) {
       final tracks = likedTracksSignal.value;
       final query = librarySearchQuerySignal.value;
+      final barColor = playerBarColorSignal.watch(context);
+      final isHome = currentRootSignal.watch(context) == AppSection.home;
+      final alpha = isHome ? 0.5 : 0.7;
 
-      if (tracks.isEmpty) {
-        return Center(
-          child: Text(
-            query.isEmpty ? 'Нет любимых треков' : 'Ничего не найдено',
-            style: const TextStyle(color: Colors.white38),
-          ),
-        );
-      }
-
-      return ListView.builder(
-        padding: const EdgeInsets.only(bottom: 140),
-        itemCount: tracks.length,
-        itemBuilder: (context, index) {
-          final track = tracks[index];
-          return CommonTrackTile(
-            trackId: track.id,
-            title: track.title,
-            version: track.version,
-            artists: track.artists,
-            leading: TrackCover(url: track.coverUrl),
-            trailing: Text(
-              formatDuration(track.durationMs),
-              style: const TextStyle(color: Colors.white38),
-            ),
-            hoverActions: [
-              IconButton(
-                icon: Icon(
-                  Icons.play_arrow_rounded,
-                  color: Theme.of(context).colorScheme.primary,
-                ),
-                onPressed: () =>
-                    unawaited(PlaybackController.playLikedTrack(track.id)),
+      return Stack(
+        children: [
+          if (tracks.isEmpty)
+            Center(
+              child: Text(
+                query.isEmpty ? 'Нет любимых треков' : 'Ничего не найдено',
+                style: const TextStyle(color: Colors.white38),
               ),
-            ],
-            onTap: () => unawaited(PlaybackController.playLikedTrack(track.id)),
-            onTitleTap: () {
-              if (track.albumId != null) {
-                navigateTo(AppSection.album, track.albumId);
-              }
-            },
-          );
-        },
+            )
+          else
+            ListView.builder(
+              padding: EdgeInsets.only(
+                top: isNarrow ? 70 : 80,
+                bottom: 140,
+              ),
+              itemCount: tracks.length,
+              itemBuilder: (context, index) {
+                final track = tracks[index];
+                return CommonTrackTile(
+                  trackId: track.id,
+                  title: track.title,
+                  version: track.version,
+                  artists: track.artists,
+                  leading: TrackCover(url: track.coverUrl),
+                  contentPadding: EdgeInsets.symmetric(
+                    horizontal: isNarrow ? 20 : 40,
+                    vertical: 8,
+                  ),
+                  trailing: Text(
+                    formatDuration(track.durationMs),
+                    style: const TextStyle(color: Colors.white38),
+                  ),
+                  hoverActions: [
+                    IconButton(
+                      icon: Icon(
+                        Icons.play_arrow_rounded,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                      onPressed: () => unawaited(
+                        PlaybackController.playLikedTrack(track.id),
+                      ),
+                    ),
+                  ],
+                  onTap: () =>
+                      unawaited(PlaybackController.playLikedTrack(track.id)),
+                  onTitleTap: () {
+                    if (track.albumId != null) {
+                      navigateTo(AppSection.album, track.albumId);
+                    }
+                  },
+                );
+              },
+            ),
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(
+                context.horizontalPadding,
+                8,
+                context.horizontalPadding,
+                12,
+              ),
+              child: Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.4),
+                      blurRadius: 15,
+                      offset: const Offset(0, 8),
+                    ),
+                  ],
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 3, sigmaY: 3),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: barColor.withValues(alpha: alpha),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.1),
+                        ),
+                      ),
+                      child: TextField(
+                        controller: searchController,
+                        onChanged: setLibrarySearchQuery,
+                        style: const TextStyle(color: Colors.white),
+                        decoration: InputDecoration(
+                          hintText: 'Поиск в любимых треках...',
+                          hintStyle: const TextStyle(color: Colors.white24),
+                          prefixIcon: const Icon(
+                            Icons.search,
+                            color: Colors.white38,
+                          ),
+                          suffixIcon: searchController.text.isNotEmpty
+                              ? IconButton(
+                                  icon: const Icon(
+                                    Icons.clear,
+                                    color: Colors.white38,
+                                  ),
+                                  onPressed: () {
+                                    searchController.clear();
+                                    setLibrarySearchQuery('');
+                                  },
+                                )
+                              : null,
+                          filled: false,
+                          border: InputBorder.none,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 14,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       );
     });
   }
@@ -283,6 +356,9 @@ class _PlaylistsTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final isNarrow = screenWidth < 600;
+
     return Watch((context) {
       final playlists = playlistsSignal.value;
 
@@ -296,12 +372,17 @@ class _PlaylistsTab extends StatelessWidget {
       }
 
       return GridView.builder(
-        padding: const EdgeInsets.fromLTRB(40, 40, 40, 140),
-        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-          maxCrossAxisExtent: 200,
-          mainAxisSpacing: 24,
-          crossAxisSpacing: 24,
-          childAspectRatio: 0.75, // Increased vertical space
+        padding: EdgeInsets.fromLTRB(
+          isNarrow ? 20 : 40,
+          isNarrow ? 20 : 40,
+          isNarrow ? 20 : 40,
+          140,
+        ),
+        gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+          maxCrossAxisExtent: isNarrow ? 180 : 200,
+          mainAxisSpacing: isNarrow ? 16 : 24,
+          crossAxisSpacing: isNarrow ? 16 : 24,
+          childAspectRatio: isNarrow ? 0.7 : 0.75,
         ),
         itemCount: playlists.length,
         itemBuilder: (context, index) {

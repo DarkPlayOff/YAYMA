@@ -50,7 +50,7 @@ impl StreamManager {
 
         let this = self.clone();
         tokio::spawn(async move {
-            if let Ok(result) = this.create_stream_session(&track).await {
+            if let Ok(result) = this.create_stream_session(&track, None).await {
                 this.prewarm_cache.lock().insert(track.id, result);
             }
         });
@@ -64,6 +64,7 @@ impl StreamManager {
     pub async fn create_stream_session(
         &self,
         track: &Track,
+        buffering_signal: Option<crate::util::reactive::Signal<bool>>,
     ) -> Result<PrewarmResult> {
         {
             let mut cache = self.prewarm_cache.lock();
@@ -91,7 +92,7 @@ impl StreamManager {
         let codec_clone = codec.clone();
 
         let client = self.http_client.clone();
-        let data_source = stream::StreamingDataSource::new(client, url, Arc::clone(&progress))
+        let data_source = stream::StreamingDataSource::new(client, url, Arc::clone(&progress), buffering_signal)
             .await
             .map_err(|e| Box::<dyn std::error::Error + Send + Sync>::from(e.to_string()))?;
 

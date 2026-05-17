@@ -1,8 +1,12 @@
 import 'dart:async';
+import 'dart:io';
 
+import 'package:audio_service/audio_service.dart';
+import 'package:audio_session/audio_session.dart';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:signals_flutter/signals_flutter.dart';
+import 'package:yayma/src/providers/audio_handler.dart';
 import 'package:yayma/src/providers/auth_provider.dart'
     show accountSignal, appContextSignal, authSignal;
 import 'package:yayma/src/providers/library_provider.dart';
@@ -19,14 +23,35 @@ export 'package:yayma/src/providers/auth_provider.dart'
 /// Centralized application initialization module
 class AppInit {
   static Future<void> initialize() async {
-    WidgetsFlutterBinding.ensureInitialized();
     SignalsObserver.instance = null;
+
     await RustLib.init();
+
+    if (Platform.isAndroid || Platform.isIOS) {
+      await _initAudioService();
+    }
 
     final appDir = await getApplicationDocumentsDirectory();
     await simple.initAppInfrastructure(basePath: appDir.path);
 
     unawaited(_initializeAuthAndServices());
+  }
+
+  static Future<void> _initAudioService() async {
+    final session = await AudioSession.instance;
+    await session.configure(const AudioSessionConfiguration.music());
+
+    await AudioService.init(
+      builder: () => YaymaAudioHandler(),
+      config: const AudioServiceConfig(
+        androidNotificationChannelId: 'io.github.darkplayoff.yayma.playback',
+        androidNotificationChannelName: 'YAYMA Playback',
+        androidNotificationOngoing: true,
+        androidStopForegroundOnPause: true,
+        androidShowNotificationBadge: true,
+        androidNotificationIcon: 'drawable/ic_notification',
+      ),
+    );
   }
 
   static Future<void> _initializeAuthAndServices() async {
@@ -38,12 +63,16 @@ class AppInit {
       return;
     }
 
-    // Parallel initialization of dependent services
-    await Future.wait([
-      _loadAccountInfo(context),
-      initLibrary(),
-      initPlayback(),
-    ]);
+    // Initialize playback locally before showing UI
+    await initPlayback();
+
+    // Fetch network-dependent data in the background
+    unawaited(
+      Future.wait([
+        _loadAccountInfo(context),
+        initLibrary(),
+      ]),
+    );
 
     authSignal.value = const AsyncData(true);
   }
@@ -63,11 +92,14 @@ class AppInit {
       final context = await loginWithToken(token: token);
       appContextSignal.value = context;
 
-      await Future.wait([
-        _loadAccountInfo(context),
-        initLibrary(),
-        initPlayback(),
-      ]);
+      await initPlayback();
+
+      unawaited(
+        Future.wait([
+          _loadAccountInfo(context),
+          initLibrary(),
+        ]),
+      );
 
       authSignal.value = const AsyncData(true);
     } on Object catch (e, st) {

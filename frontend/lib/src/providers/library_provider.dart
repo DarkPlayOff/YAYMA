@@ -71,13 +71,14 @@ Future<void> refreshLikedTracks({String? query, bool force = false}) async {
         } else {
           // Avoid duplicates when adding a chunk
           final existingIds = likedTracksSignal.value.map((t) => t.id).toSet();
-          final uniqueNewTracks =
-              chunk.where((t) => !existingIds.contains(t.id)).toList();
+          final uniqueNewTracks = chunk
+              .where((t) => !existingIds.contains(t.id))
+              .toList();
 
           if (uniqueNewTracks.isNotEmpty) {
             likedTracksSignal.value = [
               ...likedTracksSignal.value,
-              ...uniqueNewTracks
+              ...uniqueNewTracks,
             ];
           }
         }
@@ -103,7 +104,7 @@ void setLibrarySearchQuery(String query) {
 
   if (trimmedQuery.isEmpty) {
     // Immediately reset search and request the full list
-    unawaited(refreshLikedTracks(query: null, force: true));
+    unawaited(refreshLikedTracks(force: true));
     return;
   }
 

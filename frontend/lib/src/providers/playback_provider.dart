@@ -13,6 +13,7 @@ import 'package:yayma/src/rust/api/library.dart' as rust;
 import 'package:yayma/src/rust/api/models.dart';
 import 'package:yayma/src/rust/api/playback.dart' as rust;
 import 'package:yayma/src/rust/api/simple.dart' as rust;
+import 'package:yayma/src/rust/lib.dart';
 
 // Player state signals
 final FlutterSignal<PlaybackState?> playerStateSignal = signal<PlaybackState?>(
@@ -20,8 +21,8 @@ final FlutterSignal<PlaybackState?> playerStateSignal = signal<PlaybackState?>(
 );
 final FlutterSignal<PlaybackProgressDto?> playerProgressSignal =
     signal<PlaybackProgressDto?>(null);
-final FlutterSignal<Float32List> vibeTickSignal = signal<Float32List>(
-  Float32List(0),
+final FlutterSignal<F32Array26> vibeTickSignal = signal<F32Array26>(
+  F32Array26.init(),
 );
 
 final FlutterSignal<AudioQuality> audioQualitySignal = signal<AudioQuality>(
@@ -154,8 +155,18 @@ trackProgressSignal = computed(() {
 // Signal for cover URL only to avoid re-calculating on pause/likes
 final FlutterComputed<String?> currentCoverUrlSignal = computed(
   () => playerStateSignal.value?.currentTrack?.coverUrl,
-  debugLabel: 'currentCoverUrlSignal',
 );
+
+// Signal for local cover URI from Rust cache
+final FutureSignal<Uri?> localCoverUriSignal = computedAsync(() async {
+  final url = currentCoverUrlSignal();
+  final ctx = appContextSignal.value;
+  if (url == null || ctx == null) return null;
+
+  final path = await rust.getCachedImagePath(ctx: ctx, url: url);
+  if (path != null) return Uri.file(path);
+  return Uri.parse(url); // Fallback to remote if not yet cached
+}, debugLabel: 'localCoverUriSignal');
 
 // Color scheme generated from cover image
 final FutureSignal<ColorScheme?> colorSchemeSignal = computedAsync(() async {
@@ -272,6 +283,15 @@ final EffectCleanup _taskbarEffect = effect(() {
       await WindowsTaskbar.setThumbnailToolbar([
         ThumbnailToolbarButton(
           ThumbnailToolbarAssetIcon(
+            isShuffled
+                ? 'assets/icons/shuffle_on.ico'
+                : 'assets/icons/shuffle.ico',
+          ),
+          isShuffled ? 'Выключить перемешивание' : 'Включить перемешивание',
+          () => unawaited(PlaybackController.toggleShuffle()),
+        ),
+        ThumbnailToolbarButton(
+          ThumbnailToolbarAssetIcon(
             isDisliked
                 ? 'assets/icons/disliked.ico'
                 : 'assets/icons/dislike.ico',
@@ -282,15 +302,6 @@ final EffectCleanup _taskbarEffect = effect(() {
               unawaited(PlaybackController.toggleDislike(trackId: meta.id!));
             }
           },
-        ),
-        ThumbnailToolbarButton(
-          ThumbnailToolbarAssetIcon(
-            isShuffled
-                ? 'assets/icons/shuffle_on.ico'
-                : 'assets/icons/shuffle.ico',
-          ),
-          isShuffled ? 'Выключить перемешивание' : 'Включить перемешивание',
-          () => unawaited(PlaybackController.toggleShuffle()),
         ),
         ThumbnailToolbarButton(
           ThumbnailToolbarAssetIcon('assets/icons/skip_previous.ico'),
@@ -311,17 +322,6 @@ final EffectCleanup _taskbarEffect = effect(() {
         ),
         ThumbnailToolbarButton(
           ThumbnailToolbarAssetIcon(
-            repeatMode == RepeatModeDto.none
-                ? 'assets/icons/repeat.ico'
-                : (repeatMode == RepeatModeDto.single
-                      ? 'assets/icons/repeat_one.ico'
-                      : 'assets/icons/repeat_on.ico'),
-          ),
-          'Повтор',
-          () => unawaited(PlaybackController.toggleRepeat()),
-        ),
-        ThumbnailToolbarButton(
-          ThumbnailToolbarAssetIcon(
             isLiked ? 'assets/icons/liked.ico' : 'assets/icons/like.ico',
           ),
           isLiked ? 'Убрать лайк' : 'Лайк',
@@ -330,6 +330,17 @@ final EffectCleanup _taskbarEffect = effect(() {
               unawaited(PlaybackController.toggleLike(trackId: meta.id!));
             }
           },
+        ),
+        ThumbnailToolbarButton(
+          ThumbnailToolbarAssetIcon(
+            repeatMode == RepeatModeDto.none
+                ? 'assets/icons/repeat.ico'
+                : (repeatMode == RepeatModeDto.single
+                      ? 'assets/icons/repeat_one.ico'
+                      : 'assets/icons/repeat_on.ico'),
+          ),
+          'Повтор',
+          () => unawaited(PlaybackController.toggleRepeat()),
         ),
       ]);
 

@@ -1,9 +1,9 @@
 import 'dart:async';
 import 'dart:io';
-import 'package:flutter/material.dart';
-import 'package:yayma/src/rust/api/simple.dart';
 
+import 'package:flutter/material.dart';
 import 'package:yayma/src/providers/auth_provider.dart';
+import 'package:yayma/src/rust/api/simple.dart';
 
 class RustCachedImage extends StatefulWidget {
   final String? imageUrl;

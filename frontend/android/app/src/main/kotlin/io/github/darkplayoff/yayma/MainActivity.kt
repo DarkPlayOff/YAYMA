@@ -1,12 +1,12 @@
 package io.github.darkplayoff.yayma
 
 import android.os.Bundle
-import io.flutter.embedding.android.FlutterActivity
+import com.ryanheise.audioservice.AudioServiceActivity
 
-class MainActivity : FlutterActivity() {
+class MainActivity : AudioServiceActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
-        initRustls(this.applicationContext)
         super.onCreate(savedInstanceState)
+        initRustls(this.applicationContext)
     }
 
     private external fun initRustls(context: android.content.Context)

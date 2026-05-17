@@ -33,8 +33,8 @@ class GlobalNotificationListener extends StatefulWidget {
       _GlobalNotificationListenerState();
 }
 
-class _GlobalNotificationListenerState
-    extends State<GlobalNotificationListener> with SingleTickerProviderStateMixin {
+class _GlobalNotificationListenerState extends State<GlobalNotificationListener>
+    with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
   late final Animation<Offset> _offsetAnimation;
   AppNotification? _currentNotification;
@@ -47,13 +47,16 @@ class _GlobalNotificationListenerState
       duration: const Duration(milliseconds: 600),
       vsync: this,
     );
-    _offsetAnimation = Tween<Offset>(
-      begin: const Offset(0, -2),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(
-      parent: _controller,
-      curve: Curves.easeOutBack,
-    ));
+    _offsetAnimation =
+        Tween<Offset>(
+          begin: const Offset(0, -2),
+          end: Offset.zero,
+        ).animate(
+          CurvedAnimation(
+            parent: _controller,
+            curve: Curves.easeOutBack,
+          ),
+        );
 
     effect(() {
       final notif = appNotificationSignal.value;
@@ -61,7 +64,7 @@ class _GlobalNotificationListenerState
       if (_lastShown != null && notif.timestamp.isBefore(_lastShown!)) return;
 
       _lastShown = notif.timestamp;
-      
+
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         _showNotification(notif);
@@ -69,16 +72,16 @@ class _GlobalNotificationListenerState
     });
   }
 
-  void _showNotification(AppNotification notif) async {
+  Future<void> _showNotification(AppNotification notif) async {
     if (_controller.isAnimating) return;
-    
+
     setState(() {
       _currentNotification = notif;
     });
 
     await _controller.forward();
     await Future.delayed(const Duration(seconds: 4));
-    
+
     if (mounted) {
       await _controller.reverse();
       setState(() {
@@ -109,11 +112,14 @@ class _GlobalNotificationListenerState
                 child: Material(
                   color: Colors.transparent,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 12,
+                    ),
                     decoration: BoxDecoration(
-                      color: _currentNotification!.isError 
-                        ? Colors.redAccent.withValues(alpha: 0.9)
-                        : Colors.white.withValues(alpha: 0.1),
+                      color: _currentNotification!.isError
+                          ? Colors.redAccent.withValues(alpha: 0.9)
+                          : Colors.white.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(100),
                       border: Border.all(color: Colors.white10),
                       boxShadow: const [
@@ -128,9 +134,9 @@ class _GlobalNotificationListenerState
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(
-                          _currentNotification!.isError 
-                            ? Icons.error_outline_rounded 
-                            : Icons.check_circle_outline_rounded,
+                          _currentNotification!.isError
+                              ? Icons.error_outline_rounded
+                              : Icons.check_circle_outline_rounded,
                           color: Colors.white,
                           size: 20,
                         ),

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/providers/playback_provider.dart';
 import 'package:yayma/src/rust/api/models.dart';
+import 'package:yayma/src/ui/widgets/responsive.dart';
 import 'package:yayma/src/ui/widgets/track_elements.dart';
 
 String formatDuration(int ms) {
@@ -36,22 +37,31 @@ class CommonErrorWidget extends StatelessWidget {
 
 class CommonSectionTitle extends StatelessWidget {
   final String title;
-  final EdgeInsets padding;
+  final EdgeInsets? padding;
 
   const CommonSectionTitle({
     required this.title,
     super.key,
-    this.padding = const EdgeInsets.symmetric(vertical: 24, horizontal: 40),
+    this.padding,
   });
 
   @override
   Widget build(BuildContext context) {
+    final isNarrow = context.isNarrow;
+
+    final effectivePadding =
+        padding ??
+        EdgeInsets.symmetric(
+          vertical: 24,
+          horizontal: context.horizontalPadding,
+        );
+
     return Padding(
-      padding: padding,
+      padding: effectivePadding,
       child: Text(
         title,
-        style: const TextStyle(
-          fontSize: 24,
+        style: TextStyle(
+          fontSize: isNarrow ? 20 : 24,
           fontWeight: FontWeight.bold,
           color: Colors.white,
         ),
@@ -86,76 +96,112 @@ class CommonDetailHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(40),
-      child: Row(
-        crossAxisAlignment: isCircle
-            ? CrossAxisAlignment.center
-            : CrossAxisAlignment.end,
-        children: [
-          TrackCover(
-            url: coverUrl,
-            size: coverSize,
-            borderRadius: 16,
-            isCircle: isCircle,
-            canExpand: true,
-            heroTag: coverUrl,
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final isNarrow = screenWidth < 600;
+
+    final actualCoverSize = isNarrow
+        ? (screenWidth - 80).clamp(150.0, 200.0)
+        : coverSize;
+
+    final content = Column(
+      crossAxisAlignment: isNarrow
+          ? CrossAxisAlignment.center
+          : CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          type.toUpperCase(),
+          style: const TextStyle(
+            color: Colors.white54,
+            letterSpacing: 2,
+            fontWeight: FontWeight.bold,
           ),
-          const SizedBox(width: 40),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  type.toUpperCase(),
-                  style: const TextStyle(
-                    color: Colors.white54,
-                    letterSpacing: 2,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 48,
-                    fontWeight: FontWeight.w900,
-                    color: Colors.white,
-                    height: 1.1,
-                    letterSpacing: -1,
-                  ),
-                ),
-                if (artists != null) ...[
-                  const SizedBox(height: 12),
-                  ArtistNamesWidget(
-                    artists: artists!,
-                    fontSize: 24,
-                    color: Colors.white70,
-                  ),
-                ] else if (subtitle != null) ...[
-                  const SizedBox(height: 12),
-                  Text(
-                    subtitle!,
-                    style: const TextStyle(fontSize: 24, color: Colors.white70),
-                  ),
-                ],
-                if (secondarySubtitle != null) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    secondarySubtitle!,
-                    style: const TextStyle(color: Colors.white38),
-                  ),
-                ],
-                if (actions != null) ...[
-                  const SizedBox(height: 24),
-                  Row(children: actions!),
-                ],
-              ],
+        ),
+        const SizedBox(height: 8),
+        Text(
+          title,
+          textAlign: isNarrow ? TextAlign.center : TextAlign.start,
+          style: TextStyle(
+            fontSize: isNarrow ? 32 : 48,
+            fontWeight: FontWeight.w900,
+            color: Colors.white,
+            height: 1.1,
+            letterSpacing: -1,
+          ),
+        ),
+        if (artists != null) ...[
+          const SizedBox(height: 12),
+          ArtistNamesWidget(
+            artists: artists!,
+            fontSize: isNarrow ? 18 : 24,
+            color: Colors.white70,
+            alignment: isNarrow ? WrapAlignment.center : WrapAlignment.start,
+          ),
+        ] else if (subtitle != null) ...[
+          const SizedBox(height: 12),
+          Text(
+            subtitle!,
+            textAlign: isNarrow ? TextAlign.center : TextAlign.start,
+            style: TextStyle(
+              fontSize: isNarrow ? 18 : 24,
+              color: Colors.white70,
             ),
           ),
         ],
-      ),
+        if (secondarySubtitle != null) ...[
+          const SizedBox(height: 8),
+          Text(
+            secondarySubtitle!,
+            textAlign: isNarrow ? TextAlign.center : TextAlign.start,
+            style: const TextStyle(color: Colors.white38),
+          ),
+        ],
+        if (actions != null) ...[
+          const SizedBox(height: 24),
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            alignment: isNarrow ? WrapAlignment.center : WrapAlignment.start,
+            children: actions!,
+          ),
+        ],
+      ],
+    );
+
+    return Padding(
+      padding: EdgeInsets.all(isNarrow ? 20 : 40),
+      child: isNarrow
+          ? Column(
+              children: [
+                TrackCover(
+                  url: coverUrl,
+                  size: actualCoverSize,
+                  borderRadius: 16,
+                  isCircle: isCircle,
+                  canExpand: true,
+                  heroTag: coverUrl,
+                ),
+                const SizedBox(height: 24),
+                content,
+              ],
+            )
+          : Row(
+              crossAxisAlignment: isCircle
+                  ? CrossAxisAlignment.center
+                  : CrossAxisAlignment.end,
+              children: [
+                TrackCover(
+                  url: coverUrl,
+                  size: actualCoverSize,
+                  borderRadius: 16,
+                  isCircle: isCircle,
+                  canExpand: true,
+                  heroTag: coverUrl,
+                ),
+                const SizedBox(width: 40),
+                Expanded(child: content),
+              ],
+            ),
     );
   }
 }
@@ -387,46 +433,52 @@ class _CommonProgressSliderState extends State<CommonProgressSlider> {
               )
             : Column(
                 children: [
-                  SliderTheme(
-                    data: SliderTheme.of(context).copyWith(
-                      trackHeight: trackHeight,
-                      activeTrackColor: widget.accentColor,
-                      inactiveTrackColor: Colors.white10,
-                      thumbColor: widget.accentColor,
-                      thumbShape: RoundSliderThumbShape(
-                        enabledThumbRadius: thumbRadius,
+                  Theme(
+                    data: Theme.of(context).copyWith(
+                      sliderTheme: SliderThemeData(
+                        overlayShape: SliderComponentShape.noOverlay,
                       ),
-                      trackShape: const RoundedRectSliderTrackShape(),
                     ),
-                    child: Slider(
-                      value: displayPosition.clamp(0.0, dur),
-                      max: dur,
-                      onChangeStart: (val) {
-                        setState(() => _dragValue = val);
-                      },
-                      onChanged: (val) {
-                        setState(() => _dragValue = val);
-                      },
-                      onChangeEnd: (val) {
-                        setState(() => _dragValue = val);
-                        _dragEndTimer?.cancel();
-                        _dragEndTimer = Timer(
-                          const Duration(milliseconds: 500),
-                          () {
-                            if (mounted) {
-                              setState(() => _dragValue = null);
-                            }
-                          },
-                        );
-                        unawaited(
-                          PlaybackController.seekTo(
-                            Duration(milliseconds: val.toInt()),
-                          ),
-                        );
-                      },
+                    child: SliderTheme(
+                      data: SliderTheme.of(context).copyWith(
+                        trackHeight: trackHeight,
+                        activeTrackColor: widget.accentColor,
+                        inactiveTrackColor: Colors.white10,
+                        thumbColor: widget.accentColor,
+                        thumbShape: RoundSliderThumbShape(
+                          enabledThumbRadius: thumbRadius,
+                        ),
+                        trackShape: const RoundedRectSliderTrackShape(),
+                      ),
+                      child: Slider(
+                        value: displayPosition.clamp(0.0, dur),
+                        max: dur,
+                        onChangeStart: (val) {
+                          setState(() => _dragValue = val);
+                        },
+                        onChanged: (val) {
+                          setState(() => _dragValue = val);
+                        },
+                        onChangeEnd: (val) {
+                          setState(() => _dragValue = val);
+                          _dragEndTimer?.cancel();
+                          _dragEndTimer = Timer(
+                            const Duration(milliseconds: 500),
+                            () {
+                              if (mounted) {
+                                setState(() => _dragValue = null);
+                              }
+                            },
+                          );
+                          unawaited(
+                            PlaybackController.seekTo(
+                              Duration(milliseconds: val.toInt()),
+                            ),
+                          );
+                        },
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 4),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [

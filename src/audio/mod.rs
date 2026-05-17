@@ -1,6 +1,7 @@
 pub mod cache;
 pub mod commands;
 pub mod controller;
+#[cfg(not(any(target_os = "android")))]
 pub mod discord;
 pub mod enums;
 pub mod error;
@@ -12,6 +13,7 @@ pub mod playback;
 pub mod progress;
 pub mod queue;
 pub mod signals;
+#[cfg(not(any(target_os = "android")))]
 pub mod smtc;
 pub mod state;
 pub mod stream_manager;

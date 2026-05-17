@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:signals_flutter/signals_flutter.dart';
@@ -69,55 +70,65 @@ class _FloatingNavBarState extends State<FloatingNavBar>
     final currentSection = currentState.section;
     final isHome = currentSection == AppSection.home;
     final isAutoHideEnabled = autoHideNavbarSignal.watch(context);
+    final barColor = playerBarColorSignal.watch(context);
 
-    final isVisible = !isHome || !isAutoHideEnabled || _isNavbarHovered || _isHovered || _isAccountMenuOpen;
+    final isVisible =
+        !isHome ||
+        !isAutoHideEnabled ||
+        _isNavbarHovered ||
+        _isHovered ||
+        _isAccountMenuOpen;
     final isNarrow = MediaQuery.sizeOf(context).width < 600;
 
-    final children = [
-      MouseRegion(
-        onEnter: (_) {
-          setState(() {
-            _isHovered = true;
-          });
-          _showWaveSettings();
-        },
-        onExit: (_) {
-          setState(() {
-            _isHovered = false;
-          });
-          _hideWaveSettings();
-        },
-        child: Watch((context) {
-          final isWaveActive = currentWaveSeedsSignal().isNotEmpty;
-          final isPlaying = isPlayingSignal();
+    final alpha = isHome ? 0.5 : 0.7;
 
-          return IconButton(
-            onPressed: () {
-              if (isWaveActive) {
-                unawaited(PlaybackController.togglePlay());
-              } else {
-                unawaited(HomeController.startMyWave());
-              }
-            },
-            style: IconButton.styleFrom(
-              backgroundColor: Theme.of(
-                context,
-              ).colorScheme.primary.withValues(alpha: 0.1),
-              hoverColor: Theme.of(
-                context,
-              ).colorScheme.primary.withValues(alpha: 0.2),
-            ),
-            icon: Icon(
-              isWaveActive && isPlaying
-                  ? Icons.pause_rounded
-                  : Icons.play_arrow_rounded,
-              size: 32,
-              color: Theme.of(context).colorScheme.primary,
-            ),
-          );
-        }),
-      ),
-      SizedBox(height: isNarrow ? 0 : 12, width: isNarrow ? 12 : 0),
+    final children = [
+      if (!isNarrow)
+        MouseRegion(
+          onEnter: (_) {
+            setState(() {
+              _isHovered = true;
+            });
+            _showWaveSettings();
+          },
+          onExit: (_) {
+            setState(() {
+              _isHovered = false;
+            });
+            _hideWaveSettings();
+          },
+          child: Watch((context) {
+            final isWaveActive = currentWaveSeedsSignal().isNotEmpty;
+            final isPlaying = isPlayingSignal();
+
+            return IconButton(
+              onPressed: () {
+                if (isWaveActive) {
+                  unawaited(PlaybackController.togglePlay());
+                } else {
+                  unawaited(HomeController.startMyWave());
+                }
+              },
+              style: IconButton.styleFrom(
+                backgroundColor: Theme.of(
+                  context,
+                ).colorScheme.primary.withValues(alpha: 0.1),
+                hoverColor: Theme.of(
+                  context,
+                ).colorScheme.primary.withValues(alpha: 0.2),
+              ),
+              icon: Icon(
+                isWaveActive && isPlaying
+                    ? Icons.pause_rounded
+                    : Icons.play_arrow_rounded,
+                size: 32,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+            );
+          }),
+        ),
+      if (!isNarrow)
+        SizedBox(height: isNarrow ? 0 : 12, width: isNarrow ? 12 : 0),
       _NavIcon(
         icon: Icons.home_rounded,
         isSelected: currentSection == AppSection.home,
@@ -150,12 +161,12 @@ class _FloatingNavBarState extends State<FloatingNavBar>
       onEnter: (_) => setState(() => _isNavbarHovered = true),
       onExit: (_) => setState(() => _isNavbarHovered = false),
       child: Padding(
-        padding: isNarrow 
-            ? const EdgeInsets.only(bottom: 24, left: 24, right: 24)
+        padding: isNarrow
+            ? const EdgeInsets.only(bottom: 12, left: 24, right: 24)
             : const EdgeInsets.only(left: 16, right: 48, top: 48, bottom: 48),
         child: AnimatedSlide(
-          offset: isVisible 
-              ? Offset.zero 
+          offset: isVisible
+              ? Offset.zero
               : (isNarrow ? const Offset(0, 1.5) : const Offset(-1.5, 0)),
           duration: const Duration(milliseconds: 300),
           curve: Curves.easeOutCubic,
@@ -165,18 +176,8 @@ class _FloatingNavBarState extends State<FloatingNavBar>
             child: CompositedTransformTarget(
               link: _layerLink,
               child: Container(
-                width: isNarrow ? null : 64,
-                height: isNarrow ? 64 : null,
-                padding: EdgeInsets.symmetric(
-                  vertical: isNarrow ? 0 : 12,
-                  horizontal: isNarrow ? 12 : 0,
-                ),
                 decoration: BoxDecoration(
-                  color: isHome
-                      ? Colors.black.withValues(alpha: 0.5)
-                      : const Color(0xFF1E1E1E),
                   borderRadius: BorderRadius.circular(32),
-                  border: Border.all(color: Colors.white10),
                   boxShadow: [
                     BoxShadow(
                       color: Colors.black.withValues(alpha: isHome ? 0.8 : 0.4),
@@ -185,16 +186,40 @@ class _FloatingNavBarState extends State<FloatingNavBar>
                     ),
                   ],
                 ),
-                child: isNarrow 
-                    ? Row(
-                        mainAxisSize: MainAxisSize.min,
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: children,
-                      )
-                    : Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: children,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(32),
+                  child: BackdropFilter(
+                    filter: ui.ImageFilter.blur(
+                      sigmaX: isHome ? 0 : 3,
+                      sigmaY: isHome ? 0 : 3,
+                    ),
+                    child: Container(
+                      width: isNarrow ? null : 64,
+                      height: isNarrow ? 64 : null,
+                      padding: EdgeInsets.symmetric(
+                        vertical: isNarrow ? 0 : 12,
+                        horizontal: isNarrow ? 12 : 0,
                       ),
+                      decoration: BoxDecoration(
+                        color: barColor.withValues(alpha: alpha),
+                        borderRadius: BorderRadius.circular(32),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.1),
+                        ),
+                      ),
+                      child: isNarrow
+                          ? Row(
+                              mainAxisSize: MainAxisSize.min,
+                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                              children: children,
+                            )
+                          : Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: children,
+                            ),
+                    ),
+                  ),
+                ),
               ),
             ),
           ),
@@ -498,7 +523,9 @@ class _WaveOverlayState extends State<_WaveOverlay>
         link: widget.layerLink,
         showWhenUnlinked: false,
         targetAnchor: isNarrow ? Alignment.topCenter : Alignment.centerRight,
-        followerAnchor: isNarrow ? Alignment.bottomCenter : Alignment.centerLeft,
+        followerAnchor: isNarrow
+            ? Alignment.bottomCenter
+            : Alignment.centerLeft,
         offset: isNarrow ? const Offset(0, -24) : const Offset(32, 0),
         child: MouseRegion(
           onEnter: (_) => widget.onHover(isHovered: true),

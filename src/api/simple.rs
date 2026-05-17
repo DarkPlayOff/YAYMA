@@ -7,7 +7,7 @@ use crate::frb_generated::StreamSink;
 pub enum AppEvent {
     PlaybackStateChanged(PlaybackState),
     PlaybackProgress(PlaybackProgressDto),
-    VibeTick(Vec<f32>),
+    VibeTick([f32; 26]),
     LikedTracksChanged(Vec<SimpleTrackDto>),
     AuthStatusChanged(bool),
     Notification(String, String), // Title, Message

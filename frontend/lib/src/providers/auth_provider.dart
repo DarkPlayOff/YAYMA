@@ -33,7 +33,7 @@ Future<bool> runRustAction(
     if (result is bool) return result;
     return true;
   } on Object catch (e) {
-    showAppError(e.toString());
+    _handleRustError(e);
     return false;
   }
 }
@@ -46,7 +46,18 @@ Future<T?> runRustFetch<T>(Future<T> Function(AppContext ctx) fetcher) async {
   try {
     return await fetcher(ctx);
   } on Object catch (e) {
-    showAppError(e.toString());
+    _handleRustError(e);
     return null;
+  }
+}
+
+void _handleRustError(Object e) {
+  final errorStr = e.toString();
+  if (errorStr.contains('Invalid token or session expired') ||
+      errorStr.contains('Unauthorized')) {
+    showAppError('Сессия истекла. Пожалуйста, войдите снова.');
+    app_init.AppInit.logout();
+  } else {
+    showAppError(errorStr);
   }
 }

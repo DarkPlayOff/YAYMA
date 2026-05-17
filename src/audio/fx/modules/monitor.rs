@@ -15,10 +15,7 @@ impl MonitorEffect {
 impl Effect for MonitorEffect {
     #[inline]
     fn process(&mut self, left: &mut [f32], right: &mut [f32]) {
-        let len = left.len().min(right.len());
-        for i in 0..len {
-            self.inner.process_stereo(left[i], right[i]);
-        }
+        self.inner.process_block(left, right);
     }
 
     fn reset(&mut self) {

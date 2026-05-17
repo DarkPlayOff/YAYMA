@@ -1,4 +1,5 @@
 use crate::audio::progress::TrackProgress;
+use crate::util::reactive::Signal;
 use flume::{Receiver, Sender};
 use parking_lot::Mutex;
 use reqwest::Client;
@@ -13,9 +14,9 @@ use super::buffer::BufferState;
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
-const PREFETCH_SIZE: usize = 512 * 1024;
-const MIN_INITIAL_DATA: usize = 64 * 1024;
-const MAX_ATTEMPTS: usize = 100;
+const PREFETCH_SIZE: usize = 1024 * 1024;
+const MIN_INITIAL_DATA: usize = 128 * 1024;
+const MAX_ATTEMPTS: usize = 30; // Fewer attempts but longer wait
 
 enum FetchCommand {
     Fetch {
@@ -34,10 +35,16 @@ pub struct StreamingDataSource {
     fetch_tx: Sender<FetchCommand>,
     fetch_rx: Receiver<()>,
     task_handle: Option<tokio::task::JoinHandle<()>>,
+    buffering_signal: Option<Signal<bool>>,
 }
 
 impl StreamingDataSource {
-    pub async fn new(client: Client, url: String, progress: Arc<TrackProgress>) -> Result<Self> {
+    pub async fn new(
+        client: Client,
+        url: String,
+        progress: Arc<TrackProgress>,
+        buffering_signal: Option<Signal<bool>>,
+    ) -> Result<Self> {
         let progress_generation = progress.get_generation();
 
         let range_header = format!("bytes=0-{}", PREFETCH_SIZE - 1);
@@ -116,6 +123,7 @@ impl StreamingDataSource {
             fetch_tx: tx_cmd,
             fetch_rx: rx_res,
             task_handle: Some(task_handle),
+            buffering_signal,
         };
 
         src.wait_for(0, MIN_INITIAL_DATA)?;
@@ -136,7 +144,7 @@ impl StreamingDataSource {
                     }
                     match Self::fetch_range_async(&ctx.client, &ctx.url, start, end).await {
                         Ok(data) => {
-                            if request_generation != ctx.generation.load(Ordering::SeqCst) {
+                            if request_generation != ctx.generation.load(Ordering::Acquire) {
                                 let _ = ctx.tx_res.send(());
                                 continue;
                             }
@@ -150,7 +158,7 @@ impl StreamingDataSource {
                                 }
                             };
 
-                            if request_generation == ctx.generation.load(Ordering::SeqCst)
+                            if request_generation == ctx.generation.load(Ordering::Acquire)
                                 && ctx.progress_generation == ctx.progress.get_generation()
                                 && let Some(buffered_pos) = maybe_buffered
                             {
@@ -186,7 +194,7 @@ impl StreamingDataSource {
 
     fn fetch(&self, start: u64, size: u64) -> Result<()> {
         let end = (start + size).min(self.total_bytes);
-        let generation = self.generation.load(Ordering::SeqCst);
+        let generation = self.generation.load(Ordering::Acquire);
         self.fetch_tx
             .send(FetchCommand::Fetch {
                 start,
@@ -204,27 +212,43 @@ impl StreamingDataSource {
             }
         }
 
+        if let Some(sig) = &self.buffering_signal {
+            sig.set(true);
+        }
+
         let mut attempts = 0usize;
+        let mut result = Ok(());
+
         while attempts < MAX_ATTEMPTS {
-            match self.fetch_rx.recv_timeout(Duration::from_millis(50)) {
+            // Wait for next fetch completion with a longer timeout
+            match self.fetch_rx.recv_timeout(Duration::from_millis(500)) {
                 Ok(_) => {
                     let buf = self.buffer.lock();
                     if buf.available_from(pos) >= min || buf.eof {
-                        return Ok(());
+                        break;
                     }
+                    // Reset attempts because we received a notification, even if it didn't satisfy our range
+                    attempts = 0;
                 }
                 Err(flume::RecvTimeoutError::Timeout) => {
                     attempts += 1;
                 }
                 Err(_) => {
+                    result = Err("fetch channel closed".into());
                     break;
                 }
             }
         }
 
-        Err(Box::<dyn std::error::Error + Send + Sync>::from(
-            "wait_for_data timed out",
-        ))
+        if attempts >= MAX_ATTEMPTS {
+            result = Err("wait_for_data timed out".into());
+        }
+
+        if let Some(sig) = &self.buffering_signal {
+            sig.set(false);
+        }
+
+        result
     }
 
     fn ensure(&self, pos: u64) -> Result<()> {
@@ -235,16 +259,16 @@ impl StreamingDataSource {
             }
         }
 
-        let _ = self.generation.fetch_add(1, Ordering::SeqCst);
+        let _ = self.generation.fetch_add(1, Ordering::Release);
         {
             let mut buf = self.buffer.lock();
             buf.clear(pos);
         }
 
-        let size = PREFETCH_SIZE.min((self.total_bytes.saturating_sub(pos)) as usize) as u64;
+        let size = PREFETCH_SIZE.max(MIN_INITIAL_DATA).min((self.total_bytes.saturating_sub(pos)) as usize) as u64;
         if size > 0 {
             self.fetch(pos, size)?;
-            self.wait_for(pos, PREFETCH_SIZE.min(size as usize))?;
+            self.wait_for(pos, MIN_INITIAL_DATA.min(size as usize))?;
         }
 
         Ok(())
@@ -252,7 +276,7 @@ impl StreamingDataSource {
 
     fn trigger_prefetch(&self) {
         let (should, start, size) = {
-            let pos = self.position.load(Ordering::SeqCst);
+            let pos = self.position.load(Ordering::Relaxed);
             let buf = self.buffer.lock();
             if buf.should_prefetch(pos) {
                 let start = buf.end_pos();
@@ -263,7 +287,7 @@ impl StreamingDataSource {
             }
         };
         if should {
-            let generation = self.generation.load(Ordering::SeqCst);
+            let generation = self.generation.load(Ordering::Acquire);
             let _ = self.fetch_tx.try_send(FetchCommand::Fetch {
                 start,
                 end: start + size as u64,
@@ -290,7 +314,7 @@ struct FetchContext {
 
 impl Read for StreamingDataSource {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        let pos = self.position.load(Ordering::SeqCst);
+        let pos = self.position.load(Ordering::Relaxed);
         if pos >= self.total_bytes {
             return Ok(0);
         }
@@ -314,7 +338,7 @@ impl Read for StreamingDataSource {
         };
 
         if bytes > 0 {
-            self.position.fetch_add(bytes as u64, Ordering::SeqCst);
+            self.position.fetch_add(bytes as u64, Ordering::Relaxed);
             self.trigger_prefetch();
         }
 
@@ -334,7 +358,7 @@ impl Seek for StreamingDataSource {
                 }
             }
             SeekFrom::Current(off) => {
-                let cur = self.position.load(Ordering::SeqCst);
+                let cur = self.position.load(Ordering::Relaxed);
                 if off >= 0 {
                     cur.saturating_add(off as u64)
                 } else {
@@ -344,7 +368,7 @@ impl Seek for StreamingDataSource {
         }
         .min(self.total_bytes);
 
-        self.position.store(new, Ordering::SeqCst);
+        self.position.store(new, Ordering::Relaxed);
         self.ensure(new).map_err(std::io::Error::other)?;
         Ok(new)
     }
