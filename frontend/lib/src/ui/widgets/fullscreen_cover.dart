@@ -19,7 +19,7 @@ class FullscreenCoverDialog extends StatelessWidget {
     // Try to get high-quality version
     final highResUrl = imageUrl
         .replaceFirst('200x200', '1000x1000')
-        .replaceFirst('400x400', '1000x1000');
+        .replaceFirst('600x600', '1000x1000');
 
     return Navigator.of(context).push(
       PageRouteBuilder(

@@ -249,7 +249,7 @@ pub async fn get_artist_details(
     Some(ArtistDetailsDto {
         id: artist_id,
         name: artist.name.take().unwrap_or_default(),
-        cover_url: format_cover(artist.cover.and_then(|mut c| c.uri.take()), "400x400"),
+        cover_url: format_cover(artist.cover.and_then(|mut c| c.uri.take()), "600x600"),
         tracks: mapped_tracks,
         total_tracks: pager.total,
     })

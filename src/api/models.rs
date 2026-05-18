@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 pub use yandex_music::model::{album::Album, artist::Artist, playlist::Playlist, track::Track};
 
 pub const COVER_SIZE_SMALL: &str = "200x200";
-pub const COVER_SIZE_MEDIUM: &str = "400x400";
+pub const COVER_SIZE_MEDIUM: &str = "600x600";
 pub const COVER_SIZE_LARGE: &str = "1000x1000";
 
 pub fn format_cover(uri: Option<String>, size: &str) -> Option<String> {
@@ -199,7 +199,7 @@ impl AlbumDetailsDto {
     ) -> Self {
         let album_id = album.id.unwrap_or(0).to_string();
         let album_title = album.title.take().unwrap_or_default();
-        let cover_url = format_cover(album.og_image.take(), "400x400");
+        let cover_url = format_cover(album.og_image.take(), "600x600");
         let year = album.year.map(|y| y as i32);
         let artists = album
             .artists
@@ -261,7 +261,7 @@ impl SimpleAlbumDto {
                 .iter()
                 .map(TrackArtistDto::from_yandex)
                 .collect(),
-            cover_url: format_cover(album.og_image.take(), "400x400"),
+            cover_url: format_cover(album.og_image.take(), "600x600"),
             year: album.year.map(|y| y as i32),
         }
     }
@@ -281,7 +281,7 @@ impl SimpleArtistDto {
         Self {
             id: artist.id.take().unwrap_or_default(),
             name: artist.name.take().unwrap_or_default(),
-            cover_url: format_cover(artist.cover.and_then(|mut c| c.uri.take()), "400x400"),
+            cover_url: format_cover(artist.cover.and_then(|mut c| c.uri.take()), "600x600"),
         }
     }
 }
@@ -301,7 +301,7 @@ pub struct PlaylistDetailsDto {
 #[flutter_rust_bridge::frb(ignore)]
 impl PlaylistDetailsDto {
     pub fn from_yandex(mut playlist: Playlist) -> Self {
-        let cover_url = format_cover(playlist.cover.uri.take(), "400x400");
+        let cover_url = format_cover(playlist.cover.uri.take(), "600x600");
         let title = std::mem::take(&mut playlist.title);
         let track_count = playlist.track_count;
         let is_public = format!("{:?}", playlist.visibility)
@@ -341,7 +341,7 @@ impl SimplePlaylistDto {
             kind: playlist.kind,
             uid: playlist.uid as i64,
             title: std::mem::take(&mut playlist.title),
-            cover_url: format_cover(playlist.cover.uri.take(), "400x400"),
+            cover_url: format_cover(playlist.cover.uri.take(), "600x600"),
             track_count: playlist.track_count,
             is_public,
         }
