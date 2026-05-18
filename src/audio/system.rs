@@ -30,8 +30,6 @@ pub struct AudioSystem {
     event_tx: Sender<Event>,
     state: Arc<RwLock<SystemState>>,
     signals: AudioSignals,
-    #[cfg(not(any(target_os = "android")))]
-    smtc: Arc<Mutex<SmtcManager>>,
     tx: mpsc::Sender<AudioMessage>,
     db: Arc<tokio::sync::Mutex<crate::db::AppDatabase>>,
 }
@@ -107,8 +105,6 @@ impl AudioSystem {
             event_tx: event_tx.clone(),
             state: state.clone(),
             signals: signals.clone(),
-            #[cfg(not(any(target_os = "android")))]
-            smtc: smtc.clone(),
             tx: tx.clone(),
             db,
         };

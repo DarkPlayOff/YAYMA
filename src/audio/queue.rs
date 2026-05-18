@@ -816,7 +816,7 @@ impl QueueManager {
             self.trigger_fetch();
         }
 
-        if let Some(track) = self.try_advance_or_fetch(current + 1).await {
+        if let Some(track) = self.try_advance_or_fetch(current).await {
             return Some(track);
         }
 
@@ -847,8 +847,9 @@ impl QueueManager {
         self.advance_to(index)
     }
 
-    async fn try_advance_or_fetch(&mut self, next: usize) -> Option<Track> {
-        if next < self.signals.queue().len() {
+    async fn try_advance_or_fetch(&mut self, current: usize) -> Option<Track> {
+        let queue_len = self.signals.queue().len();
+        if let Some(next) = PlaybackPolicy::try_advance(current, queue_len) {
             return self.advance_to(next);
         }
 
@@ -857,7 +858,8 @@ impl QueueManager {
             && !new_tracks.is_empty()
         {
             self.wave_append(new_tracks);
-            if next < self.signals.queue().len() {
+            let queue_len = self.signals.queue().len();
+            if let Some(next) = PlaybackPolicy::try_advance(current, queue_len) {
                 return self.advance_to(next);
             }
         }
@@ -882,7 +884,7 @@ impl QueueManager {
         }
 
         let current = self.signals.index();
-        self.try_advance_or_fetch(current + 1).await
+        self.try_advance_or_fetch(current).await
     }
 
     pub fn wave_finish_track(&mut self) {

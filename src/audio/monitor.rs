@@ -383,6 +383,7 @@ impl Monitor {
         let mut local_combined_amp_sum = 0.0f32;
 
         let mut l_f = f32::from_bits(self.internal.low_filter.load(Ordering::Relaxed));
+        let mut m_f = f32::from_bits(self.internal.mid_filter.load(Ordering::Relaxed));
         let mut h_f = f32::from_bits(self.internal.high_filter.load(Ordering::Relaxed));
 
         for i in 0..len {
@@ -401,7 +402,9 @@ impl Monitor {
             let high = (abs_mono - h_val).abs();
             h_f = h_val;
 
-            let mid = (abs_mono - low - high).abs();
+            let mid_val = (abs_mono - low - high).abs();
+            let mid = m_f + (mid_val - m_f) * 0.2;
+            m_f = mid;
 
             local_bass_peak = local_bass_peak.max(low);
             local_mid_peak = local_mid_peak.max(mid);
@@ -416,6 +419,9 @@ impl Monitor {
         self.internal
             .low_filter
             .store(l_f.to_bits(), Ordering::Relaxed);
+        self.internal
+            .mid_filter
+            .store(m_f.to_bits(), Ordering::Relaxed);
         self.internal
             .high_filter
             .store(h_f.to_bits(), Ordering::Relaxed);
