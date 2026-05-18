@@ -32,8 +32,7 @@ impl SmtcManager {
         }
 
         #[cfg(target_os = "windows")]
-        let hwnd =
-            crate::audio::thumbnail::get_flutter_hwnd().map(|h| h.0);
+        let hwnd = crate::audio::thumbnail::get_flutter_hwnd().map(|h| h.0);
         #[cfg(not(target_os = "windows"))]
         let hwnd = None;
 
@@ -82,8 +81,7 @@ impl SmtcManager {
 
         #[cfg(target_os = "windows")]
         let thumbnail_manager = {
-            let thumbnail_hwnd =
-                crate::audio::thumbnail::get_flutter_hwnd().map(|h| h.0);
+            let thumbnail_hwnd = crate::audio::thumbnail::get_flutter_hwnd().map(|h| h.0);
             thumbnail_hwnd.and_then(ThumbnailManager::new)
         };
 

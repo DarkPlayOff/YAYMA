@@ -6,6 +6,7 @@ import 'package:signals_flutter/signals_flutter.dart';
 import 'package:webview_all/webview_all.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:yayma/src/providers/auth_provider.dart';
+import 'package:yayma/src/providers/navigation_provider.dart';
 import 'package:yayma/src/rust/api/auth.dart' as rust;
 import 'package:yayma/src/rust/api/playback.dart' as rust;
 import 'package:yayma/src/rust/api/simple.dart' as simple;
@@ -93,7 +94,7 @@ class _LoginScreenState extends State<LoginScreen> {
     final theme = Theme.of(context);
     final isDesktop =
         Platform.isWindows || Platform.isLinux || Platform.isMacOS;
-    final isCustomTitlebar = isDesktop && simple.isCustomTitlebarEnabledSync();
+    final isCustomTitlebar = isDesktop && customTitlebarSignal.watch(context);
 
     return Scaffold(
       resizeToAvoidBottomInset: false,

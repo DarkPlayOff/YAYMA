@@ -90,7 +90,7 @@ impl EffectChain {
         if self.right.capacity() < frames {
             self.right.reserve(frames - self.right.capacity());
         }
-        
+
         unsafe {
             self.left.set_len(frames);
             self.right.set_len(frames);

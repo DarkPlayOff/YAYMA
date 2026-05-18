@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:yayma/src/app/init.dart';
+import 'package:yayma/src/providers/navigation_provider.dart';
 import 'package:yayma/src/providers/notification_provider.dart';
 import 'package:yayma/src/rust/api/simple.dart' as simple;
 import 'package:yayma/src/ui/auth/auth_screens.dart';
@@ -19,7 +20,8 @@ Future<void> main() async {
   ]);
 
   if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
-    final isCustom = simple.isCustomTitlebarEnabledSync();
+    final isCustom = await simple.isCustomTitlebarEnabledInit();
+    customTitlebarSignal.value = isCustom;
 
     final windowOptions = WindowOptions(
       size: const Size(1280, 720),

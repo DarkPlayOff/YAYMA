@@ -46,32 +46,30 @@ pub fn is_discord_rpc_enabled(ctx: &AppContext) -> bool {
     logic::is_discord_rpc_enabled(ctx)
 }
 
-pub fn set_discord_rpc_enabled(ctx: &AppContext, enabled: bool) {
-    logic::set_discord_rpc_enabled(ctx, enabled)
+pub async fn set_discord_rpc_enabled(ctx: &AppContext, enabled: bool) {
+    logic::set_discord_rpc_enabled(ctx, enabled).await;
 }
 
-pub fn is_custom_titlebar_enabled(ctx: &AppContext) -> bool {
-    logic::is_custom_titlebar_enabled(ctx)
+pub async fn is_custom_titlebar_enabled(ctx: &AppContext) -> bool {
+    logic::is_custom_titlebar_enabled(ctx).await
 }
 
-#[flutter_rust_bridge::frb(sync)]
-pub fn is_custom_titlebar_enabled_sync() -> bool {
-    logic::is_custom_titlebar_enabled_sync()
+pub async fn is_custom_titlebar_enabled_init() -> bool {
+    logic::is_custom_titlebar_enabled_init().await
 }
 
-pub fn set_custom_titlebar_enabled(ctx: &AppContext, enabled: bool) {
-    logic::set_custom_titlebar_enabled(ctx, enabled)
+pub async fn set_custom_titlebar_enabled(ctx: &AppContext, enabled: bool) {
+    logic::set_custom_titlebar_enabled(ctx, enabled).await;
 }
 
-pub fn is_auto_hide_navbar_enabled(ctx: &AppContext) -> bool {
-    logic::is_auto_hide_navbar_enabled(ctx)
+pub async fn is_auto_hide_navbar_enabled(ctx: &AppContext) -> bool {
+    logic::is_auto_hide_navbar_enabled(ctx).await
 }
 
-#[flutter_rust_bridge::frb(sync)]
-pub fn is_auto_hide_navbar_enabled_sync() -> bool {
-    logic::is_auto_hide_navbar_enabled_sync()
+pub async fn is_auto_hide_navbar_enabled_init() -> bool {
+    logic::is_auto_hide_navbar_enabled_init().await
 }
 
-pub fn set_auto_hide_navbar_enabled(ctx: &AppContext, enabled: bool) {
-    logic::set_auto_hide_navbar_enabled(ctx, enabled)
+pub async fn set_auto_hide_navbar_enabled(ctx: &AppContext, enabled: bool) {
+    logic::set_auto_hide_navbar_enabled(ctx, enabled).await;
 }

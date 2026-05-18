@@ -96,9 +96,9 @@ pub fn spawn_bridge_worker(ctx: Arc<AppContext>, mut shutdown_rx: watch::Receive
                     let is_playing = audio_signals.is_playing.get();
                     if let Some(track_id) = track_id {
                         let db_arc = ctx.core.db.clone();
-                        tokio::task::spawn_blocking(move || {
-                            let db = db_arc.lock();
-                            let _ = db.save_playback_state(&track_id, position_ms, is_playing);
+                        tokio::spawn(async move {
+                            let mut db = db_arc.lock().await;
+                            let _ = db.save_playback_state(&track_id, position_ms, is_playing).await;
                         });
                     }
                 }
@@ -126,16 +126,15 @@ pub fn spawn_bridge_worker(ctx: Arc<AppContext>, mut shutdown_rx: watch::Receive
                         let track_id = audio_signals.current_track_id.get();
                         let position_ms = audio_signals.position_ms.get();
                         // Save only if position changed significantly (> 3 sec)
-                        if let Some(track_id) = track_id {
-                            if position_ms.saturating_sub(last_saved_position_ms) > 3000 {
+                        if let Some(track_id) = track_id
+                            && position_ms.saturating_sub(last_saved_position_ms) > 3000 {
                                 let db_arc = ctx.core.db.clone();
-                                tokio::task::spawn_blocking(move || {
-                                    let db = db_arc.lock();
-                                    let _ = db.save_playback_state(&track_id, position_ms, true);
+                                tokio::spawn(async move {
+                                    let mut db = db_arc.lock().await;
+                                    let _ = db.save_playback_state(&track_id, position_ms, true).await;
                                 });
                                 last_saved_position_ms = position_ms;
                             }
-                        }
                     }
                 }
             }
@@ -152,23 +151,36 @@ pub fn spawn_settings_worker(ctx: Arc<AppContext>, mut shutdown_rx: watch::Recei
 
                     let ctx_clone = ctx.clone();
                     let db_arc = ctx.core.db.clone();
-                    tokio::task::spawn_blocking(move || {
-                        let guard = ctx_clone.audio.effect_handles.read();
-                        let db = db_arc.lock();
+                    tokio::spawn(async move {
+                        // Extract everything needed out of the non-Send guard
+                        let (eq_bands, eq_enabled, effects, quality) = {
+                            let guard = ctx_clone.audio.effect_handles.read();
+                            let eq = guard.get("eq");
+                            let eq_bands = eq.map(|e| (0..e.param_count()).map(|i| e.get_param(i)).collect::<Vec<_>>());
+                            let eq_enabled = eq.map(|e| e.is_enabled()).unwrap_or(false);
 
-                        if let Some(eq) = guard.get("eq") {
-                            let bands: Vec<_> = (0..eq.param_count()).map(|i| eq.get_param(i)).collect();
-                            let _ = db.save_equalizer(eq.is_enabled(), &bands);
+                            let mut effects = Vec::new();
+                            for (id, handle) in guard.iter() {
+                                if matches!(id.as_str(), "eq" | "monitor" | "fade") {
+                                    continue;
+                                }
+                                let params: Vec<_> = (0..handle.param_count()).map(|i| handle.get_param(i)).collect();
+                                effects.push((id.clone(), handle.is_enabled(), params));
+                            }
+
+                            (eq_bands, eq_enabled, effects, ctx_clone.core.api.get_quality())
+                        };
+
+                        let mut db = db_arc.lock().await;
+
+                        if let Some(bands) = eq_bands {
+                            let _ = db.save_equalizer(eq_enabled, &bands).await;
                         }
 
-                        let _ = db.save_audio_quality(ctx_clone.core.api.get_quality());
+                        let _ = db.save_audio_quality(quality).await;
 
-                        for (id, handle) in guard.iter() {
-                            if matches!(id.as_str(), "eq" | "monitor" | "fade") {
-                                continue;
-                            }
-                            let params: Vec<_> = (0..handle.param_count()).map(|i| handle.get_param(i)).collect();
-                            let _ = db.save_effect(id, handle.is_enabled(), &params);
+                        for (id, enabled, params) in effects {
+                            let _ = db.save_effect(&id, enabled, &params).await;
                         }
                     });
                 }

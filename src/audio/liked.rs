@@ -36,7 +36,11 @@ impl LikedCache {
             self.revision = Some(tracks.info.revision);
         }
         if let Some(albums) = collection.liked_albums {
-            self.liked_albums_ids = albums.liked.into_iter().map(|a| a.album_id as u32).collect();
+            self.liked_albums_ids = albums
+                .liked
+                .into_iter()
+                .map(|a| a.album_id as u32)
+                .collect();
         }
         if let Some(artists) = collection.liked_artists {
             self.liked_artists_ids = artists

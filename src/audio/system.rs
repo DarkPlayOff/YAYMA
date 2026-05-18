@@ -1,8 +1,8 @@
 use crate::audio::cache::UrlCache;
 use crate::{
     audio::{
-        commands::AudioMessage, controller::AudioController,
-        events::Event, playback::PlaybackEngine, progress::TrackProgress, queue::QueueManager,
+        commands::AudioMessage, controller::AudioController, events::Event,
+        playback::PlaybackEngine, progress::TrackProgress, queue::QueueManager,
         queue::as_wave_seed, signals::AudioSignals, state::SystemState,
         stream_manager::StreamManager, yandex::YandexProvider,
     },
@@ -19,7 +19,8 @@ use std::time::Duration;
 use tokio::sync::{Mutex, RwLock, mpsc};
 use yandex_music::model::track::Track;
 
-pub type EffectHandles = Arc<parking_lot::RwLock<foldhash::HashMap<String, crate::audio::fx::EffectHandle>>>;
+pub type EffectHandles =
+    Arc<parking_lot::RwLock<foldhash::HashMap<String, crate::audio::fx::EffectHandle>>>;
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
 pub struct AudioSystem {
@@ -32,14 +33,14 @@ pub struct AudioSystem {
     #[cfg(not(any(target_os = "android")))]
     smtc: Arc<Mutex<SmtcManager>>,
     tx: mpsc::Sender<AudioMessage>,
-    db: Arc<parking_lot::Mutex<crate::db::AppDatabase>>,
+    db: Arc<tokio::sync::Mutex<crate::db::AppDatabase>>,
 }
 
 impl AudioSystem {
     pub async fn spawn(
         event_tx: Sender<Event>,
         api: Arc<ApiService>,
-        db: Arc<parking_lot::Mutex<crate::db::AppDatabase>>,
+        db: Arc<tokio::sync::Mutex<crate::db::AppDatabase>>,
         http_cache: Arc<crate::storage::cache::HttpCache>,
     ) -> Result<(
         mpsc::Sender<AudioMessage>,
@@ -83,14 +84,18 @@ impl AudioSystem {
         queue.set_event_tx(event_tx.clone());
 
         let state = Arc::new(RwLock::new(SystemState::default()));
-        
+
         #[cfg(not(any(target_os = "android")))]
         let (smtc, smtc_cmd_rx) = {
             let (smtc_cmd_tx, smtc_cmd_rx) = mpsc::unbounded_channel();
-            let smtc = Arc::new(Mutex::new(SmtcManager::new(event_tx.clone(), smtc_cmd_tx, http_cache.clone())?));
+            let smtc = Arc::new(Mutex::new(SmtcManager::new(
+                event_tx.clone(),
+                smtc_cmd_tx,
+                http_cache.clone(),
+            )?));
             (smtc, smtc_cmd_rx)
         };
-        
+
         let yandex = YandexProvider::new(api.clone(), event_tx.clone(), signals.clone());
 
         let effect_handles = controller.get_effect_handles();
@@ -107,7 +112,7 @@ impl AudioSystem {
             tx: tx.clone(),
             db,
         };
-        
+
         let mut system_loop = system;
 
         // Start Discord integration
@@ -142,7 +147,8 @@ impl AudioSystem {
                     let current_track_id = current_track.as_ref().map(|t| t.id.clone());
                     let is_playing = signals_clone.is_playing.get();
 
-                    let mut smtc_guard: tokio::sync::MutexGuard<SmtcManager> = smtc_clone.lock().await;
+                    let mut smtc_guard: tokio::sync::MutexGuard<SmtcManager> =
+                        smtc_clone.lock().await;
 
                     if current_track_id != last_track_id {
                         if let Some(track) = current_track {
@@ -204,9 +210,7 @@ impl AudioSystem {
         });
     }
 
-    pub fn get_effect_handles(
-        &self,
-    ) -> EffectHandles {
+    pub fn get_effect_handles(&self) -> EffectHandles {
         self.controller.get_effect_handles()
     }
 
@@ -570,16 +574,17 @@ impl AudioSystem {
         api: Arc<ApiService>,
         state: Arc<RwLock<SystemState>>,
         signals: AudioSignals,
-        db_arc: Arc<parking_lot::Mutex<crate::db::AppDatabase>>,
+        db_arc: Arc<tokio::sync::Mutex<crate::db::AppDatabase>>,
     ) {
         if let Ok(ids) = api.fetch_liked_ids().await {
             let count = ids.len();
 
             // Sync with DB
             let ids_for_db = ids.clone();
-            tokio::task::spawn_blocking(move || {
-                let db = db_arc.lock();
-                let _ = db.save_liked_tracks(&ids_for_db);
+            let db_arc_clone = db_arc.clone();
+            tokio::spawn(async move {
+                let mut db = db_arc_clone.lock().await;
+                let _ = db.save_liked_tracks(&ids_for_db).await;
             });
 
             {

@@ -177,7 +177,10 @@ impl AudioController {
 
         let buffering_signal = self.signals.is_buffering.clone();
         let task = tokio::spawn(async move {
-            match stream_manager.create_stream_session(&track_clone, Some(buffering_signal)).await {
+            match stream_manager
+                .create_stream_session(&track_clone, Some(buffering_signal))
+                .await
+            {
                 Ok((session, new_progress, _codec)) => {
                     {
                         let mut guard = progress.write();

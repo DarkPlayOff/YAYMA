@@ -265,7 +265,9 @@ impl StreamingDataSource {
             buf.clear(pos);
         }
 
-        let size = PREFETCH_SIZE.max(MIN_INITIAL_DATA).min((self.total_bytes.saturating_sub(pos)) as usize) as u64;
+        let size = PREFETCH_SIZE
+            .max(MIN_INITIAL_DATA)
+            .min((self.total_bytes.saturating_sub(pos)) as usize) as u64;
         if size > 0 {
             self.fetch(pos, size)?;
             self.wait_for(pos, MIN_INITIAL_DATA.min(size as usize))?;

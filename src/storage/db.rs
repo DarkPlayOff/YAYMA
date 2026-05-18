@@ -1,15 +1,16 @@
-use chrono;
-use directories::ProjectDirs;
-use crate::api::models::{TrackArtistDto};
-use rusqlite::{Connection, Result, params};
+use crate::api::models::{AudioQuality, TrackArtistDto};
+use crate::storage::models::*;
 use std::path::PathBuf;
-use foldhash::HashMapExt;
+use toasty::Db;
+use tokio::sync::OnceCell;
 
 /// Default TTL for cached images: 7 days in seconds
 const DEFAULT_CACHE_TTL_SECS: i64 = 7 * 24 * 60 * 60;
 
+static SCHEMA_PUSHED: OnceCell<()> = OnceCell::const_new();
+
 pub struct AppDatabase {
-    conn: Connection,
+    pub db: Db,
 }
 
 #[derive(Debug, Clone)]
@@ -25,695 +26,565 @@ pub struct TrackMetadata {
 }
 
 impl AppDatabase {
-    pub fn init(base_path: Option<PathBuf>) -> Result<Self> {
+    pub async fn init(base_path: Option<PathBuf>) -> toasty::Result<Self> {
         let db_path = if let Some(path) = base_path {
             std::fs::create_dir_all(&path).ok();
-            path.join("yamusic.db")
-        } else if let Some(proj_dirs) = ProjectDirs::from("com", "yamusic", "yamusic") {
+            path.join("yamusic_v2.db")
+        } else if let Some(proj_dirs) = directories::ProjectDirs::from("com", "yamusic", "yamusic")
+        {
             let data_dir = proj_dirs.data_dir();
             std::fs::create_dir_all(data_dir).ok();
-            data_dir.join("yamusic.db")
+            data_dir.join("yamusic_v2.db")
         } else {
-            PathBuf::from("yamusic.db")
+            PathBuf::from("yamusic_v2.db")
         };
 
-        let conn = Connection::open(db_path)?;
+        let db_url = format!("sqlite:{}", db_path.to_string_lossy());
 
-        // Performance optimizations
-        conn.pragma_update(None, "journal_mode", "WAL")?;
-        conn.pragma_update(None, "synchronous", "NORMAL")?;
-        conn.pragma_update(None, "cache_size", -30000)?; // ~30MB cache
-        conn.pragma_update(None, "temp_store", "MEMORY")?;
-        conn.pragma_update(None, "foreign_keys", "ON")?;
+        let db = Db::builder()
+            .models(toasty::models!(crate::*))
+            .connect(&db_url)
+            .await?;
 
-        // --- MIGRATION: Simply drop old metadata table if schema is outdated ---
-        let has_old_metadata_column: bool = conn
-            .query_row(
-                "SELECT count(*) FROM pragma_table_info('track_metadata') WHERE name = 'artists'",
-                [],
-                |r| r.get(0),
-            )
-            .unwrap_or(0)
-            > 0;
+        SCHEMA_PUSHED
+            .get_or_init(|| async {
+                if let Err(_e) = db.push_schema().await {
+                    // Toasty's push_schema does not use IF NOT EXISTS and will return an error
+                    // if the tables already exist in the database.
+                }
+            })
+            .await;
 
-        if has_old_metadata_column {
-            tracing::info!("Outdated metadata schema detected. Dropping table for re-sync...");
-            let _ = conn.execute("DROP TABLE IF EXISTS track_metadata", []);
-            let _ = conn.execute("DROP TABLE IF EXISTS track_metadata_artists", []);
-        }
-        // -----------------------------------------------------------------------
-
-        let migrations = [
-            "CREATE TABLE IF NOT EXISTS playback_state (
-                id INTEGER PRIMARY KEY CHECK (id = 1),
-                track_id TEXT NOT NULL,
-                position_ms INTEGER NOT NULL,
-                is_playing INTEGER NOT NULL
-            )",
-            "CREATE TABLE IF NOT EXISTS download_path (
-                id INTEGER PRIMARY KEY CHECK (id = 1),
-                path TEXT NOT NULL
-            )",
-            "CREATE TABLE IF NOT EXISTS liked_tracks (
-                track_id TEXT PRIMARY KEY
-            )",
-            "CREATE TABLE IF NOT EXISTS track_metadata (
-                track_id TEXT PRIMARY KEY,
-                title TEXT NOT NULL,
-                version TEXT,
-                album TEXT,
-                album_id TEXT,
-                cover_url TEXT,
-                duration_ms INTEGER NOT NULL
-            )",
-            "CREATE TABLE IF NOT EXISTS track_metadata_artists (
-                track_id TEXT NOT NULL,
-                artist_id TEXT NOT NULL,
-                name TEXT NOT NULL,
-                position INTEGER NOT NULL,
-                PRIMARY KEY (track_id, position),
-                FOREIGN KEY (track_id) REFERENCES track_metadata(track_id) ON DELETE CASCADE
-            )",
-            "CREATE INDEX IF NOT EXISTS idx_track_artists_id ON track_metadata_artists(track_id)",
-            "CREATE INDEX IF NOT EXISTS idx_track_artists_name ON track_metadata_artists(name)",
-            "CREATE INDEX IF NOT EXISTS idx_metadata_search_title ON track_metadata(title)",
-            "CREATE TABLE IF NOT EXISTS equalizer_settings (
-                id INTEGER PRIMARY KEY CHECK (id = 1),
-                enabled INTEGER NOT NULL DEFAULT 0,
-                bands TEXT NOT NULL
-            )",
-            "CREATE TABLE IF NOT EXISTS effect_settings (
-                effect_id TEXT PRIMARY KEY,
-                enabled INTEGER NOT NULL DEFAULT 0,
-                params TEXT NOT NULL
-            )",
-            "CREATE TABLE IF NOT EXISTS cache_metadata (
-                url TEXT PRIMARY KEY,
-                file_path TEXT NOT NULL,
-                size INTEGER NOT NULL,
-                last_access_at INTEGER NOT NULL,
-                created_at INTEGER NOT NULL,
-                expires_at INTEGER NOT NULL DEFAULT 0,
-                etag TEXT
-            )",
-            "CREATE TABLE IF NOT EXISTS app_settings (
-                key TEXT PRIMARY KEY,
-                value TEXT
-            )",
-            "CREATE INDEX IF NOT EXISTS idx_cache_last_access ON cache_metadata(last_access_at)",
-            "CREATE INDEX IF NOT EXISTS idx_cache_expires_at ON cache_metadata(expires_at)",
-            "CREATE INDEX IF NOT EXISTS idx_liked_track_id ON liked_tracks(track_id)",
-        ];
-
-        for m in migrations {
-            conn.execute(m, [])?;
-        }
-
-        // Apply column additions gracefully
-        let _ = conn.execute(
-            "ALTER TABLE cache_metadata ADD COLUMN expires_at INTEGER NOT NULL DEFAULT 0",
-            [],
-        );
-        let _ = conn.execute(
-            "UPDATE cache_metadata SET expires_at = created_at + 604800 WHERE expires_at = 0",
-            [],
-        );
-
-        Ok(Self { conn })
+        Ok(Self { db })
     }
 
-    pub fn save_auth_token(&self, token: &str, user_id: u64) -> rusqlite::Result<()> {
+    pub async fn save_auth_token(&mut self, token: &str, user_id: u64) -> toasty::Result<()> {
         let val = format!("{}:{}", token, user_id);
-        self.conn.execute(
-            "INSERT INTO app_settings (key, value) VALUES ('auth_token', ?1) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-            params![val],
-        )?;
-        Ok(())
-    }
-
-    pub fn load_auth_token(&self) -> rusqlite::Result<Option<(String, u64)>> {
-        let mut stmt = self
-            .conn
-            .prepare("SELECT value FROM app_settings WHERE key = 'auth_token'")?;
-        let mut rows = stmt.query([])?;
-        if let Some(row) = rows.next()? {
-            let val: String = row.get(0)?;
-            let mut parts = val.split(':');
-            let token = parts.next().ok_or(rusqlite::Error::InvalidQuery)?.to_string();
-            let uid = parts
-                .next()
-                .ok_or(rusqlite::Error::InvalidQuery)?
-                .parse()
-                .map_err(|_| rusqlite::Error::InvalidQuery)?;
-            Ok(Some((token, uid)))
+        let key = "auth_token".to_string();
+        let existing = AppSetting::get_by_key(&mut self.db, &key).await;
+        if let Ok(mut existing) = existing {
+            existing.update().value(val).exec(&mut self.db).await?;
         } else {
-            Ok(None)
+            toasty::create!(AppSetting { key, value: val })
+                .exec(&mut self.db)
+                .await?;
         }
-    }
-
-    pub fn delete_auth_token(&self) -> rusqlite::Result<()> {
-        self.conn
-            .execute("DELETE FROM app_settings WHERE key = 'auth_token'", [])?;
         Ok(())
     }
 
-    pub fn update_cache_metadata(
-        &self,
+    pub async fn load_auth_token(&mut self) -> toasty::Result<Option<(String, u64)>> {
+        let res = AppSetting::get_by_key(&mut self.db, "auth_token").await;
+        if let Ok(setting) = res {
+            let mut parts = setting.value.split(':');
+            let token = parts.next().unwrap_or("").to_string();
+            let uid = parts.next().unwrap_or("0").parse().unwrap_or(0);
+            if !token.is_empty() {
+                return Ok(Some((token, uid)));
+            }
+        }
+        Ok(None)
+    }
+
+    pub async fn delete_auth_token(&mut self) -> toasty::Result<()> {
+        let _ = AppSetting::delete_by_key(&mut self.db, "auth_token").await;
+        Ok(())
+    }
+
+    pub async fn update_cache_metadata(
+        &mut self,
         url: &str,
         file_path: &str,
         size: u64,
         etag: Option<&str>,
-    ) -> Result<()> {
+    ) -> toasty::Result<()> {
         let now = chrono::Utc::now().timestamp();
         let expires_at = now + DEFAULT_CACHE_TTL_SECS;
-        self.conn.execute(
-            "INSERT INTO cache_metadata (url, file_path, size, last_access_at, created_at, expires_at, etag)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
-             ON CONFLICT(url) DO UPDATE SET
-             last_access_at = excluded.last_access_at,
-             size = excluded.size,
-             etag = excluded.etag,
-             expires_at = excluded.expires_at",
-            params![url, file_path, size as i64, now, now, expires_at, etag],
-        )?;
+        let existing = CacheMetadata::get_by_url(&mut self.db, url).await;
+        if let Ok(mut cache) = existing {
+            cache
+                .update()
+                .last_access_at(now)
+                .size(size)
+                .etag(etag.map(|s| s.to_string()))
+                .expires_at(expires_at)
+                .exec(&mut self.db)
+                .await?;
+        } else {
+            toasty::create!(CacheMetadata {
+                url: url.to_string(),
+                file_path: file_path.to_string(),
+                size,
+                last_access_at: now,
+                created_at: now,
+                expires_at,
+                etag: etag.map(|s| s.to_string()),
+            })
+            .exec(&mut self.db)
+            .await?;
+        }
         Ok(())
     }
 
-    pub fn get_cache_metadata(&self, url: &str) -> Result<Option<(String, Option<String>, bool)>> {
-        let mut stmt = self
-            .conn
-            .prepare("SELECT file_path, etag, expires_at FROM cache_metadata WHERE url = ?1")?;
-        let mut rows = stmt.query(params![url])?;
-
-        if let Some(row) = rows.next()? {
-            let path: String = row.get(0)?;
-            let etag: Option<String> = row.get(1)?;
-            let expires_at: i64 = row.get(2)?;
-
+    pub async fn get_cache_metadata(
+        &mut self,
+        url: &str,
+    ) -> toasty::Result<Option<(String, Option<String>, bool)>> {
+        let res = CacheMetadata::get_by_url(&mut self.db, url).await;
+        if let Ok(mut cache) = res {
             let now = chrono::Utc::now().timestamp();
-            let is_expired = now >= expires_at;
+            let is_expired = now >= cache.expires_at;
 
             if !is_expired {
                 let new_expires = now + DEFAULT_CACHE_TTL_SECS;
-                let _ = self.conn.execute(
-                    "UPDATE cache_metadata SET last_access_at = ?1, expires_at = ?2 WHERE url = ?3",
-                    params![now, new_expires, url],
-                );
+                cache
+                    .update()
+                    .last_access_at(now)
+                    .expires_at(new_expires)
+                    .exec(&mut self.db)
+                    .await?;
             }
-
-            Ok(Some((path, etag, is_expired)))
-        } else {
-            Ok(None)
+            return Ok(Some((
+                cache.file_path.clone(),
+                cache.etag.clone(),
+                is_expired,
+            )));
         }
+        Ok(None)
     }
 
-    pub fn prune_expired(&self) -> Result<Vec<String>> {
+    pub async fn prune_expired(&mut self) -> toasty::Result<Vec<String>> {
         let now = chrono::Utc::now().timestamp();
-        let mut stmt = match self
-            .conn
-            .prepare("SELECT file_path FROM cache_metadata WHERE expires_at <= ?1")
-        {
-            Ok(s) => s,
-            Err(_) => return Ok(vec![]),
-        };
-        let rows = stmt.query_map(params![now], |r| r.get(0))?;
-        let mut paths = Vec::new();
-        for p in rows {
-            paths.push(p?);
+        let all: Vec<CacheMetadata> =
+            CacheMetadata::filter(CacheMetadata::fields().expires_at().le(now))
+                .exec(&mut self.db)
+                .await?;
+        let paths: Vec<String> = all.into_iter().map(|c| c.file_path).collect();
+
+        if !paths.is_empty() {
+            CacheMetadata::filter(CacheMetadata::fields().expires_at().le(now))
+                .delete()
+                .exec(&mut self.db)
+                .await?;
         }
-        let _ = self.conn.execute(
-            "DELETE FROM cache_metadata WHERE expires_at <= ?1",
-            params![now],
-        );
         Ok(paths)
     }
 
-    pub fn prune_cache(&self, max_size_bytes: i64) -> Result<Vec<String>> {
-        let current_size: i64 = self.conn.query_row(
-            "SELECT COALESCE(SUM(size), 0) FROM cache_metadata",
-            [],
-            |r| r.get(0),
-        )?;
+    pub async fn prune_cache(&mut self, max_size_bytes: i64) -> toasty::Result<Vec<String>> {
+        let mut all: Vec<CacheMetadata> = CacheMetadata::all().exec(&mut self.db).await?;
+        let current_size: u64 = all.iter().map(|c| c.size).sum();
 
-        if current_size <= max_size_bytes {
+        if current_size as i64 <= max_size_bytes {
             return Ok(vec![]);
         }
 
-        let target_size = (max_size_bytes as f64 * 0.8) as i64;
+        all.sort_by_key(|c| c.last_access_at);
+        let target_size = (max_size_bytes as f64 * 0.8) as u64;
         let mut to_delete = Vec::new();
-        let mut deleted_size = 0i64;
+        let mut deleted_size = 0u64;
 
-        let mut stmt = self.conn.prepare(
-            "SELECT url, file_path, size FROM cache_metadata ORDER BY last_access_at ASC",
-        )?;
-        let mut rows = stmt.query([])?;
-
-        while let Some(row) = rows.next()? {
+        for c in all {
             if current_size - deleted_size <= target_size {
                 break;
             }
-            let path: String = row.get(1)?;
-            let size: i64 = row.get(2)?;
-
-            to_delete.push(path);
-            deleted_size += size;
-        }
-
-        for path in &to_delete {
-            let _ = self.conn.execute(
-                "DELETE FROM cache_metadata WHERE file_path = ?1",
-                params![path],
-            );
+            to_delete.push(c.file_path.clone());
+            deleted_size += c.size;
+            let _ = CacheMetadata::delete_by_url(&mut self.db, &c.url).await;
         }
 
         Ok(to_delete)
     }
 
-    pub fn get_cache_size(&self) -> Result<i64> {
-        self.conn.query_row(
-            "SELECT COALESCE(SUM(size), 0) FROM cache_metadata",
-            [],
-            |r| r.get(0),
-        )
+    pub async fn get_cache_size(&mut self) -> toasty::Result<i64> {
+        let all: Vec<CacheMetadata> = CacheMetadata::all().exec(&mut self.db).await?;
+        Ok(all.iter().map(|c| c.size as i64).sum())
     }
 
-    pub fn clear_cache_metadata(&self) -> Result<()> {
-        self.conn.execute("DELETE FROM cache_metadata", [])?;
+    pub async fn clear_cache_metadata(&mut self) -> toasty::Result<()> {
+        CacheMetadata::all().delete().exec(&mut self.db).await?;
         Ok(())
     }
 
-    pub fn save_playback_state(
-        &self,
+    pub async fn save_playback_state(
+        &mut self,
         track_id: &str,
         position_ms: u64,
         is_playing: bool,
-    ) -> Result<()> {
-        self.conn.execute(
-            "INSERT INTO playback_state (id, track_id, position_ms, is_playing)
-             VALUES (1, ?1, ?2, ?3)
-             ON CONFLICT(id) DO UPDATE SET
-             track_id = excluded.track_id,
-             position_ms = excluded.position_ms,
-             is_playing = excluded.is_playing",
-            params![track_id, position_ms as i64, if is_playing { 1 } else { 0 }],
-        )?;
+    ) -> toasty::Result<()> {
+        let id = "1".to_string();
+        let res = PlaybackState::get_by_id(&mut self.db, &id).await;
+        if let Ok(mut state) = res {
+            state
+                .update()
+                .track_id(track_id.to_string())
+                .position_ms(position_ms)
+                .is_playing(is_playing)
+                .exec(&mut self.db)
+                .await?;
+        } else {
+            toasty::create!(PlaybackState {
+                id,
+                track_id: track_id.to_string(),
+                position_ms,
+                is_playing,
+            })
+            .exec(&mut self.db)
+            .await?;
+        }
         Ok(())
     }
 
-    pub fn load_playback_state(&self) -> Result<Option<(String, u64, bool)>> {
-        let mut stmt = self
-            .conn
-            .prepare("SELECT track_id, position_ms, is_playing FROM playback_state WHERE id = 1")?;
-        let mut rows = stmt.query([])?;
-
-        if let Some(row) = rows.next()? {
-            let track_id: String = row.get(0)?;
-            let position_ms: i64 = row.get(1)?;
-            let is_playing: i32 = row.get(2)?;
-            Ok(Some((track_id, position_ms as u64, is_playing != 0)))
+    pub async fn load_playback_state(&mut self) -> toasty::Result<Option<(String, u64, bool)>> {
+        let res = PlaybackState::get_by_id(&mut self.db, "1").await;
+        if let Ok(state) = res {
+            Ok(Some((
+                state.track_id.clone(),
+                state.position_ms,
+                state.is_playing,
+            )))
         } else {
             Ok(None)
         }
     }
 
-    pub fn save_download_path(&self, path: &str) -> Result<()> {
-        self.conn.execute(
-            "INSERT INTO download_path (id, path)
-             VALUES (1, ?1)
-             ON CONFLICT(id) DO UPDATE SET path = excluded.path",
-            params![path],
-        )?;
+    pub async fn save_download_path(&mut self, path: &str) -> toasty::Result<()> {
+        let id = "1".to_string();
+        let res = DownloadPath::get_by_id(&mut self.db, &id).await;
+        if let Ok(mut dp) = res {
+            dp.update()
+                .folder_path(path.to_string())
+                .exec(&mut self.db)
+                .await?;
+        } else {
+            toasty::create!(DownloadPath {
+                id,
+                folder_path: path.to_string(),
+            })
+            .exec(&mut self.db)
+            .await?;
+        }
         Ok(())
     }
 
-    pub fn load_download_path(&self) -> Result<Option<String>> {
-        let mut stmt = self
-            .conn
-            .prepare("SELECT path FROM download_path WHERE id = 1")?;
-        let mut rows = stmt.query([])?;
-
-        if let Some(row) = rows.next()? {
-            let path: String = row.get(0)?;
-            Ok(Some(path))
+    pub async fn load_download_path(&mut self) -> toasty::Result<Option<String>> {
+        let res = DownloadPath::get_by_id(&mut self.db, "1").await;
+        if let Ok(dp) = res {
+            Ok(Some(dp.folder_path.clone()))
         } else {
             Ok(None)
         }
     }
 
-    pub fn save_liked_tracks(&self, track_ids: &[String]) -> Result<()> {
-        self.conn.execute("BEGIN TRANSACTION", [])?;
-        let result = (|| {
-            self.conn.execute("DELETE FROM liked_tracks", [])?;
-            let mut stmt = self
-                .conn
-                .prepare("INSERT INTO liked_tracks (track_id) VALUES (?1)")?;
+    pub async fn save_liked_tracks(&mut self, track_ids: &[String]) -> toasty::Result<()> {
+        LikedTrack::all().delete().exec(&mut self.db).await?;
+
+        if !track_ids.is_empty() {
+            let mut batch = LikedTrack::create_many();
             for id in track_ids {
-                stmt.execute(params![id])?;
+                batch = batch.item(toasty::create!(LikedTrack {
+                    track_id: id.clone(),
+                }));
             }
-            Ok(())
-        })();
+            batch.exec(&mut self.db).await?;
+        }
+        Ok(())
+    }
 
-        if result.is_ok() {
-            self.conn.execute("COMMIT TRANSACTION", [])?;
+    pub async fn load_liked_tracks(&mut self) -> toasty::Result<Vec<String>> {
+        let all: Vec<LikedTrack> = LikedTrack::all().exec(&mut self.db).await?;
+        Ok(all.into_iter().map(|t| t.track_id).collect())
+    }
+
+    pub async fn add_liked_track(&mut self, track_id: &str) -> toasty::Result<()> {
+        if LikedTrack::get_by_track_id(&mut self.db, track_id)
+            .await
+            .is_err()
+        {
+            toasty::create!(LikedTrack {
+                track_id: track_id.to_string(),
+            })
+            .exec(&mut self.db)
+            .await?;
+        }
+        Ok(())
+    }
+
+    pub async fn remove_liked_track(&mut self, track_id: &str) -> toasty::Result<()> {
+        let _ = LikedTrack::delete_by_track_id(&mut self.db, track_id).await;
+        Ok(())
+    }
+
+    pub async fn upsert_track_metadata(&mut self, metadata: TrackMetadata) -> toasty::Result<()> {
+        let res = TrackMetadataEntity::get_by_track_id(&mut self.db, &metadata.id).await;
+        if let Ok(mut entity) = res {
+            entity
+                .update()
+                .title(metadata.title)
+                .version(metadata.version)
+                .album(metadata.album)
+                .album_id(metadata.album_id)
+                .cover_url(metadata.cover_url)
+                .duration_ms(metadata.duration_ms)
+                .exec(&mut self.db)
+                .await?;
+
+            let artists: Vec<TrackMetadataArtist> =
+                TrackMetadataArtist::filter_by_track_metadata_entity_id(&metadata.id)
+                    .exec(&mut self.db)
+                    .await?;
+            for a in artists {
+                let _ = a.delete().exec(&mut self.db).await;
+            }
         } else {
-            self.conn.execute("ROLLBACK TRANSACTION", [])?;
+            toasty::create!(TrackMetadataEntity {
+                track_id: metadata.id.clone(),
+                title: metadata.title,
+                version: metadata.version,
+                album: metadata.album,
+                album_id: metadata.album_id,
+                cover_url: metadata.cover_url,
+                duration_ms: metadata.duration_ms,
+            })
+            .exec(&mut self.db)
+            .await?;
         }
-        result
-    }
-
-    pub fn load_liked_tracks(&self) -> Result<Vec<String>> {
-        let mut stmt = self.conn.prepare("SELECT track_id FROM liked_tracks")?;
-        let rows = stmt.query_map([], |row| row.get(0))?;
-        let mut result = Vec::new();
-        for id in rows {
-            result.push(id?);
-        }
-        Ok(result)
-    }
-
-    pub fn add_liked_track(&self, track_id: &str) -> Result<()> {
-        self.conn.execute(
-            "INSERT OR IGNORE INTO liked_tracks (track_id) VALUES (?1)",
-            params![track_id],
-        )?;
-        Ok(())
-    }
-
-    pub fn remove_liked_track(&self, track_id: &str) -> Result<()> {
-        self.conn.execute(
-            "DELETE FROM liked_tracks WHERE track_id = ?1",
-            params![track_id],
-        )?;
-        Ok(())
-    }
-
-    pub fn upsert_track_metadata(
-        &mut self,
-        metadata: TrackMetadata,
-    ) -> Result<()> {
-        let tx = self.conn.transaction()?;
-
-        tx.execute(
-            "INSERT INTO track_metadata (track_id, title, version, album, album_id, cover_url, duration_ms)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
-             ON CONFLICT(track_id) DO UPDATE SET
-             title = excluded.title,
-             version = excluded.version,
-             album = excluded.album,
-             album_id = excluded.album_id,
-             cover_url = excluded.cover_url,
-             duration_ms = excluded.duration_ms",
-            params![
-                metadata.id,
-                metadata.title,
-                metadata.version,
-                metadata.album,
-                metadata.album_id,
-                metadata.cover_url,
-                metadata.duration_ms as i64
-            ],
-        )?;
-
-        // Update artists
-        tx.execute(
-            "DELETE FROM track_metadata_artists WHERE track_id = ?1",
-            params![metadata.id],
-        )?;
-
-        let mut stmt = tx.prepare(
-            "INSERT INTO track_metadata_artists (track_id, artist_id, name, position)
-             VALUES (?1, ?2, ?3, ?4)",
-        )?;
 
         for (i, artist) in metadata.artists.into_iter().enumerate() {
-            stmt.execute(params![metadata.id, artist.id, artist.name, i as i64])?;
+            toasty::create!(TrackMetadataArtist {
+                id: format!("{}_{}_{}", metadata.id, artist.id, i),
+                track_metadata_entity_id: metadata.id.clone(),
+                artist_id: artist.id,
+                name: artist.name,
+                position: i as i64,
+            })
+            .exec(&mut self.db)
+            .await?;
         }
 
-        drop(stmt);
-        tx.commit()?;
         Ok(())
     }
 
-    pub fn get_track_metadata(
-        &self,
+    pub async fn get_track_metadata(
+        &mut self,
         track_ids: &[String],
-    ) -> Result<Vec<TrackMetadata>> {
+    ) -> toasty::Result<Vec<TrackMetadata>> {
         if track_ids.is_empty() {
             return Ok(vec![]);
         }
 
-        // Chunking to avoid SQLite parameter limit (usually 999)
-        let mut all_results = Vec::new();
-        for chunk in track_ids.chunks(900) {
-            let placeholders = chunk.iter().map(|_| "?").collect::<Vec<_>>().join(",");
-            
-            // 1. Get tracks
-            let query = format!(
-                "SELECT track_id, title, version, album, album_id, cover_url, duration_ms 
-                 FROM track_metadata WHERE track_id IN ({})",
-                placeholders
-            );
+        let entities: Vec<TrackMetadataEntity> = TrackMetadataEntity::filter(
+            TrackMetadataEntity::fields().track_id().in_list(track_ids),
+        )
+        .exec(&mut self.db)
+        .await?;
 
-            let mut stmt = self.conn.prepare(&query)?;
-            let track_rows = stmt.query_map(rusqlite::params_from_iter(chunk), |row| {
-                Ok(TrackMetadata {
-                    id: row.get(0)?,
-                    title: row.get(1)?,
-                    version: row.get(2)?,
-                    artists: Vec::new(),
-                    album: row.get(3)?,
-                    album_id: row.get(4)?,
-                    cover_url: row.get(5)?,
-                    duration_ms: row.get::<_, i64>(6)? as u64,
-                })
-            })?;
-
-            let mut tracks = Vec::new();
-            for t in track_rows {
-                tracks.push(t?);
+        let mut results = Vec::new();
+        for entity in entities {
+            let artists: Vec<TrackMetadataArtist> =
+                TrackMetadataArtist::filter_by_track_metadata_entity_id(&entity.track_id)
+                    .exec(&mut self.db)
+                    .await?;
+            let mut artist_dtos = Vec::new();
+            let mut sorted_artists = artists;
+            sorted_artists.sort_by_key(|a| a.position);
+            for a in sorted_artists {
+                artist_dtos.push(TrackArtistDto {
+                    id: a.artist_id.clone(),
+                    name: a.name.clone(),
+                });
             }
+            results.push(TrackMetadata {
+                id: entity.track_id.clone(),
+                title: entity.title.clone(),
+                version: entity.version.clone(),
+                artists: artist_dtos,
+                album: entity.album.clone(),
+                album_id: entity.album_id.clone(),
+                cover_url: entity.cover_url.clone(),
+                duration_ms: entity.duration_ms,
+            });
+        }
+        Ok(results)
+    }
 
-            // 2. Get all artists for these tracks
-            let artist_query = format!(
-                "SELECT track_id, artist_id, name 
-                 FROM track_metadata_artists 
-                 WHERE track_id IN ({}) 
-                 ORDER BY track_id, position ASC",
-                placeholders
-            );
-
-            let mut artist_stmt = self.conn.prepare(&artist_query)?;
-            let artist_rows = artist_stmt.query_map(rusqlite::params_from_iter(chunk), |row| {
-                Ok((row.get::<_, String>(0)?, TrackArtistDto {
-                    id: row.get(1)?,
-                    name: row.get(2)?,
-                }))
-            })?;
-
-            let mut artists_map: foldhash::HashMap<String, Vec<TrackArtistDto>> = foldhash::HashMap::new();
-            for res in artist_rows {
-                let (tid, artist) = res?;
-                artists_map.entry(tid).or_default().push(artist);
-            }
-
-            // 3. Attach artists to tracks
-            for mut track in tracks {
-                if let Some(artists) = artists_map.remove(&track.id) {
-                    track.artists = artists;
+    pub async fn search_liked_tracks(&mut self, query: &str) -> toasty::Result<Vec<String>> {
+        let q = query.to_lowercase();
+        let likes: Vec<LikedTrack> = LikedTrack::all().exec(&mut self.db).await?;
+        let mut matches = Vec::new();
+        for l in likes {
+            if let Ok(m) = TrackMetadataEntity::get_by_track_id(&mut self.db, &l.track_id).await {
+                if m.title.to_lowercase().contains(&q)
+                    || m.album.as_deref().unwrap_or("").to_lowercase().contains(&q)
+                {
+                    matches.push(l.track_id.clone());
+                    continue;
                 }
-                all_results.push(track);
+                let artists: Vec<TrackMetadataArtist> =
+                    TrackMetadataArtist::filter_by_track_metadata_entity_id(&l.track_id)
+                        .exec(&mut self.db)
+                        .await?;
+                for a in artists {
+                    if a.name.to_lowercase().contains(&q) {
+                        matches.push(l.track_id.clone());
+                        break;
+                    }
+                }
             }
         }
-
-        // Restore original order
-        let mut sorted_results = Vec::with_capacity(track_ids.len());
-        let results_map: foldhash::HashMap<String, TrackMetadata> = all_results.into_iter().map(|t| (t.id.clone(), t)).collect();
-        
-        for id in track_ids {
-            if let Some(metadata) = results_map.get(id) {
-                sorted_results.push(metadata.clone());
-            }
-        }
-
-        Ok(sorted_results)
+        Ok(matches)
     }
 
-    pub fn search_liked_tracks(&self, query: &str) -> Result<Vec<String>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT DISTINCT lt.track_id 
-             FROM liked_tracks lt
-             JOIN track_metadata tm ON lt.track_id = tm.track_id
-             LEFT JOIN track_metadata_artists tma ON tm.track_id = tma.track_id
-             WHERE tm.title LIKE ?1 OR tma.name LIKE ?1 OR tm.album LIKE ?1",
-             )?;
-        let search_pattern = format!("%{}%", query);
-        let rows = stmt.query_map(params![search_pattern], |row| row.get(0))?;
-
-        let mut result = Vec::new();
-        for id in rows {
-            result.push(id?);
-        }
-        Ok(result)
-    }
-
-    pub fn save_equalizer(&self, enabled: bool, bands: &[f32]) -> Result<()> {
+    pub async fn save_equalizer(&mut self, enabled: bool, bands: &[f32]) -> toasty::Result<()> {
         let bands_json = serde_json::to_string(bands).unwrap_or_else(|_| "[]".to_string());
-        self.conn.execute(
-            "INSERT INTO equalizer_settings (id, enabled, bands)
-             VALUES (1, ?1, ?2)
-             ON CONFLICT(id) DO UPDATE SET
-             enabled = excluded.enabled,
-             bands = excluded.bands",
-            params![if enabled { 1 } else { 0 }, bands_json],
-        )?;
+        let id = "1".to_string();
+        if let Ok(mut eq) = EqualizerSetting::get_by_id(&mut self.db, &id).await {
+            eq.update()
+                .enabled(enabled)
+                .bands(bands_json)
+                .exec(&mut self.db)
+                .await?;
+        } else {
+            toasty::create!(EqualizerSetting {
+                id,
+                enabled,
+                bands: bands_json,
+            })
+            .exec(&mut self.db)
+            .await?;
+        }
         Ok(())
     }
 
-    pub fn load_equalizer(&self) -> Result<Option<(bool, Vec<f32>)>> {
-        let mut stmt = self
-            .conn
-            .prepare("SELECT enabled, bands FROM equalizer_settings WHERE id = 1")?;
-        let mut rows = stmt.query([])?;
-
-        if let Some(row) = rows.next()? {
-            let enabled: i32 = row.get(0)?;
-            let bands_json: String = row.get(1)?;
-            let bands: Vec<f32> = serde_json::from_str(&bands_json).unwrap_or_default();
-            Ok(Some((enabled != 0, bands)))
+    pub async fn load_equalizer(&mut self) -> toasty::Result<Option<(bool, Vec<f32>)>> {
+        if let Ok(eq) = EqualizerSetting::get_by_id(&mut self.db, "1").await {
+            let bands: Vec<f32> = serde_json::from_str(&eq.bands).unwrap_or_default();
+            Ok(Some((eq.enabled, bands)))
         } else {
             Ok(None)
         }
     }
 
-    pub fn save_effect(&self, id: &str, enabled: bool, params: &[f32]) -> Result<()> {
+    pub async fn save_effect(
+        &mut self,
+        id: &str,
+        enabled: bool,
+        params: &[f32],
+    ) -> toasty::Result<()> {
         let params_json = serde_json::to_string(params).unwrap_or_else(|_| "[]".to_string());
-        self.conn.execute(
-            "INSERT INTO effect_settings (effect_id, enabled, params)
-             VALUES (?1, ?2, ?3)
-             ON CONFLICT(effect_id) DO UPDATE SET
-             enabled = excluded.enabled,
-             params = excluded.params",
-            params![id, if enabled { 1 } else { 0 }, params_json],
-        )?;
+        if let Ok(mut effect) = EffectSetting::get_by_effect_id(&mut self.db, id).await {
+            effect
+                .update()
+                .enabled(enabled)
+                .params(params_json)
+                .exec(&mut self.db)
+                .await?;
+        } else {
+            toasty::create!(EffectSetting {
+                effect_id: id.to_string(),
+                enabled,
+                params: params_json,
+            })
+            .exec(&mut self.db)
+            .await?;
+        }
         Ok(())
     }
 
-    pub fn load_effect(&self, id: &str) -> Result<Option<(bool, Vec<f32>)>> {
-        let mut stmt = self
-            .conn
-            .prepare("SELECT enabled, params FROM effect_settings WHERE effect_id = ?1")?;
-        let mut rows = stmt.query(params![id])?;
-
-        if let Some(row) = rows.next()? {
-            let enabled: i32 = row.get(0)?;
-            let params_json: String = row.get(1)?;
-            let params: Vec<f32> = serde_json::from_str(&params_json).unwrap_or_default();
-            Ok(Some((enabled != 0, params)))
+    pub async fn load_effect(&mut self, id: &str) -> toasty::Result<Option<(bool, Vec<f32>)>> {
+        if let Ok(effect) = EffectSetting::get_by_effect_id(&mut self.db, id).await {
+            let params: Vec<f32> = serde_json::from_str(&effect.params).unwrap_or_default();
+            Ok(Some((effect.enabled, params)))
         } else {
             Ok(None)
         }
     }
 
-    pub fn save_volume(&self, volume: u8) -> Result<()> {
-        self.conn.execute("INSERT INTO app_settings (key, value) VALUES ('volume', ?1) ON CONFLICT(key) DO UPDATE SET value = excluded.value", params![volume.to_string()])?;
-        Ok(())
+    pub async fn save_volume(&mut self, volume: u8) -> toasty::Result<()> {
+        self.save_app_setting("volume", &volume.to_string()).await
     }
 
-    pub fn load_volume(&self) -> Result<u8> {
-        let mut stmt = self
-            .conn
-            .prepare("SELECT value FROM app_settings WHERE key = 'volume'")?;
-        let mut rows = stmt.query([])?;
-        if let Some(row) = rows.next()? {
-            let val: String = row.get(0)?;
-            Ok(val.parse().unwrap_or(100))
-        } else {
-            Ok(100)
-        }
+    pub async fn load_volume(&mut self) -> toasty::Result<u8> {
+        let val = self
+            .load_app_setting("volume")
+            .await?
+            .unwrap_or_else(|| "100".to_string());
+        Ok(val.parse().unwrap_or(100))
     }
 
-    pub fn save_audio_quality(&self, quality: crate::api::models::AudioQuality) -> Result<()> {
+    pub async fn save_audio_quality(&mut self, quality: AudioQuality) -> toasty::Result<()> {
         let val = serde_json::to_string(&quality).unwrap_or_else(|_| "\"Normal\"".to_string());
-        self.conn.execute(
-            "INSERT INTO app_settings (key, value) VALUES ('audio_quality', ?1) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-            params![val],
-        )?;
-        Ok(())
+        self.save_app_setting("audio_quality", &val).await
     }
 
-    pub fn load_audio_quality(&self) -> Result<crate::api::models::AudioQuality> {
-        let mut stmt = self
-            .conn
-            .prepare("SELECT value FROM app_settings WHERE key = 'audio_quality'")?;
-        let mut rows = stmt.query([])?;
-        if let Some(row) = rows.next()? {
-            let val: String = row.get(0)?;
-            Ok(serde_json::from_str(&val).unwrap_or_default())
+    pub async fn load_audio_quality(&mut self) -> toasty::Result<AudioQuality> {
+        let val = self
+            .load_app_setting("audio_quality")
+            .await?
+            .unwrap_or_default();
+        Ok(serde_json::from_str(&val).unwrap_or_default())
+    }
+
+    pub async fn save_discord_rpc(&mut self, enabled: bool) -> toasty::Result<()> {
+        self.save_app_setting("discord_rpc", &enabled.to_string())
+            .await
+    }
+
+    pub async fn load_discord_rpc(&mut self) -> toasty::Result<bool> {
+        let val = self
+            .load_app_setting("discord_rpc")
+            .await?
+            .unwrap_or_default();
+        Ok(val.parse().unwrap_or(false))
+    }
+
+    pub async fn save_custom_titlebar(&mut self, enabled: bool) -> toasty::Result<()> {
+        self.save_app_setting("custom_titlebar", &enabled.to_string())
+            .await
+    }
+
+    pub async fn load_custom_titlebar(&mut self) -> toasty::Result<bool> {
+        let val = self
+            .load_app_setting("custom_titlebar")
+            .await?
+            .unwrap_or_else(|| "true".to_string());
+        Ok(val.parse().unwrap_or(true))
+    }
+
+    pub async fn save_auto_hide_navbar(&mut self, enabled: bool) -> toasty::Result<()> {
+        self.save_app_setting("auto_hide_navbar", &enabled.to_string())
+            .await
+    }
+
+    pub async fn load_auto_hide_navbar(&mut self) -> toasty::Result<bool> {
+        let val = self
+            .load_app_setting("auto_hide_navbar")
+            .await?
+            .unwrap_or_default();
+        Ok(val.parse().unwrap_or(false))
+    }
+
+    async fn save_app_setting(&mut self, key: &str, value: &str) -> toasty::Result<()> {
+        if let Ok(mut setting) = AppSetting::get_by_key(&mut self.db, key).await {
+            setting
+                .update()
+                .value(value.to_string())
+                .exec(&mut self.db)
+                .await?;
         } else {
-            Ok(crate::api::models::AudioQuality::default())
+            toasty::create!(AppSetting {
+                key: key.to_string(),
+                value: value.to_string(),
+            })
+            .exec(&mut self.db)
+            .await?;
         }
-    }
-
-    pub fn save_discord_rpc(&self, enabled: bool) -> Result<()> {
-        self.conn.execute(
-            "INSERT INTO app_settings (key, value) VALUES ('discord_rpc', ?1) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-            params![enabled.to_string()],
-        )?;
         Ok(())
     }
 
-    pub fn load_discord_rpc(&self) -> Result<bool> {
-        let mut stmt = self
-            .conn
-            .prepare("SELECT value FROM app_settings WHERE key = 'discord_rpc'")?;
-        let mut rows = stmt.query([])?;
-        if let Some(row) = rows.next()? {
-            let val: String = row.get(0)?;
-            Ok(val.parse().unwrap_or(false))
+    async fn load_app_setting(&mut self, key: &str) -> toasty::Result<Option<String>> {
+        if let Ok(setting) = AppSetting::get_by_key(&mut self.db, key).await {
+            Ok(Some(setting.value))
         } else {
-            Ok(false)
-        }
-    }
-
-    pub fn save_custom_titlebar(&self, enabled: bool) -> Result<()> {
-        self.conn.execute(
-            "INSERT INTO app_settings (key, value) VALUES ('custom_titlebar', ?1) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-            params![enabled.to_string()],
-        )?;
-        Ok(())
-    }
-
-    pub fn load_custom_titlebar(&self) -> Result<bool> {
-        let mut stmt = self
-            .conn
-            .prepare("SELECT value FROM app_settings WHERE key = 'custom_titlebar'")?;
-        let mut rows = stmt.query([])?;
-        if let Some(row) = rows.next()? {
-            let val: String = row.get(0)?;
-            Ok(val.parse().unwrap_or(true))
-        } else {
-            Ok(true)
-        }
-    }
-
-    pub fn save_auto_hide_navbar(&self, enabled: bool) -> Result<()> {
-        self.conn.execute(
-            "INSERT INTO app_settings (key, value) VALUES ('auto_hide_navbar', ?1) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-            params![enabled.to_string()],
-        )?;
-        Ok(())
-    }
-
-    pub fn load_auto_hide_navbar(&self) -> Result<bool> {
-        let mut stmt = self
-            .conn
-            .prepare("SELECT value FROM app_settings WHERE key = 'auto_hide_navbar'")?;
-        let mut rows = stmt.query([])?;
-        if let Some(row) = rows.next()? {
-            let val: String = row.get(0)?;
-            Ok(val.parse().unwrap_or(false))
-        } else {
-            Ok(false)
+            Ok(None)
         }
     }
 }

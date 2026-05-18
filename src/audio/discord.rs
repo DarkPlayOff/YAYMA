@@ -1,6 +1,6 @@
-use discord_rich_presence::{DiscordIpc, DiscordIpcClient, activity};
-use std::time::{SystemTime, UNIX_EPOCH, Instant, Duration};
 use crate::audio::signals::AudioSignals;
+use discord_rich_presence::{DiscordIpc, DiscordIpcClient, activity};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 const CLIENT_ID: &str = "1269826362399522849";
 const RECONNECT_INTERVAL: Duration = Duration::from_secs(15);
@@ -41,14 +41,17 @@ impl DiscordManager {
 
                 let track_id = signals.current_track_id.get();
                 let is_playing = signals.is_playing.get();
-                
+
                 let track_changed = track_id != last_track_id;
                 let playing_changed = is_playing != last_playing;
 
                 if track_changed || playing_changed {
                     if let Some(id) = track_id.as_ref() {
                         // Пытаемся подключиться, если клиента нет и прошло достаточно времени
-                        if client.is_none() && Instant::now().duration_since(last_connect_attempt) >= RECONNECT_INTERVAL {
+                        if client.is_none()
+                            && Instant::now().duration_since(last_connect_attempt)
+                                >= RECONNECT_INTERVAL
+                        {
                             last_connect_attempt = Instant::now();
                             let mut c = DiscordIpcClient::new(CLIENT_ID);
                             if c.connect().is_ok() {
@@ -65,9 +68,18 @@ impl DiscordManager {
                             let duration_ms = signals.duration_ms.get();
                             let position_ms = signals.position_ms.get();
 
-                            let cover_url = signals.current_track.get().and_then(|t| {
-                                t.cover_uri.map(|uri| format!("https://{}", uri.replace("%%", "400x400")))
-                            }).unwrap_or_else(|| "https://avatars.yandex.net/get-music-content/default/m/400x400".into());
+                            let cover_url = signals
+                                .current_track
+                                .get()
+                                .and_then(|t| {
+                                    t.cover_uri.map(|uri| {
+                                        format!("https://{}", uri.replace("%%", "400x400"))
+                                    })
+                                })
+                                .unwrap_or_else(|| {
+                                    "https://avatars.yandex.net/get-music-content/default/m/400x400"
+                                        .into()
+                                });
 
                             let data = PresenceData {
                                 track_id: id,
@@ -82,7 +94,7 @@ impl DiscordManager {
                             if let Err(e) = update_presence(c, data) {
                                 tracing::error!("Discord RPC error: {:?}", e);
                                 let _ = c.close();
-                                client = None; 
+                                client = None;
                             }
                         }
                     } else {

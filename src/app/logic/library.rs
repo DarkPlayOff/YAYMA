@@ -15,11 +15,11 @@ pub async fn toggle_like(ctx: &AppContext, track_id: String) {
         state.liked.set_like_status(&track_id, !is_liked);
 
         // Update DB immediately for search and offline access
-        let db = ctx.core.db.lock();
+        let mut db = ctx.core.db.lock().await;
         if is_liked {
-            let _ = db.remove_liked_track(&track_id);
+            let _ = db.remove_liked_track(&track_id).await;
         } else {
-            let _ = db.add_liked_track(&track_id);
+            let _ = db.add_liked_track(&track_id).await;
         }
 
         ctx.audio.signals.library_changed.send_replace(());
@@ -144,7 +144,8 @@ pub async fn add_track_to_playlist(
     track_id: String,
     album_id: Option<String>,
 ) -> bool {
-    ctx.core.api
+    ctx.core
+        .api
         .add_track_to_playlist(kind, track_id, album_id.unwrap_or_default())
         .await
         .is_ok()
@@ -156,7 +157,8 @@ pub async fn remove_track_from_playlist(
     track_id: String,
     album_id: Option<String>,
 ) -> bool {
-    ctx.core.api
+    ctx.core
+        .api
         .remove_track_from_playlist(kind, track_id, album_id.unwrap_or_default())
         .await
         .is_ok()
@@ -175,7 +177,8 @@ pub async fn rename_playlist(ctx: &AppContext, kind: u32, new_title: String) -> 
 }
 
 pub async fn set_playlist_visibility(ctx: &AppContext, kind: u32, is_public: bool) -> bool {
-    ctx.core.api
+    ctx.core
+        .api
         .change_playlist_visibility(kind, is_public)
         .await
         .is_ok()
@@ -189,7 +192,8 @@ pub async fn move_track_in_playlist(
     track_id: String,
     album_id: Option<String>,
 ) -> bool {
-    ctx.core.api
+    ctx.core
+        .api
         .move_track_in_playlist(
             kind,
             from_index as usize,
@@ -238,7 +242,13 @@ async fn fetch_and_save_missing_metadata(
                     duration_ms,
                 };
 
-                let _ = ctx.core.db.lock().upsert_track_metadata(metadata_to_save.clone());
+                let _ = ctx
+                    .core
+                    .db
+                    .lock()
+                    .await
+                    .upsert_track_metadata(metadata_to_save.clone())
+                    .await;
                 metadata_map.insert(t.id, metadata_to_save);
             }
         }
@@ -277,7 +287,7 @@ pub async fn liked_tracks_stream(
 
     loop {
         let (liked_ids, disliked_ids_set) = ctx.audio.state.read().await.liked.ordered_snapshot();
-        
+
         // Signal a reset to the frontend ONLY if we have no tracks at all.
         // Otherwise, the frontend will replace the list when the first data chunk arrives.
         if liked_ids.is_empty() && sink.add(vec![]).is_err() {
@@ -288,14 +298,22 @@ pub async fn liked_tracks_stream(
             // If local is empty and not searching, might need sync
             if query_lower.is_none() {
                 let _ = ctx
-                    .audio.tx
+                    .audio
+                    .tx
                     .send(crate::audio::commands::AudioMessage::SyncLiked)
                     .await;
             }
         } else {
             // 1. Fetch available metadata from DB
             let mut metadata_map = foldhash::HashMap::new();
-            if let Ok(metadata) = ctx.core.db.lock().get_track_metadata(&liked_ids) {
+            if let Ok(metadata) = ctx
+                .core
+                .db
+                .lock()
+                .await
+                .get_track_metadata(&liked_ids)
+                .await
+            {
                 for m in metadata {
                     metadata_map.insert(m.id.clone(), m);
                 }
@@ -304,11 +322,9 @@ pub async fn liked_tracks_stream(
             // 2. Fetch missing metadata if any
             let missing_ids: Vec<String> = liked_ids
                 .iter()
-                .filter(|id| {
-                    match metadata_map.get(*id) {
-                        None => true,
-                        Some(m) => m.artists.is_empty() || m.artists.iter().any(|a| a.id.is_empty()),
-                    }
+                .filter(|id| match metadata_map.get(*id) {
+                    None => true,
+                    Some(m) => m.artists.is_empty() || m.artists.iter().any(|a| a.id.is_empty()),
                 })
                 .cloned()
                 .collect();
@@ -324,23 +340,24 @@ pub async fn liked_tracks_stream(
                     // Apply search filter if active
                     if let Some(ref q) = query_lower {
                         let title = m.title.to_lowercase();
-                        let artists = m.artists
+                        let artists = m
+                            .artists
                             .iter()
                             .map(|a| a.name.to_lowercase())
                             .collect::<Vec<_>>()
                             .join(" ");
-                        let album = m.album.as_ref().map(|a| a.to_lowercase()).unwrap_or_default();
+                        let album = m
+                            .album
+                            .as_ref()
+                            .map(|a| a.to_lowercase())
+                            .unwrap_or_default();
 
                         if !title.contains(q) && !artists.contains(q) && !album.contains(q) {
                             continue;
                         }
                     }
 
-                    dtos.push(metadata_to_dto(
-                        m,
-                        true,
-                        disliked_ids_set.contains(&id),
-                    ));
+                    dtos.push(metadata_to_dto(m, true, disliked_ids_set.contains(&id)));
 
                     if dtos.len() >= 50 {
                         if sink.add(std::mem::take(&mut dtos)).is_err() {
@@ -359,11 +376,10 @@ pub async fn liked_tracks_stream(
             }
 
             // If we were searching but found nothing, send empty list to show "No results"
-            if !sent_any && query_lower.is_some() {
-                if sink.add(vec![]).is_err() {
+            if !sent_any && query_lower.is_some()
+                && sink.add(vec![]).is_err() {
                     return;
                 }
-            }
         }
 
         // Wait for signal changes

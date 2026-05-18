@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:signals_flutter/signals_flutter.dart';
-import 'package:yayma/src/rust/api/simple.dart' as simple;
+
 
 enum AppSection {
   home,
@@ -56,7 +56,12 @@ final FlutterSignal<Map<AppSection, List<NavState>>> rootStacksSignal =
 
 /// Navbar auto-hide setting
 final FlutterSignal<bool> autoHideNavbarSignal = signal<bool>(
-  simple.isAutoHideNavbarEnabledSync(),
+  true,
+);
+
+/// Custom titlebar setting
+final FlutterSignal<bool> customTitlebarSignal = signal<bool>(
+  true,
 );
 
 /// Computed current navigation stack

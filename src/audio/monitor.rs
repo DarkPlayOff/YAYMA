@@ -390,7 +390,7 @@ impl Monitor {
             let r = right[i];
             let mono = (l + r) * 0.5;
             let abs_mono = mono.abs();
-            
+
             self.waveform.push(mono);
 
             // Filter cascade
@@ -409,11 +409,16 @@ impl Monitor {
 
             self.amplitude_left.process(l);
             self.amplitude_right.process(r);
-            local_combined_amp_sum += (self.amplitude_left.amplitude() + self.amplitude_right.amplitude()) * 0.5;
+            local_combined_amp_sum +=
+                (self.amplitude_left.amplitude() + self.amplitude_right.amplitude()) * 0.5;
         }
 
-        self.internal.low_filter.store(l_f.to_bits(), Ordering::Relaxed);
-        self.internal.high_filter.store(h_f.to_bits(), Ordering::Relaxed);
+        self.internal
+            .low_filter
+            .store(l_f.to_bits(), Ordering::Relaxed);
+        self.internal
+            .high_filter
+            .store(h_f.to_bits(), Ordering::Relaxed);
 
         let update_peak = |atomic: &AtomicU32, val: f32| {
             let mut cur = atomic.load(Ordering::Relaxed);
@@ -435,8 +440,12 @@ impl Monitor {
         update_peak(&self.internal.high_amp, local_high_peak);
 
         let avg_combined = local_combined_amp_sum / len as f32;
-        self.internal.combined_amplitude.store(avg_combined.to_bits(), Ordering::Relaxed);
-        self.internal.position.fetch_add(len as u64, Ordering::Relaxed);
+        self.internal
+            .combined_amplitude
+            .store(avg_combined.to_bits(), Ordering::Relaxed);
+        self.internal
+            .position
+            .fetch_add(len as u64, Ordering::Relaxed);
     }
 
     #[inline]

@@ -7,7 +7,7 @@ pub mod settings;
 pub mod workers;
 
 pub use context::AppContext;
-pub use init::{initialize_app, initialize_infrastructure, get_data_dir};
+pub use init::{get_data_dir, initialize_app, initialize_infrastructure};
 
 pub static AUDIO_READY: Notify = Notify::const_new();
 pub static SETTINGS_CHANGED: Notify = Notify::const_new();

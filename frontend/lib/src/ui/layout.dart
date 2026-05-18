@@ -5,7 +5,7 @@ import 'package:signals_flutter/signals_flutter.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:yayma/src/providers/navigation_provider.dart';
 import 'package:yayma/src/providers/playback_provider.dart';
-import 'package:yayma/src/rust/api/simple.dart' as simple;
+
 import 'package:yayma/src/ui/album_view.dart';
 import 'package:yayma/src/ui/artist_view.dart';
 import 'package:yayma/src/ui/home_view.dart';
@@ -38,7 +38,7 @@ class _AppLayoutState extends State<AppLayout> {
       final isDesktop =
           Platform.isWindows || Platform.isLinux || Platform.isMacOS;
       final isCustomTitlebar =
-          isDesktop && simple.isCustomTitlebarEnabledSync();
+          isDesktop && customTitlebarSignal.watch(context);
 
       final screenWidth = MediaQuery.sizeOf(context).width;
       final isNarrow = screenWidth < 600;

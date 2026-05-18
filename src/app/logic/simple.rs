@@ -38,44 +38,44 @@ pub fn is_discord_rpc_enabled(ctx: &AppContext) -> bool {
     ctx.audio.signals.discord_rpc.get()
 }
 
-pub fn set_discord_rpc_enabled(ctx: &AppContext, enabled: bool) {
+pub async fn set_discord_rpc_enabled(ctx: &AppContext, enabled: bool) {
     ctx.audio.signals.discord_rpc.set(enabled);
-    let db = ctx.core.db.lock();
-    let _ = db.save_discord_rpc(enabled);
+    let mut db = ctx.core.db.lock().await;
+    let _ = db.save_discord_rpc(enabled).await;
 }
 
-pub fn is_custom_titlebar_enabled(ctx: &AppContext) -> bool {
-    let db = ctx.core.db.lock();
-    db.load_custom_titlebar().unwrap_or(false)
+pub async fn is_custom_titlebar_enabled(ctx: &AppContext) -> bool {
+    let mut db = ctx.core.db.lock().await;
+    db.load_custom_titlebar().await.unwrap_or(false)
 }
 
-pub fn is_custom_titlebar_enabled_sync() -> bool {
-    if let Ok(db) = crate::storage::db::AppDatabase::init(crate::app::get_data_dir()) {
-        db.load_custom_titlebar().unwrap_or(true)
+pub async fn is_custom_titlebar_enabled_init() -> bool {
+    if let Ok(mut db) = crate::storage::db::AppDatabase::init(crate::app::get_data_dir()).await {
+        db.load_custom_titlebar().await.unwrap_or(true)
     } else {
         true
     }
 }
 
-pub fn set_custom_titlebar_enabled(ctx: &AppContext, enabled: bool) {
-    let db = ctx.core.db.lock();
-    let _ = db.save_custom_titlebar(enabled);
+pub async fn set_custom_titlebar_enabled(ctx: &AppContext, enabled: bool) {
+    let mut db = ctx.core.db.lock().await;
+    let _ = db.save_custom_titlebar(enabled).await;
 }
 
-pub fn is_auto_hide_navbar_enabled(ctx: &AppContext) -> bool {
-    let db = ctx.core.db.lock();
-    db.load_auto_hide_navbar().unwrap_or(true)
+pub async fn is_auto_hide_navbar_enabled(ctx: &AppContext) -> bool {
+    let mut db = ctx.core.db.lock().await;
+    db.load_auto_hide_navbar().await.unwrap_or(true)
 }
 
-pub fn is_auto_hide_navbar_enabled_sync() -> bool {
-    if let Ok(db) = crate::storage::db::AppDatabase::init(crate::app::get_data_dir()) {
-        db.load_auto_hide_navbar().unwrap_or(true)
+pub async fn is_auto_hide_navbar_enabled_init() -> bool {
+    if let Ok(mut db) = crate::storage::db::AppDatabase::init(crate::app::get_data_dir()).await {
+        db.load_auto_hide_navbar().await.unwrap_or(true)
     } else {
         true
     }
 }
 
-pub fn set_auto_hide_navbar_enabled(ctx: &AppContext, enabled: bool) {
-    let db = ctx.core.db.lock();
-    let _ = db.save_auto_hide_navbar(enabled);
+pub async fn set_auto_hide_navbar_enabled(ctx: &AppContext, enabled: bool) {
+    let mut db = ctx.core.db.lock().await;
+    let _ = db.save_auto_hide_navbar(enabled).await;
 }

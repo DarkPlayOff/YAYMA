@@ -851,7 +851,7 @@ impl QueueManager {
         if next < self.signals.queue().len() {
             return self.advance_to(next);
         }
-        
+
         if self.fetch.is_fetching()
             && let Some((new_tracks, _)) = self.fetch.await_task().await
             && !new_tracks.is_empty()
@@ -880,7 +880,7 @@ impl QueueManager {
                 self.trigger_fetch();
             }
         }
-        
+
         let current = self.signals.index();
         self.try_advance_or_fetch(current + 1).await
     }
@@ -1162,11 +1162,7 @@ fn slice_from(mut v: Vector<Track>, start: usize) -> Vector<Track> {
 }
 
 pub fn as_wave_seed(track: &Track) -> String {
-    if let Some(album_id) = track
-        .albums
-        .first()
-        .and_then(|a| a.id.as_ref())
-    {
+    if let Some(album_id) = track.albums.first().and_then(|a| a.id.as_ref()) {
         format!("{}:{}", track.id, album_id)
     } else {
         track.id.clone()

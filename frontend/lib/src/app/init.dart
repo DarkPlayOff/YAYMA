@@ -3,13 +3,14 @@ import 'dart:io';
 
 import 'package:audio_service/audio_service.dart';
 import 'package:audio_session/audio_session.dart';
-import 'package:flutter/material.dart';
+
 import 'package:path_provider/path_provider.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/providers/audio_handler.dart';
 import 'package:yayma/src/providers/auth_provider.dart'
     show accountSignal, appContextSignal, authSignal;
 import 'package:yayma/src/providers/library_provider.dart';
+import 'package:yayma/src/providers/navigation_provider.dart';
 import 'package:yayma/src/providers/playback_provider.dart';
 import 'package:yayma/src/rust/api/auth.dart';
 import 'package:yayma/src/rust/api/simple.dart' as simple;
@@ -33,6 +34,11 @@ class AppInit {
 
     final appDir = await getApplicationDocumentsDirectory();
     await simple.initAppInfrastructure(basePath: appDir.path);
+
+    try {
+      final autoHide = await simple.isAutoHideNavbarEnabledInit();
+      autoHideNavbarSignal.value = autoHide;
+    } catch (_) {}
 
     unawaited(_initializeAuthAndServices());
   }

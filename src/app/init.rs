@@ -1,15 +1,15 @@
+use crate::app::AUDIO_READY;
 use crate::app::context::AppContext;
 use crate::app::settings::load_persisted_settings;
 use crate::app::workers;
-use crate::app::{AUDIO_READY};
 use crate::audio::system::AudioSystem;
 use crate::db::AppDatabase;
 use crate::http::ApiService;
 use crate::storage::cache::HttpCache;
-use parking_lot::Mutex;
-use std::sync::Arc;
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::sync::OnceLock;
+use tokio::sync::Mutex;
 
 static DATA_DIR: OnceLock<PathBuf> = OnceLock::new();
 
@@ -47,12 +47,17 @@ async fn initialize_services(
     let api_arc = Arc::new(api);
     let (event_tx, event_rx) = flume::unbounded();
 
-    let db = AppDatabase::init(DATA_DIR.get().cloned())?;
+    let db = AppDatabase::init(DATA_DIR.get().cloned()).await?;
     let db_arc = Arc::new(Mutex::new(db));
     let http_cache = Arc::new(HttpCache::new(db_arc.clone(), DATA_DIR.get().cloned()));
 
-    let (audio_tx, signals, state, effect_handles) =
-        AudioSystem::spawn(event_tx.clone(), api_arc.clone(), db_arc.clone(), http_cache.clone()).await?;
+    let (audio_tx, signals, state, effect_handles) = AudioSystem::spawn(
+        event_tx.clone(),
+        api_arc.clone(),
+        db_arc.clone(),
+        http_cache.clone(),
+    )
+    .await?;
 
     let (context, shutdown_rx) = AppContext::new(
         audio_tx,

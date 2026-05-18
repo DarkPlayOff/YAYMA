@@ -16,7 +16,9 @@ pub struct PlaybackEngine {
 }
 
 impl PlaybackEngine {
-    pub fn new(tx: tokio::sync::mpsc::Sender<crate::audio::commands::AudioMessage>) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+    pub fn new(
+        tx: tokio::sync::mpsc::Sender<crate::audio::commands::AudioMessage>,
+    ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let engine = Self {
             state: parking_lot::RwLock::new(None),
             tx,
@@ -29,7 +31,7 @@ impl PlaybackEngine {
         let (device, stream_config, sample_format) = setup_device_config();
         let sample_rate = NonZero::new(stream_config.sample_rate).unwrap();
         let channels = NonZero::new(stream_config.channels).unwrap();
-        
+
         let tx_clone = self.tx.clone();
         let error_callback = move |err: rodio::cpal::StreamError| {
             tracing::error!("Audio stream error: {:?}", err);
@@ -37,7 +39,7 @@ impl PlaybackEngine {
         };
 
         let (stream, sink) = construct_sink(device, &stream_config, sample_format, error_callback)?;
-        
+
         *self.state.write() = Some(EngineState {
             _stream: stream,
             sink: Arc::new(sink),
@@ -52,7 +54,11 @@ impl PlaybackEngine {
         S: Source<Item = f32> + Send + 'static,
     {
         if let Some(state) = self.state.read().as_ref() {
-            let resampled = rodio::source::UniformSourceIterator::new(source, state.channels, state.sample_rate);
+            let resampled = rodio::source::UniformSourceIterator::new(
+                source,
+                state.channels,
+                state.sample_rate,
+            );
             state.sink.append(resampled);
         }
     }
@@ -82,15 +88,27 @@ impl PlaybackEngine {
     }
 
     pub fn is_paused(&self) -> bool {
-        self.state.read().as_ref().map(|s| s.sink.is_paused()).unwrap_or(true)
+        self.state
+            .read()
+            .as_ref()
+            .map(|s| s.sink.is_paused())
+            .unwrap_or(true)
     }
 
     pub fn is_empty(&self) -> bool {
-        self.state.read().as_ref().map(|s| s.sink.empty()).unwrap_or(true)
+        self.state
+            .read()
+            .as_ref()
+            .map(|s| s.sink.empty())
+            .unwrap_or(true)
     }
 
     pub fn pos(&self) -> std::time::Duration {
-        self.state.read().as_ref().map(|s| s.sink.get_pos()).unwrap_or_default()
+        self.state
+            .read()
+            .as_ref()
+            .map(|s| s.sink.get_pos())
+            .unwrap_or_default()
     }
 
     pub fn try_seek(

@@ -17,8 +17,7 @@ pub type PrewarmResult = (stream::StreamingSession, Arc<TrackProgress>, String);
 pub struct StreamManager {
     api: Arc<ApiService>,
     url_cache: UrlCache,
-    prewarm_cache:
-        Arc<Mutex<HashMap<String, PrewarmResult>>>,
+    prewarm_cache: Arc<Mutex<HashMap<String, PrewarmResult>>>,
     http_client: reqwest::Client,
 }
 
@@ -92,9 +91,10 @@ impl StreamManager {
         let codec_clone = codec.clone();
 
         let client = self.http_client.clone();
-        let data_source = stream::StreamingDataSource::new(client, url, Arc::clone(&progress), buffering_signal)
-            .await
-            .map_err(|e| Box::<dyn std::error::Error + Send + Sync>::from(e.to_string()))?;
+        let data_source =
+            stream::StreamingDataSource::new(client, url, Arc::clone(&progress), buffering_signal)
+                .await
+                .map_err(|e| Box::<dyn std::error::Error + Send + Sync>::from(e.to_string()))?;
 
         let session = tokio::task::spawn_blocking(move || {
             stream::create_streaming_session(data_source, codec_clone, progress_clone)

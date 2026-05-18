@@ -50,7 +50,8 @@ pub async fn play_prev(ctx: &AppContext) {
 
 pub async fn seek(ctx: &AppContext, position_ms: u32) {
     let _ = ctx
-        .audio.tx
+        .audio
+        .tx
         .send(AudioMessage::Seek(std::time::Duration::from_millis(
             position_ms as u64,
         )))
@@ -60,9 +61,9 @@ pub async fn seek(ctx: &AppContext, position_ms: u32) {
 pub async fn set_volume(ctx: &AppContext, volume: u8) {
     let _ = ctx.audio.tx.send(AudioMessage::SetVolume(volume)).await;
     let db = ctx.core.db.clone();
-    tokio::task::spawn_blocking(move || {
-        let db = db.lock();
-        let _ = db.save_volume(volume);
+    tokio::spawn(async move {
+        let mut db = db.lock().await;
+        let _ = db.save_volume(volume).await;
     });
 }
 
@@ -115,7 +116,8 @@ pub async fn restore_and_play(
     {
         let pos = std::time::Duration::from_millis(position_ms as u64);
         let _ = ctx
-            .audio.tx
+            .audio
+            .tx
             .send(AudioMessage::PlayTrackPaused(track, pos))
             .await;
         if is_playing {
@@ -134,21 +136,24 @@ pub async fn play_album(ctx: &AppContext, album_id: u32) {
 
 pub async fn play_album_track(ctx: &AppContext, album_id: u32, track_id: String) {
     let _ = ctx
-        .audio.tx
+        .audio
+        .tx
         .send(AudioMessage::PlayAlbumTrack(album_id, track_id))
         .await;
 }
 
 pub async fn play_playlist_track(ctx: &AppContext, _uid: String, kind: u32, track_id: String) {
     let _ = ctx
-        .audio.tx
+        .audio
+        .tx
         .send(AudioMessage::PlayPlaylistTrack(kind, track_id))
         .await;
 }
 
 pub async fn play_liked_track(ctx: &AppContext, track_id: String) {
     let _ = ctx
-        .audio.tx
+        .audio
+        .tx
         .send(AudioMessage::PlayLikedTrack(track_id))
         .await;
 }

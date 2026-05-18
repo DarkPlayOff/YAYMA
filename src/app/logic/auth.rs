@@ -4,8 +4,9 @@ use crate::auth::TokenProvider;
 use crate::http::ApiService;
 
 pub async fn restore_saved_state(ctx: &AppContext) -> Option<SavedStateDto> {
-    let db = ctx.core.db.lock();
+    let mut db = ctx.core.db.lock().await;
     db.load_playback_state()
+        .await
         .ok()
         .flatten()
         .map(|(id, pos, playing)| SavedStateDto {
@@ -37,16 +38,19 @@ pub async fn login_with_token(token: String) -> Result<AppContext, AppError> {
 
 pub async fn try_auto_login() -> Option<AppContext> {
     let (token, user_id) = TokenProvider::resolve()?;
-    
+
     // Fast path: bypass token validation on auto-login to speed up startup.
     // We must initialize the Yandex client with the builder so it receives the token.
-    if let Ok(client) = yandex_music::YandexMusicClient::builder(&token).build() {
-        if let Ok(api) = ApiService::new(token.clone(), Some(std::sync::Arc::new(client)), Some(user_id)).await {
-            if let Ok(ctx) = initialize_app(api).await {
+    if let Ok(client) = yandex_music::YandexMusicClient::builder(&token).build()
+        && let Ok(api) = ApiService::new(
+            token.clone(),
+            Some(std::sync::Arc::new(client)),
+            Some(user_id),
+        )
+        .await
+            && let Ok(ctx) = initialize_app(api).await {
                 return Some(ctx);
             }
-        }
-    }
 
     // Fallback if the fast path fails for any reason
     login_with_token(token).await.ok()

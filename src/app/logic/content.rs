@@ -5,9 +5,9 @@ use crate::api::models::{
 };
 use crate::app::AppContext;
 use crate::storage::cache::HttpCache;
-use std::sync::Arc;
 use crate::util::flac::extract_native_flac;
 use foldhash::HashMapExt;
+use std::sync::Arc;
 
 async fn get_liked_snapshot(
     ctx: &AppContext,
@@ -37,12 +37,12 @@ pub async fn search(ctx: &AppContext, query: String) -> Option<SearchResultsDto>
 }
 
 pub async fn set_download_path(ctx: &AppContext, path: String) -> Result<(), AppError> {
-    ctx.core.db.lock().save_download_path(&path)?;
+    ctx.core.db.lock().await.save_download_path(&path).await?;
     Ok(())
 }
 
 pub async fn get_download_path(ctx: &AppContext) -> Result<Option<String>, AppError> {
-    Ok(ctx.core.db.lock().load_download_path()?)
+    Ok(ctx.core.db.lock().await.load_download_path().await?)
 }
 
 pub async fn get_downloads_size(_ctx: &AppContext) -> i64 {
@@ -87,9 +87,12 @@ pub async fn download_track(ctx: &AppContext, track_id: String) -> Result<String
 
     let dest_path = {
         let mut dir = ctx
-            .core.db
+            .core
+            .db
             .lock()
+            .await
             .load_download_path()
+            .await
             .ok()
             .flatten()
             .map(std::path::PathBuf::from)
@@ -206,7 +209,8 @@ pub async fn get_track_details(
     track_id: String,
 ) -> Result<TrackDetailsDto, AppError> {
     let track = ctx
-        .core.api
+        .core
+        .api
         .fetch_tracks(vec![track_id.clone()])
         .await?
         .into_iter()
@@ -230,7 +234,8 @@ pub async fn get_artist_details(
     let (liked, disliked) = get_liked_snapshot(ctx).await;
     let (artist_res, tracks_res) = tokio::join!(
         ctx.core.api.fetch_artist(artist_id.clone()),
-        ctx.core.api
+        ctx.core
+            .api
             .fetch_artist_tracks_paginated(artist_id.clone(), page, page_size)
     );
 
@@ -331,7 +336,8 @@ pub async fn fetch_wave_stations(ctx: &AppContext) -> Vec<StationCategoryDto> {
 }
 
 pub async fn get_lyrics(ctx: &AppContext, track_id: String) -> Option<String> {
-    ctx.core.api
+    ctx.core
+        .api
         .fetch_lyrics(
             track_id,
             yandex_music::model::info::lyrics::LyricsFormat::LRC,

@@ -8,9 +8,9 @@ use crate::frb_generated::StreamSink;
 use crate::http::ApiService;
 use crate::storage::cache::HttpCache;
 use foldhash::HashMap;
-use parking_lot::{Mutex, RwLock as StdRwLock};
+use parking_lot::RwLock as StdRwLock;
 use std::sync::Arc;
-use tokio::sync::{OnceCell, RwLock, mpsc, watch};
+use tokio::sync::{Mutex, OnceCell, RwLock, mpsc, watch};
 
 pub struct AppAudioContext {
     pub tx: mpsc::Sender<AudioMessage>,

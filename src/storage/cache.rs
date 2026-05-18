@@ -1,3 +1,4 @@
+use crate::db::AppDatabase;
 use directories::ProjectDirs;
 use foldhash::HashMap;
 use foldhash::HashMapExt;
@@ -5,12 +6,11 @@ use foldhash::fast::FixedState;
 use parking_lot::Mutex as SyncMutex;
 use std::hash::{BuildHasher, Hasher};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::sync::OnceLock;
 use tokio::fs;
+use tokio::sync::Mutex;
 use tokio::sync::broadcast;
-use crate::db::AppDatabase;
-use parking_lot::Mutex;
-use std::sync::Arc;
 
 pub struct ActiveDownloads {
     pub map: SyncMutex<HashMap<String, broadcast::Sender<Result<PathBuf, String>>>>,
@@ -49,7 +49,11 @@ impl HttpCache {
             .build()
             .unwrap_or_else(|_| reqwest::Client::new());
 
-        Self { cache_dir, client, db }
+        Self {
+            cache_dir,
+            client,
+            db,
+        }
     }
 
     pub fn get_cache_dir(&self) -> &Path {
@@ -68,10 +72,10 @@ impl HttpCache {
     ) -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
         // 1. Check DB for existing cache
         {
-            let path_opt = tokio::task::block_in_place(|| {
-                let db = self.db.lock();
-                db.get_cache_metadata(url).ok().flatten()
-            });
+            let path_opt = {
+                let mut db = self.db.lock().await;
+                db.get_cache_metadata(url).await.ok().flatten()
+            };
 
             if let Some((path, _, is_expired)) = path_opt {
                 let path = PathBuf::from(&path);
@@ -173,10 +177,10 @@ impl HttpCache {
         // Update DB
         {
             let path_str = file_path.to_string_lossy().to_string();
-            tokio::task::block_in_place(|| {
-                let db = self.db.lock();
-                let _ = db.update_cache_metadata(url, &path_str, size, etag.as_deref());
-            });
+            let mut db = self.db.lock().await;
+            let _ = db
+                .update_cache_metadata(url, &path_str, size, etag.as_deref())
+                .await;
         }
 
         Ok(file_path)
@@ -187,10 +191,8 @@ impl HttpCache {
         max_size_bytes: i64,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let to_delete = {
-            tokio::task::block_in_place(|| {
-                let db = self.db.lock();
-                db.prune_cache(max_size_bytes)
-            })?
+            let mut db = self.db.lock().await;
+            db.prune_cache(max_size_bytes).await?
         };
 
         for path_str in to_delete {
@@ -221,20 +223,16 @@ impl HttpCache {
         if self.cache_dir.exists() {
             fs::remove_dir_all(&self.cache_dir).await?;
         }
-        tokio::task::block_in_place(|| {
-            let db = self.db.lock();
-            let _ = db.clear_cache_metadata();
-        });
+        let mut db = self.db.lock().await;
+        let _ = db.clear_cache_metadata().await;
         Ok(())
     }
 
     /// Prune all expired entries from cache.
     pub async fn prune_expired(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let to_delete = {
-            tokio::task::block_in_place(|| {
-                let db = self.db.lock();
-                db.prune_expired()
-            })?
+            let mut db = self.db.lock().await;
+            db.prune_expired().await?
         };
 
         for path_str in to_delete {
