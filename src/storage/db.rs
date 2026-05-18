@@ -61,8 +61,8 @@ impl AppDatabase {
     pub async fn save_auth_token(&mut self, token: &str, user_id: u64) -> toasty::Result<()> {
         let val = format!("{}:{}", token, user_id);
         let key = "auth_token".to_string();
-        let existing = AppSetting::get_by_key(&mut self.db, &key).await;
-        if let Ok(mut existing) = existing {
+        let existing = AppSetting::filter_by_key(&key).first().exec(&mut self.db).await?;
+        if let Some(mut existing) = existing {
             existing.update().value(val).exec(&mut self.db).await?;
         } else {
             toasty::create!(AppSetting { key, value: val })
@@ -73,8 +73,8 @@ impl AppDatabase {
     }
 
     pub async fn load_auth_token(&mut self) -> toasty::Result<Option<(String, u64)>> {
-        let res = AppSetting::get_by_key(&mut self.db, "auth_token").await;
-        if let Ok(setting) = res {
+        let res = AppSetting::filter_by_key("auth_token").first().exec(&mut self.db).await?;
+        if let Some(setting) = res {
             let mut parts = setting.value.split(':');
             let token = parts.next().unwrap_or("").to_string();
             let uid = parts.next().unwrap_or("0").parse().unwrap_or(0);
@@ -99,8 +99,8 @@ impl AppDatabase {
     ) -> toasty::Result<()> {
         let now = chrono::Utc::now().timestamp();
         let expires_at = now + DEFAULT_CACHE_TTL_SECS;
-        let existing = CacheMetadata::get_by_url(&mut self.db, url).await;
-        if let Ok(mut cache) = existing {
+        let existing = CacheMetadata::filter_by_url(url).first().exec(&mut self.db).await?;
+        if let Some(mut cache) = existing {
             cache
                 .update()
                 .last_access_at(now)
@@ -129,8 +129,8 @@ impl AppDatabase {
         &mut self,
         url: &str,
     ) -> toasty::Result<Option<(String, Option<String>, bool)>> {
-        let res = CacheMetadata::get_by_url(&mut self.db, url).await;
-        if let Ok(mut cache) = res {
+        let res = CacheMetadata::filter_by_url(url).first().exec(&mut self.db).await?;
+        if let Some(mut cache) = res {
             let now = chrono::Utc::now().timestamp();
             let is_expired = now >= cache.expires_at;
 
@@ -211,8 +211,8 @@ impl AppDatabase {
         is_playing: bool,
     ) -> toasty::Result<()> {
         let id = "1".to_string();
-        let res = PlaybackState::get_by_id(&mut self.db, &id).await;
-        if let Ok(mut state) = res {
+        let res = PlaybackState::filter_by_id(&id).first().exec(&mut self.db).await?;
+        if let Some(mut state) = res {
             state
                 .update()
                 .track_id(track_id.to_string())
@@ -234,8 +234,8 @@ impl AppDatabase {
     }
 
     pub async fn load_playback_state(&mut self) -> toasty::Result<Option<(String, u64, bool)>> {
-        let res = PlaybackState::get_by_id(&mut self.db, "1").await;
-        if let Ok(state) = res {
+        let res = PlaybackState::filter_by_id("1").first().exec(&mut self.db).await?;
+        if let Some(state) = res {
             Ok(Some((
                 state.track_id.clone(),
                 state.position_ms,
@@ -248,8 +248,8 @@ impl AppDatabase {
 
     pub async fn save_download_path(&mut self, path: &str) -> toasty::Result<()> {
         let id = "1".to_string();
-        let res = DownloadPath::get_by_id(&mut self.db, &id).await;
-        if let Ok(mut dp) = res {
+        let res = DownloadPath::filter_by_id(&id).first().exec(&mut self.db).await?;
+        if let Some(mut dp) = res {
             dp.update()
                 .folder_path(path.to_string())
                 .exec(&mut self.db)
@@ -266,8 +266,8 @@ impl AppDatabase {
     }
 
     pub async fn load_download_path(&mut self) -> toasty::Result<Option<String>> {
-        let res = DownloadPath::get_by_id(&mut self.db, "1").await;
-        if let Ok(dp) = res {
+        let res = DownloadPath::filter_by_id("1").first().exec(&mut self.db).await?;
+        if let Some(dp) = res {
             Ok(Some(dp.folder_path.clone()))
         } else {
             Ok(None)
@@ -295,10 +295,8 @@ impl AppDatabase {
     }
 
     pub async fn add_liked_track(&mut self, track_id: &str) -> toasty::Result<()> {
-        if LikedTrack::get_by_track_id(&mut self.db, track_id)
-            .await
-            .is_err()
-        {
+        let exists = LikedTrack::filter_by_track_id(track_id).first().exec(&mut self.db).await?;
+        if exists.is_none() {
             toasty::create!(LikedTrack {
                 track_id: track_id.to_string(),
             })
@@ -314,8 +312,8 @@ impl AppDatabase {
     }
 
     pub async fn upsert_track_metadata(&mut self, metadata: TrackMetadata) -> toasty::Result<()> {
-        let res = TrackMetadataEntity::get_by_track_id(&mut self.db, &metadata.id).await;
-        if let Ok(mut entity) = res {
+        let res = TrackMetadataEntity::filter_by_track_id(&metadata.id).first().exec(&mut self.db).await?;
+        if let Some(mut entity) = res {
             entity
                 .update()
                 .title(metadata.title)
@@ -371,72 +369,87 @@ impl AppDatabase {
             return Ok(vec![]);
         }
 
-        let entities: Vec<TrackMetadataEntity> = TrackMetadataEntity::filter(
-            TrackMetadataEntity::fields().track_id().in_list(track_ids),
-        )
-        .exec(&mut self.db)
-        .await?;
-
         let mut results = Vec::new();
-        for entity in entities {
-            let artists: Vec<TrackMetadataArtist> =
-                TrackMetadataArtist::filter_by_track_metadata_entity_id(&entity.track_id)
-                    .exec(&mut self.db)
-                    .await?;
-            let mut artist_dtos = Vec::new();
-            let mut sorted_artists = artists;
-            sorted_artists.sort_by_key(|a| a.position);
-            for a in sorted_artists {
-                artist_dtos.push(TrackArtistDto {
-                    id: a.artist_id.clone(),
-                    name: a.name.clone(),
+
+        for chunk in track_ids.chunks(900) {
+            let entities: Vec<TrackMetadataEntity> = TrackMetadataEntity::filter(
+                TrackMetadataEntity::fields().track_id().in_list(chunk),
+            )
+            .include(TrackMetadataEntity::fields().artists())
+            .exec(&mut self.db)
+            .await?;
+
+            for entity in entities {
+                let track_artists: &[TrackMetadataArtist] = entity.artists.get();
+                let mut track_artists_refs: Vec<&TrackMetadataArtist> = track_artists.iter().collect();
+                track_artists_refs.sort_by_key(|a| a.position);
+                
+                let mut artist_dtos = Vec::new();
+                for a in track_artists_refs {
+                    artist_dtos.push(TrackArtistDto {
+                        id: a.artist_id.clone(),
+                        name: a.name.clone(),
+                    });
+                }
+
+                results.push(TrackMetadata {
+                    id: entity.track_id,
+                    title: entity.title,
+                    version: entity.version,
+                    artists: artist_dtos,
+                    album: entity.album,
+                    album_id: entity.album_id,
+                    cover_url: entity.cover_url,
+                    duration_ms: entity.duration_ms,
                 });
             }
-            results.push(TrackMetadata {
-                id: entity.track_id.clone(),
-                title: entity.title.clone(),
-                version: entity.version.clone(),
-                artists: artist_dtos,
-                album: entity.album.clone(),
-                album_id: entity.album_id.clone(),
-                cover_url: entity.cover_url.clone(),
-                duration_ms: entity.duration_ms,
-            });
         }
+
         Ok(results)
     }
 
     pub async fn search_liked_tracks(&mut self, query: &str) -> toasty::Result<Vec<String>> {
         let q = query.to_lowercase();
         let likes: Vec<LikedTrack> = LikedTrack::all().exec(&mut self.db).await?;
+        let liked_ids: Vec<String> = likes.into_iter().map(|l| l.track_id).collect();
+
+        if liked_ids.is_empty() {
+            return Ok(vec![]);
+        }
+
         let mut matches = Vec::new();
-        for l in likes {
-            if let Ok(m) = TrackMetadataEntity::get_by_track_id(&mut self.db, &l.track_id).await {
+
+        for chunk in liked_ids.chunks(900) {
+            let entities: Vec<TrackMetadataEntity> = TrackMetadataEntity::filter(
+                TrackMetadataEntity::fields().track_id().in_list(chunk),
+            )
+            .include(TrackMetadataEntity::fields().artists())
+            .exec(&mut self.db)
+            .await?;
+
+            for m in entities {
                 if m.title.to_lowercase().contains(&q)
                     || m.album.as_deref().unwrap_or("").to_lowercase().contains(&q)
                 {
-                    matches.push(l.track_id.clone());
+                    matches.push(m.track_id);
                     continue;
                 }
-                let artists: Vec<TrackMetadataArtist> =
-                    TrackMetadataArtist::filter_by_track_metadata_entity_id(&l.track_id)
-                        .exec(&mut self.db)
-                        .await?;
-                for a in artists {
-                    if a.name.to_lowercase().contains(&q) {
-                        matches.push(l.track_id.clone());
-                        break;
-                    }
+
+                let track_artists: &[TrackMetadataArtist] = m.artists.get();
+                if track_artists.iter().any(|a| a.name.to_lowercase().contains(&q)) {
+                    matches.push(m.track_id);
                 }
             }
         }
+
         Ok(matches)
     }
 
     pub async fn save_equalizer(&mut self, enabled: bool, bands: &[f32]) -> toasty::Result<()> {
         let bands_json = serde_json::to_string(bands).unwrap_or_else(|_| "[]".to_string());
         let id = "1".to_string();
-        if let Ok(mut eq) = EqualizerSetting::get_by_id(&mut self.db, &id).await {
+        let res = EqualizerSetting::filter_by_id(&id).first().exec(&mut self.db).await?;
+        if let Some(mut eq) = res {
             eq.update()
                 .enabled(enabled)
                 .bands(bands_json)
@@ -455,7 +468,8 @@ impl AppDatabase {
     }
 
     pub async fn load_equalizer(&mut self) -> toasty::Result<Option<(bool, Vec<f32>)>> {
-        if let Ok(eq) = EqualizerSetting::get_by_id(&mut self.db, "1").await {
+        let res = EqualizerSetting::filter_by_id("1").first().exec(&mut self.db).await?;
+        if let Some(eq) = res {
             let bands: Vec<f32> = serde_json::from_str(&eq.bands).unwrap_or_default();
             Ok(Some((eq.enabled, bands)))
         } else {
@@ -470,7 +484,8 @@ impl AppDatabase {
         params: &[f32],
     ) -> toasty::Result<()> {
         let params_json = serde_json::to_string(params).unwrap_or_else(|_| "[]".to_string());
-        if let Ok(mut effect) = EffectSetting::get_by_effect_id(&mut self.db, id).await {
+        let res = EffectSetting::filter_by_effect_id(id).first().exec(&mut self.db).await?;
+        if let Some(mut effect) = res {
             effect
                 .update()
                 .enabled(enabled)
@@ -490,7 +505,8 @@ impl AppDatabase {
     }
 
     pub async fn load_effect(&mut self, id: &str) -> toasty::Result<Option<(bool, Vec<f32>)>> {
-        if let Ok(effect) = EffectSetting::get_by_effect_id(&mut self.db, id).await {
+        let res = EffectSetting::filter_by_effect_id(id).first().exec(&mut self.db).await?;
+        if let Some(effect) = res {
             let params: Vec<f32> = serde_json::from_str(&effect.params).unwrap_or_default();
             Ok(Some((effect.enabled, params)))
         } else {
@@ -563,7 +579,8 @@ impl AppDatabase {
     }
 
     async fn save_app_setting(&mut self, key: &str, value: &str) -> toasty::Result<()> {
-        if let Ok(mut setting) = AppSetting::get_by_key(&mut self.db, key).await {
+        let res = AppSetting::filter_by_key(key).first().exec(&mut self.db).await?;
+        if let Some(mut setting) = res {
             setting
                 .update()
                 .value(value.to_string())
@@ -581,7 +598,8 @@ impl AppDatabase {
     }
 
     async fn load_app_setting(&mut self, key: &str) -> toasty::Result<Option<String>> {
-        if let Ok(setting) = AppSetting::get_by_key(&mut self.db, key).await {
+        let res = AppSetting::filter_by_key(key).first().exec(&mut self.db).await?;
+        if let Some(setting) = res {
             Ok(Some(setting.value))
         } else {
             Ok(None)
