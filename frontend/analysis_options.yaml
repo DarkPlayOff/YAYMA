@@ -6,6 +6,7 @@ analyzer:
   exclude:
     - "lib/src/rust/**" # Игнорируем автосгенерированный код Rust bridge
     - "test/**"
+    - "build/**"
 
 linter:
   rules:

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -241,10 +242,12 @@ class TrackCover extends StatelessWidget {
       content = MouseRegion(
         cursor: SystemMouseCursors.click,
         child: GestureDetector(
-          onTap: () => FullscreenCoverDialog.show(
-            context,
-            url!,
-            heroTag: heroTag ?? url!,
+          onTap: () => unawaited(
+            FullscreenCoverDialog.show(
+              context,
+              url!,
+              heroTag: heroTag ?? url!,
+            ),
           ),
           child: content,
         ),

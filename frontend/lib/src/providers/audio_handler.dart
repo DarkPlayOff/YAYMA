@@ -95,8 +95,6 @@ class YaymaAudioHandler extends BaseAudioHandler {
               ? AudioServiceShuffleMode.all
               : AudioServiceShuffleMode.none,
           updatePosition: Duration(milliseconds: currentPosition.toInt()),
-          bufferedPosition: Duration.zero,
-          speed: 1.0,
         ),
       );
     });

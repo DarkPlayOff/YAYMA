@@ -16,23 +16,25 @@ class _YandexIdViewState extends State<YandexIdView> {
   @override
   void initState() {
     super.initState();
-    _controller = WebViewController()
-      ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setBackgroundColor(Colors.transparent)
-      ..setUserAgent(
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-      )
-      ..loadRequest(Uri.parse('https://id.yandex.ru'));
+    _controller = WebViewController();
+    unawaited(_controller.setJavaScriptMode(JavaScriptMode.unrestricted));
+    unawaited(_controller.setBackgroundColor(Colors.transparent));
+    unawaited(_controller.setUserAgent(
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+    ));
+    unawaited(_controller.loadRequest(Uri.parse('https://id.yandex.ru')));
 
     // Delay WebView initialization to wait for the transition animation to finish.
     // This prevents "Setting webview bounds failed" error on Windows.
-    Future.delayed(const Duration(milliseconds: 450), () {
-      if (mounted) {
-        setState(() {
-          _isReady = true;
-        });
-      }
-    });
+    unawaited(
+      Future<void>.delayed(const Duration(milliseconds: 450), () {
+        if (mounted) {
+          setState(() {
+            _isReady = true;
+          });
+        }
+      }),
+    );
   }
 
   @override

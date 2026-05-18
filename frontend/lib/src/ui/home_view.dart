@@ -6,13 +6,13 @@ import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/providers/navigation_provider.dart';
 import 'package:yayma/src/providers/playback_provider.dart';
 import 'package:yayma/src/rust/api/models.dart';
+import 'package:yayma/src/ui/wave_view.dart';
 import 'package:yayma/src/ui/widgets/common_ui.dart';
 import 'package:yayma/src/ui/widgets/lyrics_view.dart';
 import 'package:yayma/src/ui/widgets/quality_selector.dart';
 import 'package:yayma/src/ui/widgets/responsive.dart';
 import 'package:yayma/src/ui/widgets/rust_cached_image.dart';
 import 'package:yayma/src/ui/widgets/track_elements.dart';
-import 'package:yayma/src/ui/wave_view.dart';
 
 class HomeView extends StatelessWidget {
   const HomeView({super.key});
@@ -613,24 +613,25 @@ class _WaveSettingsButton extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: () {
-          showModalBottomSheet<void>(
-            context: context,
-            backgroundColor: const Color(0xFF1A1A1E),
-            isScrollControlled: true,
-            enableDrag: true,
-            showDragHandle: true,
-            shape: const RoundedRectangleBorder(
-              borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
-            ),
-            builder: (context) => DraggableScrollableSheet(
-              initialChildSize: 0.6,
-              minChildSize: 0.4,
-              maxChildSize: 0.9,
-              expand: false,
-              snap: true,
-              builder: (context, scrollController) => WaveSettingsPanel(
-                onSelected: () => Navigator.pop(context),
-                scrollController: scrollController,
+          unawaited(
+            showModalBottomSheet<void>(
+              context: context,
+              backgroundColor: const Color(0xFF1A1A1E),
+              isScrollControlled: true,
+              showDragHandle: true,
+              shape: const RoundedRectangleBorder(
+                borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+              ),
+              builder: (context) => DraggableScrollableSheet(
+                initialChildSize: 0.6,
+                minChildSize: 0.4,
+                maxChildSize: 0.9,
+                expand: false,
+                snap: true,
+                builder: (context, scrollController) => WaveSettingsPanel(
+                  onSelected: () => Navigator.pop(context),
+                  scrollController: scrollController,
+                ),
               ),
             ),
           );

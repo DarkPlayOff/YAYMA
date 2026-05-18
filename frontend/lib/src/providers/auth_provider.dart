@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/app/init.dart' as app_init;
 import 'package:yayma/src/providers/notification_provider.dart';
@@ -56,7 +58,7 @@ void _handleRustError(Object e) {
   if (errorStr.contains('Invalid token or session expired') ||
       errorStr.contains('Unauthorized')) {
     showAppError('Сессия истекла. Пожалуйста, войдите снова.');
-    app_init.AppInit.logout();
+    unawaited(app_init.AppInit.logout());
   } else {
     showAppError(errorStr);
   }

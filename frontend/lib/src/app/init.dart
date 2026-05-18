@@ -38,7 +38,7 @@ class AppInit {
     try {
       final autoHide = await simple.isAutoHideNavbarEnabledInit();
       autoHideNavbarSignal.value = autoHide;
-    } catch (_) {}
+    } on Object catch (_) {}
 
     unawaited(_initializeAuthAndServices());
   }
@@ -48,12 +48,11 @@ class AppInit {
     await session.configure(const AudioSessionConfiguration.music());
 
     await AudioService.init(
-      builder: () => YaymaAudioHandler(),
+      builder: YaymaAudioHandler.new,
       config: const AudioServiceConfig(
         androidNotificationChannelId: 'io.github.darkplayoff.yayma.playback',
         androidNotificationChannelName: 'YAYMA Playback',
         androidNotificationOngoing: true,
-        androidStopForegroundOnPause: true,
         androidShowNotificationBadge: true,
         androidNotificationIcon: 'drawable/ic_notification',
       ),

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 
@@ -67,7 +69,7 @@ class _GlobalNotificationListenerState extends State<GlobalNotificationListener>
 
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        _showNotification(notif);
+        unawaited(_showNotification(notif));
       });
     });
   }
@@ -80,7 +82,7 @@ class _GlobalNotificationListenerState extends State<GlobalNotificationListener>
     });
 
     await _controller.forward();
-    await Future.delayed(const Duration(seconds: 4));
+    await Future<void>.delayed(const Duration(seconds: 4));
 
     if (mounted) {
       await _controller.reverse();

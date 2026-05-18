@@ -394,8 +394,9 @@ class _WordByWordText extends StatelessWidget {
   }
 
   Widget _buildActiveContent(TextStyle baseStyle) {
-    if (words.isEmpty)
+    if (words.isEmpty) {
       return Text(text, style: baseStyle, textAlign: TextAlign.center);
+    }
 
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -508,7 +509,8 @@ class _LyricTimerWidgetState extends State<_LyricTimerWidget>
       duration: const Duration(
         milliseconds: 942,
       ), // Close to sin(ms/150) period
-    )..repeat(reverse: true);
+    );
+    unawaited(_pulseController.repeat(reverse: true));
   }
 
   @override
@@ -635,13 +637,14 @@ class LyricsReaderDialog extends StatelessWidget {
         child: lyricsAsync.map(
           data: (items) {
             final lines = items.whereType<LyricLine>().toList();
-            if (lines.isEmpty)
+            if (lines.isEmpty) {
               return const Center(
                 child: Text(
                   'Текст отсутствует',
                   style: TextStyle(color: Colors.white24, fontSize: 18),
                 ),
               );
+            }
             return ListView.builder(
               itemCount: lines.length,
               itemBuilder: (context, index) => Padding(
