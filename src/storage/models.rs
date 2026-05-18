@@ -1,26 +1,4 @@
 #[derive(Debug, toasty::Model)]
-pub struct PlaybackState {
-    #[key]
-    pub id: String,
-    pub track_id: String,
-    pub position_ms: u64,
-    pub is_playing: bool,
-}
-
-#[derive(Debug, toasty::Model)]
-pub struct DownloadPath {
-    #[key]
-    pub id: String,
-    pub folder_path: String,
-}
-
-#[derive(Debug, toasty::Model)]
-pub struct LikedTrack {
-    #[key]
-    pub track_id: String,
-}
-
-#[derive(Debug, toasty::Model)]
 pub struct TrackMetadataEntity {
     #[key]
     pub track_id: String,
@@ -49,22 +27,6 @@ pub struct TrackMetadataArtist {
     pub artist_id: String,
     pub name: String,
     pub position: i64,
-}
-
-#[derive(Debug, toasty::Model)]
-pub struct EqualizerSetting {
-    #[key]
-    pub id: String,
-    pub enabled: bool,
-    pub bands: String, // JSON
-}
-
-#[derive(Debug, toasty::Model)]
-pub struct EffectSetting {
-    #[key]
-    pub effect_id: String,
-    pub enabled: bool,
-    pub params: String, // JSON
 }
 
 #[derive(Debug, toasty::Model)]

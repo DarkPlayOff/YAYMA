@@ -177,7 +177,7 @@ pub fn spawn_settings_worker(ctx: Arc<AppContext>, mut shutdown_rx: watch::Recei
                             let _ = db.save_equalizer(eq_enabled, &bands).await;
                         }
 
-                        let _ = db.save_audio_quality(quality).await;
+                        let _ = db.save_setting("audio_quality", &quality).await;
 
                         for (id, enabled, params) in effects {
                             let _ = db.save_effect(&id, enabled, &params).await;

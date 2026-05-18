@@ -63,7 +63,7 @@ pub async fn set_volume(ctx: &AppContext, volume: u8) {
     let db = ctx.core.db.clone();
     tokio::spawn(async move {
         let mut db = db.lock().await;
-        let _ = db.save_volume(volume).await;
+        let _ = db.save_setting("volume", &volume).await;
     });
 }
 

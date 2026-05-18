@@ -41,17 +41,17 @@ pub fn is_discord_rpc_enabled(ctx: &AppContext) -> bool {
 pub async fn set_discord_rpc_enabled(ctx: &AppContext, enabled: bool) {
     ctx.audio.signals.discord_rpc.set(enabled);
     let mut db = ctx.core.db.lock().await;
-    let _ = db.save_discord_rpc(enabled).await;
+    let _ = db.save_setting("discord_rpc", &enabled).await;
 }
 
 pub async fn is_custom_titlebar_enabled(ctx: &AppContext) -> bool {
     let mut db = ctx.core.db.lock().await;
-    db.load_custom_titlebar().await.unwrap_or(false)
+    db.load_setting("custom_titlebar").await.unwrap_or(Some(true)).unwrap_or(true)
 }
 
 pub async fn is_custom_titlebar_enabled_init() -> bool {
     if let Ok(mut db) = crate::storage::db::AppDatabase::init(crate::app::get_data_dir()).await {
-        db.load_custom_titlebar().await.unwrap_or(true)
+        db.load_setting("custom_titlebar").await.unwrap_or(Some(true)).unwrap_or(true)
     } else {
         true
     }
@@ -59,17 +59,17 @@ pub async fn is_custom_titlebar_enabled_init() -> bool {
 
 pub async fn set_custom_titlebar_enabled(ctx: &AppContext, enabled: bool) {
     let mut db = ctx.core.db.lock().await;
-    let _ = db.save_custom_titlebar(enabled).await;
+    let _ = db.save_setting("custom_titlebar", &enabled).await;
 }
 
 pub async fn is_auto_hide_navbar_enabled(ctx: &AppContext) -> bool {
     let mut db = ctx.core.db.lock().await;
-    db.load_auto_hide_navbar().await.unwrap_or(true)
+    db.load_setting("auto_hide_navbar").await.unwrap_or(Some(true)).unwrap_or(true)
 }
 
 pub async fn is_auto_hide_navbar_enabled_init() -> bool {
     if let Ok(mut db) = crate::storage::db::AppDatabase::init(crate::app::get_data_dir()).await {
-        db.load_auto_hide_navbar().await.unwrap_or(true)
+        db.load_setting("auto_hide_navbar").await.unwrap_or(Some(true)).unwrap_or(true)
     } else {
         true
     }
@@ -77,5 +77,5 @@ pub async fn is_auto_hide_navbar_enabled_init() -> bool {
 
 pub async fn set_auto_hide_navbar_enabled(ctx: &AppContext, enabled: bool) {
     let mut db = ctx.core.db.lock().await;
-    let _ = db.save_auto_hide_navbar(enabled).await;
+    let _ = db.save_setting("auto_hide_navbar", &enabled).await;
 }

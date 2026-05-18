@@ -4,18 +4,18 @@ use crate::audio::commands::AudioMessage;
 pub async fn load_persisted_settings(ctx: &AppContext) {
     let volume = {
         let mut db = ctx.core.db.lock().await;
-        db.load_volume().await.ok()
+        db.load_setting::<u8>("volume").await.unwrap_or(Some(100))
     };
 
     if let Some(volume) = volume {
         let _ = ctx.audio.tx.send(AudioMessage::SetVolume(volume)).await;
     }
 
-    if let Ok(quality) = ctx.core.db.lock().await.load_audio_quality().await {
+    if let Ok(Some(quality)) = ctx.core.db.lock().await.load_setting::<crate::api::models::AudioQuality>("audio_quality").await {
         ctx.core.api.set_quality(quality);
     }
 
-    if let Ok(rpc_enabled) = ctx.core.db.lock().await.load_discord_rpc().await {
+    if let Ok(Some(rpc_enabled)) = ctx.core.db.lock().await.load_setting::<bool>("discord_rpc").await {
         ctx.audio.signals.discord_rpc.set(rpc_enabled);
     }
 

@@ -1,4 +1,4 @@
-use crate::api::models::{AudioQuality, TrackArtistDto};
+use crate::api::models::TrackArtistDto;
 use crate::storage::models::*;
 use std::path::PathBuf;
 use toasty::Db;
@@ -59,30 +59,11 @@ impl AppDatabase {
     }
 
     pub async fn save_auth_token(&mut self, token: &str, user_id: u64) -> toasty::Result<()> {
-        let val = format!("{}:{}", token, user_id);
-        let key = "auth_token".to_string();
-        let existing = AppSetting::filter_by_key(&key).first().exec(&mut self.db).await?;
-        if let Some(mut existing) = existing {
-            existing.update().value(val).exec(&mut self.db).await?;
-        } else {
-            toasty::create!(AppSetting { key, value: val })
-                .exec(&mut self.db)
-                .await?;
-        }
-        Ok(())
+        self.save_setting("auth_token", &(token.to_string(), user_id)).await
     }
 
     pub async fn load_auth_token(&mut self) -> toasty::Result<Option<(String, u64)>> {
-        let res = AppSetting::filter_by_key("auth_token").first().exec(&mut self.db).await?;
-        if let Some(setting) = res {
-            let mut parts = setting.value.split(':');
-            let token = parts.next().unwrap_or("").to_string();
-            let uid = parts.next().unwrap_or("0").parse().unwrap_or(0);
-            if !token.is_empty() {
-                return Ok(Some((token, uid)));
-            }
-        }
-        Ok(None)
+        self.load_setting("auth_token").await
     }
 
     pub async fn delete_auth_token(&mut self) -> toasty::Result<()> {
@@ -210,104 +191,44 @@ impl AppDatabase {
         position_ms: u64,
         is_playing: bool,
     ) -> toasty::Result<()> {
-        let id = "1".to_string();
-        let res = PlaybackState::filter_by_id(&id).first().exec(&mut self.db).await?;
-        if let Some(mut state) = res {
-            state
-                .update()
-                .track_id(track_id.to_string())
-                .position_ms(position_ms)
-                .is_playing(is_playing)
-                .exec(&mut self.db)
-                .await?;
-        } else {
-            toasty::create!(PlaybackState {
-                id,
-                track_id: track_id.to_string(),
-                position_ms,
-                is_playing,
-            })
-            .exec(&mut self.db)
-            .await?;
-        }
-        Ok(())
+        self.save_setting("playback_state", &(track_id.to_string(), position_ms, is_playing)).await
     }
 
     pub async fn load_playback_state(&mut self) -> toasty::Result<Option<(String, u64, bool)>> {
-        let res = PlaybackState::filter_by_id("1").first().exec(&mut self.db).await?;
-        if let Some(state) = res {
-            Ok(Some((
-                state.track_id.clone(),
-                state.position_ms,
-                state.is_playing,
-            )))
-        } else {
-            Ok(None)
-        }
+        self.load_setting("playback_state").await
     }
 
     pub async fn save_download_path(&mut self, path: &str) -> toasty::Result<()> {
-        let id = "1".to_string();
-        let res = DownloadPath::filter_by_id(&id).first().exec(&mut self.db).await?;
-        if let Some(mut dp) = res {
-            dp.update()
-                .folder_path(path.to_string())
-                .exec(&mut self.db)
-                .await?;
-        } else {
-            toasty::create!(DownloadPath {
-                id,
-                folder_path: path.to_string(),
-            })
-            .exec(&mut self.db)
-            .await?;
-        }
-        Ok(())
+        self.save_setting("download_path", &path.to_string()).await
     }
 
     pub async fn load_download_path(&mut self) -> toasty::Result<Option<String>> {
-        let res = DownloadPath::filter_by_id("1").first().exec(&mut self.db).await?;
-        if let Some(dp) = res {
-            Ok(Some(dp.folder_path.clone()))
-        } else {
-            Ok(None)
-        }
+        self.load_setting("download_path").await
     }
 
     pub async fn save_liked_tracks(&mut self, track_ids: &[String]) -> toasty::Result<()> {
-        LikedTrack::all().delete().exec(&mut self.db).await?;
-
-        if !track_ids.is_empty() {
-            let mut batch = LikedTrack::create_many();
-            for id in track_ids {
-                batch = batch.item(toasty::create!(LikedTrack {
-                    track_id: id.clone(),
-                }));
-            }
-            batch.exec(&mut self.db).await?;
-        }
-        Ok(())
+        self.save_setting("liked_tracks", &track_ids.to_vec()).await
     }
 
     pub async fn load_liked_tracks(&mut self) -> toasty::Result<Vec<String>> {
-        let all: Vec<LikedTrack> = LikedTrack::all().exec(&mut self.db).await?;
-        Ok(all.into_iter().map(|t| t.track_id).collect())
+        Ok(self.load_setting("liked_tracks").await?.unwrap_or_default())
     }
 
     pub async fn add_liked_track(&mut self, track_id: &str) -> toasty::Result<()> {
-        let exists = LikedTrack::filter_by_track_id(track_id).first().exec(&mut self.db).await?;
-        if exists.is_none() {
-            toasty::create!(LikedTrack {
-                track_id: track_id.to_string(),
-            })
-            .exec(&mut self.db)
-            .await?;
+        let mut tracks = self.load_liked_tracks().await?;
+        if !tracks.contains(&track_id.to_string()) {
+            tracks.push(track_id.to_string());
+            self.save_liked_tracks(&tracks).await?;
         }
         Ok(())
     }
 
     pub async fn remove_liked_track(&mut self, track_id: &str) -> toasty::Result<()> {
-        let _ = LikedTrack::delete_by_track_id(&mut self.db, track_id).await;
+        let mut tracks = self.load_liked_tracks().await?;
+        if let Some(pos) = tracks.iter().position(|x| x == track_id) {
+            tracks.remove(pos);
+            self.save_liked_tracks(&tracks).await?;
+        }
         Ok(())
     }
 
@@ -410,8 +331,7 @@ impl AppDatabase {
 
     pub async fn search_liked_tracks(&mut self, query: &str) -> toasty::Result<Vec<String>> {
         let q = query.to_lowercase();
-        let likes: Vec<LikedTrack> = LikedTrack::all().exec(&mut self.db).await?;
-        let liked_ids: Vec<String> = likes.into_iter().map(|l| l.track_id).collect();
+        let liked_ids = self.load_liked_tracks().await?;
 
         if liked_ids.is_empty() {
             return Ok(vec![]);
@@ -446,35 +366,11 @@ impl AppDatabase {
     }
 
     pub async fn save_equalizer(&mut self, enabled: bool, bands: &[f32]) -> toasty::Result<()> {
-        let bands_json = serde_json::to_string(bands).unwrap_or_else(|_| "[]".to_string());
-        let id = "1".to_string();
-        let res = EqualizerSetting::filter_by_id(&id).first().exec(&mut self.db).await?;
-        if let Some(mut eq) = res {
-            eq.update()
-                .enabled(enabled)
-                .bands(bands_json)
-                .exec(&mut self.db)
-                .await?;
-        } else {
-            toasty::create!(EqualizerSetting {
-                id,
-                enabled,
-                bands: bands_json,
-            })
-            .exec(&mut self.db)
-            .await?;
-        }
-        Ok(())
+        self.save_setting("equalizer", &(enabled, bands)).await
     }
 
     pub async fn load_equalizer(&mut self) -> toasty::Result<Option<(bool, Vec<f32>)>> {
-        let res = EqualizerSetting::filter_by_id("1").first().exec(&mut self.db).await?;
-        if let Some(eq) = res {
-            let bands: Vec<f32> = serde_json::from_str(&eq.bands).unwrap_or_default();
-            Ok(Some((eq.enabled, bands)))
-        } else {
-            Ok(None)
-        }
+        self.load_setting("equalizer").await
     }
 
     pub async fn save_effect(
@@ -483,102 +379,29 @@ impl AppDatabase {
         enabled: bool,
         params: &[f32],
     ) -> toasty::Result<()> {
-        let params_json = serde_json::to_string(params).unwrap_or_else(|_| "[]".to_string());
-        let res = EffectSetting::filter_by_effect_id(id).first().exec(&mut self.db).await?;
-        if let Some(mut effect) = res {
-            effect
-                .update()
-                .enabled(enabled)
-                .params(params_json)
-                .exec(&mut self.db)
-                .await?;
-        } else {
-            toasty::create!(EffectSetting {
-                effect_id: id.to_string(),
-                enabled,
-                params: params_json,
-            })
-            .exec(&mut self.db)
-            .await?;
-        }
-        Ok(())
+        self.save_setting(&format!("effect_{}", id), &(enabled, params)).await
     }
 
     pub async fn load_effect(&mut self, id: &str) -> toasty::Result<Option<(bool, Vec<f32>)>> {
-        let res = EffectSetting::filter_by_effect_id(id).first().exec(&mut self.db).await?;
-        if let Some(effect) = res {
-            let params: Vec<f32> = serde_json::from_str(&effect.params).unwrap_or_default();
-            Ok(Some((effect.enabled, params)))
-        } else {
-            Ok(None)
+        self.load_setting(&format!("effect_{}", id)).await
+    }
+
+    pub async fn save_setting<T: serde::Serialize>(&mut self, key: &str, value: &T) -> toasty::Result<()> {
+        let val = serde_json::to_string(value).unwrap_or_default();
+        self.save_app_setting(key, &val).await
+    }
+
+    pub async fn load_setting<T: serde::de::DeserializeOwned>(&mut self, key: &str) -> toasty::Result<Option<T>> {
+        let val = self.load_app_setting(key).await?;
+        if let Some(v) = val {
+            if let Ok(parsed) = serde_json::from_str(&v) {
+                return Ok(Some(parsed));
+            }
         }
+        Ok(None)
     }
 
-    pub async fn save_volume(&mut self, volume: u8) -> toasty::Result<()> {
-        self.save_app_setting("volume", &volume.to_string()).await
-    }
-
-    pub async fn load_volume(&mut self) -> toasty::Result<u8> {
-        let val = self
-            .load_app_setting("volume")
-            .await?
-            .unwrap_or_else(|| "100".to_string());
-        Ok(val.parse().unwrap_or(100))
-    }
-
-    pub async fn save_audio_quality(&mut self, quality: AudioQuality) -> toasty::Result<()> {
-        let val = serde_json::to_string(&quality).unwrap_or_else(|_| "\"Normal\"".to_string());
-        self.save_app_setting("audio_quality", &val).await
-    }
-
-    pub async fn load_audio_quality(&mut self) -> toasty::Result<AudioQuality> {
-        let val = self
-            .load_app_setting("audio_quality")
-            .await?
-            .unwrap_or_default();
-        Ok(serde_json::from_str(&val).unwrap_or_default())
-    }
-
-    pub async fn save_discord_rpc(&mut self, enabled: bool) -> toasty::Result<()> {
-        self.save_app_setting("discord_rpc", &enabled.to_string())
-            .await
-    }
-
-    pub async fn load_discord_rpc(&mut self) -> toasty::Result<bool> {
-        let val = self
-            .load_app_setting("discord_rpc")
-            .await?
-            .unwrap_or_default();
-        Ok(val.parse().unwrap_or(false))
-    }
-
-    pub async fn save_custom_titlebar(&mut self, enabled: bool) -> toasty::Result<()> {
-        self.save_app_setting("custom_titlebar", &enabled.to_string())
-            .await
-    }
-
-    pub async fn load_custom_titlebar(&mut self) -> toasty::Result<bool> {
-        let val = self
-            .load_app_setting("custom_titlebar")
-            .await?
-            .unwrap_or_else(|| "true".to_string());
-        Ok(val.parse().unwrap_or(true))
-    }
-
-    pub async fn save_auto_hide_navbar(&mut self, enabled: bool) -> toasty::Result<()> {
-        self.save_app_setting("auto_hide_navbar", &enabled.to_string())
-            .await
-    }
-
-    pub async fn load_auto_hide_navbar(&mut self) -> toasty::Result<bool> {
-        let val = self
-            .load_app_setting("auto_hide_navbar")
-            .await?
-            .unwrap_or_default();
-        Ok(val.parse().unwrap_or(false))
-    }
-
-    async fn save_app_setting(&mut self, key: &str, value: &str) -> toasty::Result<()> {
+    pub async fn save_app_setting(&mut self, key: &str, value: &str) -> toasty::Result<()> {
         let res = AppSetting::filter_by_key(key).first().exec(&mut self.db).await?;
         if let Some(mut setting) = res {
             setting
