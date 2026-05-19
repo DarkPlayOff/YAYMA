@@ -39,7 +39,7 @@ impl AudioSystem {
         event_tx: Sender<Event>,
         api: Arc<ApiService>,
         db: Arc<tokio::sync::Mutex<crate::db::AppDatabase>>,
-        http_cache: Arc<crate::storage::cache::HttpCache>,
+        _http_cache: Arc<crate::storage::cache::HttpCache>,
     ) -> Result<(
         mpsc::Sender<AudioMessage>,
         AudioSignals,
@@ -89,7 +89,7 @@ impl AudioSystem {
             let smtc = Arc::new(Mutex::new(SmtcManager::new(
                 event_tx.clone(),
                 smtc_cmd_tx,
-                http_cache.clone(),
+                _http_cache.clone(),
             )?));
             (smtc, smtc_cmd_rx)
         };

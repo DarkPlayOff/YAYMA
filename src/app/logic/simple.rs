@@ -64,14 +64,14 @@ pub async fn set_custom_titlebar_enabled(ctx: &AppContext, enabled: bool) {
 
 pub async fn is_auto_hide_navbar_enabled(ctx: &AppContext) -> bool {
     let mut db = ctx.core.db.lock().await;
-    db.load_setting("auto_hide_navbar").await.unwrap_or(Some(true)).unwrap_or(true)
+    db.load_setting("auto_hide_navbar").await.unwrap_or(Some(false)).unwrap_or(false)
 }
 
 pub async fn is_auto_hide_navbar_enabled_init() -> bool {
     if let Ok(mut db) = crate::storage::db::AppDatabase::init(crate::app::get_data_dir()).await {
-        db.load_setting("auto_hide_navbar").await.unwrap_or(Some(true)).unwrap_or(true)
+        db.load_setting("auto_hide_navbar").await.unwrap_or(Some(false)).unwrap_or(false)
     } else {
-        true
+        false
     }
 }
 

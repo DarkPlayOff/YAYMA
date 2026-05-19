@@ -12,7 +12,7 @@ type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>
 pub struct TokenProvider;
 
 impl TokenProvider {
-    pub fn resolve() -> Option<(String, u64)> {
+    pub async fn resolve() -> Option<(String, u64)> {
         #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
         {
             let stored = Self::load_from_keyring().ok()?;
@@ -23,8 +23,10 @@ impl TokenProvider {
         }
         #[cfg(target_os = "android")]
         {
-            let db = crate::storage::db::AppDatabase::init(crate::app::get_data_dir()).ok()?;
-            db.load_auth_token().ok().flatten()
+            let mut db = crate::storage::db::AppDatabase::init(crate::app::get_data_dir())
+                .await
+                .ok()?;
+            db.load_auth_token().await.ok().flatten()
         }
         #[cfg(not(any(
             target_os = "windows",
@@ -35,7 +37,7 @@ impl TokenProvider {
         None
     }
 
-    pub fn store(token: &str, user_id: u64) -> Result<()> {
+    pub async fn store(token: &str, user_id: u64) -> Result<()> {
         #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
         {
             let entry = Entry::new(&SERVICE_NAME, "default")?;
@@ -44,8 +46,8 @@ impl TokenProvider {
         }
         #[cfg(target_os = "android")]
         {
-            let db = crate::storage::db::AppDatabase::init(crate::app::get_data_dir())?;
-            db.save_auth_token(token, user_id)?;
+            let mut db = crate::storage::db::AppDatabase::init(crate::app::get_data_dir()).await?;
+            db.save_auth_token(token, user_id).await?;
             Ok(())
         }
         #[cfg(not(any(
@@ -65,15 +67,15 @@ impl TokenProvider {
         Ok(Entry::new(&SERVICE_NAME, "default")?.get_password()?)
     }
 
-    pub fn delete() -> Result<()> {
+    pub async fn delete() -> Result<()> {
         #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
         {
             Ok(Entry::new(&SERVICE_NAME, "default")?.delete_credential()?)
         }
         #[cfg(target_os = "android")]
         {
-            let db = crate::storage::db::AppDatabase::init(crate::app::get_data_dir())?;
-            db.delete_auth_token()?;
+            let mut db = crate::storage::db::AppDatabase::init(crate::app::get_data_dir()).await?;
+            db.delete_auth_token().await?;
             Ok(())
         }
         #[cfg(not(any(

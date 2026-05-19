@@ -70,8 +70,8 @@ souvlaki = "0.8.3"
 windows = { version = "0.62.2", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_UI_Shell", "Win32_System_Com", "Win32_Graphics_Dwm", "Win32_Graphics_Gdi", "Win32_UI_Controls", "Win32_System_Threading", "Win32_Graphics_Imaging", "Win32_System_Memory"] }
 
 [target.'cfg(target_os = "android")'.dependencies]
-rustls-platform-verifier = { version = "0.6.2", features = ["jni"] }
-jni = "0.21"
+rustls-platform-verifier = { version = "0.7.0", features = ["jni"] }
+jni = "0.22"
 ndk-context = "0.1.1"
 
 [workspace]

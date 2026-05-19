@@ -56,7 +56,7 @@ final FlutterSignal<Map<AppSection, List<NavState>>> rootStacksSignal =
 
 /// Navbar auto-hide setting
 final FlutterSignal<bool> autoHideNavbarSignal = signal<bool>(
-  true,
+  false,
 );
 
 /// Custom titlebar setting

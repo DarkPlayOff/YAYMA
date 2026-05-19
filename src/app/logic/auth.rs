@@ -17,7 +17,7 @@ pub async fn restore_saved_state(ctx: &AppContext) -> Option<SavedStateDto> {
 }
 
 pub async fn clear_token() {
-    let _ = TokenProvider::delete();
+    let _ = TokenProvider::delete().await;
 }
 
 pub async fn login_with_token(token: String) -> Result<AppContext, AppError> {
@@ -25,7 +25,7 @@ pub async fn login_with_token(token: String) -> Result<AppContext, AppError> {
         .await
         .map_err(|_| AppError::InvalidToken)?;
 
-    let _ = TokenProvider::store(&token, user_id);
+    let _ = TokenProvider::store(&token, user_id).await;
 
     let api = ApiService::new(token, Some(client), Some(user_id))
         .await
@@ -37,7 +37,7 @@ pub async fn login_with_token(token: String) -> Result<AppContext, AppError> {
 }
 
 pub async fn try_auto_login() -> Option<AppContext> {
-    let (token, user_id) = TokenProvider::resolve()?;
+    let (token, user_id) = TokenProvider::resolve().await?;
 
     // Fast path: bypass token validation on auto-login to speed up startup.
     // We must initialize the Yandex client with the builder so it receives the token.
