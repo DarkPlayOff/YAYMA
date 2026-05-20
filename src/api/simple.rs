@@ -1,4 +1,4 @@
-use crate::api::models::{PlaybackProgressDto, PlaybackState, SimpleTrackDto};
+use crate::api::models::{PlaybackProgressDto, PlaybackState, SimpleTrackDto, UserAccountDto};
 use crate::app::AppContext;
 use crate::app::logic::simple as logic;
 use crate::frb_generated::StreamSink;
@@ -10,6 +10,7 @@ pub enum AppEvent {
     VibeTick([f32; 26]),
     LikedTracksChanged(Vec<SimpleTrackDto>),
     AuthStatusChanged(bool),
+    AccountUpdated(UserAccountDto),
     Notification(String, String), // Title, Message
     Error(String),
 }

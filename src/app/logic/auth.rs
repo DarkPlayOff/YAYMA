@@ -57,5 +57,31 @@ pub async fn try_auto_login() -> Option<AppContext> {
 }
 
 pub async fn get_account_info(ctx: &AppContext) -> Option<UserAccountDto> {
-    ctx.core.api.get_account_info().await.ok()
+    // 1. Try to get from cache for instant start
+    let cached: Option<UserAccountDto> = {
+        let mut db = ctx.core.db.lock().await;
+        db.load_setting("account_info").await.ok().flatten()
+    };
+
+    if let Some(account) = cached {
+        // Return cached immediately, but spawn a refresh in background
+        let ctx_clone = ctx.clone();
+        tokio::spawn(async move {
+            if let Ok(fresh) = ctx_clone.core.api.get_account_info().await {
+                let mut db = ctx_clone.core.db.lock().await;
+                let _ = db.save_setting("account_info", &fresh).await;
+                ctx_clone.send_event(crate::api::simple::AppEvent::AccountUpdated(fresh));
+            }
+        });
+        return Some(account);
+    }
+
+    // 2. If no cache, wait for API
+    if let Ok(account) = ctx.core.api.get_account_info().await {
+        let mut db = ctx.core.db.lock().await;
+        let _ = db.save_setting("account_info", &account).await;
+        return Some(account);
+    }
+
+    None
 }

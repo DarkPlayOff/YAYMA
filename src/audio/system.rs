@@ -83,6 +83,21 @@ impl AudioSystem {
 
         let state = Arc::new(RwLock::new(SystemState::default()));
 
+        // Load liked tracks from DB for instant start
+        {
+            let db_clone = db.clone();
+            let state_clone = state.clone();
+            let signals_clone = signals.clone();
+            tokio::spawn(async move {
+                let mut db = db_clone.lock().await;
+                if let Ok(ids) = db.load_liked_tracks().await {
+                    let mut state = state_clone.write().await;
+                    state.liked.set_liked_ids(ids);
+                    signals_clone.library_changed.send_replace(());
+                }
+            });
+        }
+
         #[cfg(not(any(target_os = "android")))]
         let (smtc, smtc_cmd_rx) = {
             let (smtc_cmd_tx, smtc_cmd_rx) = mpsc::unbounded_channel();

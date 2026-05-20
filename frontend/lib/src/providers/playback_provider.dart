@@ -48,6 +48,8 @@ Future<void> initPlayback() async {
         vibeTickSignal.value = tick;
       case rust.AppEvent_LikedTracksChanged(field0: final tracks):
         likedTracksSignal.value = tracks;
+      case rust.AppEvent_AccountUpdated(field0: final account):
+        accountSignal.value = account;
       case rust.AppEvent_Error(field0: final message):
         showAppError(message);
       case _:
