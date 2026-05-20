@@ -112,7 +112,9 @@ class _RustCachedImageState extends State<RustCachedImage> {
     Widget content;
 
     if (widget.imageUrl == null || widget.imageUrl!.isEmpty) {
-      content = widget.placeholder ?? _buildPlaceholder();
+      content =
+          widget.placeholder ??
+          _ImagePlaceholder(width: widget.width, height: widget.height);
     } else if (_resolvedPath != null) {
       content = Stack(
         fit: StackFit.passthrough,
@@ -124,7 +126,11 @@ class _RustCachedImageState extends State<RustCachedImage> {
               child: widget.placeholder,
             )
           else if (!_imageReady)
-            _buildShimmer(),
+            _ImageShimmer(
+              width: widget.width,
+              height: widget.height,
+              borderRadius: widget.borderRadius,
+            ),
           Image.file(
             File(_resolvedPath!),
             width: widget.width,
@@ -153,20 +159,33 @@ class _RustCachedImageState extends State<RustCachedImage> {
                 duration: const Duration(milliseconds: 300),
                 curve: Curves.easeInOut,
                 builder: (context, opacity, innerChild) {
-                  return Opacity(opacity: opacity, child: innerChild);
+                  return AnimatedOpacity(
+                    opacity: opacity,
+                    duration: const Duration(milliseconds: 300),
+                    child: innerChild,
+                  );
                 },
                 child: child,
               );
             },
             errorBuilder: (context, error, stackTrace) =>
-                widget.errorWidget ?? _buildError(),
+                widget.errorWidget ??
+                _ImageError(width: widget.width, height: widget.height),
           ),
         ],
       );
     } else if (_isLoading) {
-      content = widget.placeholder ?? _buildShimmer();
+      content =
+          widget.placeholder ??
+          _ImageShimmer(
+            width: widget.width,
+            height: widget.height,
+            borderRadius: widget.borderRadius,
+          );
     } else {
-      content = widget.errorWidget ?? _buildError();
+      content =
+          widget.errorWidget ??
+          _ImageError(width: widget.width, height: widget.height);
     }
 
     if (widget.borderRadius > 0) {
@@ -178,38 +197,63 @@ class _RustCachedImageState extends State<RustCachedImage> {
 
     return content;
   }
+}
 
-  Widget _buildPlaceholder() {
+class _ImagePlaceholder extends StatelessWidget {
+  final double? width;
+  final double? height;
+
+  const _ImagePlaceholder({this.width, this.height});
+
+  @override
+  Widget build(BuildContext context) {
     return Container(
-      width: widget.width,
-      height: widget.height,
+      width: width,
+      height: height,
       color: Colors.grey[900],
       child: const Icon(Icons.image, color: Colors.grey),
     );
   }
+}
 
-  Widget _buildShimmer() {
+class _ImageShimmer extends StatelessWidget {
+  final double? width;
+  final double? height;
+  final double borderRadius;
+
+  const _ImageShimmer({this.width, this.height, this.borderRadius = 0});
+
+  @override
+  Widget build(BuildContext context) {
     return Container(
-      width: widget.width,
-      height: widget.height,
+      width: width,
+      height: height,
       decoration: BoxDecoration(
         color: Colors.grey[850],
-        borderRadius: widget.borderRadius > 0
-            ? BorderRadius.circular(widget.borderRadius)
+        borderRadius: borderRadius > 0
+            ? BorderRadius.circular(borderRadius)
             : null,
       ),
       child: _ShimmerLoader(
-        width: widget.width,
-        height: widget.height,
-        borderRadius: widget.borderRadius,
+        width: width,
+        height: height,
+        borderRadius: borderRadius,
       ),
     );
   }
+}
 
-  Widget _buildError() {
+class _ImageError extends StatelessWidget {
+  final double? width;
+  final double? height;
+
+  const _ImageError({this.width, this.height});
+
+  @override
+  Widget build(BuildContext context) {
     return Container(
-      width: widget.width,
-      height: widget.height,
+      width: width,
+      height: height,
       color: Colors.grey[900],
       child: const Icon(Icons.broken_image, color: Colors.grey),
     );

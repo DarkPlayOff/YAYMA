@@ -7,11 +7,11 @@ import 'package:yayma/src/rust/api/models.dart';
 import 'package:yayma/src/ui/widgets/audio_settings.dart';
 
 class CommonQualitySelector extends StatelessWidget {
-  final Color accentColor;
+  final Color? accentColor;
   final bool isSmall;
 
   const CommonQualitySelector({
-    required this.accentColor,
+    this.accentColor,
     super.key,
     this.isSmall = false,
   });
@@ -21,6 +21,7 @@ class CommonQualitySelector extends StatelessWidget {
     return Watch((context) {
       final quality = audioQualitySignal.value;
       final meta = trackMetadataSignal.watch(context);
+      final accentColor = this.accentColor ?? accentColorSignal.watch(context);
 
       var label = '';
       switch (quality) {
@@ -117,15 +118,30 @@ class CommonQualitySelector extends StatelessWidget {
               ),
             ),
           ),
-          _buildItem(context, AudioQuality.low, 'LQ', 'Низкое', quality),
+          _buildItem(
+            context,
+            AudioQuality.low,
+            'LQ',
+            'Низкое',
+            quality,
+            accentColor,
+          ),
           _buildItem(
             context,
             AudioQuality.normal,
             'NQ',
             'Стандартное',
             quality,
+            accentColor,
           ),
-          _buildItem(context, AudioQuality.high, 'HQ', 'Высокое', quality),
+          _buildItem(
+            context,
+            AudioQuality.high,
+            'HQ',
+            'Высокое',
+            quality,
+            accentColor,
+          ),
           const PopupMenuDivider(),
           PopupMenuItem(
             value: 'eq',
@@ -162,6 +178,7 @@ class CommonQualitySelector extends StatelessWidget {
     String label,
     String desc,
     AudioQuality current,
+    Color accentColor,
   ) {
     final isSelected = value == current;
     return PopupMenuItem(

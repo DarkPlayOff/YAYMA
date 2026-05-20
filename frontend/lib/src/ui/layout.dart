@@ -37,8 +37,7 @@ class _AppLayoutState extends State<AppLayout> {
 
       final isDesktop =
           Platform.isWindows || Platform.isLinux || Platform.isMacOS;
-      final isCustomTitlebar =
-          isDesktop && customTitlebarSignal.watch(context);
+      final isCustomTitlebar = isDesktop && customTitlebarSignal.watch(context);
 
       final screenWidth = MediaQuery.sizeOf(context).width;
       final isNarrow = screenWidth < 600;
@@ -81,15 +80,15 @@ class _AppLayoutState extends State<AppLayout> {
                       // 3. Content (set of independent stacks for each tab)
                       Positioned.fill(
                         child: Padding(
-                          padding:
-                              EdgeInsets.only(top: isCustomTitlebar ? 32.0 : 0),
+                          padding: EdgeInsets.only(
+                            top: isCustomTitlebar ? 32.0 : 0,
+                          ),
                           child: Stack(
                             children: [
                               Positioned.fill(
                                 child: Stack(
                                   children: rootSections
-                                      .map((root) =>
-                                          _buildRootBucket(context, root))
+                                      .map((root) => _RootBucket(root: root))
                                       .toList(),
                                 ),
                               ),
@@ -97,7 +96,7 @@ class _AppLayoutState extends State<AppLayout> {
                                 left: 0,
                                 right: 0,
                                 bottom: isNarrow ? 80 : 0,
-                                child: _buildAnimatedPlayerBar(isHome),
+                                child: _AnimatedPlayerBar(isHome: isHome),
                               ),
                             ],
                           ),
@@ -139,8 +138,15 @@ class _AppLayoutState extends State<AppLayout> {
       );
     });
   }
+}
 
-  Widget _buildRootBucket(BuildContext context, AppSection root) {
+class _RootBucket extends StatelessWidget {
+  final AppSection root;
+
+  const _RootBucket({required this.root});
+
+  @override
+  Widget build(BuildContext context) {
     return Watch((context) {
       final activeRoot = currentRootSignal.watch(context);
       final stack = rootStacksSignal.watch(context)[root] ?? [NavState(root)];
@@ -158,35 +164,6 @@ class _AppLayoutState extends State<AppLayout> {
             children: _buildWindowStack(stack),
           ),
         ),
-      );
-    });
-  }
-
-  Widget _buildAnimatedPlayerBar(bool isHome) {
-    return Watch((context) {
-      final showLyrics = showLyricsSignal.watch(context);
-      final shouldShowBar = !isHome || showLyrics;
-
-      return AnimatedSwitcher(
-        duration: const Duration(milliseconds: 600),
-        reverseDuration: const Duration(milliseconds: 500),
-        switchInCurve: Curves.easeOutCubic,
-        switchOutCurve: Curves.easeInCubic,
-        transitionBuilder: (child, animation) {
-          final offsetAnimation = Tween<Offset>(
-            begin: const Offset(0, 1),
-            end: Offset.zero,
-          ).animate(animation);
-          return SlideTransition(
-            position: offsetAnimation,
-            child: child,
-          );
-        },
-        child: shouldShowBar
-            ? const PlayerBar(
-                key: ValueKey('player_bar_visible'),
-              )
-            : const SizedBox.shrink(key: ValueKey('player_bar_hidden')),
       );
     });
   }
@@ -218,7 +195,7 @@ class _AppLayoutState extends State<AppLayout> {
               curve: Curves.easeOutCubic,
               child: IgnorePointer(
                 ignoring: !isLast,
-                child: _buildWindowContent(state, index),
+                child: _WindowContent(state: state, index: index),
               ),
             ),
           ),
@@ -226,8 +203,52 @@ class _AppLayoutState extends State<AppLayout> {
       );
     }).toList();
   }
+}
 
-  Widget _buildWindowContent(NavState state, int index) {
+class _AnimatedPlayerBar extends StatelessWidget {
+  final bool isHome;
+
+  const _AnimatedPlayerBar({required this.isHome});
+
+  @override
+  Widget build(BuildContext context) {
+    return Watch((context) {
+      final showLyrics = showLyricsSignal.watch(context);
+      final shouldShowBar = !isHome || showLyrics;
+
+      return AnimatedSwitcher(
+        duration: const Duration(milliseconds: 600),
+        reverseDuration: const Duration(milliseconds: 500),
+        switchInCurve: Curves.easeOutCubic,
+        switchOutCurve: Curves.easeInCubic,
+        transitionBuilder: (child, animation) {
+          final offsetAnimation = Tween<Offset>(
+            begin: const Offset(0, 1),
+            end: Offset.zero,
+          ).animate(animation);
+          return SlideTransition(
+            position: offsetAnimation,
+            child: child,
+          );
+        },
+        child: shouldShowBar
+            ? const PlayerBar(
+                key: ValueKey('player_bar_visible'),
+              )
+            : const SizedBox.shrink(key: ValueKey('player_bar_hidden')),
+      );
+    });
+  }
+}
+
+class _WindowContent extends StatelessWidget {
+  final NavState state;
+  final int index;
+
+  const _WindowContent({required this.state, required this.index});
+
+  @override
+  Widget build(BuildContext context) {
     return Watch((context) {
       final isHome = state.section == AppSection.home;
       final showLyrics = showLyricsSignal.watch(context);

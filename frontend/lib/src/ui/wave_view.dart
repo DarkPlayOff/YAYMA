@@ -64,8 +64,9 @@ class WaveSettingsPanel extends StatelessWidget {
                         color: Colors.red,
                         seed: 'personal:collection',
                         onSelected: onSelected,
-                        isSelected:
-                            currentSeeds.contains('personal:collection'),
+                        isSelected: currentSeeds.contains(
+                          'personal:collection',
+                        ),
                       ),
                       const SizedBox(width: 12),
                       _CharacterCard(
@@ -74,8 +75,9 @@ class WaveSettingsPanel extends StatelessWidget {
                         color: Colors.amber,
                         seed: 'personal:never-heard',
                         onSelected: onSelected,
-                        isSelected:
-                            currentSeeds.contains('personal:never-heard'),
+                        isSelected: currentSeeds.contains(
+                          'personal:never-heard',
+                        ),
                       ),
                       const SizedBox(width: 12),
                       _CharacterCard(
@@ -102,65 +104,66 @@ class WaveSettingsPanel extends StatelessWidget {
                     _MoodItem('Спокойное', [
                       Colors.cyan,
                       Colors.teal,
-                        ], 'mood:calm'),
-                        _MoodItem('Грустное', [
-                          Colors.blue,
-                          Colors.indigo,
-                        ], 'mood:sad'),
-                      ], currentSeeds),
-                      const SizedBox(height: 24),
-                      _buildSectionTitle('По языку'),
-                      _buildChips(context, [
-                        _VibeItem('Русский', 'local-language:russian'),
-                        _VibeItem('Иностранный', 'local-language:english'),
-                        _VibeItem('Без слов', 'local-language:instrumental'),
-                      ], currentSeeds),
-                      const SizedBox(height: 24),
-                      if (currentSeeds.isNotEmpty &&
-                          !currentSeeds.contains('user:onyourwave') &&
-                          !_isMainSeed(currentSeeds.first))
-                        _buildActiveExtraStation(currentSeeds.first),
-                      Center(
-                        child: TextButton.icon(
-                          onPressed: () async {
-                            await showModalBottomSheet<void>(
-                              context: context,
-                              backgroundColor: Colors.transparent,
-                              isScrollControlled: true,
-                              builder: (context) => const _AllStationsSheet(),
-                            );
-                          },
-                          icon: const Icon(Icons.explore, color: Colors.white54),
-                          label: const Text(
-                            'Каталог всех станций',
-                            style: TextStyle(color: Colors.white54),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 60), // Space for FAB
-                    ],
-                  ),
-                ),
-                if (isNarrow)
-                  Positioned(
-                    right: 24,
-                    bottom: 32,
-                    child: FloatingActionButton(
-                      onPressed: () {
-                        unawaited(HomeController.startMyWave());
-                        onSelected();
+                    ], 'mood:calm'),
+                    _MoodItem('Грустное', [
+                      Colors.blue,
+                      Colors.indigo,
+                    ], 'mood:sad'),
+                  ], currentSeeds),
+                  const SizedBox(height: 24),
+                  _buildSectionTitle('По языку'),
+                  _buildChips(context, [
+                    _VibeItem('Русский', 'local-language:russian'),
+                    _VibeItem('Иностранный', 'local-language:english'),
+                    _VibeItem('Без слов', 'local-language:instrumental'),
+                  ], currentSeeds),
+                  const SizedBox(height: 24),
+                  if (currentSeeds.isNotEmpty &&
+                      !currentSeeds.contains('user:onyourwave') &&
+                      !_isMainSeed(currentSeeds.first))
+                    _buildActiveExtraStation(currentSeeds.first),
+                  Center(
+                    child: TextButton.icon(
+                      onPressed: () async {
+                        await showModalBottomSheet<void>(
+                          context: context,
+                          backgroundColor: Colors.transparent,
+                          isScrollControlled: true,
+                          builder: (context) => const _AllStationsSheet(),
+                        );
                       },
-                      backgroundColor: Theme.of(context).colorScheme.primary,
-                      foregroundColor: Colors.black,
-                      elevation: 8,
-                      child: const Icon(Icons.play_arrow_rounded, size: 28),
+                      icon: const Icon(Icons.explore, color: Colors.white54),
+                      label: const Text(
+                        'Каталог всех станций',
+                        style: TextStyle(color: Colors.white54),
+                      ),
                     ),
                   ),
-              ],
+                  const SizedBox(height: 60), // Space for FAB
+                ],
+              ),
             ),
+            if (isNarrow)
+              Positioned(
+                right: 24,
+                bottom: 32,
+                child: FloatingActionButton(
+                  onPressed: () {
+                    unawaited(HomeController.startMyWave());
+                    onSelected();
+                  },
+                  backgroundColor: Theme.of(context).colorScheme.primary,
+                  foregroundColor: Colors.black,
+                  elevation: 8,
+                  child: const Icon(Icons.play_arrow_rounded, size: 28),
+                ),
+              ),
+          ],
+        ),
       );
     });
   }
+
   bool _isMainSeed(String seed) {
     const mainSeeds = {
       'activity:wake-up',
@@ -228,7 +231,11 @@ class WaveSettingsPanel extends StatelessWidget {
     );
   }
 
-  Widget _buildChips(BuildContext context, List<_VibeItem> items, List<String> currentSeeds) {
+  Widget _buildChips(
+    BuildContext context,
+    List<_VibeItem> items,
+    List<String> currentSeeds,
+  ) {
     if (!context.isNarrow) {
       return Wrap(
         spacing: 8,
@@ -517,7 +524,10 @@ class _AllStationsSheetState extends State<_AllStationsSheet> {
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 8,
+                ),
                 child: TextField(
                   controller: _controller,
                   onChanged: (v) => _searchQuery.value = v,
@@ -552,8 +562,12 @@ class _AllStationsSheetState extends State<_AllStationsSheet> {
                           slivers: [
                             for (final cat in cats) ...[
                               SliverPadding(
-                                padding:
-                                    const EdgeInsets.fromLTRB(24, 24, 24, 12),
+                                padding: const EdgeInsets.fromLTRB(
+                                  24,
+                                  24,
+                                  24,
+                                  12,
+                                ),
                                 sliver: SliverToBoxAdapter(
                                   child: Text(
                                     cat.title.toUpperCase(),
@@ -567,15 +581,17 @@ class _AllStationsSheetState extends State<_AllStationsSheet> {
                                 ),
                               ),
                               SliverPadding(
-                                padding:
-                                    const EdgeInsets.symmetric(horizontal: 24),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 24,
+                                ),
                                 sliver: SliverToBoxAdapter(
                                   child: Wrap(
                                     spacing: 8,
                                     runSpacing: 8,
                                     children: cat.items.map((item) {
-                                      final isSelected =
-                                          currentSeeds.contains(item.seed);
+                                      final isSelected = currentSeeds.contains(
+                                        item.seed,
+                                      );
                                       return FilterChip(
                                         selected: isSelected,
                                         label: Text(item.label),
@@ -587,10 +603,11 @@ class _AllStationsSheetState extends State<_AllStationsSheet> {
                                           );
                                           Navigator.pop(context);
                                         },
-                                        backgroundColor:
-                                            Colors.white.withValues(alpha: 0.05),
-                                        selectedColor:
-                                            Colors.white.withValues(alpha: 0.2),
+                                        backgroundColor: Colors.white
+                                            .withValues(alpha: 0.05),
+                                        selectedColor: Colors.white.withValues(
+                                          alpha: 0.2,
+                                        ),
                                         labelStyle: TextStyle(
                                           color: isSelected
                                               ? Colors.white
@@ -601,8 +618,9 @@ class _AllStationsSheetState extends State<_AllStationsSheet> {
                                           fontSize: 12,
                                         ),
                                         shape: RoundedRectangleBorder(
-                                          borderRadius:
-                                              BorderRadius.circular(20),
+                                          borderRadius: BorderRadius.circular(
+                                            20,
+                                          ),
                                         ),
                                         side: isSelected
                                             ? const BorderSide(

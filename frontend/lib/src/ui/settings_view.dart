@@ -149,12 +149,11 @@ class _SettingsViewState extends State<SettingsView> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildSectionTitle(context, 'Загрузки'),
+                  const _SectionTitle(title: 'Загрузки'),
                   const SizedBox(height: 24),
                   Watch((context) {
                     final path = _pathSignal.value;
-                    return _buildSettingItem(
-                      context,
+                    return _SettingItem(
                       title: 'Путь для сохранения треков',
                       subtitle: path.value ?? 'По умолчанию (Загрузки)',
                       icon: Icons.folder_open_rounded,
@@ -162,13 +161,12 @@ class _SettingsViewState extends State<SettingsView> {
                     );
                   }),
                   const SizedBox(height: 48),
-                  _buildSectionTitle(context, 'Внешний вид'),
+                  const _SectionTitle(title: 'Внешний вид'),
                   const SizedBox(height: 24),
                   if (context.isDesktop) ...[
                     Watch((context) {
                       final enabled = _customTitlebarSignal.value;
-                      return _buildSettingItem(
-                        context,
+                      return _SettingItem(
                         title: 'Собственная рамка окна',
                         subtitle: 'Отключает стандартную рамку ОС',
                         icon: Icons.web_asset_rounded,
@@ -184,8 +182,7 @@ class _SettingsViewState extends State<SettingsView> {
                     const SizedBox(height: 16),
                     Watch((context) {
                       final enabled = _autoHideNavbarSignal.value;
-                      return _buildSettingItem(
-                        context,
+                      return _SettingItem(
                         title: 'Скрывать боковую панель',
                         subtitle:
                             'Автоматически скрывать навигацию на главном экране',
@@ -202,12 +199,11 @@ class _SettingsViewState extends State<SettingsView> {
                     const SizedBox(height: 48),
                   ],
                   if (context.isDesktop) ...[
-                    _buildSectionTitle(context, 'Интеграции'),
+                    const _SectionTitle(title: 'Интеграции'),
                     const SizedBox(height: 24),
                     Watch((context) {
                       final enabled = _discordRpcSignal.value;
-                      return _buildSettingItem(
-                        context,
+                      return _SettingItem(
                         title: 'Discord Rich Presence',
                         subtitle: 'Показывать текущий трек в статусе Discord',
                         icon: Icons.discord_rounded,
@@ -222,12 +218,11 @@ class _SettingsViewState extends State<SettingsView> {
                     }),
                     const SizedBox(height: 48),
                   ],
-                  _buildSectionTitle(context, 'Кэш'),
+                  const _SectionTitle(title: 'Кэш'),
                   const SizedBox(height: 24),
                   Watch((context) {
                     final size = _cacheSizeSignal.value;
-                    return _buildSettingItem(
-                      context,
+                    return _SettingItem(
                       title: 'Очистить кэш изображений и данных',
                       subtitle: size.map(
                         data: (d) => 'Занято: ${_formatBytes(d)}',
@@ -239,7 +234,7 @@ class _SettingsViewState extends State<SettingsView> {
                     );
                   }),
                   const SizedBox(height: 48),
-                  _buildSectionTitle(context, 'О приложении'),
+                  const _SectionTitle(title: 'О приложении'),
                   const SizedBox(height: 24),
                   Container(
                     padding: const EdgeInsets.all(24),
@@ -282,8 +277,15 @@ class _SettingsViewState extends State<SettingsView> {
       ),
     );
   }
+}
 
-  Widget _buildSectionTitle(BuildContext context, String title) {
+class _SectionTitle extends StatelessWidget {
+  final String title;
+
+  const _SectionTitle({required this.title});
+
+  @override
+  Widget build(BuildContext context) {
     return Text(
       title,
       style: TextStyle(
@@ -293,15 +295,25 @@ class _SettingsViewState extends State<SettingsView> {
       ),
     );
   }
+}
 
-  Widget _buildSettingItem(
-    BuildContext context, {
-    required String title,
-    required String subtitle,
-    required IconData icon,
-    required VoidCallback onTap,
-    Widget? trailing,
-  }) {
+class _SettingItem extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final VoidCallback onTap;
+  final Widget? trailing;
+
+  const _SettingItem({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.onTap,
+    this.trailing,
+  });
+
+  @override
+  Widget build(BuildContext context) {
     final primaryColor = Theme.of(context).colorScheme.primary;
     return InkWell(
       onTap: onTap,

@@ -1,7 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 
-
 enum AppSection {
   home,
   search,

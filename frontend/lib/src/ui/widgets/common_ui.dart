@@ -319,11 +319,11 @@ class CommonDetailSliverLayout extends StatelessWidget {
 }
 
 class CommonProgressSlider extends StatefulWidget {
-  final Color accentColor;
+  final Color? accentColor;
   final double maxWidth;
   final bool compact;
   const CommonProgressSlider({
-    required this.accentColor,
+    this.accentColor,
     super.key,
     this.maxWidth = double.infinity,
     this.compact = false,
@@ -354,6 +354,8 @@ class _CommonProgressSliderState extends State<CommonProgressSlider> {
         final trackHeight = widget.compact ? 4.0 : 6.0;
         final thumbRadius = widget.compact ? 4.0 : 6.0;
         final fontSize = widget.compact ? 11.0 : 12.0;
+        final accentColor =
+            widget.accentColor ?? accentColorSignal.watch(context);
 
         return widget.compact
             ? Row(
@@ -374,9 +376,9 @@ class _CommonProgressSliderState extends State<CommonProgressSlider> {
                     child: SliderTheme(
                       data: SliderTheme.of(context).copyWith(
                         trackHeight: trackHeight,
-                        activeTrackColor: widget.accentColor,
+                        activeTrackColor: accentColor,
                         inactiveTrackColor: Colors.white10,
-                        thumbColor: widget.accentColor,
+                        thumbColor: accentColor,
                         thumbShape: RoundSliderThumbShape(
                           enabledThumbRadius: thumbRadius,
                         ),
@@ -442,9 +444,9 @@ class _CommonProgressSliderState extends State<CommonProgressSlider> {
                     child: SliderTheme(
                       data: SliderTheme.of(context).copyWith(
                         trackHeight: trackHeight,
-                        activeTrackColor: widget.accentColor,
+                        activeTrackColor: accentColor,
                         inactiveTrackColor: Colors.white10,
-                        thumbColor: widget.accentColor,
+                        thumbColor: accentColor,
                         thumbShape: RoundSliderThumbShape(
                           enabledThumbRadius: thumbRadius,
                         ),

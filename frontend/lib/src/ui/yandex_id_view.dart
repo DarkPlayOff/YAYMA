@@ -19,9 +19,11 @@ class _YandexIdViewState extends State<YandexIdView> {
     _controller = WebViewController();
     unawaited(_controller.setJavaScriptMode(JavaScriptMode.unrestricted));
     unawaited(_controller.setBackgroundColor(Colors.transparent));
-    unawaited(_controller.setUserAgent(
-      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-    ));
+    unawaited(
+      _controller.setUserAgent(
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+      ),
+    );
     unawaited(_controller.loadRequest(Uri.parse('https://id.yandex.ru')));
 
     // Delay WebView initialization to wait for the transition animation to finish.

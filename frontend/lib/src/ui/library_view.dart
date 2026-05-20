@@ -217,9 +217,6 @@ class _LikedTracksTab extends StatelessWidget {
     return Watch((context) {
       final tracks = likedTracksSignal.value;
       final query = librarySearchQuerySignal.value;
-      final barColor = playerBarColorSignal.watch(context);
-      final isHome = currentRootSignal.watch(context) == AppSection.home;
-      final alpha = isHome ? 0.5 : 0.7;
 
       return Stack(
         children: [
@@ -300,46 +297,53 @@ class _LikedTracksTab extends StatelessWidget {
                   borderRadius: BorderRadius.circular(16),
                   child: BackdropFilter(
                     filter: ImageFilter.blur(sigmaX: 3, sigmaY: 3),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: barColor.withValues(alpha: alpha),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.1),
-                        ),
-                      ),
-                      child: TextField(
-                        controller: searchController,
-                        onChanged: setLibrarySearchQuery,
-                        style: const TextStyle(color: Colors.white),
-                        decoration: InputDecoration(
-                          hintText: 'Поиск в любимых треках...',
-                          hintStyle: const TextStyle(color: Colors.white24),
-                          prefixIcon: const Icon(
-                            Icons.search,
-                            color: Colors.white38,
-                          ),
-                          suffixIcon: searchController.text.isNotEmpty
-                              ? IconButton(
-                                  icon: const Icon(
-                                    Icons.clear,
-                                    color: Colors.white38,
-                                  ),
-                                  onPressed: () {
-                                    searchController.clear();
-                                    setLibrarySearchQuery('');
-                                  },
-                                )
-                              : null,
-                          filled: false,
-                          border: InputBorder.none,
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 20,
-                            vertical: 14,
+                    child: Watch((context) {
+                      final barColor = playerBarColorSignal.watch(context);
+                      final isHome =
+                          currentRootSignal.watch(context) == AppSection.home;
+                      final alpha = isHome ? 0.5 : 0.7;
+
+                      return Container(
+                        decoration: BoxDecoration(
+                          color: barColor.withValues(alpha: alpha),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.1),
                           ),
                         ),
-                      ),
-                    ),
+                        child: TextField(
+                          controller: searchController,
+                          onChanged: setLibrarySearchQuery,
+                          style: const TextStyle(color: Colors.white),
+                          decoration: InputDecoration(
+                            hintText: 'Поиск в любимых треках...',
+                            hintStyle: const TextStyle(color: Colors.white24),
+                            prefixIcon: const Icon(
+                              Icons.search,
+                              color: Colors.white38,
+                            ),
+                            suffixIcon: searchController.text.isNotEmpty
+                                ? IconButton(
+                                    icon: const Icon(
+                                      Icons.clear,
+                                      color: Colors.white38,
+                                    ),
+                                    onPressed: () {
+                                      searchController.clear();
+                                      setLibrarySearchQuery('');
+                                    },
+                                  )
+                                : null,
+                            filled: false,
+                            border: InputBorder.none,
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 20,
+                              vertical: 14,
+                            ),
+                          ),
+                        ),
+                      );
+                    }),
                   ),
                 ),
               ),

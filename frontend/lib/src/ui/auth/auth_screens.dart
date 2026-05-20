@@ -231,32 +231,40 @@ class _YandexLoginDialogState extends State<YandexLoginDialog> {
     super.initState();
     _controller = WebViewController();
     unawaited(_controller.setJavaScriptMode(JavaScriptMode.unrestricted));
-    unawaited(_controller.setUserAgent(
-      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-    ));
-    unawaited(_controller.setNavigationDelegate(
-      NavigationDelegate(
-        onPageStarted: (url) async {
-          unawaited(_parseToken(url));
-        },
-        onUrlChange: (change) async {
-          if (change.url != null) {
-            unawaited(_parseToken(change.url!));
-          }
-        },
-        onNavigationRequest: (request) async {
-          return _parseToken(request.url);
-        },
-        onPageFinished: (url) async {
-          unawaited(_parseToken(url));
-          final currentUrl = await _controller.currentUrl();
-          if (currentUrl != null) {
-            unawaited(_parseToken(currentUrl));
-          }
-        },
+    unawaited(
+      _controller.setUserAgent(
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
       ),
-    ));
-    unawaited(_controller.loadRequest(Uri.parse('https://passport.yandex.ru/pwl-yandex/auth/')));
+    );
+    unawaited(
+      _controller.setNavigationDelegate(
+        NavigationDelegate(
+          onPageStarted: (url) async {
+            unawaited(_parseToken(url));
+          },
+          onUrlChange: (change) async {
+            if (change.url != null) {
+              unawaited(_parseToken(change.url!));
+            }
+          },
+          onNavigationRequest: (request) async {
+            return _parseToken(request.url);
+          },
+          onPageFinished: (url) async {
+            unawaited(_parseToken(url));
+            final currentUrl = await _controller.currentUrl();
+            if (currentUrl != null) {
+              unawaited(_parseToken(currentUrl));
+            }
+          },
+        ),
+      ),
+    );
+    unawaited(
+      _controller.loadRequest(
+        Uri.parse('https://passport.yandex.ru/pwl-yandex/auth/'),
+      ),
+    );
   }
 
   Future<NavigationDecision> _parseToken(String urlString) async {

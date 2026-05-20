@@ -14,9 +14,9 @@ extension ResponsiveContext on BuildContext {
   double get topPadding => isNarrow ? 40.0 : 60.0;
 
   EdgeInsets get viewPadding => EdgeInsets.fromLTRB(
-        horizontalPadding,
-        topPadding,
-        horizontalPadding,
-        20,
-      );
+    horizontalPadding,
+    topPadding,
+    horizontalPadding,
+    20,
+  );
 }

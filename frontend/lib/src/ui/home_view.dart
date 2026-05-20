@@ -24,7 +24,6 @@ class HomeView extends StatelessWidget {
         final height = constraints.maxHeight;
         final width = constraints.maxWidth;
         final showLyrics = showLyricsSignal.watch(context);
-        final accentColor = accentColorSignal.watch(context);
 
         var verticalSpacing = 40.0;
         var trackHeaderSpacing = 32.0;
@@ -80,7 +79,6 @@ class HomeView extends StatelessWidget {
                                   SizedBox(
                                     width: width - 48,
                                     child: CommonProgressSlider(
-                                      accentColor: accentColor,
                                       maxWidth: width - 48,
                                     ),
                                   ),
@@ -89,7 +87,6 @@ class HomeView extends StatelessWidget {
                                   ), // Reduced from controlsSpacing
                                   _HomeMainControls(
                                     showLyrics: showLyrics,
-                                    accentColor: accentColor,
                                     small: height < 750,
                                     isNarrow: true,
                                   ),
@@ -105,17 +102,15 @@ class HomeView extends StatelessWidget {
                                     SizedBox(height: verticalSpacing),
                                     _HomeTrackHeader(small: height < 750),
                                     SizedBox(height: trackHeaderSpacing),
-                                    SizedBox(
+                                    const SizedBox(
                                       width: 500,
                                       child: CommonProgressSlider(
-                                        accentColor: accentColor,
                                         maxWidth: 500,
                                       ),
                                     ),
                                     SizedBox(height: controlsSpacing),
                                     _HomeMainControls(
                                       showLyrics: showLyrics,
-                                      accentColor: accentColor,
                                       small: height < 750,
                                     ),
                                   ],
@@ -353,13 +348,11 @@ class _HomeTrackHeaderState extends State<_HomeTrackHeader> {
 
 class _HomeMainControls extends StatelessWidget {
   final bool showLyrics;
-  final Color accentColor;
   final bool small;
   final bool isNarrow;
 
   const _HomeMainControls({
     required this.showLyrics,
-    required this.accentColor,
     required this.small,
     this.isNarrow = false,
   });
@@ -373,6 +366,7 @@ class _HomeMainControls extends StatelessWidget {
       final isDisliked = isDislikedSignal();
       final isShuffled = isShuffledSignal();
       final repeatMode = repeatModeSignal();
+      final accentColor = accentColorSignal.watch(context);
 
       var repeatIcon = Icons.repeat;
       var repeatColor = Colors.white38;
@@ -481,8 +475,7 @@ class _HomeMainControls extends StatelessWidget {
                       onPressed: () =>
                           unawaited(PlaybackController.toggleRepeat()),
                     ),
-                    CommonQualitySelector(
-                      accentColor: accentColor,
+                    const CommonQualitySelector(
                       isSmall: true,
                     ),
                   ],
@@ -579,7 +572,7 @@ class _HomeMainControls extends StatelessWidget {
                 onPressed: () => unawaited(PlaybackController.toggleRepeat()),
               ),
               SizedBox(width: small ? 8 : 12),
-              CommonQualitySelector(accentColor: accentColor, isSmall: true),
+              const CommonQualitySelector(isSmall: true),
             ],
           ),
           if (!Platform.isAndroid) ...[

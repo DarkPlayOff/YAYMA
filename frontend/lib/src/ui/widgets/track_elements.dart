@@ -145,44 +145,33 @@ class _SingleArtistName extends StatefulWidget {
 }
 
 class _SingleArtistNameState extends State<_SingleArtistName> {
-  final ValueNotifier<bool> _isHovered = ValueNotifier(false);
-
-  @override
-  void dispose() {
-    _isHovered.dispose();
-    super.dispose();
-  }
+  bool _isHovered = false;
 
   @override
   Widget build(BuildContext context) {
     return MouseRegion(
-      onEnter: (_) => _isHovered.value = true,
-      onExit: (_) => _isHovered.value = false,
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
       cursor: widget.onTap != null
           ? SystemMouseCursors.click
           : SystemMouseCursors.basic,
-      child: ValueListenableBuilder<bool>(
-        valueListenable: _isHovered,
-        builder: (context, hovered, _) {
-          return GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: widget.onTap,
-            child: Text(
-              widget.artist.name,
-              style: TextStyle(
-                color: hovered && widget.onTap != null
-                    ? widget.hoverColor
-                    : widget.color,
-                fontSize: widget.fontSize,
-                decoration: hovered && widget.onTap != null
-                    ? TextDecoration.underline
-                    : null,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          );
-        },
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: widget.onTap,
+        child: Text(
+          widget.artist.name,
+          style: TextStyle(
+            color: _isHovered && widget.onTap != null
+                ? widget.hoverColor
+                : widget.color,
+            fontSize: widget.fontSize,
+            decoration: _isHovered && widget.onTap != null
+                ? TextDecoration.underline
+                : null,
+          ),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
       ),
     );
   }
@@ -213,9 +202,9 @@ class TrackCover extends StatelessWidget {
             imageUrl: url,
             width: size,
             height: size,
-            errorWidget: _buildPlaceholder(),
+            errorWidget: _CoverPlaceholder(isCircle: isCircle, size: size),
           )
-        : _buildPlaceholder();
+        : _CoverPlaceholder(isCircle: isCircle, size: size);
 
     Widget content = Container(
       width: size,
@@ -256,8 +245,16 @@ class TrackCover extends StatelessWidget {
 
     return content;
   }
+}
 
-  Widget _buildPlaceholder() {
+class _CoverPlaceholder extends StatelessWidget {
+  final bool isCircle;
+  final double size;
+
+  const _CoverPlaceholder({required this.isCircle, required this.size});
+
+  @override
+  Widget build(BuildContext context) {
     return Icon(
       isCircle ? Icons.person : Icons.music_note,
       color: Colors.white24,

@@ -96,7 +96,7 @@ class _SearchViewState extends State<SearchView> {
         Expanded(
           child: searchResultsAsync.map(
             data: (results) {
-              if (results == null) return _buildEmptyState();
+              if (results == null) return const _EmptySearchState();
               if (results.tracks.isEmpty &&
                   results.albums.isEmpty &&
                   results.artists.isEmpty) {
@@ -107,7 +107,7 @@ class _SearchViewState extends State<SearchView> {
                   ),
                 );
               }
-              return _buildResults(results);
+              return _SearchResults(results: results);
             },
             loading: () => const CommonLoadingWidget(),
             error: (Object e, StackTrace? _) =>
@@ -117,8 +117,13 @@ class _SearchViewState extends State<SearchView> {
       ],
     );
   }
+}
 
-  Widget _buildEmptyState() {
+class _EmptySearchState extends StatelessWidget {
+  const _EmptySearchState();
+
+  @override
+  Widget build(BuildContext context) {
     return const Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -133,49 +138,74 @@ class _SearchViewState extends State<SearchView> {
       ),
     );
   }
+}
 
-  Widget _buildResults(SearchResultsDto results) {
-    return ListView(
-      padding: const EdgeInsets.only(bottom: 140),
-      children: [
+class _SearchResults extends StatelessWidget {
+  final SearchResultsDto results;
+
+  const _SearchResults({required this.results});
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomScrollView(
+      slivers: [
         if (results.artists.isNotEmpty) ...[
-          const CommonSectionTitle(title: 'Артисты'),
-          SizedBox(
-            height: 180,
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(
-                horizontal: 32,
-              ), // 32 + 8 (internal card padding) = 40
-              itemCount: results.artists.length,
-              itemBuilder: (context, i) => _buildArtistCard(results.artists[i]),
+          const SliverToBoxAdapter(child: CommonSectionTitle(title: 'Артисты')),
+          SliverToBoxAdapter(
+            child: SizedBox(
+              height: 180,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 32,
+                ), // 32 + 8 (internal card padding) = 40
+                itemCount: results.artists.length,
+                itemBuilder: (context, i) =>
+                    _ArtistSearchCard(artist: results.artists[i]),
+              ),
             ),
           ),
         ],
         if (results.albums.isNotEmpty) ...[
-          const CommonSectionTitle(title: 'Альбомы'),
-          SizedBox(
-            height: 240,
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(
-                horizontal: 32,
-              ), // 32 + 8 = 40
-              itemCount: results.albums.length,
-              itemBuilder: (context, i) => _buildAlbumCard(results.albums[i]),
+          const SliverToBoxAdapter(child: CommonSectionTitle(title: 'Альбомы')),
+          SliverToBoxAdapter(
+            child: SizedBox(
+              height: 240,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 32,
+                ), // 32 + 8 = 40
+                itemCount: results.albums.length,
+                itemBuilder: (context, i) =>
+                    _AlbumSearchCard(album: results.albums[i]),
+              ),
             ),
           ),
         ],
         if (results.tracks.isNotEmpty) ...[
-          const CommonSectionTitle(title: 'Треки'),
-          ...results.tracks.map(_buildTrackTile),
-          const SizedBox(height: 40),
+          const SliverToBoxAdapter(child: CommonSectionTitle(title: 'Треки')),
+          SliverList(
+            delegate: SliverChildBuilderDelegate(
+              (context, i) => _TrackSearchTile(track: results.tracks[i]),
+              childCount: results.tracks.length,
+            ),
+          ),
+          const SliverToBoxAdapter(child: SizedBox(height: 40)),
         ],
+        const SliverPadding(padding: EdgeInsets.only(bottom: 140)),
       ],
     );
   }
+}
 
-  Widget _buildTrackTile(SimpleTrackDto track) {
+class _TrackSearchTile extends StatelessWidget {
+  final SimpleTrackDto track;
+
+  const _TrackSearchTile({required this.track});
+
+  @override
+  Widget build(BuildContext context) {
     return CommonTrackTile(
       trackId: track.id,
       title: track.title,
@@ -208,8 +238,15 @@ class _SearchViewState extends State<SearchView> {
       },
     );
   }
+}
 
-  Widget _buildAlbumCard(SimpleAlbumDto album) {
+class _AlbumSearchCard extends StatelessWidget {
+  final SimpleAlbumDto album;
+
+  const _AlbumSearchCard({required this.album});
+
+  @override
+  Widget build(BuildContext context) {
     return CommonMediaCard(
       title: album.title,
       artists: album.artists,
@@ -217,8 +254,15 @@ class _SearchViewState extends State<SearchView> {
       onTap: () => navigateTo(AppSection.album, album.id),
     );
   }
+}
 
-  Widget _buildArtistCard(SimpleArtistDto artist) {
+class _ArtistSearchCard extends StatelessWidget {
+  final SimpleArtistDto artist;
+
+  const _ArtistSearchCard({required this.artist});
+
+  @override
+  Widget build(BuildContext context) {
     return CommonMediaCard(
       title: artist.name,
       coverUrl: artist.coverUrl,
