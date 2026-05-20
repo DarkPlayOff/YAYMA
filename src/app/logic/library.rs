@@ -65,21 +65,20 @@ pub async fn toggle_dislike(ctx: &AppContext, track_id: String) {
 
     // Perform API request in background
     let api = ctx.core.api.clone();
-    let track_id_clone = track_id.clone();
     let audio_tx = ctx.audio.tx.clone();
     tokio::spawn(async move {
         if is_disliked {
-            let _ = api.remove_dislike_track(track_id_clone.clone()).await;
+            let _ = api.remove_dislike_track(track_id.clone()).await;
             let _ = audio_tx
                 .send(crate::audio::commands::AudioMessage::WaveUndislike(
-                    track_id_clone,
+                    track_id,
                 ))
                 .await;
         } else {
-            let _ = api.add_dislike_track(track_id_clone.clone()).await;
+            let _ = api.add_dislike_track(track_id.clone()).await;
             let _ = audio_tx
                 .send(crate::audio::commands::AudioMessage::WaveDislike(
-                    track_id_clone,
+                    track_id,
                 ))
                 .await;
         }
@@ -216,25 +215,25 @@ async fn fetch_and_save_missing_metadata(
 
     for chunk in missing_ids.chunks(50) {
         if let Ok(tracks) = ctx.core.api.fetch_tracks(chunk.to_vec()).await {
-            for t in tracks {
+            for mut t in tracks {
                 let artists: Vec<crate::api::models::TrackArtistDto> = t
                     .artists
-                    .into_iter()
-                    .map(|a| crate::api::models::TrackArtistDto::from_yandex(&a))
+                    .iter()
+                    .map(crate::api::models::TrackArtistDto::from_yandex)
                     .collect();
-                let album = t.albums.first().and_then(|a| a.title.clone());
-                let album_id = t.albums.first().and_then(|a| a.id).map(|id| id.to_string());
+                let album = t.albums.first_mut().and_then(|a| a.title.take());
+                let album_id = t.albums.first_mut().and_then(|a| a.id.take()).map(|id| id.to_string());
                 let cover_url = t
                     .og_image
-                    .as_ref()
+                    .take()
                     .map(|img| format!("https://{}", img.replace("%%", "200x200")));
 
                 let duration_ms = t.duration.map(|d| d.as_millis() as u64).unwrap_or(0);
 
                 let metadata_to_save = crate::storage::db::TrackMetadata {
-                    id: t.id.clone(),
-                    title: t.title.clone().unwrap_or_default(),
-                    version: t.version.clone(),
+                    id: t.id,
+                    title: t.title.take().unwrap_or_default(),
+                    version: t.version.take(),
                     artists,
                     album,
                     album_id,
@@ -249,7 +248,7 @@ async fn fetch_and_save_missing_metadata(
                     .await
                     .upsert_track_metadata(metadata_to_save.clone())
                     .await;
-                metadata_map.insert(t.id, metadata_to_save);
+                metadata_map.insert(metadata_to_save.id.clone(), metadata_to_save);
             }
         }
     }

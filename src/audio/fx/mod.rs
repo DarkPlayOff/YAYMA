@@ -51,7 +51,7 @@ impl<T: Source<Item = f32> + Send + 'static> FxSource<T> {
         effect: Box<dyn Effect>,
         params: std::sync::Arc<param::EffectParams>,
     ) -> EffectHandle {
-        self.chain.add(id, name, effect, params)
+        self.chain.add_effect(id, name, effect, params)
     }
 
     pub fn get_effect_handle(&self, name: &str) -> Option<&EffectHandle> {

@@ -176,7 +176,7 @@ impl HttpCache {
 
         // Update DB
         {
-            let path_str = file_path.to_string_lossy().to_string();
+            let path_str = file_path.to_string_lossy().into_owned();
             let mut db = self.db.lock().await;
             let _ = db
                 .update_cache_metadata(url, &path_str, size, etag.as_deref())

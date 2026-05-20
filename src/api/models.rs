@@ -7,12 +7,16 @@ pub const COVER_SIZE_MEDIUM: &str = "600x600";
 pub const COVER_SIZE_LARGE: &str = "1000x1000";
 
 pub fn format_cover(uri: Option<String>, size: &str) -> Option<String> {
-    uri.map(|s| {
-        let s = s.replace("%%", size);
+    uri.map(|mut s| {
+        if let Some(pos) = s.find("%%") {
+            s.replace_range(pos..pos + 2, size);
+        }
         if s.starts_with("//") {
-            format!("https:{}", s)
+            s.insert_str(0, "https:");
+            s
         } else if !s.starts_with("http") {
-            format!("https://{}", s)
+            s.insert_str(0, "https://");
+            s
         } else {
             s
         }
@@ -109,6 +113,37 @@ impl SimpleTrackDto {
             is_disliked: disliked_ids.contains(track_id_base),
         }
     }
+
+    pub fn from_yandex_owned<S: std::hash::BuildHasher>(
+        mut t: Track,
+        liked_ids: &std::collections::HashSet<String, S>,
+        disliked_ids: &std::collections::HashSet<String, S>,
+    ) -> Self {
+        let is_liked = liked_ids.contains(t.id.to_base_id());
+        let is_disliked = disliked_ids.contains(t.id.to_base_id());
+        let cover_url = format_cover(get_any_cover(&t), COVER_SIZE_MEDIUM);
+        let (album_title, album_id) = t
+            .albums
+            .first_mut()
+            .map(|a| (a.title.take(), a.id.take().map(|id| id.to_string())))
+            .unwrap_or((None, None));
+
+        Self {
+            id: t.id,
+            title: t.title.take().unwrap_or_default(),
+            version: t.version.take(),
+            artists: t.artists.into_iter().map(|mut a| TrackArtistDto {
+                id: a.id.take().map(|id| id.to_string()).unwrap_or_default(),
+                name: a.name.take().unwrap_or_default()
+            }).collect(),
+            album: album_title,
+            album_id,
+            duration_ms: t.duration.map(|d| d.as_millis() as u32).unwrap_or(0),
+            cover_url,
+            is_liked,
+            is_disliked,
+        }
+    }
 }
 
 #[flutter_rust_bridge::frb(unignore)]
@@ -127,10 +162,10 @@ pub struct TrackDetailsDto {
 #[flutter_rust_bridge::frb(ignore)]
 impl TrackDetailsDto {
     pub fn from_yandex(mut t: Track) -> Self {
-        let album_title = t.albums.get(0).and_then(|a| a.title.clone());
+        let album_title = t.albums.first_mut().and_then(|a| a.title.take());
 
         // In yandex-music-rs, the label is located in major.name
-        let label = t.major.as_ref().map(|m| m.name.clone());
+        let label = t.major.take().map(|m| m.name);
 
         // Authors are often listed as separate artists or via metadata,
         // but in this simplified view, we take all artists
@@ -139,7 +174,10 @@ impl TrackDetailsDto {
         Self {
             id: t.id,
             title: t.title.take().unwrap_or_default(),
-            artists: t.artists.iter().map(TrackArtistDto::from_yandex).collect(),
+            artists: t.artists.into_iter().map(|mut a| TrackArtistDto {
+                id: a.id.take().map(|id| id.to_string()).unwrap_or_default(),
+                name: a.name.take().unwrap_or_default()
+            }).collect(),
             album: album_title,
             label,
             music_authors,
@@ -212,7 +250,7 @@ impl AlbumDetailsDto {
             .into_iter()
             .flatten()
             .map(|t| {
-                let mut dto = SimpleTrackDto::from_yandex(&t, liked_ids, disliked_ids);
+                let mut dto = SimpleTrackDto::from_yandex_owned(t, liked_ids, disliked_ids);
                 dto.album = Some(album_title.clone());
                 dto.album_id = Some(album_id.clone());
                 dto

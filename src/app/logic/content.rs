@@ -60,7 +60,7 @@ pub async fn download_track(ctx: &AppContext, track_id: String) -> Result<String
         .next()
         .ok_or_else(|| AppError::NotFound(format!("Track {}", track_id)))?;
 
-    let dto = SimpleTrackDto::from_yandex(&track, &liked, &disliked);
+    let dto = SimpleTrackDto::from_yandex_owned(track, &liked, &disliked);
     let artist_name = dto
         .artists
         .first()
@@ -111,8 +111,8 @@ pub async fn download_track(ctx: &AppContext, track_id: String) -> Result<String
         let temp_path = dest_path.with_extension("m4a_tmp");
         tokio::fs::write(&temp_path, &bytes).await?;
 
-        let input_path_str = temp_path.to_string_lossy().to_string();
-        let output_path_str = dest_path.to_string_lossy().to_string();
+        let input_path_str = temp_path.to_string_lossy().into_owned();
+        let output_path_str = dest_path.to_string_lossy().into_owned();
 
         let extraction_result = tokio::task::spawn_blocking(move || {
             extract_native_flac(&input_path_str, &output_path_str)
@@ -131,13 +131,13 @@ pub async fn download_track(ctx: &AppContext, track_id: String) -> Result<String
     }
 
     let cache = ctx.core.http_cache.clone();
-    let _ = embed_metadata(&dest_path, &dto, cache).await;
-    Ok(dest_path.to_string_lossy().to_string())
+    let _ = embed_metadata(&dest_path, dto, cache).await;
+    Ok(dest_path.to_string_lossy().into_owned())
 }
 
 async fn embed_metadata(
     path: &std::path::Path,
-    dto: &SimpleTrackDto,
+    dto: SimpleTrackDto,
     cache: Arc<HttpCache>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     use lofty::config::{ParseOptions, WriteOptions};
@@ -147,22 +147,24 @@ async fn embed_metadata(
     use lofty::tag::{Accessor, Tag, TagExt};
 
     let path_buf = path.to_path_buf();
-    let title = dto.title.clone();
-    let artists = dto
-        .artists
-        .iter()
-        .map(|a| a.name.clone())
-        .collect::<Vec<_>>()
-        .join(", ");
-    let album = dto.album.clone();
+    let title = dto.title;
+    let album = dto.album;
+    let artists = {
+        let mut s = String::new();
+        for (i, artist) in dto.artists.into_iter().enumerate() {
+            if i > 0 {
+                s.push_str(", ");
+            }
+            s.push_str(&artist.name);
+        }
+        s
+    };
 
-    let cover_bytes = if let Some(ref url) = dto.cover_url {
-        let https_url = if url.starts_with("//") {
-            format!("https:{}", url)
-        } else {
-            url.clone()
-        };
-        if let Ok(path) = cache.get_file(&https_url).await {
+    let cover_bytes = if let Some(mut url) = dto.cover_url {
+        if url.starts_with("//") {
+            url.insert_str(0, "https:");
+        }
+        if let Ok(path) = cache.get_file(&url).await {
             tokio::fs::read(path).await.ok()
         } else {
             None
@@ -299,15 +301,18 @@ pub async fn fetch_wave_stations(ctx: &AppContext) -> Vec<StationCategoryDto> {
 
     for rotor in stations {
         let station = rotor.station;
-        let item_type = station.id.item_type;
+        let mut item_type = station.id.item_type;
+        let seed = format!("{}:{}", item_type, station.id.tag);
+        
         let cat_key = if item_type == "mix" {
             "Моя волна".to_string()
         } else {
-            item_type.clone()
+            std::mem::take(&mut item_type)
         };
+        
         grouped.entry(cat_key).or_default().push(StationItemDto {
             label: station.name,
-            seed: format!("{}:{}", item_type, station.id.tag),
+            seed,
         });
     }
 

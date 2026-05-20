@@ -36,22 +36,23 @@ impl EffectChain {
         self.slots.is_empty()
     }
 
-    pub fn add(
+    pub fn add_effect(
         &mut self,
         id: &str,
         name: &str,
         effect: Box<dyn Effect>,
         params: Arc<EffectParams>,
     ) -> EffectHandle {
+        let id_str = id.to_string();
         let handle = EffectHandle {
-            id: id.to_string(),
+            id: id_str.clone(),
             name: name.to_string(),
             params: params.clone(),
         };
 
-        self.handles.insert(id.to_string(), handle.clone());
+        self.handles.insert(id_str.clone(), handle.clone());
         self.slots.push(EffectSlot {
-            id: id.to_string(),
+            id: id_str,
             effect,
             params,
         });

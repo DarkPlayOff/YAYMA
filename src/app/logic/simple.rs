@@ -16,7 +16,7 @@ pub async fn get_cached_image_path(ctx: &AppContext, url: String) -> Option<Stri
         .get_file(&url)
         .await
         .ok()
-        .map(|p| p.to_string_lossy().to_string())
+        .map(|p| p.to_string_lossy().into_owned())
 }
 
 pub async fn prune_expired_cache(ctx: &AppContext) {

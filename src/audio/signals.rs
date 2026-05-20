@@ -92,8 +92,7 @@ impl AudioSignals {
             self.artists.set(Some(
                 t.artists
                     .iter()
-                    .filter_map(|a| a.name.as_ref())
-                    .cloned()
+                    .filter_map(|a| a.name.clone())
                     .collect::<Vec<_>>()
                     .join(", "),
             ));

@@ -216,7 +216,7 @@ impl AppDatabase {
 
     pub async fn add_liked_track(&mut self, track_id: &str) -> toasty::Result<()> {
         let mut tracks = self.load_liked_tracks().await?;
-        if !tracks.contains(&track_id.to_string()) {
+        if !tracks.iter().any(|x| x == track_id) {
             tracks.push(track_id.to_string());
             self.save_liked_tracks(&tracks).await?;
         }
@@ -393,11 +393,10 @@ impl AppDatabase {
 
     pub async fn load_setting<T: serde::de::DeserializeOwned>(&mut self, key: &str) -> toasty::Result<Option<T>> {
         let val = self.load_app_setting(key).await?;
-        if let Some(v) = val {
-            if let Ok(parsed) = serde_json::from_str(&v) {
+        if let Some(v) = val
+            && let Ok(parsed) = serde_json::from_str(&v) {
                 return Ok(Some(parsed));
             }
-        }
         Ok(None)
     }
 
