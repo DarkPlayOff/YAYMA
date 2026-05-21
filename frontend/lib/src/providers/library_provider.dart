@@ -60,20 +60,26 @@ Future<void> refreshLikedTracks({String? query, bool force = false}) async {
       }
 
       if (chunk.isEmpty) {
-        // Empty chunk serves as a reset signal from Rust
-        likedTracksSignal.value = [];
-        isFirstChunk = false;
+        if (isFirstChunk) {
+          // Second empty chunk in a row or initial empty chunk when already expecting first
+          // means the list is truly empty.
+          likedTracksSignal.value = [];
+          isFirstChunk = false;
+        } else {
+          // First empty chunk serves as a reset signal for a new data sequence.
+          // We set isFirstChunk to true so that the next non-empty chunk REPLACES the list.
+          isFirstChunk = true;
+        }
       } else {
         if (isFirstChunk) {
-          // Replace old list with the first result of a new search
+          // Replace old list with the first result of a new search or update
           likedTracksSignal.value = chunk;
           isFirstChunk = false;
         } else {
-          // Avoid duplicates when adding a chunk
+          // Append subsequent chunks
           final existingIds = likedTracksSignal.value.map((t) => t.id).toSet();
-          final uniqueNewTracks = chunk
-              .where((t) => !existingIds.contains(t.id))
-              .toList();
+          final uniqueNewTracks =
+              chunk.where((t) => !existingIds.contains(t.id)).toList();
 
           if (uniqueNewTracks.isNotEmpty) {
             likedTracksSignal.value = [

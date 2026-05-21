@@ -21,20 +21,41 @@ class WaveController {
   static Future<void> toggleStation(String seed) async {
     final currentSeeds = List<String>.from(currentWaveSeedsSignal());
 
-    // In Yandex Music, each mood (e.g., personal:never-heard) is a
-    // standalone station.
-    final wasSelected = currentSeeds.contains(seed);
-    currentSeeds.clear();
-
-    if (wasSelected) {
-      // Button deselected - returning to the base wave
-      currentSeeds.add('user:onyourwave');
+    if (currentSeeds.contains(seed)) {
+      currentSeeds.remove(seed);
     } else {
-      // New mood selected
+      // Remove 'user:onyourwave' if we're adding a specific seed
+      currentSeeds.remove('user:onyourwave');
+
+      // Group seeds by category (the part before the colon)
+      final category = seed.split(':').first;
+
+      // Special case: 'activity' and 'personal' are mutually exclusive as they
+      // represent the main vibe type.
+      if (category == 'activity' || category == 'personal') {
+        currentSeeds.removeWhere(
+          (s) => s.startsWith('activity:') || s.startsWith('personal:'),
+        );
+      } else {
+        // For other categories (mood, local-language), remove existing ones
+        // from the same category.
+        currentSeeds.removeWhere((s) => s.startsWith('$category:'));
+      }
+
       currentSeeds.add(seed);
     }
 
+    // If no specific seeds are left, return to the default wave
+    if (currentSeeds.isEmpty) {
+      currentSeeds.add('user:onyourwave');
+    }
+
     await runRustAction((ctx) => startWave(ctx: ctx, seeds: currentSeeds));
+  }
+
+  static Future<void> resetStations() async {
+    final seeds = ['user:onyourwave'];
+    await runRustAction((ctx) => startWave(ctx: ctx, seeds: seeds));
   }
 
   static Future<void> refresh() async {

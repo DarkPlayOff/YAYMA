@@ -285,15 +285,20 @@ pub async fn liked_tracks_stream(
         .map(|q| q.to_lowercase());
 
     loop {
-        let (liked_ids, disliked_ids_set) = ctx.audio.state.read().await.liked.ordered_snapshot();
-
-        // Signal a reset to the frontend ONLY if we have no tracks at all.
-        // Otherwise, the frontend will replace the list when the first data chunk arrives.
-        if liked_ids.is_empty() && sink.add(vec![]).is_err() {
+        // ALWAYS send an empty vec to signal a new data sequence (for reset/replacement)
+        // This ensures the frontend knows that a new sequence of chunks is starting.
+        if sink.add(vec![]).is_err() {
             return;
         }
 
+        let (liked_ids, disliked_ids_set) = ctx.audio.state.read().await.liked.ordered_snapshot();
+
         if liked_ids.is_empty() {
+            // If the list is truly empty, we send another empty vec as the data itself.
+            if sink.add(vec![]).is_err() {
+                return;
+            }
+
             // If local is empty and not searching, might need sync
             if query_lower.is_none() {
                 let _ = ctx

@@ -36,14 +36,40 @@ class WaveSettingsPanel extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Text(
-                    'Настроить Мою волну',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 22,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: -0.5,
-                    ),
+                  Row(
+                    children: [
+                      const Text(
+                        'Настроить Мою волну',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 22,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: -0.5,
+                        ),
+                      ),
+                      const Spacer(),
+                      SizedBox(
+                        width: 40,
+                        height: 40,
+                        child: (currentSeeds.isNotEmpty &&
+                                !currentSeeds.contains('user:onyourwave'))
+                            ? MouseRegion(
+                                cursor: SystemMouseCursors.click,
+                                child: GestureDetector(
+                                  onTap: () {
+                                    unawaited(WaveController.resetStations());
+                                  },
+                                  behavior: HitTestBehavior.opaque,
+                                  child: const Icon(
+                                    Icons.refresh,
+                                    color: Colors.white54,
+                                    size: 20,
+                                  ),
+                                ),
+                              )
+                            : null,
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 24),
                   _buildSectionTitle('Под занятие'),
@@ -123,6 +149,7 @@ class WaveSettingsPanel extends StatelessWidget {
                       !currentSeeds.contains('user:onyourwave') &&
                       !_isMainSeed(currentSeeds.first))
                     _buildActiveExtraStation(currentSeeds.first),
+
                   Center(
                     child: TextButton.icon(
                       onPressed: () async {

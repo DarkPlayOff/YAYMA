@@ -428,9 +428,11 @@ class PlaybackController {
       runRustAction((ctx) => rust.toggleLike(ctx: ctx, trackId: trackId));
   static Future<void> toggleDislike({required String trackId}) =>
       runRustAction((ctx) => rust.toggleDislike(ctx: ctx, trackId: trackId));
-  static Future<void> startMyWave() => runRustAction(
-    (ctx) => rust.startWave(ctx: ctx, seeds: ['user:onyourwave']),
-  );
+  static Future<void> startMyWave() {
+    final currentSeeds = currentWaveSeedsSignal();
+    final seeds = currentSeeds.isNotEmpty ? currentSeeds : ['user:onyourwave'];
+    return runRustAction((ctx) => rust.startWave(ctx: ctx, seeds: seeds));
+  }
   static Future<void> startTrackWave(String trackId) => runRustAction(
     (ctx) => rust.startWave(ctx: ctx, seeds: ['track:$trackId']),
   );
