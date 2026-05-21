@@ -354,7 +354,7 @@ class _PlaylistContentState extends State<_PlaylistContent> {
               );
             },
             itemCount: _localTracks.length,
-            onReorder: (oldIndex, originalNewIndex) async {
+            onReorderItem: (oldIndex, originalNewIndex) async {
               var newIndex = originalNewIndex;
               setState(() {
                 if (newIndex > oldIndex) newIndex -= 1;

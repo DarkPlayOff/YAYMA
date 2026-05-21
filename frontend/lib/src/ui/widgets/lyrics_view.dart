@@ -204,7 +204,7 @@ class _LyricsWidgetState extends State<LyricsWidget> {
               final viewportHeight = constraints.maxHeight;
 
               return Watch((context) {
-                final activeIndex = _activeIndexSignal.watch(context);
+                final activeIndex = _activeIndexSignal.value;
 
                 if (activeIndex != -1) {
                   WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -437,7 +437,7 @@ class _WordWidget extends StatelessWidget {
             if (currentMs >= word.startTimeMs) return _WordStatus.current;
             return _WordStatus.future;
           })
-          .watch(context);
+          ();
 
       var wordOpacity = 1.0;
       var wordScale = 1.0;
@@ -523,7 +523,7 @@ class _LyricTimerWidgetState extends State<_LyricTimerWidget>
   Widget build(BuildContext context) {
     return Watch((context) {
       // Rebuild only when visibility or active dots count changes
-      final progress = trackProgressSignal.watch(context);
+      final progress = trackProgressSignal.value;
       final currentMs = progress.positionMs.toInt();
       final remainingMs =
           (widget.item.time.inMilliseconds +
@@ -604,7 +604,7 @@ class LyricsReaderDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final lyricsAsync = lyricsSignal(trackId).watch(context);
+    final lyricsAsync = lyricsSignal(trackId).value;
     return AlertDialog(
       backgroundColor: const Color(0xFF0F0F0F),
       surfaceTintColor: Colors.transparent,

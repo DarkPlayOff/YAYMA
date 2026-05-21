@@ -180,7 +180,7 @@ class _HomeCoverWidgetState extends State<_HomeCoverWidget> {
   Widget build(BuildContext context) {
     return Watch((context) {
       final meta = trackMetadataSignal();
-      final showLyrics = showLyricsSignal.watch(context);
+      final showLyrics = showLyricsSignal.value;
       final height = MediaQuery.of(context).size.height;
 
       final width = MediaQuery.of(context).size.width;
@@ -366,7 +366,7 @@ class _HomeMainControls extends StatelessWidget {
       final isDisliked = isDislikedSignal();
       final isShuffled = isShuffledSignal();
       final repeatMode = repeatModeSignal();
-      final accentColor = accentColorSignal.watch(context);
+      final accentColor = accentColorSignal.value;
 
       var repeatIcon = Icons.repeat;
       var repeatColor = Colors.white38;

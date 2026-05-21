@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/providers/home_provider.dart';
 import 'package:yayma/src/providers/playback_provider.dart';
@@ -557,8 +558,7 @@ class _AllStationsSheetState extends State<_AllStationsSheet> {
                     : Scrollbar(
                         controller: _scrollController,
                         child: CustomScrollView(
-                          controller: _scrollController,
-                          cacheExtent: 1000,
+                          scrollCacheExtent: const ScrollCacheExtent.pixels(1000), controller: _scrollController,
                           slivers: [
                             for (final cat in cats) ...[
                               SliverPadding(

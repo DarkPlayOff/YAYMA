@@ -298,9 +298,9 @@ class _LikedTracksTab extends StatelessWidget {
                   child: BackdropFilter(
                     filter: ImageFilter.blur(sigmaX: 3, sigmaY: 3),
                     child: Watch((context) {
-                      final barColor = playerBarColorSignal.watch(context);
+                      final barColor = playerBarColorSignal.value;
                       final isHome =
-                          currentRootSignal.watch(context) == AppSection.home;
+                          currentRootSignal.value == AppSection.home;
                       final alpha = isHome ? 0.5 : 0.7;
 
                       return Container(

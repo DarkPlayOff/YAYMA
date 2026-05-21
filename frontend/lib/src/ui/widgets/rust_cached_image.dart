@@ -37,7 +37,6 @@ class _RustCachedImageState extends State<RustCachedImage> {
   static final Map<String, String> _pathCache = {};
   String? _resolvedPath;
   late bool _isLoading;
-  bool _imageReady = false;
   String? _lastUrl;
 
   @override
@@ -102,7 +101,6 @@ class _RustCachedImageState extends State<RustCachedImage> {
   void didUpdateWidget(RustCachedImage oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.imageUrl != widget.imageUrl) {
-      _imageReady = false;
       _initPath();
     }
   }
@@ -116,63 +114,47 @@ class _RustCachedImageState extends State<RustCachedImage> {
           widget.placeholder ??
           _ImagePlaceholder(width: widget.width, height: widget.height);
     } else if (_resolvedPath != null) {
-      content = Stack(
-        fit: StackFit.passthrough,
-        children: [
-          if (widget.placeholder != null)
-            AnimatedOpacity(
-              opacity: _imageReady ? 0.0 : 1.0,
-              duration: const Duration(milliseconds: 300),
-              child: widget.placeholder,
-            )
-          else if (!_imageReady)
-            _ImageShimmer(
-              width: widget.width,
-              height: widget.height,
-              borderRadius: widget.borderRadius,
-            ),
-          Image.file(
-            File(_resolvedPath!),
-            width: widget.width,
-            height: widget.height,
-            fit: widget.fit,
-            color: widget.color,
-            colorBlendMode: widget.colorBlendMode,
-            frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
-              if (frame != null && !_imageReady) {
-                _imageReady = true;
-                unawaited(
-                  Future.microtask(() {
-                    if (mounted) {
-                      setState(() {});
-                    }
-                  }),
-                );
-              }
+      content = Image.file(
+        File(_resolvedPath!),
+        width: widget.width,
+        height: widget.height,
+        fit: widget.fit,
+        color: widget.color,
+        colorBlendMode: widget.colorBlendMode,
+        frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+          if (wasSynchronouslyLoaded) {
+            return child;
+          }
 
-              if (wasSynchronouslyLoaded) {
-                return child;
-              }
+          final isLoaded = frame != null;
 
-              return TweenAnimationBuilder<double>(
-                tween: Tween(begin: 0, end: _imageReady ? 1.0 : 0.0),
+          return Stack(
+            fit: StackFit.passthrough,
+            children: [
+              if (widget.placeholder != null)
+                AnimatedOpacity(
+                  opacity: isLoaded ? 0.0 : 1.0,
+                  duration: const Duration(milliseconds: 300),
+                  child: widget.placeholder,
+                )
+              else if (!isLoaded)
+                _ImageShimmer(
+                  width: widget.width,
+                  height: widget.height,
+                  borderRadius: widget.borderRadius,
+                ),
+              AnimatedOpacity(
+                opacity: isLoaded ? 1.0 : 0.0,
                 duration: const Duration(milliseconds: 300),
                 curve: Curves.easeInOut,
-                builder: (context, opacity, innerChild) {
-                  return AnimatedOpacity(
-                    opacity: opacity,
-                    duration: const Duration(milliseconds: 300),
-                    child: innerChild,
-                  );
-                },
                 child: child,
-              );
-            },
-            errorBuilder: (context, error, stackTrace) =>
-                widget.errorWidget ??
-                _ImageError(width: widget.width, height: widget.height),
-          ),
-        ],
+              ),
+            ],
+          );
+        },
+        errorBuilder: (context, error, stackTrace) =>
+            widget.errorWidget ??
+            _ImageError(width: widget.width, height: widget.height),
       );
     } else if (_isLoading) {
       content =

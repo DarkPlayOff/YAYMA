@@ -20,8 +20,8 @@ class CommonQualitySelector extends StatelessWidget {
   Widget build(BuildContext context) {
     return Watch((context) {
       final quality = audioQualitySignal.value;
-      final meta = trackMetadataSignal.watch(context);
-      final accentColor = this.accentColor ?? accentColorSignal.watch(context);
+      final meta = trackMetadataSignal.value;
+      final accentColor = this.accentColor ?? accentColorSignal.value;
 
       var label = '';
       switch (quality) {

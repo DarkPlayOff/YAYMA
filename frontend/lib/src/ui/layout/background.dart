@@ -16,7 +16,7 @@ class BlurredCoverBackground extends StatelessWidget {
   Widget build(BuildContext context) {
     return RepaintBoundary(
       child: Watch((context) {
-        final coverUrl = currentCoverUrlSignal.watch(context);
+        final coverUrl = currentCoverUrlSignal.value;
 
         return AnimatedSwitcher(
           duration: const Duration(seconds: 1),

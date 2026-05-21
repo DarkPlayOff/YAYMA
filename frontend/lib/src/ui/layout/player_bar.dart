@@ -17,9 +17,9 @@ class PlayerBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Watch((context) {
-      final barColor = playerBarColorSignal.watch(context);
-      final navState = currentNavStateSignal.watch(context);
-      final showLyrics = showLyricsSignal.watch(context);
+      final barColor = playerBarColorSignal.value;
+      final navState = currentNavStateSignal.value;
+      final showLyrics = showLyricsSignal.value;
       final isHome = navState.section == AppSection.home;
 
       final useLyricsStyle = isHome && showLyrics;
@@ -29,7 +29,7 @@ class PlayerBar extends StatelessWidget {
       return LayoutBuilder(
         builder: (context, constraints) {
           final width = constraints.maxWidth;
-          final accentColor = accentColorSignal.watch(context);
+          final accentColor = accentColorSignal.value;
           final isNarrow = width < 600;
 
           double coverSize = 75;
@@ -247,7 +247,7 @@ class _PlayerControls extends StatelessWidget {
                   icon: Icon(
                     Icons.lyrics_rounded,
                     size: 20,
-                    color: showLyricsSignal.watch(context)
+                    color: showLyricsSignal.value
                         ? accentColor
                         : Colors.white38,
                   ),

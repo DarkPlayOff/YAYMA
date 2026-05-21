@@ -31,13 +31,13 @@ class _AppLayoutState extends State<AppLayout> {
   @override
   Widget build(BuildContext context) {
     return Watch((context) {
-      currentRootSignal.watch(context);
-      final navState = currentNavStateSignal.watch(context);
+      currentRootSignal();
+      final navState = currentNavStateSignal();
       final isHome = navState.section == AppSection.home;
 
       final isDesktop =
           Platform.isWindows || Platform.isLinux || Platform.isMacOS;
-      final isCustomTitlebar = isDesktop && customTitlebarSignal.watch(context);
+      final isCustomTitlebar = isDesktop && customTitlebarSignal.value;
 
       final screenWidth = MediaQuery.sizeOf(context).width;
       final isNarrow = screenWidth < 600;
@@ -55,8 +55,8 @@ class _AppLayoutState extends State<AppLayout> {
 
               // 2. Dimming when leaving home or showing lyrics
               Watch((context) {
-                final showLyrics = showLyricsSignal.watch(context);
-                final hideOverlay = hideLyricsOverlaySignal.watch(context);
+                final showLyrics = showLyricsSignal.value;
+                final hideOverlay = hideLyricsOverlaySignal.value;
                 final isDimmed = !isHome || (showLyrics && !hideOverlay);
 
                 return Positioned.fill(
@@ -148,8 +148,8 @@ class _RootBucket extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Watch((context) {
-      final activeRoot = currentRootSignal.watch(context);
-      final stack = rootStacksSignal.watch(context)[root] ?? [NavState(root)];
+      final activeRoot = currentRootSignal.value;
+      final stack = rootStacksSignal.value[root] ?? [NavState(root)];
       final isVisible = activeRoot == root;
 
       if (root == AppSection.account && !isVisible) {
@@ -213,7 +213,7 @@ class _AnimatedPlayerBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Watch((context) {
-      final showLyrics = showLyricsSignal.watch(context);
+      final showLyrics = showLyricsSignal.value;
       final shouldShowBar = !isHome || showLyrics;
 
       return AnimatedSwitcher(
@@ -251,7 +251,7 @@ class _WindowContent extends StatelessWidget {
   Widget build(BuildContext context) {
     return Watch((context) {
       final isHome = state.section == AppSection.home;
-      final showLyrics = showLyricsSignal.watch(context);
+      final showLyrics = showLyricsSignal.value;
       final screenWidth = MediaQuery.sizeOf(context).width;
       final isNarrow = screenWidth < 600;
 
