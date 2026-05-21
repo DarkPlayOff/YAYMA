@@ -26,8 +26,6 @@ class _LyricsWidgetState extends State<LyricsWidget> {
   Timer? _emptyLyricsTimer;
   String? _lastEmptyTrackId;
 
-  final Map<String, List<_ProcessedLyricLine>> _processedLinesCache = {};
-
   @override
   void initState() {
     super.initState();
@@ -96,7 +94,6 @@ class _LyricsWidgetState extends State<LyricsWidget> {
       _activeIndexSignal.value = -1;
       _emptyLyricsTimer?.cancel();
       _lastEmptyTrackId = null;
-      _processedLinesCache.clear();
       hideLyricsOverlaySignal.value = false;
 
       _trackIdSignal.value = widget.trackId;
@@ -114,7 +111,6 @@ class _LyricsWidgetState extends State<LyricsWidget> {
   void dispose() {
     _scrollController.dispose();
     _emptyLyricsTimer?.cancel();
-    _processedLinesCache.clear();
     super.dispose();
   }
 
@@ -151,30 +147,6 @@ class _LyricsWidgetState extends State<LyricsWidget> {
     });
   }
 
-  List<_ProcessedLyricLine> _getProcessedLines(List<LyricItem> items) {
-    return _processedLinesCache.putIfAbsent(widget.trackId, () {
-      return items.map((item) {
-        if (item is LyricLine) {
-          final words = item.text.split(' ');
-          final wordDuration =
-              item.duration.inMilliseconds / (words.isEmpty ? 1 : words.length);
-          final processedWords = <_ProcessedWord>[];
-
-          for (var i = 0; i < words.length; i++) {
-            final wordStart = item.time.inMilliseconds + (i * wordDuration);
-            final wordEnd = wordStart + wordDuration;
-            processedWords.add(
-              _ProcessedWord(words[i], wordStart.toInt(), wordEnd.toInt()),
-            );
-          }
-
-          return _ProcessedLyricLine(item, processedWords);
-        }
-        return _ProcessedLyricLine(item, const []);
-      }).toList();
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
     if (!_hasBeenVisible) return const SizedBox.shrink();
@@ -196,8 +168,6 @@ class _LyricsWidgetState extends State<LyricsWidget> {
               ),
             );
           }
-
-          final processedLines = _getProcessedLines(lines);
 
           return LayoutBuilder(
             builder: (context, constraints) {
@@ -232,18 +202,18 @@ class _LyricsWidgetState extends State<LyricsWidget> {
                     child: ListView.builder(
                       controller: _scrollController,
                       physics: const NeverScrollableScrollPhysics(),
-                      itemCount: processedLines.length,
+                      itemCount: lines.length,
                       padding: EdgeInsets.only(
                         top: (viewportHeight / 2) - (_rowHeight / 2),
                         bottom: viewportHeight / 2,
                       ),
                       itemExtent: _rowHeight,
                       itemBuilder: (context, index) {
-                        final item = processedLines[index];
+                        final item = lines[index];
                         final isActive = index == activeIndex;
                         final distance = (index - activeIndex).abs();
 
-                        return _AppleLyricRow(
+                        return _LyricRow(
                           key: ValueKey('${widget.trackId}_$index'),
                           item: item,
                           isActive: isActive,
@@ -264,27 +234,12 @@ class _LyricsWidgetState extends State<LyricsWidget> {
   }
 }
 
-@immutable
-class _ProcessedWord {
-  final String text;
-  final int startTimeMs;
-  final int endTimeMs;
-  const _ProcessedWord(this.text, this.startTimeMs, this.endTimeMs);
-}
-
-@immutable
-class _ProcessedLyricLine {
-  final LyricItem original;
-  final List<_ProcessedWord> words;
-  const _ProcessedLyricLine(this.original, this.words);
-}
-
-class _AppleLyricRow extends StatelessWidget {
-  final _ProcessedLyricLine item;
+class _LyricRow extends StatelessWidget {
+  final LyricItem item;
   final bool isActive;
   final int distance;
 
-  const _AppleLyricRow({
+  const _LyricRow({
     required this.item,
     required this.isActive,
     required this.distance,
@@ -293,27 +248,35 @@ class _AppleLyricRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (item.original is LyricTimer) {
+    if (item is LyricTimer) {
       return _LyricTimerWidget(
-        item: item.original as LyricTimer,
+        item: item as LyricTimer,
         isActive: isActive,
       );
     }
 
-    final line = item.original as LyricLine;
+    final line = item as LyricLine;
     var opacity = 1.0;
     var scale = 1.0;
+    var blur = 0.0;
 
-    if (!isActive) {
+    if (isActive) {
+      opacity = 1.0;
+      scale = 1.0;
+      blur = 0.0;
+    } else {
       if (distance == 1) {
         opacity = 0.4;
         scale = 0.94;
+        blur = 1.0;
       } else if (distance == 2) {
         opacity = 0.15;
         scale = 0.9;
+        blur = 2.0;
       } else {
         opacity = 0.05;
         scale = 0.86;
+        blur = 3.0;
       }
     }
 
@@ -324,166 +287,46 @@ class _AppleLyricRow extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 48),
           alignment: Alignment.center,
           child: AnimatedScale(
-            duration: const Duration(milliseconds: 800),
-            curve: Curves.easeInOutCubic,
+            duration: const Duration(milliseconds: 600),
+            curve: Curves.easeOutCubic,
             scale: scale,
             child: AnimatedOpacity(
-              duration: const Duration(milliseconds: 800),
+              duration: const Duration(milliseconds: 600),
               opacity: opacity,
-              child: _WordByWordText(
-                words: item.words,
-                text: line.text,
-                isActive: isActive,
-                distance: distance,
+              child: ImageFiltered(
+                imageFilter: ui.ImageFilter.blur(sigmaX: blur, sigmaY: blur),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    line.text,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 48,
+                      fontWeight: isActive ? FontWeight.w900 : FontWeight.w800,
+                      letterSpacing: -2.2,
+                      height: 1.1,
+                      shadows: [
+                        if (isActive)
+                          Shadow(
+                            color: Colors.white.withValues(alpha: 0.3),
+                            blurRadius: 20,
+                          ),
+                        const Shadow(
+                          color: Colors.black45,
+                          blurRadius: 10,
+                          offset: Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               ),
             ),
           ),
         ),
       ),
     );
-  }
-}
-
-class _WordByWordText extends StatelessWidget {
-  final List<_ProcessedWord> words;
-  final String text;
-  final bool isActive;
-  final int distance;
-
-  const _WordByWordText({
-    required this.words,
-    required this.text,
-    required this.isActive,
-    required this.distance,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    const baseStyle = TextStyle(
-      color: Colors.white,
-      fontSize: 48,
-      fontWeight: FontWeight.w900,
-      letterSpacing: -2.2,
-      height: 1,
-    );
-
-    return FittedBox(
-      fit: BoxFit.scaleDown,
-      child: isActive
-          ? _buildActiveContent(baseStyle)
-          : _buildInactiveContent(baseStyle),
-    );
-  }
-
-  Widget _buildInactiveContent(TextStyle baseStyle) {
-    final content = Text(
-      text,
-      style: baseStyle.copyWith(color: baseStyle.color?.withValues(alpha: 0.8)),
-      textAlign: TextAlign.center,
-    );
-
-    // Apply blur only if close to active line to save resources
-    if (distance <= 2) {
-      return ImageFiltered(
-        imageFilter: ui.ImageFilter.blur(sigmaX: 1, sigmaY: 1),
-        child: content,
-      );
-    }
-
-    return content;
-  }
-
-  Widget _buildActiveContent(TextStyle baseStyle) {
-    if (words.isEmpty) {
-      return Text(text, style: baseStyle, textAlign: TextAlign.center);
-    }
-
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: words
-          .map(
-            (word) => _WordWidget(
-              key: ValueKey(word.startTimeMs),
-              word: word,
-              baseStyle: baseStyle,
-            ),
-          )
-          .toList(),
-    );
-  }
-}
-
-enum _WordStatus { future, current, past }
-
-class _WordWidget extends StatelessWidget {
-  final _ProcessedWord word;
-  final TextStyle baseStyle;
-
-  const _WordWidget({
-    required this.word,
-    required this.baseStyle,
-    super.key,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Watch((context) {
-      // Use select to rebuild only when this word status actually changes
-      final status = trackProgressSignal
-          .select((s) {
-            final currentMs = s.value.positionMs;
-            if (currentMs > word.endTimeMs) return _WordStatus.past;
-            if (currentMs >= word.startTimeMs) return _WordStatus.current;
-            return _WordStatus.future;
-          })
-          ();
-
-      var wordOpacity = 1.0;
-      var wordScale = 1.0;
-      var glow = 0.0;
-
-      switch (status) {
-        case _WordStatus.current:
-          wordScale = 1.1;
-          glow = 1.0;
-          wordOpacity = 1.0;
-        case _WordStatus.past:
-          wordOpacity = 0.6;
-        case _WordStatus.future:
-          wordOpacity = 0.4;
-      }
-
-      return Padding(
-        padding: const EdgeInsets.only(right: 12),
-        child: AnimatedScale(
-          duration: const Duration(milliseconds: 400),
-          curve: Curves.easeOutCubic,
-          scale: wordScale,
-          child: AnimatedOpacity(
-            duration: const Duration(milliseconds: 400),
-            opacity: wordOpacity,
-            child: Text(
-              word.text,
-              style: baseStyle.copyWith(
-                shadows: [
-                  if (glow > 0)
-                    Shadow(
-                      color: Colors.white.withValues(alpha: 0.5 * glow),
-                      blurRadius: 30,
-                    ),
-                  const Shadow(
-                    color: Colors.black45,
-                    blurRadius: 10,
-                    offset: Offset(0, 4),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      );
-    });
   }
 }
 
@@ -506,9 +349,7 @@ class _LyricTimerWidgetState extends State<_LyricTimerWidget>
     super.initState();
     _pulseController = AnimationController(
       vsync: this,
-      duration: const Duration(
-        milliseconds: 942,
-      ), // Close to sin(ms/150) period
+      duration: const Duration(milliseconds: 1000),
     );
     unawaited(_pulseController.repeat(reverse: true));
   }
@@ -522,7 +363,6 @@ class _LyricTimerWidgetState extends State<_LyricTimerWidget>
   @override
   Widget build(BuildContext context) {
     return Watch((context) {
-      // Rebuild only when visibility or active dots count changes
       final progress = trackProgressSignal.value;
       final currentMs = progress.positionMs.toInt();
       final remainingMs =
@@ -536,9 +376,7 @@ class _LyricTimerWidgetState extends State<_LyricTimerWidget>
 
       if (!showDots) return const SizedBox.shrink();
 
-      return AnimatedOpacity(
-        duration: const Duration(milliseconds: 400),
-        opacity: 1,
+      return Center(
         child: Row(
           mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.center,
@@ -550,7 +388,7 @@ class _LyricTimerWidgetState extends State<_LyricTimerWidget>
               animation: _pulseController,
               builder: (context, child) {
                 final pulse = active
-                    ? (_pulseController.value * 0.2 + 1.0)
+                    ? (_pulseController.value * 0.15 + 1.0)
                     : 1.0;
                 return Transform.scale(
                   scale: pulse,
@@ -558,17 +396,17 @@ class _LyricTimerWidgetState extends State<_LyricTimerWidget>
                 );
               },
               child: Container(
-                margin: const EdgeInsets.symmetric(horizontal: 10),
-                width: 12,
-                height: 12,
+                margin: const EdgeInsets.symmetric(horizontal: 12),
+                width: 14,
+                height: 14,
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: active ? 1.0 : 0.2),
+                  color: Colors.white.withValues(alpha: active ? 0.9 : 0.1),
                   shape: BoxShape.circle,
                   boxShadow: active
                       ? [
                           BoxShadow(
-                            color: Colors.white.withValues(alpha: 0.3),
-                            blurRadius: 10,
+                            color: Colors.white.withValues(alpha: 0.2),
+                            blurRadius: 8,
                           ),
                         ]
                       : null,
