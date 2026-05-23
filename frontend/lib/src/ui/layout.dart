@@ -42,97 +42,106 @@ class _AppLayoutState extends State<AppLayout> {
       final screenWidth = MediaQuery.sizeOf(context).width;
       final isNarrow = screenWidth < 600;
 
-      return Scaffold(
-        backgroundColor: Colors.transparent,
-        resizeToAvoidBottomInset: false,
-        body: PageStorage(
-          bucket: _bucket,
-          child: Stack(
-            children: [
-              // 1. Background (shader + blur)
-              const Positioned.fill(child: BlurredCoverBackground()),
-              const Positioned.fill(child: WaveBackground()),
+      return PopScope(
+        canPop: !canGoBackSignal.watch(context),
+        onPopInvokedWithResult: (didPop, result) {
+          if (didPop) return;
+          if (canGoBackSignal.value) {
+            goBack();
+          }
+        },
+        child: Scaffold(
+          backgroundColor: Colors.transparent,
+          resizeToAvoidBottomInset: false,
+          body: PageStorage(
+            bucket: _bucket,
+            child: Stack(
+              children: [
+                // 1. Background (shader + blur)
+                const Positioned.fill(child: BlurredCoverBackground()),
+                const Positioned.fill(child: WaveBackground()),
 
-              // 2. Dimming when leaving home or showing lyrics
-              Watch((context) {
-                final showLyrics = showLyricsSignal.value;
-                final hideOverlay = hideLyricsOverlaySignal.value;
-                final isDimmed = !isHome || (showLyrics && !hideOverlay);
+                // 2. Dimming when leaving home or showing lyrics
+                Watch((context) {
+                  final showLyrics = showLyricsSignal.value;
+                  final hideOverlay = hideLyricsOverlaySignal.value;
+                  final isDimmed = !isHome || (showLyrics && !hideOverlay);
 
-                return Positioned.fill(
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 500),
-                    color: isDimmed
-                        ? (isHome
+                  return Positioned.fill(
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 500),
+                      color: isDimmed
+                          ? (isHome
                               ? Colors.black54
                               : Colors.black.withValues(alpha: 0.6))
-                        : Colors.transparent,
-                  ),
-                );
-              }),
+                          : Colors.transparent,
+                    ),
+                  );
+                }),
 
-              Positioned.fill(
-                child: SafeArea(
-                  top: !isCustomTitlebar,
-                  bottom: false,
-                  child: Stack(
-                    children: [
-                      // 3. Content (set of independent stacks for each tab)
-                      Positioned.fill(
-                        child: Padding(
-                          padding: EdgeInsets.only(
-                            top: isCustomTitlebar ? 32.0 : 0,
-                          ),
-                          child: Stack(
-                            children: [
-                              Positioned.fill(
-                                child: Stack(
-                                  children: rootSections
-                                      .map((root) => _RootBucket(root: root))
-                                      .toList(),
+                Positioned.fill(
+                  child: SafeArea(
+                    top: !isCustomTitlebar,
+                    bottom: false,
+                    child: Stack(
+                      children: [
+                        // 3. Content (set of independent stacks for each tab)
+                        Positioned.fill(
+                          child: Padding(
+                            padding: EdgeInsets.only(
+                              top: isCustomTitlebar ? 32.0 : 0,
+                            ),
+                            child: Stack(
+                              children: [
+                                Positioned.fill(
+                                  child: Stack(
+                                    children: rootSections
+                                        .map((root) => _RootBucket(root: root))
+                                        .toList(),
+                                  ),
                                 ),
-                              ),
-                              Positioned(
-                                left: 0,
-                                right: 0,
-                                bottom: isNarrow ? 80 : 0,
-                                child: _AnimatedPlayerBar(isHome: isHome),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-
-                      // 4. Navigation
-                      Align(
-                        alignment: isNarrow
-                            ? Alignment.bottomCenter
-                            : Alignment.centerLeft,
-                        child: const FloatingNavBar(),
-                      ),
-
-                      // 5. Back button
-                      _FloatingBackButton(),
-
-                      // 6. Custom Titlebar
-                      if (isCustomTitlebar)
-                        const Positioned(
-                          top: 0,
-                          left: 0,
-                          right: 0,
-                          child: SizedBox(
-                            height: 32,
-                            child: WindowCaption(
-                              brightness: Brightness.dark,
-                              backgroundColor: Colors.transparent,
+                                Positioned(
+                                  left: 0,
+                                  right: 0,
+                                  bottom: isNarrow ? 80 : 0,
+                                  child: _AnimatedPlayerBar(isHome: isHome),
+                                ),
+                              ],
                             ),
                           ),
                         ),
-                    ],
+
+                        // 4. Navigation
+                        Align(
+                          alignment: isNarrow
+                              ? Alignment.bottomCenter
+                              : Alignment.centerLeft,
+                          child: const FloatingNavBar(),
+                        ),
+
+                        // 5. Back button
+                        _FloatingBackButton(),
+
+                        // 6. Custom Titlebar
+                        if (isCustomTitlebar)
+                          const Positioned(
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            child: SizedBox(
+                              height: 32,
+                              child: WindowCaption(
+                                brightness: Brightness.dark,
+                                backgroundColor: Colors.transparent,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       );

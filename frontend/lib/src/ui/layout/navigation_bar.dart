@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -415,14 +416,15 @@ class _AccountMenuDialog extends StatelessWidget {
                 setSection(AppSection.yandexId);
               },
             ),
-            _MenuTile(
-              icon: Icons.settings_outlined,
-              title: 'Настройки',
-              onTap: () {
-                Navigator.pop(context);
-                setSection(AppSection.account);
-              },
-            ),
+            if (!Platform.isAndroid)
+              _MenuTile(
+                icon: Icons.settings_outlined,
+                title: 'Настройки',
+                onTap: () {
+                  Navigator.pop(context);
+                  setSection(AppSection.account);
+                },
+              ),
 
             const Divider(color: Colors.white10, height: 40),
 
@@ -577,7 +579,7 @@ class _NavIcon extends StatelessWidget {
           icon,
           color: isSelected
               ? Theme.of(context).colorScheme.primary
-              : Colors.white38,
+              : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.38),
           size: 28,
         ),
       ),

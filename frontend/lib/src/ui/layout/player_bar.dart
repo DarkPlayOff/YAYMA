@@ -17,7 +17,8 @@ class PlayerBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Watch((context) {
-      final barColor = playerBarColorSignal.value;
+      final theme = Theme.of(context);
+      final colorScheme = theme.colorScheme;
       final navState = currentNavStateSignal.value;
       final showLyrics = showLyricsSignal.value;
       final isHome = navState.section == AppSection.home;
@@ -26,25 +27,29 @@ class PlayerBar extends StatelessWidget {
       final alpha = useLyricsStyle ? 0.5 : 0.9;
       final blur = useLyricsStyle ? 0.0 : 3.0;
 
+      // Dynamic background color based on theme
+      final barColor = Color.lerp(
+        colorScheme.surfaceContainerHighest,
+        Colors.black,
+        0.4,
+      ) ?? colorScheme.surface;
+
       return LayoutBuilder(
         builder: (context, constraints) {
           final width = constraints.maxWidth;
-          final accentColor = accentColorSignal.value;
+          final accentColor = colorScheme.primary;
           final isNarrow = width < 600;
 
           double coverSize = 75;
           double volumeWidth = 120;
-          double horizontalPadding = 24;
 
           if (width < 1100) {
             coverSize = 64;
             volumeWidth = 100;
-            horizontalPadding = 16;
           }
           if (width < 900) {
             coverSize = 56;
             volumeWidth = 80;
-            horizontalPadding = 12;
           }
           if (width < 750) {
             coverSize = 48;
@@ -55,24 +60,18 @@ class PlayerBar extends StatelessWidget {
             duration: const Duration(milliseconds: 600),
             height: isNarrow ? 80 : 100,
             padding: EdgeInsets.symmetric(
-              horizontal: isNarrow ? 12 : horizontalPadding,
+              horizontal: isNarrow ? 16 : 24,
             ),
             margin: EdgeInsets.fromLTRB(
-              isNarrow ? 24 : 16,
+              isNarrow ? 16 : 16,
               0,
-              isNarrow ? 24 : 32,
+              isNarrow ? 16 : 16,
               isNarrow ? 8 : 16,
             ),
             decoration: BoxDecoration(
               color: barColor.withValues(alpha: alpha),
               borderRadius: BorderRadius.circular(24),
               border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.2),
-                  blurRadius: 20,
-                ),
-              ],
             ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(24),
@@ -134,28 +133,38 @@ class _TrackInfoState extends State<_TrackInfo> {
   Widget build(BuildContext context) {
     return Watch((context) {
       final meta = trackMetadataSignal();
+      final isPlaying = isPlayingSignal();
       if (meta.id == null) return const SizedBox();
 
       return Row(
         children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(12),
-            child: meta.coverUrl != null
-                ? RustCachedImage(
-                    imageUrl: meta.coverUrl,
-                    width: widget.coverSize,
-                    height: widget.coverSize,
-                    errorWidget: Container(
-                      width: widget.coverSize,
-                      height: widget.coverSize,
-                      color: Colors.white10,
-                    ),
-                  )
-                : Container(
-                    width: widget.coverSize,
-                    height: widget.coverSize,
-                    color: Colors.white10,
-                  ),
+          AnimatedScale(
+            scale: isPlaying ? 1.0 : 0.96,
+            duration: const Duration(milliseconds: 350),
+            curve: Curves.easeInOutCubic,
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 400),
+              child: ClipRRect(
+                key: ValueKey(meta.coverUrl),
+                borderRadius: BorderRadius.circular(12),
+                child: meta.coverUrl != null
+                    ? RustCachedImage(
+                        imageUrl: meta.coverUrl,
+                        width: widget.coverSize,
+                        height: widget.coverSize,
+                        errorWidget: Container(
+                          width: widget.coverSize,
+                          height: widget.coverSize,
+                          color: Colors.white10,
+                        ),
+                      )
+                    : Container(
+                        width: widget.coverSize,
+                        height: widget.coverSize,
+                        color: Colors.white10,
+                      ),
+              ),
+            ),
           ),
           const SizedBox(width: 16),
           Expanded(
@@ -336,6 +345,7 @@ class _VolumeAndQuality extends StatelessWidget {
 
     return FittedBox(
       fit: BoxFit.scaleDown,
+      alignment: Alignment.centerRight,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.end,
         children: [

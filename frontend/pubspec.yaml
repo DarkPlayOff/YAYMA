@@ -40,6 +40,8 @@ dev_dependencies:
   very_good_analysis: ^10.2.0
 
 flutter_launcher_icons:
+  android: true
+  image_path: "assets/icons/logo.webp"
   windows:
     generate: true
     image_path: "assets/icons/logo.webp"

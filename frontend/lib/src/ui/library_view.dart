@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:signals_flutter/signals_flutter.dart';
@@ -9,7 +8,6 @@ import 'package:yayma/src/providers/notification_provider.dart';
 import 'package:yayma/src/providers/playback_provider.dart';
 import 'package:yayma/src/rust/api/models.dart';
 import 'package:yayma/src/ui/widgets/common_ui.dart';
-import 'package:yayma/src/ui/widgets/responsive.dart';
 import 'package:yayma/src/ui/widgets/track_elements.dart';
 import 'package:yayma/src/ui/widgets/track_tile.dart';
 
@@ -141,9 +139,9 @@ class _LibraryViewState extends State<LibraryView>
         Padding(
           padding: EdgeInsets.fromLTRB(
             isNarrow ? 20 : 40,
-            isNarrow ? 40 : 60,
+            isNarrow ? 16 : 40,
             isNarrow ? 20 : 40,
-            isNarrow ? 12 : 20,
+            isNarrow ? 8 : 20,
           ),
           child: Row(
             children: [
@@ -151,12 +149,11 @@ class _LibraryViewState extends State<LibraryView>
                 child: Text(
                   'Библиотека',
                   style: TextStyle(
-                    fontSize: isNarrow ? 32 : 48,
+                    fontSize: isNarrow ? 24 : 48,
                     fontWeight: FontWeight.w900,
                     color: Colors.white,
                     letterSpacing: -1,
                   ),
-                  overflow: TextOverflow.ellipsis,
                 ),
               ),
               const SizedBox(width: 16),
@@ -218,136 +215,104 @@ class _LikedTracksTab extends StatelessWidget {
       final tracks = likedTracksSignal.value;
       final query = librarySearchQuerySignal.value;
 
-      return Stack(
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (tracks.isEmpty)
-            Center(
-              child: Text(
-                query.isEmpty ? 'Нет любимых треков' : 'Ничего не найдено',
-                style: const TextStyle(color: Colors.white38),
-              ),
-            )
-          else
-            ListView.builder(
-              padding: EdgeInsets.only(
-                top: isNarrow ? 70 : 80,
-                bottom: 140,
-              ),
-              itemCount: tracks.length,
-              itemBuilder: (context, index) {
-                final track = tracks[index];
-                return CommonTrackTile(
-                  trackId: track.id,
-                  title: track.title,
-                  version: track.version,
-                  artists: track.artists,
-                  leading: TrackCover(url: track.coverUrl),
-                  contentPadding: EdgeInsets.symmetric(
-                    horizontal: isNarrow ? 20 : 40,
-                    vertical: 8,
-                  ),
-                  trailing: Text(
-                    formatDuration(track.durationMs),
-                    style: const TextStyle(color: Colors.white38),
-                  ),
-                  hoverActions: [
-                    IconButton(
-                      icon: Icon(
-                        Icons.play_arrow_rounded,
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                      onPressed: () => unawaited(
-                        PlaybackController.playLikedTrack(track.id),
-                      ),
-                    ),
-                  ],
-                  onTap: () =>
-                      unawaited(PlaybackController.playLikedTrack(track.id)),
-                  onTitleTap: () {
-                    if (track.albumId != null) {
-                      navigateTo(AppSection.album, track.albumId);
-                    }
-                  },
-                );
-              },
+          Padding(
+            padding: EdgeInsets.fromLTRB(
+              isNarrow ? 20 : 40,
+              8,
+              isNarrow ? 20 : 40,
+              16,
             ),
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            child: Padding(
-              padding: EdgeInsets.fromLTRB(
-                context.horizontalPadding,
-                8,
-                context.horizontalPadding,
-                12,
-              ),
-              child: Container(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.4),
-                      blurRadius: 15,
-                      offset: const Offset(0, 8),
-                    ),
-                  ],
+            child: TextField(
+              controller: searchController,
+              onChanged: setLibrarySearchQuery,
+              style: const TextStyle(color: Colors.white, fontSize: 14),
+              decoration: InputDecoration(
+                hintText: 'Поиск в любимых треках...',
+                hintStyle: const TextStyle(color: Colors.white24),
+                prefixIcon: const Icon(
+                  Icons.search,
+                  color: Colors.white38,
+                  size: 20,
                 ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(16),
-                  child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: 3, sigmaY: 3),
-                    child: Watch((context) {
-                      final barColor = playerBarColorSignal.value;
-                      final isHome =
-                          currentRootSignal.value == AppSection.home;
-                      final alpha = isHome ? 0.5 : 0.7;
-
-                      return Container(
-                        decoration: BoxDecoration(
-                          color: barColor.withValues(alpha: alpha),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.1),
-                          ),
+                suffixIcon: searchController.text.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(
+                          Icons.clear,
+                          color: Colors.white38,
+                          size: 18,
                         ),
-                        child: TextField(
-                          controller: searchController,
-                          onChanged: setLibrarySearchQuery,
-                          style: const TextStyle(color: Colors.white),
-                          decoration: InputDecoration(
-                            hintText: 'Поиск в любимых треках...',
-                            hintStyle: const TextStyle(color: Colors.white24),
-                            prefixIcon: const Icon(
-                              Icons.search,
-                              color: Colors.white38,
+                        onPressed: () {
+                          searchController.clear();
+                          setLibrarySearchQuery('');
+                        },
+                      )
+                    : null,
+                filled: true,
+                fillColor: Colors.white.withValues(alpha: 0.05),
+                isDense: true,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 10,
+                ),
+              ),
+            ),
+          ),
+          Expanded(
+            child: tracks.isEmpty
+                ? Center(
+                    child: Text(
+                      query.isEmpty ? 'Нет любимых треков' : 'Ничего не найдено',
+                      style: const TextStyle(color: Colors.white38),
+                    ),
+                  )
+                : ListView.builder(
+                    padding: const EdgeInsets.only(bottom: 140),
+                    itemCount: tracks.length,
+                    itemBuilder: (context, index) {
+                      final track = tracks[index];
+                      return CommonTrackTile(
+                        trackId: track.id,
+                        title: track.title,
+                        version: track.version,
+                        artists: track.artists,
+                        leading: TrackCover(url: track.coverUrl),
+                        contentPadding: EdgeInsets.symmetric(
+                          horizontal: isNarrow ? 20 : 40,
+                          vertical: 8,
+                        ),
+                        trailing: Text(
+                          formatDuration(track.durationMs),
+                          style: const TextStyle(color: Colors.white38),
+                        ),
+                        hoverActions: [
+                          IconButton(
+                            icon: Icon(
+                              Icons.play_arrow_rounded,
+                              color: Theme.of(context).colorScheme.primary,
                             ),
-                            suffixIcon: searchController.text.isNotEmpty
-                                ? IconButton(
-                                    icon: const Icon(
-                                      Icons.clear,
-                                      color: Colors.white38,
-                                    ),
-                                    onPressed: () {
-                                      searchController.clear();
-                                      setLibrarySearchQuery('');
-                                    },
-                                  )
-                                : null,
-                            filled: false,
-                            border: InputBorder.none,
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 20,
-                              vertical: 14,
+                            onPressed: () => unawaited(
+                              PlaybackController.playLikedTrack(track.id),
                             ),
                           ),
+                        ],
+                        onTap: () => unawaited(
+                          PlaybackController.playLikedTrack(track.id),
                         ),
+                        onTitleTap: () {
+                          if (track.albumId != null) {
+                            navigateTo(AppSection.album, track.albumId);
+                          }
+                        },
                       );
-                    }),
+                    },
                   ),
-                ),
-              ),
-            ),
           ),
         ],
       );

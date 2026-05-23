@@ -50,7 +50,7 @@ class HomeView extends StatelessWidget {
                 children: [
                   // Left side: Player UI
                   AnimatedPositioned(
-                    duration: const Duration(milliseconds: 600),
+                    duration: const Duration(milliseconds: 350),
                     curve: Curves.easeInOutCubic,
                     left: showLyrics ? -width : 0,
                     right: showLyrics ? width : 0,
@@ -122,7 +122,7 @@ class HomeView extends StatelessWidget {
 
                   // Right side: Lyrics
                   AnimatedPositioned(
-                    duration: const Duration(milliseconds: 600),
+                    duration: const Duration(milliseconds: 350),
                     curve: Curves.easeInOutCubic,
                     left: showLyrics ? 0 : width,
                     right: showLyrics ? 0 : -width,
@@ -181,6 +181,7 @@ class _HomeCoverWidgetState extends State<_HomeCoverWidget> {
     return Watch((context) {
       final meta = trackMetadataSignal();
       final showLyrics = showLyricsSignal.value;
+      final isPlaying = isPlayingSignal();
       final height = MediaQuery.of(context).size.height;
 
       final width = MediaQuery.of(context).size.width;
@@ -193,6 +194,9 @@ class _HomeCoverWidgetState extends State<_HomeCoverWidget> {
       if (isNarrow && !showLyrics) {
         size = width * 0.75; // Reduced from width - 48
       }
+
+      // Animation scale for play/pause
+      final scale = isPlaying ? 1.0 : 0.92;
 
       return MouseRegion(
         onEnter: (_) => _isCoverHovered.value = true,
@@ -209,22 +213,47 @@ class _HomeCoverWidgetState extends State<_HomeCoverWidget> {
           child: ValueListenableBuilder<bool>(
             valueListenable: _isCoverHovered,
             builder: (context, hovered, _) {
-              return AnimatedContainer(
-                duration: const Duration(milliseconds: 600),
+              return AnimatedScale(
+                scale: scale,
+                duration: const Duration(milliseconds: 350),
                 curve: Curves.easeInOutCubic,
-                width: size,
-                height: size,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(32),
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(32),
-                  child: meta.coverUrl != null
-                      ? RustCachedImage(
-                          imageUrl: meta.coverUrl,
-                          errorWidget: const _CoverErrorPlaceholder(),
-                        )
-                      : const _CoverErrorPlaceholder(),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 350),
+                  curve: Curves.easeInOutCubic,
+                  width: size,
+                  height: size,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(32),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: isPlaying ? 0.3 : 0.1),
+                        blurRadius: isPlaying ? 40 : 20,
+                        spreadRadius: isPlaying ? 10 : 0,
+                      ),
+                    ],
+                  ),
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 500),
+                    transitionBuilder: (child, animation) {
+                      return FadeTransition(
+                        opacity: animation,
+                        child: ScaleTransition(
+                          scale: Tween<double>(begin: 0.9, end: 1).animate(animation),
+                          child: child,
+                        ),
+                      );
+                    },
+                    child: ClipRRect(
+                      key: ValueKey(meta.coverUrl),
+                      borderRadius: BorderRadius.circular(32),
+                      child: meta.coverUrl != null
+                          ? RustCachedImage(
+                              imageUrl: meta.coverUrl,
+                              errorWidget: const _CoverErrorPlaceholder(),
+                            )
+                          : const _CoverErrorPlaceholder(),
+                    ),
+                  ),
                 ),
               );
             },

@@ -43,20 +43,23 @@ class _SearchViewState extends State<SearchView> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: context.viewPadding,
+          padding: isNarrow
+              ? const EdgeInsets.fromLTRB(20, 16, 20, 8)
+              : context.viewPadding,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
                 'Поиск',
                 style: TextStyle(
-                  fontSize: isNarrow ? 32 : 48,
+                  fontSize: isNarrow ? 24 : 48,
                   fontWeight: FontWeight.w900,
                   color: Colors.white,
                   letterSpacing: -1,
                 ),
               ),
-              SizedBox(height: isNarrow ? 16 : 24),
+              if (!isNarrow) const SizedBox(height: 24),
+              if (isNarrow) const SizedBox(height: 8),
               TextField(
                 controller: _controller,
                 onChanged: setSearchQuery,
