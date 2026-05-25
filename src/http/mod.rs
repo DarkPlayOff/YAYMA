@@ -13,7 +13,8 @@ use yandex_music::{
     // ... (rest of imports remains similar, but I need to provide full block)
     api::{
         album::{
-            get_album::GetAlbumOptions,
+            add_liked_album::AddLikedAlbumOptions, get_album::GetAlbumOptions,
+            remove_liked_album::RemoveLikedAlbumOptions,
         },
         artist::{
             add_disliked_artist::AddDislikedArtistOptions, add_liked_artist::AddLikedArtistOptions,
@@ -591,26 +592,14 @@ impl ApiService {
     }
 
     pub async fn add_like_album(&self, album_id: u32) -> Result<()> {
-        self.http_client
-            .post(format!(
-                "https://api.music.yandex.ru/users/{}/likes/albums/add?album-id={}",
-                self.user_id, album_id
-            ))
-            .send()
-            .await?
-            .error_for_status()?;
+        let opts = AddLikedAlbumOptions::new(self.user_id, album_id);
+        self.client.add_liked_album(&opts).await?;
         Ok(())
     }
 
     pub async fn remove_like_album(&self, album_id: u32) -> Result<()> {
-        self.http_client
-            .post(format!(
-                "https://api.music.yandex.ru/users/{}/likes/albums/{}/remove",
-                self.user_id, album_id
-            ))
-            .send()
-            .await?
-            .error_for_status()?;
+        let opts = RemoveLikedAlbumOptions::new(self.user_id, album_id);
+        self.client.remove_liked_album(&opts).await?;
         Ok(())
     }
 
