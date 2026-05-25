@@ -5,6 +5,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:yayma/src/app/init.dart';
+import 'package:yayma/src/app/system_tray.dart';
 import 'package:yayma/src/providers/navigation_provider.dart';
 import 'package:yayma/src/providers/notification_provider.dart';
 import 'package:yayma/src/providers/playback_provider.dart';
@@ -36,6 +37,8 @@ Future<void> main() async {
       await windowManager.show();
       await windowManager.focus();
     });
+
+    await SystemTrayManager.instance.initialize();
   }
 
   runApp(const MyApp());

@@ -5,6 +5,7 @@
 list(APPEND FLUTTER_PLUGIN_LIST
   dynamic_color
   screen_retriever_linux
+  tray_manager
   webview_all_linux
   window_manager
 )
