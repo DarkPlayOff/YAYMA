@@ -1,7 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/providers/auth_provider.dart';
+import 'package:yayma/src/providers/library_provider.dart';
 import 'package:yayma/src/providers/navigation_provider.dart';
+import 'package:yayma/src/providers/notification_provider.dart';
 import 'package:yayma/src/providers/playback_provider.dart';
 import 'package:yayma/src/rust/api/content.dart' as rust;
 import 'package:yayma/src/rust/api/models.dart';
@@ -18,6 +23,7 @@ class AlbumView extends StatefulWidget {
 
 class _AlbumViewState extends State<AlbumView> {
   late final FutureSignal<AlbumDetailsDto?> _albumAsync;
+  final FlutterSignal<bool> _isDownloadingAlbum = signal(false);
 
   @override
   void initState() {
@@ -31,6 +37,73 @@ class _AlbumViewState extends State<AlbumView> {
       if (ctx == null) return null;
       return rust.getAlbumDetails(albumId: id, ctx: ctx);
     });
+    unawaited(refreshLikedAlbums());
+  }
+
+  Future<void> _toggleAlbumLike(AlbumDetailsDto album, bool isLiked) async {
+    final success = isLiked
+        ? await removeLikedAlbumAction(album.id)
+        : await addLikedAlbumAction(album.id);
+
+    if (!mounted) return;
+    if (success) {
+      final current = likedAlbumsSignal.value;
+      if (isLiked) {
+        likedAlbumsSignal.value = current
+            .where((a) => a.id != album.id)
+            .toList();
+      } else if (!current.any((a) => a.id == album.id)) {
+        likedAlbumsSignal.value = [
+          SimpleAlbumDto(
+            id: album.id,
+            title: album.title,
+            artists: album.artists,
+            year: album.year,
+            coverUrl: album.coverUrl,
+          ),
+          ...current,
+        ];
+      }
+
+      showAppSuccess(
+        isLiked ? 'Альбом удалён из любимых' : 'Альбом добавлен в любимые',
+      );
+    } else {
+      showAppError('Ошибка при обновлении любимых альбомов');
+    }
+  }
+
+  Future<void> _copyAlbumLink(AlbumDetailsDto album) async {
+    await Clipboard.setData(
+      ClipboardData(text: 'https://music.yandex.ru/album/${album.id}'),
+    );
+    showAppSuccess('Ссылка скопирована');
+  }
+
+  Future<void> _downloadAlbum(AlbumDetailsDto album) async {
+    if (_isDownloadingAlbum.value) return;
+
+    final ctx = appContextSignal.value;
+    if (ctx == null) return;
+
+    _isDownloadingAlbum.value = true;
+    showAppSuccess('Скачивание альбома началось...');
+
+    var downloaded = 0;
+    try {
+      for (final track in album.tracks) {
+        await rust.downloadTrack(ctx: ctx, trackId: track.id);
+        downloaded++;
+      }
+
+      if (!mounted) return;
+      showAppSuccess('Альбом сохранён: $downloaded треков');
+    } on Object catch (e) {
+      if (!mounted) return;
+      showAppError('Ошибка при скачивании альбома: $e');
+    } finally {
+      _isDownloadingAlbum.value = false;
+    }
   }
 
   @override
@@ -45,63 +118,129 @@ class _AlbumViewState extends State<AlbumView> {
         isEmpty: (album) => album == null,
         empty: const Center(child: Text('Альбом не найден')),
         builder: (context, album) {
-          return CommonDetailSliverLayout(
-            header: CommonDetailHeader(
-              type: 'Альбом',
-              title: album!.title,
-              artists: album.artists,
-              secondarySubtitle: album.year?.toString(),
-              coverUrl: album.coverUrl,
-            ),
-            slivers: [
-              SliverFixedExtentList(
-                itemExtent: 84,
-                delegate: SliverChildBuilderDelegate((context, index) {
-                  final track = album.tracks[index];
-                  return CommonTrackTile(
-                    trackId: track.id,
-                    title: track.title,
-                    version: track.version,
-                    artists: track.artists,
-                    albumId: album.id,
-                    leading: SizedBox(
-                      width: 32,
-                      child: Center(
-                        child: Text(
-                          '${index + 1}',
-                          style: const TextStyle(
-                            color: Colors.white38,
-                            fontSize: 16,
+          final albumData = album!;
+          return Watch((context) {
+            final isLiked = likedAlbumsSignal
+                .watch(context)
+                .any((likedAlbum) => likedAlbum.id == albumData.id);
+            final isDownloading = _isDownloadingAlbum.watch(context);
+
+            return CommonDetailSliverLayout(
+              header: CommonDetailHeader(
+                type: 'Альбом',
+                title: albumData.title,
+                artists: albumData.artists,
+                secondarySubtitle: albumData.year?.toString(),
+                coverUrl: albumData.coverUrl,
+                actions: [
+                  ElevatedButton.icon(
+                    onPressed: () => unawaited(
+                      _toggleAlbumLike(albumData, isLiked),
+                    ),
+                    icon: Icon(
+                      isLiked
+                          ? Icons.favorite_rounded
+                          : Icons.favorite_border_rounded,
+                    ),
+                    label: Text(isLiked ? 'В любимых' : 'В любимые'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: isLiked
+                          ? Theme.of(context).colorScheme.primary
+                          : Colors.white.withValues(alpha: 0.1),
+                      foregroundColor: isLiked ? Colors.black : Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 14,
+                      ),
+                    ),
+                  ),
+                  ElevatedButton.icon(
+                    onPressed: () => unawaited(_copyAlbumLink(albumData)),
+                    icon: const Icon(Icons.link_rounded),
+                    label: const Text('Ссылка'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white.withValues(alpha: 0.1),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 14,
+                      ),
+                    ),
+                  ),
+                  ElevatedButton.icon(
+                    onPressed: isDownloading
+                        ? null
+                        : () => unawaited(_downloadAlbum(albumData)),
+                    icon: isDownloading
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.download_rounded),
+                    label: const Text('Скачать альбом'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white.withValues(alpha: 0.1),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 14,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              slivers: [
+                SliverFixedExtentList(
+                  itemExtent: 84,
+                  delegate: SliverChildBuilderDelegate((context, index) {
+                    final track = albumData.tracks[index];
+                    return CommonTrackTile(
+                      trackId: track.id,
+                      title: track.title,
+                      version: track.version,
+                      artists: track.artists,
+                      albumId: albumData.id,
+                      leading: SizedBox(
+                        width: 32,
+                        child: Center(
+                          child: Text(
+                            '${index + 1}',
+                            style: const TextStyle(
+                              color: Colors.white38,
+                              fontSize: 16,
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                    trailing: Text(
-                      formatDuration(track.durationMs),
-                      style: const TextStyle(color: Colors.white38),
-                    ),
-                    hoverActions: [
-                      IconButton(
-                        icon: Icon(
-                          Icons.play_arrow_rounded,
-                          color: Theme.of(context).colorScheme.primary,
-                        ),
-                        onPressed: () => PlaybackController.playAlbumTrack(
-                          int.parse(album.id),
-                          track.id,
-                        ),
+                      trailing: Text(
+                        formatDuration(track.durationMs),
+                        style: const TextStyle(color: Colors.white38),
                       ),
-                    ],
-                    onTap: () => PlaybackController.playAlbumTrack(
-                      int.parse(album.id),
-                      track.id,
-                    ),
-                    onTitleTap: () => navigateTo(AppSection.album, album.id),
-                  );
-                }, childCount: album.tracks.length),
-              ),
-            ],
-          );
+                      hoverActions: [
+                        IconButton(
+                          icon: Icon(
+                            Icons.play_arrow_rounded,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                          onPressed: () => PlaybackController.playAlbumTrack(
+                            int.parse(albumData.id),
+                            track.id,
+                          ),
+                        ),
+                      ],
+                      onTap: () => PlaybackController.playAlbumTrack(
+                        int.parse(albumData.id),
+                        track.id,
+                      ),
+                      onTitleTap: () =>
+                          navigateTo(AppSection.album, albumData.id),
+                    );
+                  }, childCount: albumData.tracks.length),
+                ),
+              ],
+            );
+          });
         },
       );
     });

@@ -47,6 +47,26 @@ Future<void> refreshLikedArtists() async {
   }
 }
 
+Future<bool> addLikedAlbumAction(String albumId) async {
+  final id = int.tryParse(albumId);
+  if (id == null) return false;
+
+  final success = await runRustAction(
+    (ctx) => addLikedAlbum(ctx: ctx, albumId: id),
+  );
+  return success;
+}
+
+Future<bool> removeLikedAlbumAction(String albumId) async {
+  final id = int.tryParse(albumId);
+  if (id == null) return false;
+
+  final success = await runRustAction(
+    (ctx) => removeLikedAlbum(ctx: ctx, albumId: id),
+  );
+  return success;
+}
+
 Future<void> refreshLikedTracks({String? query, bool force = false}) async {
   if (!force &&
       query == null &&

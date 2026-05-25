@@ -154,6 +154,38 @@ pub async fn get_liked_artists(ctx: &AppContext) -> Vec<SimpleArtistDto> {
     }
 }
 
+pub async fn add_liked_album(ctx: &AppContext, album_id: u32) -> bool {
+    {
+        let mut state = ctx.audio.state.write().await;
+        state.liked.set_album_like_status(album_id, true);
+    }
+    ctx.audio.signals.library_changed.send_replace(());
+    ctx.audio.signals.changed.send_replace(());
+
+    let api = ctx.core.api.clone();
+    tokio::spawn(async move {
+        let _ = api.add_like_album(album_id).await;
+    });
+
+    true
+}
+
+pub async fn remove_liked_album(ctx: &AppContext, album_id: u32) -> bool {
+    {
+        let mut state = ctx.audio.state.write().await;
+        state.liked.set_album_like_status(album_id, false);
+    }
+    ctx.audio.signals.library_changed.send_replace(());
+    ctx.audio.signals.changed.send_replace(());
+
+    let api = ctx.core.api.clone();
+    tokio::spawn(async move {
+        let _ = api.remove_like_album(album_id).await;
+    });
+
+    true
+}
+
 pub async fn add_track_to_playlist(
     ctx: &AppContext,
     kind: u32,
