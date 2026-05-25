@@ -55,6 +55,29 @@ class WaveSettingsPanel extends StatelessWidget {
                       SizedBox(
                         width: 40,
                         height: 40,
+                        child: MouseRegion(
+                          cursor: SystemMouseCursors.click,
+                          child: GestureDetector(
+                            onTap: () async {
+                              await showModalBottomSheet<void>(
+                                context: context,
+                                backgroundColor: Colors.transparent,
+                                isScrollControlled: true,
+                                builder: (context) => const _AllStationsSheet(),
+                              );
+                            },
+                            behavior: HitTestBehavior.opaque,
+                            child: const Icon(
+                              Icons.explore,
+                              color: Colors.white54,
+                              size: 20,
+                            ),
+                          ),
+                        ),
+                      ),
+                      SizedBox(
+                        width: 40,
+                        height: 40,
                         child:
                             (currentSeeds.isNotEmpty &&
                                 !currentSeeds.contains('user:onyourwave'))
@@ -154,25 +177,6 @@ class WaveSettingsPanel extends StatelessWidget {
                       !currentSeeds.contains('user:onyourwave') &&
                       !_isMainSeed(currentSeeds.first))
                     _buildActiveExtraStation(currentSeeds.first),
-
-                  Center(
-                    child: TextButton.icon(
-                      onPressed: () async {
-                        await showModalBottomSheet<void>(
-                          context: context,
-                          backgroundColor: Colors.transparent,
-                          isScrollControlled: true,
-                          builder: (context) => const _AllStationsSheet(),
-                        );
-                      },
-                      icon: const Icon(Icons.explore, color: Colors.white54),
-                      label: const Text(
-                        'Каталог всех станций',
-                        style: TextStyle(color: Colors.white54),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 60), // Space for FAB
                 ],
               ),
             ),
@@ -347,9 +351,21 @@ class _RoundedChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final isNarrow = context.isNarrow;
+    final panelWidth = isNarrow ? (screenWidth - 48) : 480.0;
+    final maxLabelWidth = panelWidth - 48 - 40; // Subtract padding for safety
+
     return FilterChip(
       selected: isSelected,
-      label: Text(item.label),
+      label: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: maxLabelWidth > 0 ? maxLabelWidth : 100),
+        child: Text(
+          item.label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ),
       onSelected: (_) {
         unawaited(WaveController.toggleStation(item.seed));
       },
@@ -634,9 +650,17 @@ class _AllStationsSheetState extends State<_AllStationsSheet> {
                                       final isSelected = currentSeeds.contains(
                                         item.seed,
                                       );
+                                      final maxSheetLabelWidth = MediaQuery.sizeOf(context).width - 48 - 40; // Subtract modal padding and chip padding
                                       return FilterChip(
                                         selected: isSelected,
-                                        label: Text(item.label),
+                                        label: ConstrainedBox(
+                                          constraints: BoxConstraints(maxWidth: maxSheetLabelWidth > 0 ? maxSheetLabelWidth : 100),
+                                          child: Text(
+                                            item.label,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
                                         onSelected: (_) {
                                           unawaited(
                                             WaveController.toggleStation(
