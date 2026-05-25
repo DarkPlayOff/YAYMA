@@ -133,3 +133,70 @@ jobs:
         with:
           name: windows_release
           path: yayma-windows-*.zip
+
+  build-android:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android, armv7-linux-androideabi, x86_64-linux-android
+          components: rust-src
+
+      - name: Cache Rust
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            frontend/target/
+          key: rust-frb-2.12.0-android-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Install Tools
+        run: |
+          if [ ! -f "$HOME/.cargo/bin/cargo-binstall" ]; then
+            curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
+          fi
+          cargo binstall -y flutter_rust_bridge_codegen --version 2.12.0
+          cargo binstall -y cargo-expand
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Build
+        working-directory: ./frontend
+        run: |
+          flutter config --no-analytics
+          flutter pub get
+          flutter_rust_bridge_codegen generate
+          flutter build apk --release --split-per-abi
+
+      - name: Archive
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          if [ "$VERSION" == "$GITHUB_REF" ]; then VERSION="manual"; fi
+          mkdir -p android_artifacts
+          for apk in frontend/build/app/outputs/flutter-apk/app-*-release.apk; do
+            abi=$(basename "$apk" | sed -E 's/app-(.*)-release\.apk/\1/')
+            cp "$apk" "android_artifacts/yayma-android-${abi}-${VERSION}.apk"
+          done
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: android_release
+          path: android_artifacts/yayma-android-*.apk
