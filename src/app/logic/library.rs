@@ -1,4 +1,4 @@
-use crate::api::models::{SimplePlaylistDto, SimpleTrackDto};
+use crate::api::models::{SimpleAlbumDto, SimpleArtistDto, SimplePlaylistDto, SimpleTrackDto};
 use crate::app::AppContext;
 use crate::frb_generated::StreamSink;
 use foldhash::HashMapExt;
@@ -132,6 +132,23 @@ pub async fn get_playlists(ctx: &AppContext) -> Vec<SimplePlaylistDto> {
         Ok(playlists) => playlists
             .into_iter()
             .map(SimplePlaylistDto::from_yandex)
+            .collect(),
+        Err(_) => vec![],
+    }
+}
+
+pub async fn get_liked_albums(ctx: &AppContext) -> Vec<SimpleAlbumDto> {
+    match ctx.core.api.fetch_liked_albums().await {
+        Ok(albums) => albums.into_iter().map(SimpleAlbumDto::from_yandex).collect(),
+        Err(_) => vec![],
+    }
+}
+
+pub async fn get_liked_artists(ctx: &AppContext) -> Vec<SimpleArtistDto> {
+    match ctx.core.api.fetch_liked_artists().await {
+        Ok(artists) => artists
+            .into_iter()
+            .map(SimpleArtistDto::from_yandex)
             .collect(),
         Err(_) => vec![],
     }

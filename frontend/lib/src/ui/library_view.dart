@@ -8,6 +8,7 @@ import 'package:yayma/src/providers/notification_provider.dart';
 import 'package:yayma/src/providers/playback_provider.dart';
 import 'package:yayma/src/rust/api/models.dart';
 import 'package:yayma/src/ui/widgets/common_ui.dart';
+import 'package:yayma/src/ui/widgets/media_card.dart';
 import 'package:yayma/src/ui/widgets/track_elements.dart';
 import 'package:yayma/src/ui/widgets/track_tile.dart';
 
@@ -29,7 +30,7 @@ class _LibraryViewState extends State<LibraryView>
     final currentSection = navStackSignal.value.last.section;
     final initialIndex = currentSection == AppSection.playlists ? 1 : 0;
     _tabController = TabController(
-      length: 2,
+      length: 4,
       vsync: this,
       initialIndex: initialIndex,
     );
@@ -46,6 +47,8 @@ class _LibraryViewState extends State<LibraryView>
       ),
     );
     unawaited(refreshPlaylists());
+    unawaited(refreshLikedAlbums());
+    unawaited(refreshLikedArtists());
   }
 
   @override
@@ -186,6 +189,8 @@ class _LibraryViewState extends State<LibraryView>
           tabs: const [
             Tab(text: 'Любимые треки'),
             Tab(text: 'Плейлисты'),
+            Tab(text: 'Любимые альбомы'),
+            Tab(text: 'Любимые исполнители'),
           ],
         ),
         Expanded(
@@ -194,6 +199,8 @@ class _LibraryViewState extends State<LibraryView>
             children: [
               _LikedTracksTab(searchController: _searchController),
               const _PlaylistsTab(),
+              const _LikedAlbumsTab(),
+              const _LikedArtistsTab(),
             ],
           ),
         ),
@@ -268,7 +275,9 @@ class _LikedTracksTab extends StatelessWidget {
             child: tracks.isEmpty
                 ? Center(
                     child: Text(
-                      query.isEmpty ? 'Нет любимых треков' : 'Ничего не найдено',
+                      query.isEmpty
+                          ? 'Нет любимых треков'
+                          : 'Ничего не найдено',
                       style: const TextStyle(color: Colors.white38),
                     ),
                   )
@@ -282,6 +291,7 @@ class _LikedTracksTab extends StatelessWidget {
                         title: track.title,
                         version: track.version,
                         artists: track.artists,
+                        albumId: track.albumId,
                         leading: TrackCover(url: track.coverUrl),
                         contentPadding: EdgeInsets.symmetric(
                           horizontal: isNarrow ? 20 : 40,
@@ -358,6 +368,97 @@ class _PlaylistsTab extends StatelessWidget {
           final playlist = playlists[index];
           return _PlaylistCard(playlist: playlist);
         },
+      );
+    });
+  }
+}
+
+class _LikedAlbumsTab extends StatelessWidget {
+  const _LikedAlbumsTab();
+
+  @override
+  Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final isNarrow = screenWidth < 600;
+
+    return Watch((context) {
+      final albums = likedAlbumsSignal.value;
+
+      if (albums.isEmpty) {
+        return const Center(
+          child: Text(
+            'Нет любимых альбомов',
+            style: TextStyle(color: Colors.white38),
+          ),
+        );
+      }
+
+      return SingleChildScrollView(
+        padding: EdgeInsets.fromLTRB(
+          isNarrow ? 12 : 32,
+          isNarrow ? 12 : 24,
+          isNarrow ? 12 : 32,
+          140,
+        ),
+        child: Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final album in albums)
+              CommonMediaCard(
+                title: album.title,
+                artists: album.artists,
+                coverUrl: album.coverUrl,
+                onTap: () => navigateTo(AppSection.album, album.id),
+              ),
+          ],
+        ),
+      );
+    });
+  }
+}
+
+class _LikedArtistsTab extends StatelessWidget {
+  const _LikedArtistsTab();
+
+  @override
+  Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final isNarrow = screenWidth < 600;
+
+    return Watch((context) {
+      final artists = likedArtistsSignal.value;
+
+      if (artists.isEmpty) {
+        return const Center(
+          child: Text(
+            'Нет любимых исполнителей',
+            style: TextStyle(color: Colors.white38),
+          ),
+        );
+      }
+
+      return SingleChildScrollView(
+        padding: EdgeInsets.fromLTRB(
+          isNarrow ? 12 : 32,
+          isNarrow ? 12 : 24,
+          isNarrow ? 12 : 32,
+          140,
+        ),
+        child: Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final artist in artists)
+              CommonMediaCard(
+                title: artist.name,
+                coverUrl: artist.coverUrl,
+                isCircle: true,
+                size: 140,
+                onTap: () => navigateTo(AppSection.artist, artist.id),
+              ),
+          ],
+        ),
       );
     });
   }

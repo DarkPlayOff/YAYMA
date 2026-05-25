@@ -276,6 +276,7 @@ pub struct ArtistDetailsDto {
     pub cover_url: Option<String>,
     pub tracks: Vec<SimpleTrackDto>,
     pub total_tracks: u32,
+    pub albums: Vec<SimpleAlbumDto>,
 }
 
 #[flutter_rust_bridge::frb(unignore)]

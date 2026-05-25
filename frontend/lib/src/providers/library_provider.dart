@@ -10,6 +10,10 @@ final FlutterSignal<List<SimpleTrackDto>> likedTracksSignal =
     signal<List<SimpleTrackDto>>([]);
 final FlutterSignal<List<SimplePlaylistDto>> playlistsSignal =
     signal<List<SimplePlaylistDto>>([]);
+final FlutterSignal<List<SimpleAlbumDto>> likedAlbumsSignal =
+    signal<List<SimpleAlbumDto>>([]);
+final FlutterSignal<List<SimpleArtistDto>> likedArtistsSignal =
+    signal<List<SimpleArtistDto>>([]);
 final FlutterSignal<bool> isLibraryLoadingSignal = signal<bool>(false);
 final FlutterSignal<String> librarySearchQuerySignal = signal<String>('');
 
@@ -26,6 +30,20 @@ Future<void> refreshPlaylists() async {
   final playlists = await runRustFetch((ctx) => getPlaylists(ctx: ctx));
   if (playlists != null) {
     playlistsSignal.value = playlists;
+  }
+}
+
+Future<void> refreshLikedAlbums() async {
+  final albums = await runRustFetch((ctx) => getLikedAlbums(ctx: ctx));
+  if (albums != null) {
+    likedAlbumsSignal.value = albums;
+  }
+}
+
+Future<void> refreshLikedArtists() async {
+  final artists = await runRustFetch((ctx) => getLikedArtists(ctx: ctx));
+  if (artists != null) {
+    likedArtistsSignal.value = artists;
   }
 }
 
@@ -78,8 +96,9 @@ Future<void> refreshLikedTracks({String? query, bool force = false}) async {
         } else {
           // Append subsequent chunks
           final existingIds = likedTracksSignal.value.map((t) => t.id).toSet();
-          final uniqueNewTracks =
-              chunk.where((t) => !existingIds.contains(t.id)).toList();
+          final uniqueNewTracks = chunk
+              .where((t) => !existingIds.contains(t.id))
+              .toList();
 
           if (uniqueNewTracks.isNotEmpty) {
             likedTracksSignal.value = [

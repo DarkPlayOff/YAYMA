@@ -18,7 +18,8 @@ use yandex_music::{
         },
         artist::{
             add_disliked_artist::AddDislikedArtistOptions, add_liked_artist::AddLikedArtistOptions,
-            get_artist::GetArtistOptions, get_artist_tracks::ArtistTracksOptions,
+            get_artist::GetArtistOptions, get_artist_albums::GetArtistAlbumsOptions,
+            get_artist_tracks::ArtistTracksOptions,
             remove_disliked_artist::RemoveDislikedArtistOptions,
             remove_liked_artist::RemoveLikedArtistOptions,
         },
@@ -48,6 +49,7 @@ use yandex_music::{
     },
     model::{
         album::Album,
+        artist::Artist,
         collection::Collection,
         info::{file_info::Quality, lyrics::LyricsFormat, pager::Pager},
         playlist::{
@@ -238,6 +240,58 @@ impl ApiService {
         Ok(self.client.get_all_playlists(&opts).await?)
     }
 
+    pub async fn fetch_liked_albums(&self) -> Result<Vec<Album>> {
+        let url = format!(
+            "https://api.music.yandex.ru/users/{}/likes/albums?rich=true",
+            self.user_id
+        );
+        let body: serde_json::Value =
+            self.http_client.get(url).send().await?.json().await?;
+        Ok(Self::extract_liked(&body, "albums", "album"))
+    }
+
+    pub async fn fetch_liked_artists(&self) -> Result<Vec<Artist>> {
+        let url = format!(
+            "https://api.music.yandex.ru/users/{}/likes/artists?with-timestamps=false",
+            self.user_id
+        );
+        let body: serde_json::Value =
+            self.http_client.get(url).send().await?.json().await?;
+        Ok(Self::extract_liked(&body, "artists", "artist"))
+    }
+
+    /// Parses Yandex "likes" responses. The payload may arrive as a top-level array,
+    /// `result: [..]`, `result: { <plural>: [..] }`, or `result: { likes: [..] }`.
+    /// Each entry may be the object itself or wrapped as `{ id, timestamp, <singular>: {..} }`.
+    fn extract_liked<T: serde::de::DeserializeOwned>(
+        body: &serde_json::Value,
+        plural_key: &str,
+        singular_key: &str,
+    ) -> Vec<T> {
+        Self::liked_items(body, plural_key)
+            .into_iter()
+            .filter_map(|item| {
+                let value = if item.get(singular_key).is_some() {
+                    item[singular_key].clone()
+                } else {
+                    item
+                };
+                serde_json::from_value::<T>(value).ok()
+            })
+            .collect()
+    }
+
+    fn liked_items(body: &serde_json::Value, plural_key: &str) -> Vec<serde_json::Value> {
+        let result = &body["result"];
+        body.as_array()
+            .or_else(|| result.as_array())
+            .or_else(|| result[plural_key].as_array())
+            .or_else(|| result["likes"].as_array())
+            .or_else(|| result["library"][plural_key].as_array())
+            .cloned()
+            .unwrap_or_default()
+    }
+
     pub async fn fetch_playlist(&self, kind: u32) -> Result<Playlist> {
         self.fetch_first(
             self.client.get_playlists(
@@ -386,6 +440,18 @@ impl ApiService {
     ) -> Result<yandex_music::model::artist::Artist> {
         let opts = GetArtistOptions::new(artist_id);
         Ok(self.client.get_artist(&opts).await?.artist)
+    }
+
+    pub async fn fetch_artist_albums(
+        &self,
+        artist_id: String,
+        page: u32,
+        page_size: u32,
+    ) -> Result<Vec<Album>> {
+        let opts = GetArtistAlbumsOptions::new(artist_id)
+            .page(page)
+            .page_size(page_size);
+        Ok(self.client.get_artist_albums(&opts).await?.albums)
     }
 
     pub async fn fetch_artist_tracks(
@@ -720,5 +786,68 @@ impl ApiService {
             .liked_artists(get_opt())
             .liked_playlists(get_opt());
         Ok(self.client.collection_sync(&opts).await?)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn extracts_wrapped_albums_from_top_level_array() {
+        let body = json!([
+            {
+                "timestamp": "2026-05-26T00:00:00+00:00",
+                "album": {
+                    "id": 10,
+                    "title": "Album title"
+                }
+            }
+        ]);
+
+        let albums: Vec<Album> = ApiService::extract_liked(&body, "albums", "album");
+
+        assert_eq!(albums.len(), 1);
+        assert_eq!(albums[0].id, Some(10));
+        assert_eq!(albums[0].title.as_deref(), Some("Album title"));
+    }
+
+    #[test]
+    fn extracts_direct_artists_from_top_level_array() {
+        let body = json!([
+            {
+                "id": "20",
+                "name": "Artist name"
+            }
+        ]);
+
+        let artists: Vec<Artist> = ApiService::extract_liked(&body, "artists", "artist");
+
+        assert_eq!(artists.len(), 1);
+        assert_eq!(artists[0].id.as_deref(), Some("20"));
+        assert_eq!(artists[0].name.as_deref(), Some("Artist name"));
+    }
+
+    #[test]
+    fn extracts_direct_albums_from_library_shape() {
+        let body = json!({
+            "result": {
+                "library": {
+                    "albums": [
+                        {
+                            "id": 30,
+                            "title": "Library album"
+                        }
+                    ]
+                }
+            }
+        });
+
+        let albums: Vec<Album> = ApiService::extract_liked(&body, "albums", "album");
+
+        assert_eq!(albums.len(), 1);
+        assert_eq!(albums[0].id, Some(30));
+        assert_eq!(albums[0].title.as_deref(), Some("Library album"));
     }
 }

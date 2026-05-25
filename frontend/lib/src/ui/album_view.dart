@@ -63,6 +63,7 @@ class _AlbumViewState extends State<AlbumView> {
                     title: track.title,
                     version: track.version,
                     artists: track.artists,
+                    albumId: album.id,
                     leading: SizedBox(
                       width: 32,
                       child: Center(
