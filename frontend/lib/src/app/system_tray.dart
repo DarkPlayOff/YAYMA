@@ -92,7 +92,10 @@ class SystemTrayManager with TrayListener, WindowListener {
 
   @override
   void onTrayIconRightMouseDown() {
-    unawaited(trayManager.popUpContextMenu());
+    // bringAppToFront makes the owning window foreground before TrackPopupMenu,
+    // which is required on Windows for the menu to dismiss on an outside click
+    // (classic Win32 notification-icon menu behaviour, MS KB Q135788).
+    unawaited(trayManager.popUpContextMenu(bringAppToFront: true));
   }
 
   @override
