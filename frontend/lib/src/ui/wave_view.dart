@@ -38,16 +38,20 @@ class WaveSettingsPanel extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      const Text(
-                        'Настроить Мою волну',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 22,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: -0.5,
+                      const Expanded(
+                        child: Text(
+                          'Настроить Мою волну',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 22,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: -0.5,
+                          ),
                         ),
                       ),
-                      const Spacer(),
+                      const SizedBox(width: 8),
                       SizedBox(
                         width: 40,
                         height: 40,
@@ -303,13 +307,14 @@ class WaveSettingsPanel extends StatelessWidget {
 
   Widget _buildMoods(List<_MoodItem> moods, List<String> currentSeeds) {
     return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: moods
           .map(
-            (m) => _MoodCircle(
-              mood: m,
-              onSelected: onSelected,
-              isSelected: currentSeeds.contains(m.seed),
+            (m) => Expanded(
+              child: _MoodCircle(
+                mood: m,
+                onSelected: onSelected,
+                isSelected: currentSeeds.contains(m.seed),
+              ),
             ),
           )
           .toList(),
@@ -405,6 +410,9 @@ class _CharacterCard extends StatelessWidget {
               const SizedBox(height: 8),
               Text(
                 label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
                 style: TextStyle(
                   color: isSelected ? Colors.white : Colors.white70,
                   fontWeight: isSelected ? FontWeight.w900 : FontWeight.bold,
@@ -466,6 +474,9 @@ class _MoodCircle extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             mood.label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
             style: TextStyle(
               color: isSelected ? Colors.white : Colors.white70,
               fontWeight: isSelected ? FontWeight.w900 : FontWeight.w600,
