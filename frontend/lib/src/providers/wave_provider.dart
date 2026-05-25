@@ -24,25 +24,11 @@ class WaveController {
     if (currentSeeds.contains(seed)) {
       currentSeeds.remove(seed);
     } else {
-      // Remove 'user:onyourwave' if we're adding a specific seed
-      currentSeeds.remove('user:onyourwave');
-
-      // Group seeds by category (the part before the colon)
       final category = seed.split(':').first;
-
-      // Special case: 'activity' and 'personal' are mutually exclusive as they
-      // represent the main vibe type.
-      if (category == 'activity' || category == 'personal') {
-        currentSeeds.removeWhere(
-          (s) => s.startsWith('activity:') || s.startsWith('personal:'),
-        );
-      } else {
-        // For other categories (mood, local-language), remove existing ones
-        // from the same category.
-        currentSeeds.removeWhere((s) => s.startsWith('$category:'));
-      }
-
-      currentSeeds.add(seed);
+      currentSeeds
+        ..remove('user:onyourwave')
+        ..removeWhere((s) => s.startsWith('$category:'))
+        ..add(seed);
     }
 
     // If no specific seeds are left, return to the default wave
