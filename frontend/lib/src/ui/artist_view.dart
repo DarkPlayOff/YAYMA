@@ -8,6 +8,7 @@ import 'package:yayma/src/providers/playback_provider.dart';
 import 'package:yayma/src/rust/api/content.dart' as rust;
 import 'package:yayma/src/rust/api/models.dart';
 import 'package:yayma/src/ui/widgets/common_ui.dart';
+import 'package:yayma/src/ui/widgets/media_card.dart';
 import 'package:yayma/src/ui/widgets/track_elements.dart';
 import 'package:yayma/src/ui/widgets/track_tile.dart';
 
@@ -25,6 +26,8 @@ class _ArtistViewState extends State<ArtistView> {
   final FlutterSignal<SimpleArtistDto?> _artist = signal<SimpleArtistDto?>(
     null,
   );
+  final FlutterSignal<List<SimpleAlbumDto>> _albums =
+      signal<List<SimpleAlbumDto>>([]);
   final FlutterSignal<bool> _isLoading = signal<bool>(false);
   final FlutterSignal<String?> _isError = signal<String?>(null);
   final FlutterSignal<int> _totalTracks = signal<int>(0);
@@ -76,6 +79,7 @@ class _ArtistViewState extends State<ArtistView> {
           coverUrl: details.coverUrl,
         );
         _tracks.value = details.tracks;
+        _albums.value = details.albums;
         _totalTracks.value = details.totalTracks;
         _currentPage = 0;
       } else {
@@ -133,6 +137,7 @@ class _ArtistViewState extends State<ArtistView> {
       }
 
       final tracks = _tracks.value;
+      final albums = _albums.value;
 
       return CommonDetailSliverLayout(
         controller: _scrollController,
@@ -144,6 +149,35 @@ class _ArtistViewState extends State<ArtistView> {
           isCircle: true,
         ),
         slivers: [
+          if (albums.isNotEmpty) ...[
+            const SliverToBoxAdapter(
+              child: CommonSectionTitle(
+                title: 'Альбомы',
+                padding: EdgeInsets.fromLTRB(40, 24, 40, 16),
+              ),
+            ),
+            SliverToBoxAdapter(
+              child: SizedBox(
+                height: 240,
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 32,
+                  ), // 32 + 8 (internal card padding) = 40
+                  itemCount: albums.length,
+                  itemBuilder: (context, i) {
+                    final album = albums[i];
+                    return CommonMediaCard(
+                      title: album.title,
+                      subtitle: album.year?.toString(),
+                      coverUrl: album.coverUrl,
+                      onTap: () => navigateTo(AppSection.album, album.id),
+                    );
+                  },
+                ),
+              ),
+            ),
+          ],
           SliverToBoxAdapter(
             child: CommonSectionTitle(
               title: 'Популярные треки (${_totalTracks.value})',
@@ -158,6 +192,7 @@ class _ArtistViewState extends State<ArtistView> {
                 title: track.title,
                 version: track.version,
                 artists: track.artists,
+                albumId: track.albumId,
                 leading: TrackCover(
                   url: track.coverUrl,
                   size: 48,

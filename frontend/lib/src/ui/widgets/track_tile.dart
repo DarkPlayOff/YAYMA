@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/providers/auth_provider.dart';
 import 'package:yayma/src/providers/library_provider.dart';
+import 'package:yayma/src/providers/navigation_provider.dart';
 import 'package:yayma/src/providers/notification_provider.dart';
 import 'package:yayma/src/providers/playback_provider.dart';
 import 'package:yayma/src/rust/api/content.dart' as rust;
@@ -236,6 +237,13 @@ class _CommonTrackTileState extends State<CommonTrackTile> {
                                     }
 
                                     switch (value) {
+                                      case 'go_to_album':
+                                        if (widget.albumId != null) {
+                                          navigateTo(
+                                            AppSection.album,
+                                            widget.albumId,
+                                          );
+                                        }
                                       case 'lyrics':
                                         LyricsReaderDialog.show(
                                           context,
@@ -296,6 +304,12 @@ class _CommonTrackTileState extends State<CommonTrackTile> {
                                           )
                                           .toList(),
                                     ),
+                                    if (widget.albumId != null)
+                                      const AppContextMenuItem(
+                                        value: 'go_to_album',
+                                        label: 'Перейти к альбому',
+                                        icon: Icons.album_rounded,
+                                      ),
                                     const AppContextMenuItem(
                                       value: 'lyrics',
                                       label: 'Открыть текст',

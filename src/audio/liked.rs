@@ -100,6 +100,14 @@ impl LikedCache {
         }
     }
 
+    pub fn set_album_like_status(&mut self, album_id: u32, liked: bool) {
+        if liked {
+            self.liked_albums_ids.insert(album_id);
+        } else {
+            self.liked_albums_ids.remove(&album_id);
+        }
+    }
+
     pub fn is_liked(&self, track_id: &str) -> bool {
         self.liked_ids_set.contains(track_id.to_base_id())
     }

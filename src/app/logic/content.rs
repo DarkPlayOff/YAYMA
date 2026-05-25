@@ -248,12 +248,25 @@ pub async fn get_artist_details(
         .map(|t| SimpleTrackDto::from_yandex(&t, &liked, &disliked))
         .collect();
 
+    // Albums are only needed for the first page; subsequent pages just append tracks.
+    let albums = if page == 0 {
+        ctx.core
+            .api
+            .fetch_artist_albums(artist_id.clone(), 0, page_size)
+            .await
+            .map(|albums| albums.into_iter().map(SimpleAlbumDto::from_yandex).collect())
+            .unwrap_or_default()
+    } else {
+        Vec::new()
+    };
+
     Some(ArtistDetailsDto {
         id: artist_id,
         name: artist.name.take().unwrap_or_default(),
         cover_url: format_cover(artist.cover.and_then(|mut c| c.uri.take()), "600x600"),
         tracks: mapped_tracks,
         total_tracks: pager.total,
+        albums,
     })
 }
 

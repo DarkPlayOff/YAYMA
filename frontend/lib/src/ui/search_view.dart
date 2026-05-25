@@ -214,6 +214,7 @@ class _TrackSearchTile extends StatelessWidget {
       title: track.title,
       version: track.version,
       artists: track.artists,
+      albumId: track.albumId,
       leading: TrackCover(url: track.coverUrl),
       trailing: Text(
         formatDuration(track.durationMs),

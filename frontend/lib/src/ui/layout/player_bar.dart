@@ -124,10 +124,12 @@ class _TrackInfo extends StatefulWidget {
 
 class _TrackInfoState extends State<_TrackInfo> {
   final ValueNotifier<bool> _isTitleHovered = ValueNotifier(false);
+  final ValueNotifier<bool> _isCoverHovered = ValueNotifier(false);
 
   @override
   void dispose() {
     _isTitleHovered.dispose();
+    _isCoverHovered.dispose();
     super.dispose();
   }
 
@@ -138,33 +140,75 @@ class _TrackInfoState extends State<_TrackInfo> {
       final isPlaying = isPlayingSignal();
       if (meta.id == null) return const SizedBox();
 
+      final hasAlbum = meta.albumId != null;
+
       return Row(
         children: [
-          AnimatedScale(
-            scale: isPlaying ? 1.0 : 0.96,
-            duration: const Duration(milliseconds: 350),
-            curve: Curves.easeInOutCubic,
-            child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 400),
-              child: ClipRRect(
-                key: ValueKey(meta.coverUrl),
-                borderRadius: BorderRadius.circular(12),
-                child: meta.coverUrl != null
-                    ? RustCachedImage(
-                        imageUrl: meta.coverUrl,
-                        width: widget.coverSize,
-                        height: widget.coverSize,
-                        errorWidget: Container(
-                          width: widget.coverSize,
-                          height: widget.coverSize,
-                          color: Colors.white10,
-                        ),
-                      )
-                    : Container(
-                        width: widget.coverSize,
-                        height: widget.coverSize,
-                        color: Colors.white10,
-                      ),
+          MouseRegion(
+            cursor: hasAlbum
+                ? SystemMouseCursors.click
+                : SystemMouseCursors.basic,
+            onEnter: (_) => _isCoverHovered.value = true,
+            onExit: (_) => _isCoverHovered.value = false,
+            child: GestureDetector(
+              onTap: () {
+                if (hasAlbum) {
+                  navigateTo(AppSection.album, meta.albumId);
+                }
+              },
+              child: AnimatedScale(
+                scale: isPlaying ? 1.0 : 0.96,
+                duration: const Duration(milliseconds: 350),
+                curve: Curves.easeInOutCubic,
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 400),
+                  child: ClipRRect(
+                    key: ValueKey(meta.coverUrl),
+                    borderRadius: BorderRadius.circular(12),
+                    child: Stack(
+                      children: [
+                        if (meta.coverUrl != null)
+                          RustCachedImage(
+                            imageUrl: meta.coverUrl,
+                            width: widget.coverSize,
+                            height: widget.coverSize,
+                            errorWidget: Container(
+                              width: widget.coverSize,
+                              height: widget.coverSize,
+                              color: Colors.white10,
+                            ),
+                          )
+                        else
+                          Container(
+                            width: widget.coverSize,
+                            height: widget.coverSize,
+                            color: Colors.white10,
+                          ),
+                        if (hasAlbum)
+                          Positioned.fill(
+                            child: ValueListenableBuilder<bool>(
+                              valueListenable: _isCoverHovered,
+                              builder: (context, hovered, _) {
+                                return AnimatedOpacity(
+                                  duration: const Duration(milliseconds: 150),
+                                  opacity: hovered ? 1 : 0,
+                                  child: Container(
+                                    color: Colors.black.withValues(alpha: 0.45),
+                                    alignment: Alignment.center,
+                                    child: const Icon(
+                                      Icons.album_rounded,
+                                      color: Colors.white,
+                                      size: 24,
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
               ),
             ),
           ),

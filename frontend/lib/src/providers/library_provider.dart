@@ -10,6 +10,10 @@ final FlutterSignal<List<SimpleTrackDto>> likedTracksSignal =
     signal<List<SimpleTrackDto>>([]);
 final FlutterSignal<List<SimplePlaylistDto>> playlistsSignal =
     signal<List<SimplePlaylistDto>>([]);
+final FlutterSignal<List<SimpleAlbumDto>> likedAlbumsSignal =
+    signal<List<SimpleAlbumDto>>([]);
+final FlutterSignal<List<SimpleArtistDto>> likedArtistsSignal =
+    signal<List<SimpleArtistDto>>([]);
 final FlutterSignal<bool> isLibraryLoadingSignal = signal<bool>(false);
 final FlutterSignal<String> librarySearchQuerySignal = signal<String>('');
 
@@ -27,6 +31,40 @@ Future<void> refreshPlaylists() async {
   if (playlists != null) {
     playlistsSignal.value = playlists;
   }
+}
+
+Future<void> refreshLikedAlbums() async {
+  final albums = await runRustFetch((ctx) => getLikedAlbums(ctx: ctx));
+  if (albums != null) {
+    likedAlbumsSignal.value = albums;
+  }
+}
+
+Future<void> refreshLikedArtists() async {
+  final artists = await runRustFetch((ctx) => getLikedArtists(ctx: ctx));
+  if (artists != null) {
+    likedArtistsSignal.value = artists;
+  }
+}
+
+Future<bool> addLikedAlbumAction(String albumId) async {
+  final id = int.tryParse(albumId);
+  if (id == null) return false;
+
+  final success = await runRustAction(
+    (ctx) => addLikedAlbum(ctx: ctx, albumId: id),
+  );
+  return success;
+}
+
+Future<bool> removeLikedAlbumAction(String albumId) async {
+  final id = int.tryParse(albumId);
+  if (id == null) return false;
+
+  final success = await runRustAction(
+    (ctx) => removeLikedAlbum(ctx: ctx, albumId: id),
+  );
+  return success;
 }
 
 Future<void> refreshLikedTracks({String? query, bool force = false}) async {

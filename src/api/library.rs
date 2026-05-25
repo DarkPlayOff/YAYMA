@@ -1,4 +1,4 @@
-use crate::api::models::{SimplePlaylistDto, SimpleTrackDto};
+use crate::api::models::{SimpleAlbumDto, SimpleArtistDto, SimplePlaylistDto, SimpleTrackDto};
 use crate::app::AppContext;
 use crate::app::logic::library as logic;
 use crate::frb_generated::StreamSink;
@@ -21,6 +21,22 @@ pub async fn upload_user_track(
 
 pub async fn get_playlists(ctx: &AppContext) -> Vec<SimplePlaylistDto> {
     logic::get_playlists(ctx).await
+}
+
+pub async fn get_liked_albums(ctx: &AppContext) -> Vec<SimpleAlbumDto> {
+    logic::get_liked_albums(ctx).await
+}
+
+pub async fn get_liked_artists(ctx: &AppContext) -> Vec<SimpleArtistDto> {
+    logic::get_liked_artists(ctx).await
+}
+
+pub async fn add_liked_album(ctx: &AppContext, album_id: u32) -> bool {
+    logic::add_liked_album(ctx, album_id).await
+}
+
+pub async fn remove_liked_album(ctx: &AppContext, album_id: u32) -> bool {
+    logic::remove_liked_album(ctx, album_id).await
 }
 
 pub async fn add_track_to_playlist(
