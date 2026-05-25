@@ -149,10 +149,10 @@ class YaymaAudioHandler extends BaseAudioHandler {
   }
 
   @override
-  Future<void> play() => PlaybackController.togglePlay();
+  Future<void> play() => PlaybackController.play();
 
   @override
-  Future<void> pause() => PlaybackController.togglePlay();
+  Future<void> pause() => PlaybackController.pause();
 
   @override
   Future<void> stop() => PlaybackController.stop();

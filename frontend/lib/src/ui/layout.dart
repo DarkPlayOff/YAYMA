@@ -72,8 +72,8 @@ class _AppLayoutState extends State<AppLayout> {
                       duration: const Duration(milliseconds: 500),
                       color: isDimmed
                           ? (isHome
-                              ? Colors.black54
-                              : Colors.black.withValues(alpha: 0.6))
+                                ? Colors.black54
+                                : Colors.black.withValues(alpha: 0.6))
                           : Colors.transparent,
                     ),
                   );

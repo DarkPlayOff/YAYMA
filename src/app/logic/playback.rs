@@ -40,6 +40,14 @@ pub async fn toggle_play_pause(ctx: &AppContext) {
     let _ = ctx.audio.tx.send(AudioMessage::PlayPause).await;
 }
 
+pub async fn play(ctx: &AppContext) {
+    let _ = ctx.audio.tx.send(AudioMessage::Resume).await;
+}
+
+pub async fn pause(ctx: &AppContext) {
+    let _ = ctx.audio.tx.send(AudioMessage::Pause).await;
+}
+
 pub async fn play_next(ctx: &AppContext) {
     let _ = ctx.audio.tx.send(AudioMessage::Next).await;
 }

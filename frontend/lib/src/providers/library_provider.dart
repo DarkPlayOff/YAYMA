@@ -78,8 +78,9 @@ Future<void> refreshLikedTracks({String? query, bool force = false}) async {
         } else {
           // Append subsequent chunks
           final existingIds = likedTracksSignal.value.map((t) => t.id).toSet();
-          final uniqueNewTracks =
-              chunk.where((t) => !existingIds.contains(t.id)).toList();
+          final uniqueNewTracks = chunk
+              .where((t) => !existingIds.contains(t.id))
+              .toList();
 
           if (uniqueNewTracks.isNotEmpty) {
             likedTracksSignal.value = [

@@ -417,6 +417,10 @@ class PlaybackController {
       runRustAction((ctx) => rust.playAlbum(ctx: ctx, albumId: albumId));
   static Future<void> togglePlay() =>
       runRustAction((ctx) => rust.togglePlayPause(ctx: ctx));
+
+  static Future<void> play() => runRustAction((ctx) => rust.play(ctx: ctx));
+
+  static Future<void> pause() => runRustAction((ctx) => rust.pause(ctx: ctx));
   static Future<void> next() => runRustAction((ctx) => rust.playNext(ctx: ctx));
   static Future<void> prev() => runRustAction((ctx) => rust.playPrev(ctx: ctx));
   static Future<void> toggleShuffle() =>
@@ -433,6 +437,7 @@ class PlaybackController {
     final seeds = currentSeeds.isNotEmpty ? currentSeeds : ['user:onyourwave'];
     return runRustAction((ctx) => rust.startWave(ctx: ctx, seeds: seeds));
   }
+
   static Future<void> startTrackWave(String trackId) => runRustAction(
     (ctx) => rust.startWave(ctx: ctx, seeds: ['track:$trackId']),
   );

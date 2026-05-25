@@ -354,8 +354,7 @@ class _CommonProgressSliderState extends State<CommonProgressSlider> {
         final trackHeight = widget.compact ? 4.0 : 6.0;
         final thumbRadius = widget.compact ? 4.0 : 6.0;
         final fontSize = widget.compact ? 11.0 : 12.0;
-        final accentColor =
-            widget.accentColor ?? accentColorSignal.value;
+        final accentColor = widget.accentColor ?? accentColorSignal.value;
 
         return widget.compact
             ? Row(

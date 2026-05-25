@@ -15,6 +15,14 @@ pub async fn toggle_play_pause(ctx: &AppContext) {
     logic::toggle_play_pause(ctx).await
 }
 
+pub async fn play(ctx: &AppContext) {
+    logic::play(ctx).await
+}
+
+pub async fn pause(ctx: &AppContext) {
+    logic::pause(ctx).await
+}
+
 pub async fn play_next(ctx: &AppContext) {
     logic::play_next(ctx).await
 }

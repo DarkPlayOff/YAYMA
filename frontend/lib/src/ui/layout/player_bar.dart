@@ -28,11 +28,13 @@ class PlayerBar extends StatelessWidget {
       final blur = useLyricsStyle ? 0.0 : 3.0;
 
       // Dynamic background color based on theme
-      final barColor = Color.lerp(
-        colorScheme.surfaceContainerHighest,
-        Colors.black,
-        0.4,
-      ) ?? colorScheme.surface;
+      final barColor =
+          Color.lerp(
+            colorScheme.surfaceContainerHighest,
+            Colors.black,
+            0.4,
+          ) ??
+          colorScheme.surface;
 
       return LayoutBuilder(
         builder: (context, constraints) {

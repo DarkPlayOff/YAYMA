@@ -51,7 +51,8 @@ class WaveSettingsPanel extends StatelessWidget {
                       SizedBox(
                         width: 40,
                         height: 40,
-                        child: (currentSeeds.isNotEmpty &&
+                        child:
+                            (currentSeeds.isNotEmpty &&
                                 !currentSeeds.contains('user:onyourwave'))
                             ? MouseRegion(
                                 cursor: SystemMouseCursors.click,
@@ -585,7 +586,10 @@ class _AllStationsSheetState extends State<_AllStationsSheet> {
                     : Scrollbar(
                         controller: _scrollController,
                         child: CustomScrollView(
-                          scrollCacheExtent: const ScrollCacheExtent.pixels(1000), controller: _scrollController,
+                          scrollCacheExtent: const ScrollCacheExtent.pixels(
+                            1000,
+                          ),
+                          controller: _scrollController,
                           slivers: [
                             for (final cat in cats) ...[
                               SliverPadding(

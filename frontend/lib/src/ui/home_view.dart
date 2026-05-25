@@ -226,7 +226,9 @@ class _HomeCoverWidgetState extends State<_HomeCoverWidget> {
                     borderRadius: BorderRadius.circular(32),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withValues(alpha: isPlaying ? 0.3 : 0.1),
+                        color: Colors.black.withValues(
+                          alpha: isPlaying ? 0.3 : 0.1,
+                        ),
                         blurRadius: isPlaying ? 40 : 20,
                         spreadRadius: isPlaying ? 10 : 0,
                       ),
@@ -238,7 +240,10 @@ class _HomeCoverWidgetState extends State<_HomeCoverWidget> {
                       return FadeTransition(
                         opacity: animation,
                         child: ScaleTransition(
-                          scale: Tween<double>(begin: 0.9, end: 1).animate(animation),
+                          scale: Tween<double>(
+                            begin: 0.9,
+                            end: 1,
+                          ).animate(animation),
                           child: child,
                         ),
                       );
