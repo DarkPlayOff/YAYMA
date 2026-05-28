@@ -56,13 +56,13 @@ class SystemTrayManager with TrayListener, WindowListener {
   Menu _buildMenu({required bool isPlaying}) {
     return Menu(
       items: [
-        MenuItem(key: _expandKey, label: 'Expand'),
+        MenuItem(key: _expandKey, label: 'Показать окно'),
         MenuItem.separator(),
-        MenuItem(key: _pauseKey, label: isPlaying ? 'Pause' : 'Resume'),
-        MenuItem(key: _prevKey, label: 'Previous song'),
-        MenuItem(key: _nextKey, label: 'Next song'),
+        MenuItem(key: _pauseKey, label: isPlaying ? 'Пауза' : 'Возобновить'),
+        MenuItem(key: _prevKey, label: 'Предыдущий трей'),
+        MenuItem(key: _nextKey, label: 'Следующий трек'),
         MenuItem.separator(),
-        MenuItem(key: _closeKey, label: 'Close app'),
+        MenuItem(key: _closeKey, label: 'Закрыть'),
       ],
     );
   }
