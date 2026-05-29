@@ -438,9 +438,13 @@ class PlaybackController {
     return runRustAction((ctx) => rust.startWave(ctx: ctx, seeds: seeds));
   }
 
-  static Future<void> startTrackWave(String trackId) => runRustAction(
-    (ctx) => rust.startWave(ctx: ctx, seeds: ['track:$trackId']),
-  );
+  static Future<void> startTrackWave(String trackId, [String? title]) =>
+      runRustAction(
+        (ctx) => rust.startWave(
+          ctx: ctx,
+          seeds: [title != null ? 'track:$trackId:$title' : 'track:$trackId'],
+        ),
+      );
   static Future<void> changeVolume(int volume) =>
       runRustAction((ctx) => rust.setVolume(ctx: ctx, volume: volume));
   static Future<void> seekTo(Duration duration) => runRustAction(

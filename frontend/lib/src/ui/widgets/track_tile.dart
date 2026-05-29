@@ -254,6 +254,7 @@ class _CommonTrackTileState extends State<CommonTrackTile> {
                                         unawaited(
                                           PlaybackController.startTrackWave(
                                             widget.trackId,
+                                            widget.title,
                                           ),
                                         );
                                       case 'about':

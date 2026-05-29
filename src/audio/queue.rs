@@ -741,8 +741,11 @@ impl QueueManager {
                 }
 
                 PlaybackContext::Track(seed_track) => {
-                    self.signals
-                        .set_wave_seeds(vec![format!("track:{}", seed_track.id)]);
+                    self.signals.set_wave_seeds(vec![format!(
+                        "track:{}:{}",
+                        seed_track.id,
+                        seed_track.title.as_deref().unwrap_or("Unknown")
+                    )]);
                     let mut initial_queue = Vector::new();
                     initial_queue.push_back((**seed_track).clone());
                     self.signals.set_queue(initial_queue);

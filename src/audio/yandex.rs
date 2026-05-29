@@ -99,7 +99,18 @@ impl YandexProvider {
 
     pub async fn fetch_wave_context(&self, seeds: Vec<String>) -> ContextResult {
         self.signals.current_wave_seeds.set(seeds.clone());
-        let session = self.api.create_session(seeds).await?;
+        let clean_seeds: Vec<String> = seeds
+            .iter()
+            .map(|s| {
+                if s.starts_with("track:") {
+                    s.split(':').take(2).collect::<Vec<_>>().join(":")
+                } else {
+                    s.clone()
+                }
+            })
+            .collect();
+
+        let session = self.api.create_session(clean_seeds).await?;
         let tracks: Vec<_> = session.sequence.iter().map(|s| s.track.clone()).collect();
         self.build_context(
             tracks,

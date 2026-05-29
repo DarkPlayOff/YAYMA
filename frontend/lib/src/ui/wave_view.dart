@@ -230,6 +230,14 @@ class WaveSettingsPanel extends StatelessWidget {
         Watch((context) {
           final catsFuture = waveStationsSignal.value;
           var label = seed;
+
+          if (seed.startsWith('track:')) {
+            final parts = seed.split(':');
+            if (parts.length >= 3) {
+              label = parts.sublist(2).join(':');
+            }
+          }
+
           if (catsFuture.hasValue) {
             for (final cat in catsFuture.value!) {
               for (final item in cat.items) {
