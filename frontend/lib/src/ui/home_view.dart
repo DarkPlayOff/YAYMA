@@ -224,15 +224,6 @@ class _HomeCoverWidgetState extends State<_HomeCoverWidget> {
                   height: size,
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(32),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(
-                          alpha: isPlaying ? 0.3 : 0.1,
-                        ),
-                        blurRadius: isPlaying ? 40 : 20,
-                        spreadRadius: isPlaying ? 10 : 0,
-                      ),
-                    ],
                   ),
                   child: AnimatedSwitcher(
                     duration: const Duration(milliseconds: 500),
