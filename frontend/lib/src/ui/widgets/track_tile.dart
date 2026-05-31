@@ -86,15 +86,17 @@ class _CommonTrackTileState extends State<CommonTrackTile> {
           vertical: isNarrow ? 4 : 8,
         );
 
-    return MouseRegion(
-      onEnter: (_) => _isHovered.value = true,
-      onExit: (_) => _isHovered.value = false,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: widget.onTap,
-          borderRadius: BorderRadius.circular(12),
-          child: ValueListenableBuilder<bool>(
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: widget.onTap,
+        onHover: (value) => _isHovered.value = value,
+        hoverColor: Colors.transparent,
+        focusColor: Colors.transparent,
+        highlightColor: Colors.transparent,
+        splashColor: Colors.transparent,
+        borderRadius: BorderRadius.circular(12),
+        child: ValueListenableBuilder<bool>(
             valueListenable: _isHovered,
             builder: (context, isHovered, child) {
               return ValueListenableBuilder<bool>(
@@ -211,9 +213,13 @@ class _CommonTrackTileState extends State<CommonTrackTile> {
                                 );
                                 return AppContextMenu<String>(
                                   onOpen: () => _isMenuOpen.value = true,
-                                  onClose: () => _isMenuOpen.value = false,
+                                  onClose: () {
+                                    _isMenuOpen.value = false;
+                                    _isHovered.value = false;
+                                  },
                                   onSelected: (value) async {
                                     if (!mounted) return;
+                                    _isHovered.value = false;
 
                                     if (value.startsWith('add_to_')) {
                                       final kindStr = value.substring(7);
@@ -357,7 +363,6 @@ class _CommonTrackTileState extends State<CommonTrackTile> {
               );
             },
           ),
-        ),
       ),
     );
   }
