@@ -59,7 +59,7 @@ class SystemTrayManager with TrayListener, WindowListener {
         MenuItem(key: _expandKey, label: 'Показать окно'),
         MenuItem.separator(),
         MenuItem(key: _pauseKey, label: isPlaying ? 'Пауза' : 'Возобновить'),
-        MenuItem(key: _prevKey, label: 'Предыдущий трей'),
+        MenuItem(key: _prevKey, label: 'Предыдущий трек'),
         MenuItem(key: _nextKey, label: 'Следующий трек'),
         MenuItem.separator(),
         MenuItem(key: _closeKey, label: 'Закрыть'),
