@@ -117,8 +117,9 @@ impl Iterator for BufferedStreamingSource {
                 Ok(SampleMessage::Finished(msg_gen)) => {
                     if msg_gen == current_generation {
                         self.finished_generation = Some(msg_gen);
+                        return None;
                     }
-                    return None;
+                    return self.next();
                 }
                 Err(TryRecvError::Empty) => {
                     return Some(0.0);
@@ -294,8 +295,27 @@ fn run_decode_loop(
         }
 
         if chunk.is_empty() {
-            let _ = sample_tx.send(SampleMessage::Finished(active_generation));
-            return;
+            if sample_tx.send(SampleMessage::Finished(active_generation)).is_err() {
+                return;
+            }
+            // Stay alive: wait for a Seek command to restart decoding
+            // or a Stop command to exit cleanly
+            loop {
+                match cmd_rx.recv() {
+                    Ok(DecoderCommand::Seek { position, generation: new_gen }) => {
+                        let _ = decoder.try_seek(position);
+                        if progress_generation == progress.get_generation() {
+                            progress.set_current_position(position);
+                        }
+                        active_generation = new_gen;
+                        pending_chunk = None;
+                        break;
+                    }
+                    Ok(DecoderCommand::Stop) => return,
+                    Err(_) => return,
+                }
+            }
+            continue;
         }
 
         let send_chunk = std::mem::replace(&mut chunk, Vec::with_capacity(PCM_CHUNK_SAMPLES));
