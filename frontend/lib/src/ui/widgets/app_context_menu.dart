@@ -3,16 +3,20 @@ import 'package:flutter/material.dart';
 class AppContextMenuItem<T> {
   final T? value;
   final String label;
-  final IconData icon;
+  final IconData? icon;
+  final Widget? leading;
   final Color? color;
   final List<AppContextMenuItem<T>>? subItems;
+  final bool isSelected;
 
   const AppContextMenuItem({
     required this.label,
-    required this.icon,
+    this.icon,
+    this.leading,
     this.value,
     this.color,
     this.subItems,
+    this.isSelected = false,
   });
 }
 
@@ -49,7 +53,9 @@ class AppContextMenu<T> extends StatelessWidget {
           ),
         ),
       ),
-      menuChildren: items.map((item) => _buildItem(context, item)).toList(),
+      menuChildren: items.asMap().entries.map((entry) {
+        return _buildItem(context, entry.value, entry.key);
+      }).toList(),
       builder: (context, controller, child) {
         return InkWell(
           onTap: () {
@@ -65,7 +71,51 @@ class AppContextMenu<T> extends StatelessWidget {
     );
   }
 
-  Widget _buildItem(BuildContext context, AppContextMenuItem<T> item) {
+  Widget _buildItem(
+    BuildContext context,
+    AppContextMenuItem<T> item,
+    int index,
+  ) {
+    final child = _buildItemContent(context, item, index);
+
+    return TweenAnimationBuilder<double>(
+      duration: Duration(milliseconds: 300 + (index * 50)),
+      curve: Curves.easeOutQuart,
+      tween: Tween(begin: 0, end: 1),
+      builder: (context, value, child) {
+        // Staggered effect: calculate a delayed value based on index
+        final startDelay = (index * 0.1).clamp(0.0, 0.5);
+        final effectiveValue = ((value - startDelay) / (1.0 - startDelay)).clamp(0.0, 1.0);
+
+        return Opacity(
+          opacity: effectiveValue,
+          child: Transform.translate(
+            offset: Offset(0, 8 * (1 - effectiveValue)),
+            child: Transform.scale(
+              scale: 0.95 + (0.05 * effectiveValue),
+              child: child,
+            ),
+          ),
+        );
+      },
+      child: child,
+    );
+  }
+
+  Widget _buildItemContent(
+    BuildContext context,
+    AppContextMenuItem<T> item,
+    int index,
+  ) {
+    final leading = item.leading ??
+        (item.icon != null
+            ? Icon(
+                item.icon,
+                color: item.color ?? Colors.white70,
+                size: 18,
+              )
+            : null);
+
     if (item.subItems != null && item.subItems!.isNotEmpty) {
       return SubmenuButton(
         menuStyle: MenuStyle(
@@ -80,13 +130,11 @@ class AppContextMenu<T> extends StatelessWidget {
           ),
         ),
         menuChildren: item.subItems!
-            .map((sub) => _buildItem(context, sub))
+            .asMap()
+            .entries
+            .map((entry) => _buildItem(context, entry.value, entry.key))
             .toList(),
-        leadingIcon: Icon(
-          item.icon,
-          color: item.color ?? Colors.white70,
-          size: 18,
-        ),
+        leadingIcon: leading,
         child: Text(
           item.label,
           style: TextStyle(color: item.color ?? Colors.white, fontSize: 14),
@@ -100,11 +148,14 @@ class AppContextMenu<T> extends StatelessWidget {
           onSelected(item.value as T);
         }
       },
-      leadingIcon: Icon(
-        item.icon,
-        color: item.color ?? Colors.white70,
-        size: 18,
-      ),
+      leadingIcon: leading,
+      trailingIcon: item.isSelected
+          ? Icon(
+              Icons.check_rounded,
+              color: item.color ?? Theme.of(context).colorScheme.primary,
+              size: 16,
+            )
+          : null,
       child: Text(
         item.label,
         style: TextStyle(color: item.color ?? Colors.white, fontSize: 14),

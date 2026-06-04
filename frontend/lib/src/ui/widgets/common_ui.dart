@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/providers/playback_provider.dart';
 import 'package:yayma/src/rust/api/models.dart';
+import 'package:yayma/src/ui/widgets/app_context_menu.dart';
 import 'package:yayma/src/ui/widgets/responsive.dart';
 import 'package:yayma/src/ui/widgets/track_elements.dart';
 
@@ -287,71 +288,46 @@ class _AudioDeviceButtonState extends State<AudioDeviceButton> {
       final selectedDevice = selectedAudioDeviceSignal.value;
       final accentColor = accentColorSignal.value;
 
-      return IconButton(
-        icon: Icon(
-          Icons.speaker_group_rounded,
-          size: widget.iconSize,
-          color: selectedDevice != null ? accentColor : Colors.white38,
+      final items = [
+        AppContextMenuItem<String>(
+          value: '',
+          label: 'По умолчанию',
+          icon: Icons.computer_rounded,
+          isSelected: selectedDevice == null,
+          color: selectedDevice == null ? accentColor : null,
         ),
-        tooltip: selectedDevice ?? 'Устройство вывода',
-        onPressed: () async {
+        ...devices.map(
+          (device) => AppContextMenuItem<String>(
+            value: device,
+            label: device,
+            icon: Icons.speaker_rounded,
+            isSelected: device == selectedDevice,
+            color: device == selectedDevice ? accentColor : null,
+          ),
+        ),
+      ];
+
+      return AppContextMenu<String>(
+        onOpen: () {
           if (!_devicesLoaded) {
             unawaited(_loadDevices());
           }
-          final value = await showMenu<String>(
-            context: context,
-            color: const Color(0xFF2A2A2A),
-            position: _menuPosition(context),
-            items: _buildMenuItems(devices, selectedDevice),
-          );
-          if (value != null) {
-            unawaited(setAudioDevice(value));
-          }
         },
+        onSelected: (value) {
+          unawaited(setAudioDevice(value));
+        },
+        items: items,
+        child: IconButton(
+          icon: Icon(
+            Icons.speaker_group_rounded,
+            size: widget.iconSize,
+            color: selectedDevice != null ? accentColor : Colors.white38,
+          ),
+          tooltip: selectedDevice ?? 'Устройство вывода',
+          onPressed: null, // AppContextMenu handles clicks
+        ),
       );
     });
-  }
-
-  RelativeRect _menuPosition(BuildContext context) {
-    final renderBox = context.findRenderObject()! as RenderBox;
-    final offset = renderBox.localToGlobal(Offset.zero);
-    final size = renderBox.size;
-    return RelativeRect.fromLTRB(
-      offset.dx,
-      offset.dy + size.height + 4,
-      offset.dx + 200,
-      offset.dy + size.height + 200,
-    );
-  }
-
-  List<PopupMenuEntry<String>> _buildMenuItems(
-    List<String> devices,
-    String? selectedDevice,
-  ) {
-    return [
-      PopupMenuItem<String>(
-        value: '',
-        child: Text(
-          'По умолчанию',
-          style: TextStyle(
-            color: selectedDevice == null ? Colors.white : Colors.white70,
-            fontSize: 13,
-          ),
-        ),
-      ),
-      ...devices.map(
-        (device) => PopupMenuItem<String>(
-          value: device,
-          child: Text(
-            device,
-            style: TextStyle(
-              color: device == selectedDevice ? Colors.white : Colors.white70,
-              fontSize: 13,
-            ),
-          ),
-        ),
-      ),
-    ];
   }
 }
 

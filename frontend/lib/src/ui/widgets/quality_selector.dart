@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/providers/playback_provider.dart';
 import 'package:yayma/src/rust/api/models.dart';
+import 'package:yayma/src/ui/widgets/app_context_menu.dart';
 import 'package:yayma/src/ui/widgets/audio_settings.dart';
 
 class CommonQualitySelector extends StatelessWidget {
@@ -33,8 +34,57 @@ class CommonQualitySelector extends StatelessWidget {
           label = 'HQ';
       }
 
-      return PopupMenuButton<dynamic>(
-        tooltip: 'Качество и звук',
+      final items = <AppContextMenuItem<dynamic>>[];
+
+      if (meta.codec != null) {
+        items.add(
+          AppContextMenuItem(
+            label: 'ПОТОК: ${meta.codec!.toUpperCase()}',
+            icon: Icons.info_outline_rounded,
+            color: accentColor,
+          ),
+        );
+      }
+
+      items.addAll([
+        AppContextMenuItem(
+          value: AudioQuality.low,
+          label: 'Низкое качество',
+          leading: _QualityIcon(
+            label: 'LQ',
+            color: quality == AudioQuality.low ? accentColor : null,
+          ),
+          isSelected: quality == AudioQuality.low,
+          color: quality == AudioQuality.low ? accentColor : null,
+        ),
+        AppContextMenuItem(
+          value: AudioQuality.normal,
+          label: 'Стандартное качество',
+          leading: _QualityIcon(
+            label: 'NQ',
+            color: quality == AudioQuality.normal ? accentColor : null,
+          ),
+          isSelected: quality == AudioQuality.normal,
+          color: quality == AudioQuality.normal ? accentColor : null,
+        ),
+        AppContextMenuItem(
+          value: AudioQuality.high,
+          label: 'Высокое качество',
+          leading: _QualityIcon(
+            label: 'HQ',
+            color: quality == AudioQuality.high ? accentColor : null,
+          ),
+          isSelected: quality == AudioQuality.high,
+          color: quality == AudioQuality.high ? accentColor : null,
+        ),
+        const AppContextMenuItem(
+          value: 'eq',
+          label: 'Настройки звука',
+          icon: Icons.tune_rounded,
+        ),
+      ]);
+
+      return AppContextMenu<dynamic>(
         onSelected: (val) {
           if (val is AudioQuality) {
             unawaited(PlaybackController.setQuality(val));
@@ -49,12 +99,7 @@ class CommonQualitySelector extends StatelessWidget {
             );
           }
         },
-        color: const Color(0xFF2A2A2E),
-        offset: const Offset(0, -200),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: const BorderSide(color: Colors.white10),
-        ),
+        items: items,
         child: Container(
           padding: EdgeInsets.symmetric(
             horizontal: isSmall ? 8 : 10,
@@ -74,139 +119,28 @@ class CommonQualitySelector extends StatelessWidget {
             ),
           ),
         ),
-        itemBuilder: (context) => [
-          if (meta.codec != null) ...[
-            PopupMenuItem(
-              enabled: false,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'ТЕКУЩИЙ ПОТОК',
-                    style: TextStyle(
-                      color: Colors.white38,
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      Text(
-                        meta.codec!.toUpperCase(),
-                        style: TextStyle(
-                          color: accentColor,
-                          fontWeight: FontWeight.w900,
-                          fontSize: 13,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            const PopupMenuDivider(),
-          ],
-          const PopupMenuItem(
-            enabled: false,
-            child: Text(
-              'Качество треков',
-              style: TextStyle(
-                color: Colors.white38,
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-          _buildItem(
-            context,
-            AudioQuality.low,
-            'LQ',
-            'Низкое',
-            quality,
-            accentColor,
-          ),
-          _buildItem(
-            context,
-            AudioQuality.normal,
-            'NQ',
-            'Стандартное',
-            quality,
-            accentColor,
-          ),
-          _buildItem(
-            context,
-            AudioQuality.high,
-            'HQ',
-            'Высокое',
-            quality,
-            accentColor,
-          ),
-          const PopupMenuDivider(),
-          PopupMenuItem(
-            value: 'eq',
-            child: Row(
-              children: [
-                const Icon(Icons.tune_rounded, color: Colors.white70, size: 20),
-                const SizedBox(width: 12),
-                const Text(
-                  'Настройки звука',
-                  style: TextStyle(color: Colors.white),
-                ),
-                const Spacer(),
-                if ((equalizerSignal.value?.enabled ?? false) ||
-                    audioEffectsSignal.value.any((e) => e.enabled))
-                  Container(
-                    width: 8,
-                    height: 8,
-                    decoration: BoxDecoration(
-                      color: accentColor,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ],
       );
     });
   }
+}
 
-  PopupMenuItem<AudioQuality> _buildItem(
-    BuildContext context,
-    AudioQuality value,
-    String label,
-    String desc,
-    AudioQuality current,
-    Color accentColor,
-  ) {
-    final isSelected = value == current;
-    return PopupMenuItem(
-      value: value,
-      child: Row(
-        children: [
-          Text(
-            label,
-            style: TextStyle(
-              color: isSelected ? accentColor : Colors.white,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Text(
-            desc,
-            style: TextStyle(
-              color: isSelected
-                  ? accentColor.withValues(alpha: 0.7)
-                  : Colors.white54,
-              fontSize: 13,
-            ),
-          ),
-          if (isSelected) ...[
-            const Spacer(),
-            Icon(Icons.check_rounded, color: accentColor, size: 18),
-          ],
-        ],
+class _QualityIcon extends StatelessWidget {
+  final String label;
+  final Color? color;
+  const _QualityIcon({required this.label, this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 24,
+      alignment: Alignment.center,
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w900,
+          color: color ?? Colors.white70,
+        ),
       ),
     );
   }
