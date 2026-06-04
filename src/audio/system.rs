@@ -265,7 +265,7 @@ impl AudioSystem {
                 if let Some(playing_track) = self
                     .queue
                     .load(
-                        crate::audio::queue::PlaybackContext::Track(Box::new(track.clone())),
+                        crate::audio::queue::PlaybackContext::Standalone,
                         im::Vector::from(vec![track]),
                         0,
                     )
@@ -280,7 +280,7 @@ impl AudioSystem {
                 if let Some(playing_track) = self
                     .queue
                     .load(
-                        crate::audio::queue::PlaybackContext::Track(Box::new(track.clone())),
+                        crate::audio::queue::PlaybackContext::Standalone,
                         im::Vector::from(vec![track]),
                         0,
                     )
