@@ -149,8 +149,6 @@ impl AudioController {
         start_pos: std::time::Duration,
         soft_reload: bool,
     ) {
-        self.signals.is_buffering.set(true);
-
         if !soft_reload {
             self.stop().await;
         } else {
@@ -161,6 +159,8 @@ impl AudioController {
             }
             self.engine.stop();
         }
+
+        self.signals.is_buffering.set(true);
 
         if !soft_reload {
             self.signals.is_stopped.set(false);
