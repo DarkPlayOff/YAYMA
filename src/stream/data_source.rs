@@ -77,12 +77,12 @@ impl StreamingDataSource {
 
         progress.set_total_bytes(total);
 
-        let initial_data = resp.bytes().await?.to_vec();
+        let initial_data = resp.bytes().await?;
 
         let buffer = Arc::new(Mutex::new(BufferState::new(total)));
         {
             let mut b = buffer.lock();
-            b.append(&initial_data, 0);
+            b.append(initial_data, 0);
         }
 
         progress.set_buffered_bytes({
@@ -151,7 +151,7 @@ impl StreamingDataSource {
 
                             let maybe_buffered = {
                                 let mut buf = ctx.buffer.lock();
-                                if buf.append(&data, start) {
+                                if buf.append(data, start) {
                                     Some(buf.max_buffered_from_start())
                                 } else {
                                     None
@@ -186,10 +186,10 @@ impl StreamingDataSource {
         url: &str,
         start: u64,
         end: u64,
-    ) -> Result<Vec<u8>> {
+    ) -> Result<bytes::Bytes> {
         let hdr = format!("bytes={}-{}", start, end.saturating_sub(1));
         let resp = client.get(url).header("Range", hdr).send().await?;
-        Ok(resp.bytes().await?.to_vec())
+        Ok(resp.bytes().await?)
     }
 
     fn fetch(&self, start: u64, size: u64) -> Result<()> {
