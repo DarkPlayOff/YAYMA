@@ -494,7 +494,14 @@ impl AudioSystem {
                 .handle_message(AudioMessage::PlayTrack(next_track))
                 .await;
         } else {
-            let _ = self.event_tx.send(Event::QueueEnded);
+            // Queue ended, start "My Wave"
+            let yandex = self.yandex.clone();
+            self.spawn_fetch_context(move || async move {
+                yandex
+                    .fetch_wave_context(vec!["user:onyourwave".to_string()])
+                    .await
+                    .map_err(|e| format!("Failed to auto-start wave: {e}"))
+            });
         }
     }
 
@@ -513,7 +520,14 @@ impl AudioSystem {
                 .handle_message(AudioMessage::PlayTrack(next_track))
                 .await;
         } else {
-            let _ = self.event_tx.send(Event::QueueEnded);
+            // Queue ended, start "My Wave"
+            let yandex = self.yandex.clone();
+            self.spawn_fetch_context(move || async move {
+                yandex
+                    .fetch_wave_context(vec!["user:onyourwave".to_string()])
+                    .await
+                    .map_err(|e| format!("Failed to auto-start wave: {e}"))
+            });
         }
     }
 
