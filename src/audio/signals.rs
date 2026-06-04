@@ -34,6 +34,7 @@ pub struct AudioSignals {
     pub amplitude: Signal<f32>,
     pub codec: Signal<Option<String>>,
     pub discord_rpc: Signal<bool>,
+    pub selected_device: Signal<Option<String>>,
     pub monitor: Arc<Monitor>,
     // Channel for notification of any signal change (except progress)
     pub changed: watch::Sender<()>,
@@ -76,6 +77,7 @@ impl AudioSignals {
             amplitude: Signal::new(0.0),
             codec: Signal::new(None),
             discord_rpc: Signal::new(false),
+            selected_device: Signal::new(None),
             monitor: Arc::new(Monitor::new(1024)),
             changed: changed_tx,
             changed_rx,

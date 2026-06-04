@@ -41,6 +41,9 @@ pub enum AudioMessage {
     WaveDislike(String),
     WaveUndislike(String),
 
+    // Device
+    SetAudioDevice(Option<String>),
+
     // Internal/Other
     ReloadCurrentTrack,
     TrackEnded,

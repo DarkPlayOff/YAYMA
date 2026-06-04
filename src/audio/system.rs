@@ -452,8 +452,20 @@ impl AudioSystem {
                     }
                 }
             }
+            AudioMessage::SetAudioDevice(device_name) => {
+                self.signals.selected_device.set(device_name.clone());
+                {
+                    let mut db = self.db.lock().await;
+                    let _ = db.save_setting("audio_device", &device_name).await;
+                }
+                let _ = self.tx.send(AudioMessage::RecreateStream).await;
+            }
             AudioMessage::RecreateStream => {
-                if let Err(e) = self.controller.recreate_engine() {
+                let device = self.signals.selected_device.get();
+                if let Err(e) = self
+                    .controller
+                    .recreate_engine(device.as_deref())
+                {
                     tracing::error!("Failed to recreate stream: {}", e);
                 } else {
                     let _ = self.tx.send(AudioMessage::ReloadCurrentTrack).await;

@@ -79,3 +79,67 @@ pub async fn set_auto_hide_navbar_enabled(ctx: &AppContext, enabled: bool) {
     let mut db = ctx.core.db.lock().await;
     let _ = db.save_setting("auto_hide_navbar", &enabled).await;
 }
+
+fn extract_display_name(raw: &str) -> String {
+    if let Some(pos) = raw.find(" (") {
+        let inner = &raw[pos + 2..];
+        if inner.ends_with(')') {
+            return inner[..inner.len() - 1].to_string();
+        }
+    }
+    raw.to_string()
+}
+
+pub fn get_audio_devices(_ctx: &AppContext) -> Vec<String> {
+    use std::collections::HashMap;
+
+    #[cfg(target_os = "windows")]
+    let raw_names: Vec<String> = crate::audio::util::get_windows_full_device_names();
+
+    #[cfg(not(target_os = "windows"))]
+    let raw_names: Vec<String> = {
+        use rodio::cpal::traits::HostTrait;
+        use rodio::DeviceTrait;
+        let host = rodio::cpal::default_host();
+        host.output_devices()
+            .map(|devs| {
+                devs.filter_map(|d| d.description().ok().map(|desc| desc.name().to_string()))
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
+
+    let mut display_names: Vec<String> =
+        raw_names.iter().map(|n| extract_display_name(n)).collect();
+    display_names.sort();
+
+    let mut counts: HashMap<String, usize> = HashMap::default();
+    for name in &display_names {
+        *counts.entry(name.clone()).or_insert(0) += 1;
+    }
+    let mut seen: HashMap<String, usize> = HashMap::default();
+    let mut result = Vec::with_capacity(display_names.len());
+    for name in display_names {
+        let total = counts.get(&name).copied().unwrap_or(1);
+        let idx = seen.entry(name.clone()).or_insert(0);
+        *idx += 1;
+        if total > 1 {
+            result.push(format!("{} ({})", name, idx));
+        } else {
+            result.push(name);
+        }
+    }
+    result
+}
+
+pub async fn set_audio_device(ctx: &AppContext, device_name: String) {
+    let device = if device_name.is_empty() {
+        None
+    } else {
+        Some(device_name)
+    };
+    let tx = ctx.audio.tx.clone();
+    let _ = tx
+        .send(crate::audio::commands::AudioMessage::SetAudioDevice(device))
+        .await;
+}

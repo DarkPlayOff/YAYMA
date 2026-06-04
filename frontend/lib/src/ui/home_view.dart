@@ -613,6 +613,8 @@ class _HomeMainControls extends StatelessWidget {
                 ),
                 const SizedBox(width: 12),
                 const Icon(Icons.volume_up, color: Colors.white38, size: 18),
+                const SizedBox(width: 8),
+                const AudioDeviceButton(),
               ],
             ),
           ],

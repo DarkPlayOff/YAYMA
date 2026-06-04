@@ -22,6 +22,7 @@ class _FloatingNavBarState extends State<FloatingNavBar>
     with SingleTickerProviderStateMixin {
   final LayerLink _layerLink = LayerLink();
   OverlayEntry? _overlayEntry;
+  Timer? _showWaveTimer;
   bool _isHovered = false;
   bool _isNavbarHovered = false;
   bool _isAccountMenuOpen = false;
@@ -90,9 +91,15 @@ class _FloatingNavBarState extends State<FloatingNavBar>
             setState(() {
               _isHovered = true;
             });
-            _showWaveSettings();
+            _showWaveTimer?.cancel();
+            _showWaveTimer = Timer(
+              const Duration(milliseconds: 200),
+              _showWaveSettings,
+            );
           },
           onExit: (_) {
+            _showWaveTimer?.cancel();
+            _showWaveTimer = null;
             setState(() {
               _isHovered = false;
             });
@@ -227,6 +234,12 @@ class _FloatingNavBarState extends State<FloatingNavBar>
         ),
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    _showWaveTimer?.cancel();
+    super.dispose();
   }
 }
 

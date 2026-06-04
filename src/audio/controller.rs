@@ -116,8 +116,11 @@ impl AudioController {
         self.stream_manager.invalidate_track(track_id);
     }
 
-    pub fn recreate_engine(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        self.engine.recreate()
+    pub fn recreate_engine(
+        &self,
+        device_name: Option<&str>,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        self.engine.recreate(device_name)
     }
 
     pub async fn handle_message(&self, cmd: AudioMessage) {
@@ -146,8 +149,6 @@ impl AudioController {
         start_pos: std::time::Duration,
         soft_reload: bool,
     ) {
-        self.signals.is_buffering.set(true);
-
         if !soft_reload {
             self.stop().await;
         } else {
@@ -158,6 +159,8 @@ impl AudioController {
             }
             self.engine.stop();
         }
+
+        self.signals.is_buffering.set(true);
 
         if !soft_reload {
             self.signals.is_stopped.set(false);
