@@ -74,3 +74,11 @@ pub async fn is_auto_hide_navbar_enabled_init() -> bool {
 pub async fn set_auto_hide_navbar_enabled(ctx: &AppContext, enabled: bool) {
     logic::set_auto_hide_navbar_enabled(ctx, enabled).await;
 }
+
+pub fn get_audio_devices(ctx: &AppContext) -> Vec<String> {
+    logic::get_audio_devices(ctx)
+}
+
+pub async fn set_audio_device(ctx: &AppContext, device_name: String) {
+    logic::set_audio_device(ctx, device_name).await;
+}

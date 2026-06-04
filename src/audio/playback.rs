@@ -23,12 +23,15 @@ impl PlaybackEngine {
             state: parking_lot::RwLock::new(None),
             tx,
         };
-        engine.recreate()?;
+        engine.recreate(None)?;
         Ok(engine)
     }
 
-    pub fn recreate(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let (device, stream_config, sample_format) = setup_device_config();
+    pub fn recreate(
+        &self,
+        device_name: Option<&str>,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let (device, stream_config, sample_format) = setup_device_config(device_name);
         let sample_rate = NonZero::new(stream_config.sample_rate).unwrap();
         let channels = NonZero::new(stream_config.channels).unwrap();
 

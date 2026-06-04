@@ -256,6 +256,105 @@ class _CommonVolumeSliderState extends State<CommonVolumeSlider> {
   }
 }
 
+class AudioDeviceButton extends StatefulWidget {
+  final double iconSize;
+  const AudioDeviceButton({super.key, this.iconSize = 18});
+
+  @override
+  State<AudioDeviceButton> createState() => _AudioDeviceButtonState();
+}
+
+class _AudioDeviceButtonState extends State<AudioDeviceButton> {
+  bool _devicesLoaded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_loadDevices());
+  }
+
+  Future<void> _loadDevices() async {
+    await refreshAudioDevices();
+    if (mounted) {
+      setState(() => _devicesLoaded = true);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Watch((context) {
+      final devices = audioDevicesSignal.value;
+      final selectedDevice = selectedAudioDeviceSignal.value;
+      final accentColor = accentColorSignal.value;
+
+      return IconButton(
+        icon: Icon(
+          Icons.speaker_group_rounded,
+          size: widget.iconSize,
+          color: selectedDevice != null ? accentColor : Colors.white38,
+        ),
+        tooltip: selectedDevice ?? 'Устройство вывода',
+        onPressed: () async {
+          if (!_devicesLoaded) {
+            unawaited(_loadDevices());
+          }
+          final value = await showMenu<String>(
+            context: context,
+            color: const Color(0xFF2A2A2A),
+            position: _menuPosition(context),
+            items: _buildMenuItems(devices, selectedDevice),
+          );
+          if (value != null) {
+            unawaited(setAudioDevice(value));
+          }
+        },
+      );
+    });
+  }
+
+  RelativeRect _menuPosition(BuildContext context) {
+    final renderBox = context.findRenderObject()! as RenderBox;
+    final offset = renderBox.localToGlobal(Offset.zero);
+    final size = renderBox.size;
+    return RelativeRect.fromLTRB(
+      offset.dx,
+      offset.dy + size.height + 4,
+      offset.dx + 200,
+      offset.dy + size.height + 200,
+    );
+  }
+
+  List<PopupMenuEntry<String>> _buildMenuItems(
+    List<String> devices,
+    String? selectedDevice,
+  ) {
+    return [
+      PopupMenuItem<String>(
+        value: '',
+        child: Text(
+          'По умолчанию',
+          style: TextStyle(
+            color: selectedDevice == null ? Colors.white : Colors.white70,
+            fontSize: 13,
+          ),
+        ),
+      ),
+      ...devices.map(
+        (device) => PopupMenuItem<String>(
+          value: device,
+          child: Text(
+            device,
+            style: TextStyle(
+              color: device == selectedDevice ? Colors.white : Colors.white70,
+              fontSize: 13,
+            ),
+          ),
+        ),
+      ),
+    ];
+  }
+}
+
 typedef DataBuilder<T> = Widget Function(BuildContext context, T data);
 
 class CommonAsyncView<T> extends StatelessWidget {

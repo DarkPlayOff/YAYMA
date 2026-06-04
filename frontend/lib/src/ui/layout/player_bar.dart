@@ -407,6 +407,8 @@ class _VolumeAndQuality extends StatelessWidget {
               width: volumeWidth,
               activeColor: accentColor,
             ),
+            const SizedBox(width: 8),
+            const AudioDeviceButton(),
           ],
         ],
       ),

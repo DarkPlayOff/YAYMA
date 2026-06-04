@@ -154,6 +154,23 @@ trackProgressSignal = computed(() {
   );
 }, debugLabel: 'trackProgressSignal');
 
+// Signal for audio output devices
+final FlutterSignal<List<String>> audioDevicesSignal = signal<List<String>>([]);
+final FlutterSignal<String?> selectedAudioDeviceSignal = signal<String?>(null);
+
+Future<void> refreshAudioDevices() async {
+  final ctx = appContextSignal.value;
+  if (ctx == null) return;
+  audioDevicesSignal.value = await rust.getAudioDevices(ctx: ctx);
+}
+
+Future<void> setAudioDevice(String deviceName) async {
+  final ctx = appContextSignal.value;
+  if (ctx == null) return;
+  selectedAudioDeviceSignal.value = deviceName.isEmpty ? null : deviceName;
+  await rust.setAudioDevice(ctx: ctx, deviceName: deviceName);
+}
+
 // Signal for cover URL only to avoid re-calculating on pause/likes
 final FlutterComputed<String?> currentCoverUrlSignal = computed(
   () => playerStateSignal.value?.currentTrack?.coverUrl,
