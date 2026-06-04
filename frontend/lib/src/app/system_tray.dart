@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
+import 'package:yayma/src/providers/navigation_provider.dart';
 import 'package:yayma/src/providers/playback_provider.dart';
 
 /// Minimize-to-tray support for the desktop build.
@@ -119,7 +120,12 @@ class SystemTrayManager with TrayListener, WindowListener {
   @override
   void onWindowClose() {
     if (_quitting) return;
-    // Hide to tray rather than terminating the process.
-    unawaited(windowManager.hide());
+
+    if (closeToTraySignal.value) {
+      // Hide to tray rather than terminating the process.
+      unawaited(windowManager.hide());
+    } else {
+      unawaited(_quit());
+    }
   }
 }

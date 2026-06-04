@@ -38,6 +38,12 @@ class AppInit {
     try {
       final autoHide = await simple.isAutoHideNavbarEnabledInit();
       autoHideNavbarSignal.value = autoHide;
+
+      final closeToTray = await simple.isCloseToTrayEnabledInit();
+      closeToTraySignal.value = closeToTray;
+
+      final customTitlebar = await simple.isCustomTitlebarEnabledInit();
+      customTitlebarSignal.value = customTitlebar;
     } on Object catch (_) {}
 
     unawaited(_initializeAuthAndServices());

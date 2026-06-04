@@ -63,6 +63,11 @@ final FlutterSignal<bool> customTitlebarSignal = signal<bool>(
   true,
 );
 
+/// Close to tray setting
+final FlutterSignal<bool> closeToTraySignal = signal<bool>(
+  true,
+);
+
 /// Computed current navigation stack
 final FlutterComputed<List<NavState>> navStackSignal = computed(
   () =>

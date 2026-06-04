@@ -80,6 +80,24 @@ pub async fn set_auto_hide_navbar_enabled(ctx: &AppContext, enabled: bool) {
     let _ = db.save_setting("auto_hide_navbar", &enabled).await;
 }
 
+pub async fn is_close_to_tray_enabled(ctx: &AppContext) -> bool {
+    let mut db = ctx.core.db.lock().await;
+    db.load_setting("close_to_tray").await.unwrap_or(Some(true)).unwrap_or(true)
+}
+
+pub async fn is_close_to_tray_enabled_init() -> bool {
+    if let Ok(mut db) = crate::storage::db::AppDatabase::init(crate::app::get_data_dir()).await {
+        db.load_setting("close_to_tray").await.unwrap_or(Some(true)).unwrap_or(true)
+    } else {
+        true
+    }
+}
+
+pub async fn set_close_to_tray_enabled(ctx: &AppContext, enabled: bool) {
+    let mut db = ctx.core.db.lock().await;
+    let _ = db.save_setting("close_to_tray", &enabled).await;
+}
+
 fn extract_display_name(raw: &str) -> String {
     if let Some(pos) = raw.find(" (") {
         let inner = &raw[pos + 2..];

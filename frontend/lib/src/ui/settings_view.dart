@@ -24,6 +24,7 @@ class _SettingsViewState extends State<SettingsView> {
   late final FutureSignal<bool> _discordRpcSignal;
   late final FutureSignal<bool> _customTitlebarSignal;
   late final FutureSignal<bool> _autoHideNavbarSignal;
+  late final FutureSignal<bool> _closeToTraySignal;
 
   @override
   void initState() {
@@ -54,6 +55,9 @@ class _SettingsViewState extends State<SettingsView> {
     _autoHideNavbarSignal = futureSignal(() async {
       return autoHideNavbarSignal.value;
     });
+    _closeToTraySignal = futureSignal(() async {
+      return closeToTraySignal.value;
+    });
   }
 
   Future<void> _toggleDiscordRpc(bool enabled) async {
@@ -79,6 +83,15 @@ class _SettingsViewState extends State<SettingsView> {
       await simple.setAutoHideNavbarEnabled(ctx: ctx, enabled: enabled);
       autoHideNavbarSignal.value = enabled;
       unawaited(_autoHideNavbarSignal.refresh());
+    }
+  }
+
+  Future<void> _toggleCloseToTray(bool enabled) async {
+    final ctx = appContextSignal.value;
+    if (ctx != null) {
+      await simple.setCloseToTrayEnabled(ctx: ctx, enabled: enabled);
+      closeToTraySignal.value = enabled;
+      unawaited(_closeToTraySignal.refresh());
     }
   }
 
@@ -213,6 +226,27 @@ class _SettingsViewState extends State<SettingsView> {
                         trailing: Switch(
                           value: enabled.value ?? true,
                           onChanged: (v) => unawaited(_toggleDiscordRpc(v)),
+                        ),
+                      );
+                    }),
+                    const SizedBox(height: 48),
+                  ],
+                  if (context.isDesktop) ...[
+                    const _SectionTitle(title: 'Система'),
+                    const SizedBox(height: 24),
+                    Watch((context) {
+                      final enabled = _closeToTraySignal.value;
+                      return _SettingItem(
+                        title: 'Сворачивать в трей при закрытии',
+                        subtitle:
+                            'При нажатии на крестик приложение будет скрыто в трей',
+                        icon: Icons.window_rounded,
+                        onTap: () => unawaited(
+                          _toggleCloseToTray(!(enabled.value ?? true)),
+                        ),
+                        trailing: Switch(
+                          value: enabled.value ?? true,
+                          onChanged: (v) => unawaited(_toggleCloseToTray(v)),
                         ),
                       );
                     }),

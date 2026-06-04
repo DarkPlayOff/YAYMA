@@ -75,6 +75,18 @@ pub async fn set_auto_hide_navbar_enabled(ctx: &AppContext, enabled: bool) {
     logic::set_auto_hide_navbar_enabled(ctx, enabled).await;
 }
 
+pub async fn is_close_to_tray_enabled(ctx: &AppContext) -> bool {
+    logic::is_close_to_tray_enabled(ctx).await
+}
+
+pub async fn is_close_to_tray_enabled_init() -> bool {
+    logic::is_close_to_tray_enabled_init().await
+}
+
+pub async fn set_close_to_tray_enabled(ctx: &AppContext, enabled: bool) {
+    logic::set_close_to_tray_enabled(ctx, enabled).await;
+}
+
 pub fn get_audio_devices(ctx: &AppContext) -> Vec<String> {
     logic::get_audio_devices(ctx)
 }
