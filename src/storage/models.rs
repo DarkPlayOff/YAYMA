@@ -10,7 +10,7 @@ pub struct TrackMetadataEntity {
     pub duration_ms: u64,
 
     #[has_many]
-    pub artists: toasty::HasMany<TrackMetadataArtist>,
+    pub artists: toasty::Deferred<Vec<TrackMetadataArtist>>,
 }
 
 #[derive(Debug, toasty::Model)]
@@ -22,7 +22,7 @@ pub struct TrackMetadataArtist {
     pub track_metadata_entity_id: String,
 
     #[belongs_to(key = track_metadata_entity_id, references = track_id)]
-    pub track_metadata_entity: toasty::BelongsTo<TrackMetadataEntity>,
+    pub track_metadata_entity: toasty::Deferred<TrackMetadataEntity>,
 
     pub artist_id: String,
     pub name: String,
