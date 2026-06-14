@@ -459,7 +459,7 @@ class PlaybackController {
       runRustAction(
         (ctx) => rust.startWave(
           ctx: ctx,
-          seeds: [title != null ? 'track:$trackId:$title' : 'track:$trackId'],
+          seeds: [if (title != null) 'track:$trackId:$title' else 'track:$trackId'],
         ),
       );
   static Future<void> changeVolume(int volume) =>

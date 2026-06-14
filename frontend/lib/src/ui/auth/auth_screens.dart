@@ -79,11 +79,24 @@ class _LoginScreenState extends State<LoginScreen> {
 
   void _handleLogin(String val) {
     var token = val.trim();
-    final match = RegExp('access_token=([^&]+)').firstMatch(token);
-    if (match != null) {
-      token = match.group(1)!;
+    try {
+      token = Uri.decodeFull(token);
+    } on Object catch (_) {}
+
+    token = token.replaceAll(RegExp(r'[\u200B-\u200D\uFEFF\u00A0]'), '');
+    token = token.replaceAll(RegExp(r'[^\x21-\x7E]'), '');
+
+    final urlMatch = RegExp('access_token=([^&/#?]+)').firstMatch(token);
+    if (urlMatch != null) {
+      token = urlMatch.group(1)!;
+    } else {
+      final directMatch = RegExp('(y0_[a-zA-Z0-9._-]+)').firstMatch(token);
+      if (directMatch != null) {
+        token = directMatch.group(1)!;
+      }
     }
-    if (token.isNotEmpty) {
+
+    if (token.isNotEmpty && !token.startsWith('http')) {
       unawaited(login(token));
     }
   }
