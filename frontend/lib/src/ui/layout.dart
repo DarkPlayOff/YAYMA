@@ -265,12 +265,13 @@ class _WindowContent extends StatelessWidget {
       final isNarrow = screenWidth < 600;
 
       // Bottom padding calculation to avoid overlap with PlayerBar and NavBar
-      // We only apply it to the browser (yandexId) to prevent it from being covered,
+      // We only apply it to the browser (yandexId) and settings (account) to prevent them from being covered,
       // while other views scroll under the player for the blur effect.
       final hasPlayerBar = !isHome || showLyrics;
 
       double bottomPadding = 0;
-      if (state.section == AppSection.yandexId) {
+      if (state.section == AppSection.yandexId ||
+          state.section == AppSection.account) {
         if (isNarrow) {
           bottomPadding = hasPlayerBar ? 180 : 96;
         } else {

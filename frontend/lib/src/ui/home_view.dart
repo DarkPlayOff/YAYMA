@@ -14,147 +14,149 @@ import 'package:yayma/src/ui/widgets/responsive.dart';
 import 'package:yayma/src/ui/widgets/rust_cached_image.dart';
 import 'package:yayma/src/ui/widgets/track_elements.dart';
 
-class HomeView extends SignalWidget {
+class HomeView extends StatelessWidget {
   const HomeView({super.key});
 
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final height = constraints.maxHeight;
-        final width = constraints.maxWidth;
-        final showLyrics = showLyricsSignal.value;
+        return SignalBuilder(builder: (context) {
+          final height = constraints.maxHeight;
+          final width = constraints.maxWidth;
+          final showLyrics = showLyricsSignal.value;
 
-        var verticalSpacing = 40.0;
-        var trackHeaderSpacing = 32.0;
-        var controlsSpacing = 32.0;
+          var verticalSpacing = 40.0;
+          var trackHeaderSpacing = 32.0;
+          var controlsSpacing = 32.0;
 
-        // Adaptation for height
-        if (height < 800) {
-          verticalSpacing = 24.0;
-          trackHeaderSpacing = 24.0;
-          controlsSpacing = 24.0;
-        }
-        if (height < 650) {
-          verticalSpacing = 16.0;
-          trackHeaderSpacing = 16.0;
-          controlsSpacing = 16.0;
-        }
+          // Adaptation for height
+          if (height < 800) {
+            verticalSpacing = 24.0;
+            trackHeaderSpacing = 24.0;
+            controlsSpacing = 24.0;
+          }
+          if (height < 650) {
+            verticalSpacing = 16.0;
+            trackHeaderSpacing = 16.0;
+            controlsSpacing = 16.0;
+          }
 
-        final isNarrow = context.isNarrow;
+          final isNarrow = context.isNarrow;
 
-        return Stack(
-          children: [
-            Positioned.fill(
-              child: Stack(
-                children: [
-                  // Left side: Player UI
-                  AnimatedPositioned(
-                    duration: const Duration(milliseconds: 350),
-                    curve: Curves.easeInOutCubic,
-                    left: showLyrics ? -width : 0,
-                    right: showLyrics ? width : 0,
-                    top: 0,
-                    bottom: 0,
-                    child: Center(
-                      child: Padding(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: isNarrow ? 24 : 24,
-                          vertical: 12,
-                        ),
-                        child: isNarrow && !showLyrics
-                            ? Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Center(child: _HomeCoverWidget()),
-                                  SizedBox(height: verticalSpacing * 1.5),
-                                  _HomeTrackHeader(
-                                    small: height < 750,
-                                    isNarrow: true,
-                                  ),
-                                  const SizedBox(
-                                    height: 8,
-                                  ), // Reduced from trackHeaderSpacing
-                                  SizedBox(
-                                    width: width - 48,
-                                    child: CommonProgressSlider(
-                                      maxWidth: width - 48,
-                                    ),
-                                  ),
-                                  const SizedBox(
-                                    height: 12,
-                                  ), // Reduced from controlsSpacing
-                                  _HomeMainControls(
-                                    showLyrics: showLyrics,
-                                    small: height < 750,
-                                    isNarrow: true,
-                                  ),
-                                ],
-                              )
-                            : FittedBox(
-                                fit: BoxFit.scaleDown,
-                                child: Column(
+          return Stack(
+            children: [
+              Positioned.fill(
+                child: Stack(
+                  children: [
+                    // Left side: Player UI
+                    AnimatedPositioned(
+                      duration: const Duration(milliseconds: 350),
+                      curve: Curves.easeInOutCubic,
+                      left: showLyrics ? -width : 0,
+                      right: showLyrics ? width : 0,
+                      top: 0,
+                      bottom: 0,
+                      child: Center(
+                        child: Padding(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: isNarrow ? 24 : 24,
+                            vertical: 12,
+                          ),
+                          child: isNarrow && !showLyrics
+                              ? Column(
                                   mainAxisAlignment: MainAxisAlignment.center,
-                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    const _HomeCoverWidget(),
-                                    SizedBox(height: verticalSpacing),
-                                    _HomeTrackHeader(small: height < 750),
-                                    SizedBox(height: trackHeaderSpacing),
+                                    const Center(child: _HomeCoverWidget()),
+                                    SizedBox(height: verticalSpacing * 1.5),
+                                    _HomeTrackHeader(
+                                      small: height < 750,
+                                      isNarrow: true,
+                                    ),
                                     const SizedBox(
-                                      width: 500,
+                                      height: 8,
+                                    ), // Reduced from trackHeaderSpacing
+                                    SizedBox(
+                                      width: width - 48,
                                       child: CommonProgressSlider(
-                                        maxWidth: 500,
+                                        maxWidth: width - 48,
                                       ),
                                     ),
-                                    SizedBox(height: controlsSpacing),
+                                    const SizedBox(
+                                      height: 12,
+                                    ), // Reduced from controlsSpacing
                                     _HomeMainControls(
                                       showLyrics: showLyrics,
                                       small: height < 750,
+                                      isNarrow: true,
                                     ),
                                   ],
+                                )
+                              : FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const _HomeCoverWidget(),
+                                      SizedBox(height: verticalSpacing),
+                                      _HomeTrackHeader(small: height < 750),
+                                      SizedBox(height: trackHeaderSpacing),
+                                      const SizedBox(
+                                        width: 500,
+                                        child: CommonProgressSlider(
+                                          maxWidth: 500,
+                                        ),
+                                      ),
+                                      SizedBox(height: controlsSpacing),
+                                      _HomeMainControls(
+                                        showLyrics: showLyrics,
+                                        small: height < 750,
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                              ),
+                        ),
                       ),
                     ),
-                  ),
 
-                  // Right side: Lyrics
-                  AnimatedPositioned(
-                    duration: const Duration(milliseconds: 350),
-                    curve: Curves.easeInOutCubic,
-                    left: showLyrics ? 0 : width,
-                    right: showLyrics ? 0 : -width,
-                    top: 0,
-                    bottom: 0,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 60,
-                        vertical: 40,
-                      ),
-                      child: SignalBuilder(builder: (context) {
-                        final trackId = trackMetadataSignal().id;
-                        if (trackId == null) {
-                          return const Center(
-                            child: Text(
-                              'Выберите трек',
-                              style: TextStyle(color: Colors.white38),
-                            ),
+                    // Right side: Lyrics
+                    AnimatedPositioned(
+                      duration: const Duration(milliseconds: 350),
+                      curve: Curves.easeInOutCubic,
+                      left: showLyrics ? 0 : width,
+                      right: showLyrics ? 0 : -width,
+                      top: 0,
+                      bottom: 0,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 60,
+                          vertical: 40,
+                        ),
+                        child: SignalBuilder(builder: (context) {
+                          final trackId = trackMetadataSignal().id;
+                          if (trackId == null) {
+                            return const Center(
+                              child: Text(
+                                'Выберите трек',
+                                style: TextStyle(color: Colors.white38),
+                              ),
+                            );
+                          }
+                          return LyricsWidget(
+                            trackId: trackId,
+                            visible: showLyrics,
                           );
-                        }
-                        return LyricsWidget(
-                          trackId: trackId,
-                          visible: showLyrics,
-                        );
-                      }),
+                        }),
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-          ],
-        );
+            ],
+          );
+        });
       },
     );
   }

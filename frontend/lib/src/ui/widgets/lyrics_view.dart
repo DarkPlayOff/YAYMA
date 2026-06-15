@@ -21,7 +21,6 @@ class _LyricsWidgetState extends State<LyricsWidget> {
   final FlutterSignal<String> _trackIdSignal = signal<String>('');
   final FlutterSignal<bool> _visibleSignal = signal<bool>(false);
 
-  bool _hasBeenVisible = false;
   bool _initialScrollDone = false;
   Timer? _emptyLyricsTimer;
   String? _lastEmptyTrackId;
@@ -29,7 +28,6 @@ class _LyricsWidgetState extends State<LyricsWidget> {
   @override
   void initState() {
     super.initState();
-    _hasBeenVisible = widget.visible;
     _initialScrollDone = !widget.visible;
     _trackIdSignal.value = widget.trackId;
     _visibleSignal.value = widget.visible;
@@ -89,7 +87,6 @@ class _LyricsWidgetState extends State<LyricsWidget> {
   void didUpdateWidget(LyricsWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.trackId != oldWidget.trackId) {
-      _hasBeenVisible = widget.visible;
       _initialScrollDone = !widget.visible;
       _activeIndexSignal.value = -1;
       _emptyLyricsTimer?.cancel();
@@ -100,8 +97,7 @@ class _LyricsWidgetState extends State<LyricsWidget> {
       _visibleSignal.value = widget.visible;
     } else if (widget.visible != oldWidget.visible) {
       _visibleSignal.value = widget.visible;
-      if (widget.visible && !_hasBeenVisible) {
-        _hasBeenVisible = true;
+      if (widget.visible) {
         _initialScrollDone = false;
       }
     }
@@ -149,9 +145,9 @@ class _LyricsWidgetState extends State<LyricsWidget> {
 
   @override
   Widget build(BuildContext context) {
-    return SignalBuilder(builder: (context) {
-      if (!_hasBeenVisible) return const SizedBox.shrink();
+    if (!widget.visible) return const SizedBox.shrink();
 
+    return SignalBuilder(builder: (context) {
       final lyricsAsync = lyricsSignal(widget.trackId).value;
       final hideOverlay = hideLyricsOverlaySignal.value;
 

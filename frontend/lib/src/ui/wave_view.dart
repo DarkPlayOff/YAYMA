@@ -55,6 +55,27 @@ class WaveSettingsPanel extends StatelessWidget {
                       SizedBox(
                         width: 40,
                         height: 40,
+                        child: (currentSeeds.isNotEmpty &&
+                                !currentSeeds.contains('user:onyourwave'))
+                            ? MouseRegion(
+                                cursor: SystemMouseCursors.click,
+                                child: GestureDetector(
+                                  onTap: () {
+                                    unawaited(WaveController.resetStations());
+                                  },
+                                  behavior: HitTestBehavior.opaque,
+                                  child: const Icon(
+                                    Icons.refresh,
+                                    color: Colors.white54,
+                                    size: 20,
+                                  ),
+                                ),
+                              )
+                            : null,
+                      ),
+                      SizedBox(
+                        width: 40,
+                        height: 40,
                         child: MouseRegion(
                           cursor: SystemMouseCursors.click,
                           child: GestureDetector(
@@ -74,28 +95,6 @@ class WaveSettingsPanel extends StatelessWidget {
                             ),
                           ),
                         ),
-                      ),
-                      SizedBox(
-                        width: 40,
-                        height: 40,
-                        child:
-                            (currentSeeds.isNotEmpty &&
-                                !currentSeeds.contains('user:onyourwave'))
-                            ? MouseRegion(
-                                cursor: SystemMouseCursors.click,
-                                child: GestureDetector(
-                                  onTap: () {
-                                    unawaited(WaveController.resetStations());
-                                  },
-                                  behavior: HitTestBehavior.opaque,
-                                  child: const Icon(
-                                    Icons.refresh,
-                                    color: Colors.white54,
-                                    size: 20,
-                                  ),
-                                ),
-                              )
-                            : null,
                       ),
                     ],
                   ),
