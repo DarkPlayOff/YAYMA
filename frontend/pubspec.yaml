@@ -38,6 +38,7 @@ dev_dependencies:
 #  integration_test:
 #    sdk: flutter
   json_serializable: ^6.13.1
+  signals_lint: ^7.1.0
   very_good_analysis: ^10.2.0
 
 flutter_launcher_icons:
