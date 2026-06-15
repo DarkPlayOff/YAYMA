@@ -5,7 +5,7 @@ import 'package:yayma/src/providers/notification_provider.dart';
 import 'package:yayma/src/rust/api/models.dart';
 import 'package:yayma/src/ui/widgets/rust_cached_image.dart';
 
-class AddToPlaylistDialog extends StatelessWidget {
+class AddToPlaylistDialog extends SignalWidget {
   final SimpleTrackDto track;
 
   const AddToPlaylistDialog({required this.track, super.key});
@@ -19,7 +19,7 @@ class AddToPlaylistDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final playlists = playlistsSignal.watch(context);
+    final playlists = playlistsSignal.value;
 
     return AlertDialog(
       backgroundColor: const Color(0xFF1E1E1E),

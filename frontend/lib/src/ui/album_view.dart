@@ -112,18 +112,18 @@ class _AlbumViewState extends State<AlbumView> {
       return const Center(child: Text('Альбом не выбран'));
     }
 
-    return Watch((context) {
+    return SignalBuilder(builder: (context) {
       return CommonAsyncView<AlbumDetailsDto?>(
         state: _albumAsync.value,
         isEmpty: (album) => album == null,
         empty: const Center(child: Text('Альбом не найден')),
         builder: (context, album) {
           final albumData = album!;
-          return Watch((context) {
+          return SignalBuilder(builder: (context) {
             final isLiked = likedAlbumsSignal
-                .watch(context)
+                .value
                 .any((likedAlbum) => likedAlbum.id == albumData.id);
-            final isDownloading = _isDownloadingAlbum.watch(context);
+            final isDownloading = _isDownloadingAlbum.value;
 
             return CommonDetailSliverLayout(
               header: CommonDetailHeader(

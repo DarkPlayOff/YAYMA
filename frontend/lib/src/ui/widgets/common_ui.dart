@@ -227,7 +227,7 @@ class _CommonVolumeSliderState extends State<CommonVolumeSlider> {
   Widget build(BuildContext context) {
     final activeColor =
         widget.activeColor ?? Theme.of(context).colorScheme.primary;
-    return Watch((context) {
+    return SignalBuilder(builder: (context) {
       final volume = playerVolumeSignal().toDouble();
       final displayVolume = _dragVolume ?? volume;
 
@@ -283,7 +283,7 @@ class _AudioDeviceButtonState extends State<AudioDeviceButton> {
 
   @override
   Widget build(BuildContext context) {
-    return Watch((context) {
+    return SignalBuilder(builder: (context) {
       final devices = audioDevicesSignal.value;
       final selectedDevice = selectedAudioDeviceSignal.value;
       final accentColor = accentColorSignal.value;
@@ -422,7 +422,7 @@ class _CommonProgressSliderState extends State<CommonProgressSlider> {
   Widget build(BuildContext context) {
     return ConstrainedBox(
       constraints: BoxConstraints(maxWidth: widget.maxWidth),
-      child: Watch((context) {
+      child: SignalBuilder(builder: (context) {
         final progress = trackProgressSignal();
         final dur = progress.durationMs;
         final displayPosition = _dragValue ?? progress.positionMs;

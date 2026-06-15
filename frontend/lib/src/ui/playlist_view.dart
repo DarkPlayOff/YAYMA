@@ -83,7 +83,7 @@ class _PlaylistViewState extends State<PlaylistView> {
       return const Center(child: Text('Плейлист не выбран'));
     }
 
-    return Watch((context) {
+    return SignalBuilder(builder: (context) {
       final meta = _playlistMetadata.value;
       final state = _playlistAsync.value;
 

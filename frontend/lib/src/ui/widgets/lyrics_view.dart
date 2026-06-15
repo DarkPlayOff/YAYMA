@@ -149,88 +149,90 @@ class _LyricsWidgetState extends State<LyricsWidget> {
 
   @override
   Widget build(BuildContext context) {
-    if (!_hasBeenVisible) return const SizedBox.shrink();
+    return SignalBuilder(builder: (context) {
+      if (!_hasBeenVisible) return const SizedBox.shrink();
 
-    final lyricsAsync = lyricsSignal(widget.trackId).watch(context);
-    final hideOverlay = hideLyricsOverlaySignal.watch(context);
+      final lyricsAsync = lyricsSignal(widget.trackId).value;
+      final hideOverlay = hideLyricsOverlaySignal.value;
 
-    return AnimatedOpacity(
-      duration: const Duration(milliseconds: 600),
-      opacity: hideOverlay ? 0.0 : 1.0,
-      child: lyricsAsync.map(
-        data: (lines) {
-          if (lines.isEmpty) {
-            _handleEmptyLyrics();
-            return const Center(
-              child: Text(
-                'Текст отсутствует',
-                style: TextStyle(color: Colors.white24, fontSize: 24),
-              ),
-            );
-          }
+      return AnimatedOpacity(
+        duration: const Duration(milliseconds: 600),
+        opacity: hideOverlay ? 0.0 : 1.0,
+        child: lyricsAsync.map(
+          data: (lines) {
+            if (lines.isEmpty) {
+              _handleEmptyLyrics();
+              return const Center(
+                child: Text(
+                  'Текст отсутствует',
+                  style: TextStyle(color: Colors.white24, fontSize: 24),
+                ),
+              );
+            }
 
-          return LayoutBuilder(
-            builder: (context, constraints) {
-              final viewportHeight = constraints.maxHeight;
+            return LayoutBuilder(
+              builder: (context, constraints) {
+                final viewportHeight = constraints.maxHeight;
 
-              return Watch((context) {
-                final activeIndex = _activeIndexSignal.value;
+                return SignalBuilder(builder: (context) {
+                  final activeIndex = _activeIndexSignal.value;
 
-                if (activeIndex != -1) {
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    _scrollToIndex(activeIndex);
-                  });
-                }
+                  if (activeIndex != -1) {
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      _scrollToIndex(activeIndex);
+                    });
+                  }
 
-                return ShaderMask(
-                  shaderCallback: (rect) => const LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Colors.transparent,
-                      Colors.white,
-                      Colors.white,
-                      Colors.transparent,
-                    ],
-                    stops: [0.0, 0.25, 0.75, 1.0],
-                  ).createShader(rect),
-                  blendMode: BlendMode.dstIn,
-                  child: ScrollConfiguration(
-                    behavior: ScrollConfiguration.of(
-                      context,
-                    ).copyWith(scrollbars: false),
-                    child: ListView.builder(
-                      controller: _scrollController,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: lines.length,
-                      padding: EdgeInsets.only(
-                        top: (viewportHeight / 2) - (_rowHeight / 2),
-                        bottom: viewportHeight / 2,
+                  return ShaderMask(
+                    shaderCallback: (rect) => const LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Colors.transparent,
+                        Colors.white,
+                        Colors.white,
+                        Colors.transparent,
+                      ],
+                      stops: [0.0, 0.25, 0.75, 1.0],
+                    ).createShader(rect),
+                    blendMode: BlendMode.dstIn,
+                    child: ScrollConfiguration(
+                      behavior: ScrollConfiguration.of(
+                        context,
+                      ).copyWith(scrollbars: false),
+                      child: ListView.builder(
+                        controller: _scrollController,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: lines.length,
+                        padding: EdgeInsets.only(
+                          top: (viewportHeight / 2) - (_rowHeight / 2),
+                          bottom: viewportHeight / 2,
+                        ),
+                        itemExtent: _rowHeight,
+                        itemBuilder: (context, index) {
+                          final item = lines[index];
+                          final isActive = index == activeIndex;
+                          final distance = (index - activeIndex).abs();
+
+                          return _LyricRow(
+                            key: ValueKey('${widget.trackId}_$index'),
+                            item: item,
+                            isActive: isActive,
+                            distance: distance,
+                          );
+                        },
                       ),
-                      itemExtent: _rowHeight,
-                      itemBuilder: (context, index) {
-                        final item = lines[index];
-                        final isActive = index == activeIndex;
-                        final distance = (index - activeIndex).abs();
-
-                        return _LyricRow(
-                          key: ValueKey('${widget.trackId}_$index'),
-                          item: item,
-                          isActive: isActive,
-                          distance: distance,
-                        );
-                      },
                     ),
-                  ),
-                );
-              });
-            },
-          );
-        },
-        loading: () => const CommonLoadingWidget(),
-        error: (Object e, _) => CommonErrorWidget(error: e.toString()),
-      ),
-    );
+                  );
+                });
+              },
+            );
+          },
+          loading: () => const CommonLoadingWidget(),
+          error: (Object e, _) => CommonErrorWidget(error: e.toString()),
+        ),
+      );
+    });
   }
 }
 
@@ -362,7 +364,7 @@ class _LyricTimerWidgetState extends State<_LyricTimerWidget>
 
   @override
   Widget build(BuildContext context) {
-    return Watch((context) {
+    return SignalBuilder(builder: (context) {
       final progress = trackProgressSignal.value;
       final currentMs = progress.positionMs.toInt();
       final remainingMs =
@@ -420,7 +422,7 @@ class _LyricTimerWidgetState extends State<_LyricTimerWidget>
   }
 }
 
-class LyricsReaderDialog extends StatelessWidget {
+class LyricsReaderDialog extends StatefulWidget {
   final String trackId;
   final String title;
 
@@ -441,69 +443,76 @@ class LyricsReaderDialog extends StatelessWidget {
   }
 
   @override
+  State<LyricsReaderDialog> createState() => _LyricsReaderDialogState();
+}
+
+class _LyricsReaderDialogState extends State<LyricsReaderDialog> {
+  @override
   Widget build(BuildContext context) {
-    final lyricsAsync = lyricsSignal(trackId).value;
-    return AlertDialog(
-      backgroundColor: const Color(0xFF0F0F0F),
-      surfaceTintColor: Colors.transparent,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-      title: Row(
-        children: [
-          Expanded(
-            child: Text(
-              title,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 26,
-                fontWeight: FontWeight.w900,
-                letterSpacing: -1,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.close, color: Colors.white38),
-            onPressed: () => Navigator.pop(context),
-          ),
-        ],
-      ),
-      content: Container(
-        width: 650,
-        height: 800,
-        padding: const EdgeInsets.symmetric(horizontal: 20),
-        child: lyricsAsync.map(
-          data: (items) {
-            final lines = items.whereType<LyricLine>().toList();
-            if (lines.isEmpty) {
-              return const Center(
-                child: Text(
-                  'Текст отсутствует',
-                  style: TextStyle(color: Colors.white24, fontSize: 18),
+    return SignalBuilder(builder: (context) {
+      final lyricsAsync = lyricsSignal(widget.trackId).value;
+      return AlertDialog(
+        backgroundColor: const Color(0xFF0F0F0F),
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+        title: Row(
+          children: [
+            Expanded(
+              child: Text(
+                widget.title,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 26,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: -1,
                 ),
-              );
-            }
-            return ListView.builder(
-              itemCount: lines.length,
-              itemBuilder: (context, index) => Padding(
-                padding: const EdgeInsets.symmetric(vertical: 18),
-                child: Text(
-                  lines[index].text,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 26,
-                    fontWeight: FontWeight.w800,
-                    height: 1.3,
-                    letterSpacing: -0.5,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            IconButton(
+              icon: const Icon(Icons.close, color: Colors.white38),
+              onPressed: () => Navigator.pop(context),
+            ),
+          ],
+        ),
+        content: Container(
+          width: 650,
+          height: 800,
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: lyricsAsync.map(
+            data: (items) {
+              final lines = items.whereType<LyricLine>().toList();
+              if (lines.isEmpty) {
+                return const Center(
+                  child: Text(
+                    'Текст отсутствует',
+                    style: TextStyle(color: Colors.white24, fontSize: 18),
+                  ),
+                );
+              }
+              return ListView.builder(
+                itemCount: lines.length,
+                itemBuilder: (context, index) => Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 18),
+                  child: Text(
+                    lines[index].text,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 26,
+                      fontWeight: FontWeight.w800,
+                      height: 1.3,
+                      letterSpacing: -0.5,
+                    ),
                   ),
                 ),
-              ),
-            );
-          },
-          loading: () => const CommonLoadingWidget(),
-          error: (Object e, _) => CommonErrorWidget(error: e.toString()),
+              );
+            },
+            loading: () => const CommonLoadingWidget(),
+            error: (Object e, _) => CommonErrorWidget(error: e.toString()),
+          ),
         ),
-      ),
-    );
+      );
+    });
   }
 }

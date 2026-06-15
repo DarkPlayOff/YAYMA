@@ -73,19 +73,19 @@ final FlutterComputed<List<NavState>> navStackSignal = computed(
   () =>
       rootStacksSignal()[currentRootSignal()] ??
       [NavState(currentRootSignal())],
-  debugLabel: 'navStackSignal',
+  options: const ComputedOptions(name: 'navStackSignal'),
 );
 
 /// Back button availability signal
 final FlutterComputed<bool> canGoBackSignal = computed(
   () => navStackSignal().length > 1,
-  debugLabel: 'canGoBackSignal',
+  options: const ComputedOptions(name: 'canGoBackSignal'),
 );
 
 /// Top of the active tab stack
 final FlutterComputed<NavState> currentNavStateSignal = computed(
   () => navStackSignal().last,
-  debugLabel: 'currentNavStateSignal',
+  options: const ComputedOptions(name: 'currentNavStateSignal'),
 );
 
 /// Navigates to a new page

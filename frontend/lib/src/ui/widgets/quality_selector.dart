@@ -7,7 +7,7 @@ import 'package:yayma/src/rust/api/models.dart';
 import 'package:yayma/src/ui/widgets/app_context_menu.dart';
 import 'package:yayma/src/ui/widgets/audio_settings.dart';
 
-class CommonQualitySelector extends StatelessWidget {
+class CommonQualitySelector extends SignalWidget {
   final Color? accentColor;
   final bool isSmall;
 
@@ -19,10 +19,11 @@ class CommonQualitySelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Watch((context) {
-      final quality = audioQualitySignal.value;
-      final meta = trackMetadataSignal.value;
-      final accentColor = this.accentColor ?? accentColorSignal.value;
+    return SignalBuilder(
+      builder: (context) {
+        final quality = audioQualitySignal.value;
+        final meta = trackMetadataSignal.value;
+        final accentColor = this.accentColor ?? accentColorSignal.value;
 
       var label = '';
       switch (quality) {

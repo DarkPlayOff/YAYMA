@@ -164,7 +164,7 @@ class _SettingsViewState extends State<SettingsView> {
                 children: [
                   const _SectionTitle(title: 'Загрузки'),
                   const SizedBox(height: 24),
-                  Watch((context) {
+                  SignalBuilder(builder: (context) {
                     final path = _pathSignal.value;
                     return _SettingItem(
                       title: 'Путь для сохранения треков',
@@ -177,7 +177,7 @@ class _SettingsViewState extends State<SettingsView> {
                   const _SectionTitle(title: 'Внешний вид'),
                   const SizedBox(height: 24),
                   if (context.isDesktop) ...[
-                    Watch((context) {
+                    SignalBuilder(builder: (context) {
                       final enabled = _customTitlebarSignal.value;
                       return _SettingItem(
                         title: 'Собственная рамка окна',
@@ -193,7 +193,7 @@ class _SettingsViewState extends State<SettingsView> {
                       );
                     }),
                     const SizedBox(height: 16),
-                    Watch((context) {
+                    SignalBuilder(builder: (context) {
                       final enabled = _autoHideNavbarSignal.value;
                       return _SettingItem(
                         title: 'Скрывать боковую панель',
@@ -214,7 +214,7 @@ class _SettingsViewState extends State<SettingsView> {
                   if (context.isDesktop) ...[
                     const _SectionTitle(title: 'Интеграции'),
                     const SizedBox(height: 24),
-                    Watch((context) {
+                    SignalBuilder(builder: (context) {
                       final enabled = _discordRpcSignal.value;
                       return _SettingItem(
                         title: 'Discord Rich Presence',
@@ -234,7 +234,7 @@ class _SettingsViewState extends State<SettingsView> {
                   if (context.isDesktop) ...[
                     const _SectionTitle(title: 'Система'),
                     const SizedBox(height: 24),
-                    Watch((context) {
+                    SignalBuilder(builder: (context) {
                       final enabled = _closeToTraySignal.value;
                       return _SettingItem(
                         title: 'Сворачивать в трей при закрытии',
@@ -254,7 +254,7 @@ class _SettingsViewState extends State<SettingsView> {
                   ],
                   const _SectionTitle(title: 'Кэш'),
                   const SizedBox(height: 24),
-                  Watch((context) {
+                  SignalBuilder(builder: (context) {
                     final size = _cacheSizeSignal.value;
                     return _SettingItem(
                       title: 'Очистить кэш изображений и данных',
@@ -289,7 +289,7 @@ class _SettingsViewState extends State<SettingsView> {
                           ),
                         ),
                         const SizedBox(height: 8),
-                        Watch((context) {
+                        SignalBuilder(builder: (context) {
                           final version = _versionSignal.value;
                           return Text(
                             'Альтернативный клиент для Яндекс Музыки.\nВерсия ${version.value ?? '...'}',

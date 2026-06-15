@@ -9,43 +9,45 @@ import 'package:yayma/src/rust/api/audio_fx.dart' as rust_api;
 import 'package:yayma/src/rust/lib.dart';
 import 'package:yayma/src/ui/widgets/rust_cached_image.dart';
 
-class BlurredCoverBackground extends StatelessWidget {
+class BlurredCoverBackground extends SignalWidget {
   const BlurredCoverBackground({super.key});
 
   @override
   Widget build(BuildContext context) {
     return RepaintBoundary(
-      child: Watch((context) {
-        final coverUrl = currentCoverUrlSignal.value;
+      child: SignalBuilder(
+        builder: (context) {
+          final coverUrl = currentCoverUrlSignal.value;
 
-        return AnimatedSwitcher(
-          duration: const Duration(seconds: 1),
-          child: coverUrl != null
-              ? SizedBox.expand(
-                  key: ValueKey(coverUrl),
-                  child: FittedBox(
-                    fit: BoxFit.cover,
-                    clipBehavior: Clip.hardEdge,
-                    child: ImageFiltered(
-                      imageFilter: ui.ImageFilter.blur(
-                        sigmaX: 25,
-                        sigmaY: 25,
-                        tileMode: ui.TileMode.mirror,
-                      ),
-                      child: RustCachedImage(
-                        imageUrl: coverUrl,
-                        width: 250,
-                        height: 250,
-                        color: Colors.black.withValues(alpha: 0.3),
-                        colorBlendMode: BlendMode.darken,
-                        errorWidget: Container(color: Colors.black),
+          return AnimatedSwitcher(
+            duration: const Duration(seconds: 1),
+            child: coverUrl != null
+                ? SizedBox.expand(
+                    key: ValueKey(coverUrl),
+                    child: FittedBox(
+                      fit: BoxFit.cover,
+                      clipBehavior: Clip.hardEdge,
+                      child: ImageFiltered(
+                        imageFilter: ui.ImageFilter.blur(
+                          sigmaX: 25,
+                          sigmaY: 25,
+                          tileMode: ui.TileMode.mirror,
+                        ),
+                        child: RustCachedImage(
+                          imageUrl: coverUrl,
+                          width: 250,
+                          height: 250,
+                          color: Colors.black.withValues(alpha: 0.3),
+                          colorBlendMode: BlendMode.darken,
+                          errorWidget: Container(color: Colors.black),
+                        ),
                       ),
                     ),
-                  ),
-                )
-              : Container(key: const ValueKey('none'), color: Colors.black),
-        );
-      }),
+                  )
+                : Container(key: const ValueKey('none'), color: Colors.black),
+          );
+        },
+      ),
     );
   }
 }

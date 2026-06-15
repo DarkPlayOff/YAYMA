@@ -122,7 +122,7 @@ class _ArtistViewState extends State<ArtistView> {
       return const Center(child: Text('Артист не выбран'));
     }
 
-    return Watch((context) {
+    return SignalBuilder(builder: (context) {
       if (_isError.value != null) {
         return CommonErrorWidget(error: _isError.value!);
       }

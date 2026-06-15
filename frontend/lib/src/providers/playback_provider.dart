@@ -75,48 +75,48 @@ void _activateLyricsOverlayReset() => _lyricsOverlayResetEffect;
 // Signal for current track ID only
 final FlutterComputed<String?> currentTrackIdSignal = computed(
   () => playerStateSignal.value?.currentTrack?.id,
-  debugLabel: 'currentTrackIdSignal',
+  options: const ComputedOptions(name: 'currentTrackIdSignal'),
 );
 
 // Signal for volume only
 final FlutterComputed<int> playerVolumeSignal = computed(
   () => playerStateSignal.value?.volume ?? 100,
-  debugLabel: 'playerVolumeSignal',
+  options: const ComputedOptions(name: 'playerVolumeSignal'),
 );
 
 // Signal for playback status only
 final FlutterComputed<bool> isPlayingSignal = computed(
   () => playerStateSignal.value?.isPlaying ?? false,
-  debugLabel: 'isPlayingSignal',
+  options: const ComputedOptions(name: 'isPlayingSignal'),
 );
 
 // Shuffle signal
 final FlutterComputed<bool> isShuffledSignal = computed(
   () => playerStateSignal.value?.isShuffled ?? false,
-  debugLabel: 'isShuffledSignal',
+  options: const ComputedOptions(name: 'isShuffledSignal'),
 );
 
 // Repeat mode signal
 final FlutterComputed<RepeatModeDto> repeatModeSignal = computed(
   () => playerStateSignal.value?.repeatMode ?? RepeatModeDto.none,
-  debugLabel: 'repeatModeSignal',
+  options: const ComputedOptions(name: 'repeatModeSignal'),
 );
 
 // Signals for liking/disliking the current track
 final FlutterComputed<bool> isLikedSignal = computed(
   () => playerStateSignal.value?.currentTrack?.isLiked ?? false,
-  debugLabel: 'isLikedSignal',
+  options: const ComputedOptions(name: 'isLikedSignal'),
 );
 
 final FlutterComputed<bool> isDislikedSignal = computed(
   () => playerStateSignal.value?.currentTrack?.isDisliked ?? false,
-  debugLabel: 'isDislikedSignal',
+  options: const ComputedOptions(name: 'isDislikedSignal'),
 );
 
 // Signal for current wave seeds
 final FlutterComputed<List<String>> currentWaveSeedsSignal = computed(
   () => playerStateSignal.value?.currentWaveSeeds ?? [],
-  debugLabel: 'currentWaveSeedsSignal',
+  options: const ComputedOptions(name: 'currentWaveSeedsSignal'),
 );
 
 // Track metadata (static data only)
@@ -142,7 +142,7 @@ trackMetadataSignal = computed(() {
     albumId: state?.currentTrack?.albumId,
     codec: state?.codec,
   );
-}, debugLabel: 'trackMetadataSignal');
+}, options: const ComputedOptions(name: 'trackMetadataSignal'));
 
 // Track progress (updates frequently)
 final FlutterComputed<({double durationMs, double positionMs})>
@@ -152,7 +152,7 @@ trackProgressSignal = computed(() {
     durationMs: (progress?.durationMs ?? 1).toDouble(),
     positionMs: (progress?.positionMs ?? 0).toDouble(),
   );
-}, debugLabel: 'trackProgressSignal');
+}, options: const ComputedOptions(name: 'trackProgressSignal'));
 
 // Signal for audio output devices
 final FlutterSignal<List<String>> audioDevicesSignal = signal<List<String>>([]);
@@ -185,7 +185,7 @@ final FutureSignal<Uri?> localCoverUriSignal = computedAsync(() async {
   final path = await rust.getCachedImagePath(ctx: ctx, url: url);
   if (path != null) return Uri.file(path);
   return Uri.parse(url); // Fallback to remote if not yet cached
-}, debugLabel: 'localCoverUriSignal');
+}, options: const AsyncSignalOptions(name: 'localCoverUriSignal'));
 
 // Color scheme generated from cover image
 final FutureSignal<ColorScheme?> colorSchemeSignal = computedAsync(() async {
@@ -201,7 +201,7 @@ final FutureSignal<ColorScheme?> colorSchemeSignal = computedAsync(() async {
     provider: ResizeImage(FileImage(File(path)), width: 32, height: 32),
     brightness: Brightness.dark,
   );
-}, debugLabel: 'colorSchemeSignal');
+}, options: const AsyncSignalOptions(name: 'colorSchemeSignal'));
 
 // Store last successful color scheme to prevent flickering during track changes
 final FlutterSignal<ColorScheme?> _persistentColorScheme = signal<ColorScheme?>(
@@ -223,7 +223,7 @@ final EffectCleanup _persistentColorSchemeEffect = effect(() {
 // Accent color
 final FlutterComputed<Color> accentColorSignal = computed(
   () => _persistentColorScheme()?.primary ?? Colors.deepOrange,
-  debugLabel: 'accentColorSignal',
+  options: const ComputedOptions(name: 'accentColorSignal'),
 );
 
 // Player bar background color
@@ -235,7 +235,7 @@ final FlutterComputed<Color> playerBarColorSignal = computed(
         0.4,
       ) ??
       const Color(0xFF181818),
-  debugLabel: 'playerBarColorSignal',
+  options: const ComputedOptions(name: 'playerBarColorSignal'),
 );
 
 // Sync palette with Rust for Vibe effect
@@ -378,7 +378,7 @@ final EffectCleanup _taskbarEffect = effect(() {
 // Track position from progress
 final FlutterComputed<double> playerPositionMsSignal = computed(
   () => (playerProgressSignal.value?.positionMs ?? 0).toDouble(),
-  debugLabel: 'playerPositionMsSignal',
+  options: const ComputedOptions(name: 'playerPositionMsSignal'),
 );
 
 final FlutterSignal<bool> showLyricsSignal = signal<bool>(false);

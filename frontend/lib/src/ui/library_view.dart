@@ -218,7 +218,7 @@ class _LikedTracksTab extends StatelessWidget {
     final screenWidth = MediaQuery.sizeOf(context).width;
     final isNarrow = screenWidth < 600;
 
-    return Watch((context) {
+    return SignalBuilder(builder: (context) {
       final tracks = likedTracksSignal.value;
       final query = librarySearchQuerySignal.value;
 
@@ -338,7 +338,7 @@ class _PlaylistsTab extends StatelessWidget {
     final screenWidth = MediaQuery.sizeOf(context).width;
     final isNarrow = screenWidth < 600;
 
-    return Watch((context) {
+    return SignalBuilder(builder: (context) {
       final playlists = playlistsSignal.value;
 
       if (playlists.isEmpty) {
@@ -381,7 +381,7 @@ class _LikedAlbumsTab extends StatelessWidget {
     final screenWidth = MediaQuery.sizeOf(context).width;
     final isNarrow = screenWidth < 600;
 
-    return Watch((context) {
+    return SignalBuilder(builder: (context) {
       final albums = likedAlbumsSignal.value;
 
       if (albums.isEmpty) {
@@ -426,7 +426,7 @@ class _LikedArtistsTab extends StatelessWidget {
     final screenWidth = MediaQuery.sizeOf(context).width;
     final isNarrow = screenWidth < 600;
 
-    return Watch((context) {
+    return SignalBuilder(builder: (context) {
       final artists = likedArtistsSignal.value;
 
       if (artists.isEmpty) {

@@ -11,106 +11,108 @@ import 'package:yayma/src/ui/widgets/quality_selector.dart';
 import 'package:yayma/src/ui/widgets/rust_cached_image.dart';
 import 'package:yayma/src/ui/widgets/track_elements.dart';
 
-class PlayerBar extends StatelessWidget {
+class PlayerBar extends SignalWidget {
   const PlayerBar({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return Watch((context) {
-      final theme = Theme.of(context);
-      final colorScheme = theme.colorScheme;
-      final navState = currentNavStateSignal.value;
-      final showLyrics = showLyricsSignal.value;
-      final isHome = navState.section == AppSection.home;
+    return SignalBuilder(
+      builder: (context) {
+        final theme = Theme.of(context);
+        final colorScheme = theme.colorScheme;
+        final navState = currentNavStateSignal.value;
+        final showLyrics = showLyricsSignal.value;
+        final isHome = navState.section == AppSection.home;
 
-      final useLyricsStyle = isHome && showLyrics;
-      final alpha = useLyricsStyle ? 0.5 : 0.9;
-      final blur = useLyricsStyle ? 0.0 : 3.0;
+        final useLyricsStyle = isHome && showLyrics;
+        final alpha = useLyricsStyle ? 0.5 : 0.9;
+        final blur = useLyricsStyle ? 0.0 : 3.0;
 
-      // Dynamic background color based on theme
-      final barColor =
-          Color.lerp(
-            colorScheme.surfaceContainerHighest,
-            Colors.black,
-            0.4,
-          ) ??
-          colorScheme.surface;
+        // Dynamic background color based on theme
+        final barColor =
+            Color.lerp(
+              colorScheme.surfaceContainerHighest,
+              Colors.black,
+              0.4,
+            ) ??
+            colorScheme.surface;
 
-      return LayoutBuilder(
-        builder: (context, constraints) {
-          final width = constraints.maxWidth;
-          final accentColor = colorScheme.primary;
-          final isNarrow = width < 600;
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            final width = constraints.maxWidth;
+            final accentColor = colorScheme.primary;
+            final isNarrow = width < 600;
 
-          double coverSize = 75;
-          double volumeWidth = 120;
+            double coverSize = 75;
+            double volumeWidth = 120;
 
-          if (width < 1100) {
-            coverSize = 64;
-            volumeWidth = 100;
-          }
-          if (width < 900) {
-            coverSize = 56;
-            volumeWidth = 80;
-          }
-          if (width < 750) {
-            coverSize = 48;
-            volumeWidth = 60;
-          }
+            if (width < 1100) {
+              coverSize = 64;
+              volumeWidth = 100;
+            }
+            if (width < 900) {
+              coverSize = 56;
+              volumeWidth = 80;
+            }
+            if (width < 750) {
+              coverSize = 48;
+              volumeWidth = 60;
+            }
 
-          return AnimatedContainer(
-            duration: const Duration(milliseconds: 600),
-            height: isNarrow ? 80 : 100,
-            padding: EdgeInsets.symmetric(
-              horizontal: isNarrow ? 16 : 24,
-            ),
-            margin: EdgeInsets.fromLTRB(
-              isNarrow ? 16 : 16,
-              0,
-              isNarrow ? 16 : 16,
-              isNarrow ? 8 : 16,
-            ),
-            decoration: BoxDecoration(
-              color: barColor.withValues(alpha: alpha),
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(24),
-              child: BackdropFilter(
-                filter: ui.ImageFilter.blur(sigmaX: blur, sigmaY: blur),
-                child: Row(
-                  children: [
-                    if (isNarrow) ...[
-                      Expanded(
-                        child: _TrackInfo(coverSize: coverSize),
-                      ),
-                      const _PlayPauseButton(),
-                    ] else ...[
-                      Expanded(
-                        flex: 3,
-                        child: _TrackInfo(coverSize: coverSize),
-                      ),
-                      Expanded(
-                        flex: 4,
-                        child: _PlayerControls(accentColor: accentColor),
-                      ),
-                      Expanded(
-                        flex: 3,
-                        child: _VolumeAndQuality(
-                          accentColor: accentColor,
-                          volumeWidth: volumeWidth,
+            return AnimatedContainer(
+              duration: const Duration(milliseconds: 600),
+              height: isNarrow ? 80 : 100,
+              padding: EdgeInsets.symmetric(
+                horizontal: isNarrow ? 16 : 24,
+              ),
+              margin: EdgeInsets.fromLTRB(
+                isNarrow ? 16 : 16,
+                0,
+                isNarrow ? 16 : 16,
+                isNarrow ? 8 : 16,
+              ),
+              decoration: BoxDecoration(
+                color: barColor.withValues(alpha: alpha),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(24),
+                child: BackdropFilter(
+                  filter: ui.ImageFilter.blur(sigmaX: blur, sigmaY: blur),
+                  child: Row(
+                    children: [
+                      if (isNarrow) ...[
+                        Expanded(
+                          child: _TrackInfo(coverSize: coverSize),
                         ),
-                      ),
+                        const _PlayPauseButton(),
+                      ] else ...[
+                        Expanded(
+                          flex: 3,
+                          child: _TrackInfo(coverSize: coverSize),
+                        ),
+                        Expanded(
+                          flex: 4,
+                          child: _PlayerControls(accentColor: accentColor),
+                        ),
+                        Expanded(
+                          flex: 3,
+                          child: _VolumeAndQuality(
+                            accentColor: accentColor,
+                            volumeWidth: volumeWidth,
+                          ),
+                        ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
               ),
-            ),
-          );
-        },
-      );
-    });
+            );
+          },
+        );
+      },
+    );
   }
 }
 
@@ -135,7 +137,7 @@ class _TrackInfoState extends State<_TrackInfo> {
 
   @override
   Widget build(BuildContext context) {
-    return Watch((context) {
+    return SignalBuilder(builder: (context) {
       final meta = trackMetadataSignal();
       final isPlaying = isPlayingSignal();
       if (meta.id == null) return const SizedBox();
@@ -277,7 +279,7 @@ class _PlayerControls extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Watch((context) {
+    return SignalBuilder(builder: (context) {
       final trackId = trackMetadataSignal().id;
       final isPlaying = isPlayingSignal();
       final isLiked = isLikedSignal();
@@ -421,7 +423,7 @@ class _PlayPauseButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Watch((context) {
+    return SignalBuilder(builder: (context) {
       final isPlaying = isPlayingSignal();
       return IconButton(
         iconSize: 48,

@@ -14,7 +14,7 @@ import 'package:yayma/src/ui/widgets/responsive.dart';
 import 'package:yayma/src/ui/widgets/rust_cached_image.dart';
 import 'package:yayma/src/ui/widgets/track_elements.dart';
 
-class HomeView extends StatelessWidget {
+class HomeView extends SignalWidget {
   const HomeView({super.key});
 
   @override
@@ -23,7 +23,7 @@ class HomeView extends StatelessWidget {
       builder: (context, constraints) {
         final height = constraints.maxHeight;
         final width = constraints.maxWidth;
-        final showLyrics = showLyricsSignal.watch(context);
+        final showLyrics = showLyricsSignal.value;
 
         var verticalSpacing = 40.0;
         var trackHeaderSpacing = 32.0;
@@ -133,7 +133,7 @@ class HomeView extends StatelessWidget {
                         horizontal: 60,
                         vertical: 40,
                       ),
-                      child: Watch((context) {
+                      child: SignalBuilder(builder: (context) {
                         final trackId = trackMetadataSignal().id;
                         if (trackId == null) {
                           return const Center(
@@ -178,7 +178,7 @@ class _HomeCoverWidgetState extends State<_HomeCoverWidget> {
 
   @override
   Widget build(BuildContext context) {
-    return Watch((context) {
+    return SignalBuilder(builder: (context) {
       final meta = trackMetadataSignal();
       final showLyrics = showLyricsSignal.value;
       final isPlaying = isPlayingSignal();
@@ -291,7 +291,7 @@ class _HomeTrackHeaderState extends State<_HomeTrackHeader> {
 
   @override
   Widget build(BuildContext context) {
-    return Watch((context) {
+    return SignalBuilder(builder: (context) {
       final meta = trackMetadataSignal();
 
       return Column(
@@ -384,7 +384,7 @@ class _HomeMainControls extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Watch((context) {
+    return SignalBuilder(builder: (context) {
       final trackId = trackMetadataSignal().id;
       final isPlaying = isPlayingSignal();
       final isLiked = isLikedSignal();

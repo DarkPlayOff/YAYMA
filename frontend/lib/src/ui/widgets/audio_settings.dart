@@ -16,71 +16,73 @@ class _AudioSettingsDialogState extends State<AudioSettingsDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return DefaultTabController(
-      length: 2,
-      child: AlertDialog(
-        backgroundColor: const Color(0xFF181818),
-        titlePadding: EdgeInsets.zero,
-        title: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(24, 20, 24, 8),
-              child: Row(
-                children: [
-                  const Text(
-                    'Настройки звука',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w900,
+    return SignalBuilder(builder: (context) {
+      return DefaultTabController(
+        length: 2,
+        child: AlertDialog(
+          backgroundColor: const Color(0xFF181818),
+          titlePadding: EdgeInsets.zero,
+          title: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 20, 24, 8),
+                child: Row(
+                  children: [
+                    const Text(
+                      'Настройки звука',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w900,
+                      ),
                     ),
-                  ),
-                  const Spacer(),
-                  IconButton(
-                    icon: const Icon(Icons.close, color: Colors.white54),
-                    onPressed: () => Navigator.pop(context),
-                  ),
+                    const Spacer(),
+                    IconButton(
+                      icon: const Icon(Icons.close, color: Colors.white54),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ],
+                ),
+              ),
+              TabBar(
+                onTap: (i) => setState(() => _activeTab = i),
+                indicatorColor: accentColorSignal.value,
+                labelColor: Colors.white,
+                unselectedLabelColor: Colors.white38,
+                tabs: const [
+                  Tab(text: 'Эквалайзер'),
+                  Tab(text: 'Эффекты (DSP)'),
                 ],
               ),
-            ),
-            TabBar(
-              onTap: (i) => setState(() => _activeTab = i),
-              indicatorColor: accentColorSignal.value,
-              labelColor: Colors.white,
-              unselectedLabelColor: Colors.white38,
-              tabs: const [
-                Tab(text: 'Эквалайзер'),
-                Tab(text: 'Эффекты (DSP)'),
+            ],
+          ),
+          content: const SizedBox(
+            width: 700,
+            height: 450,
+            child: TabBarView(
+              physics: NeverScrollableScrollPhysics(),
+              children: [
+                _EqualizerView(),
+                _EffectsView(),
               ],
+            ),
+          ),
+          actions: [
+            if (_activeTab == 0)
+              TextButton(
+                onPressed: () => unawaited(PlaybackController.resetEqualizer()),
+                child: const Text(
+                  'Сбросить',
+                  style: TextStyle(color: Colors.redAccent),
+                ),
+              ),
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Закрыть'),
             ),
           ],
         ),
-        content: const SizedBox(
-          width: 700,
-          height: 450,
-          child: TabBarView(
-            physics: NeverScrollableScrollPhysics(),
-            children: [
-              _EqualizerView(),
-              _EffectsView(),
-            ],
-          ),
-        ),
-        actions: [
-          if (_activeTab == 0)
-            TextButton(
-              onPressed: () => unawaited(PlaybackController.resetEqualizer()),
-              child: const Text(
-                'Сбросить',
-                style: TextStyle(color: Colors.redAccent),
-              ),
-            ),
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Закрыть'),
-          ),
-        ],
-      ),
-    );
+      );
+    });
   }
 }
 
@@ -89,7 +91,7 @@ class _EqualizerView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Watch((context) {
+    return SignalBuilder(builder: (context) {
       final eq = equalizerSignal.value;
       if (eq == null) {
         return const Center(child: CircularProgressIndicator());
@@ -191,7 +193,7 @@ class _EffectsView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Watch((context) {
+    return SignalBuilder(builder: (context) {
       final effects = audioEffectsSignal.value;
       if (effects.isEmpty) {
         return const Center(child: CircularProgressIndicator());

@@ -7,7 +7,7 @@ import 'package:yayma/src/rust/api/content.dart' as rust;
 import 'package:yayma/src/rust/api/models.dart';
 import 'package:yayma/src/ui/widgets/common_ui.dart';
 
-class TrackDetailsDialog extends StatelessWidget {
+class TrackDetailsDialog extends SignalWidget {
   final String trackId;
 
   const TrackDetailsDialog({required this.trackId, super.key});
@@ -38,19 +38,21 @@ class TrackDetailsDialog extends StatelessWidget {
       ),
       content: SizedBox(
         width: 500,
-        child: Watch((context) {
-          final result = detailsAsync.value;
-          return result.map(
-            data: (details) {
-              if (details == null) {
-                return const Center(child: Text('Загрузка...'));
-              }
-              return _buildDetails(details);
-            },
-            loading: () => const CommonLoadingWidget(),
-            error: (Object e, _) => CommonErrorWidget(error: e.toString()),
-          );
-        }),
+        child: SignalBuilder(
+          builder: (context) {
+            final result = detailsAsync.value;
+            return result.map(
+              data: (details) {
+                if (details == null) {
+                  return const Center(child: Text('Загрузка...'));
+                }
+                return _buildDetails(details);
+              },
+              loading: () => const CommonLoadingWidget(),
+              error: (Object e, _) => CommonErrorWidget(error: e.toString()),
+            );
+          },
+        ),
       ),
       actions: [
         TextButton(

@@ -49,44 +49,46 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Watch((context) {
-      final trackScheme = colorSchemeSignal().value;
-      final currentScheme =
-          trackScheme ??
-          ColorScheme.fromSeed(
-            seedColor: Colors.deepOrange,
-            brightness: Brightness.dark,
-          );
+    return SignalBuilder(
+      builder: (context) {
+        final trackScheme = colorSchemeSignal().value;
+        final currentScheme =
+            trackScheme ??
+            ColorScheme.fromSeed(
+              seedColor: Colors.deepOrange,
+              brightness: Brightness.dark,
+            );
 
-      return MaterialApp(
-        title: 'YAYMA',
-        debugShowCheckedModeBanner: false,
-        theme: ThemeData(
-          colorScheme: currentScheme,
-          useMaterial3: true,
-          fontFamily: 'Inter',
-          scaffoldBackgroundColor: Colors.black,
-        ),
-        localizationsDelegates: GlobalMaterialLocalizations.delegates,
-        builder: (context, child) {
-          return AnimatedTheme(
-            data: ThemeData(
-              colorScheme: currentScheme,
-              useMaterial3: true,
-              fontFamily: 'Inter',
-              scaffoldBackgroundColor: Colors.black,
-            ),
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeOut,
-            child: RepaintBoundary(
-              child: GlobalNotificationListener(
-                child: child ?? const SizedBox.shrink(),
+        return MaterialApp(
+          title: 'YAYMA',
+          debugShowCheckedModeBanner: false,
+          theme: ThemeData(
+            colorScheme: currentScheme,
+            useMaterial3: true,
+            fontFamily: 'Inter',
+            scaffoldBackgroundColor: Colors.black,
+          ),
+          localizationsDelegates: GlobalMaterialLocalizations.delegates,
+          builder: (context, child) {
+            return AnimatedTheme(
+              data: ThemeData(
+                colorScheme: currentScheme,
+                useMaterial3: true,
+                fontFamily: 'Inter',
+                scaffoldBackgroundColor: Colors.black,
               ),
-            ),
-          );
-        },
-        home: const RootScreen(),
-      );
-    });
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeOut,
+              child: RepaintBoundary(
+                child: GlobalNotificationListener(
+                  child: child ?? const SizedBox.shrink(),
+                ),
+              ),
+            );
+          },
+          home: const RootScreen(),
+        );
+      },
+    );
   }
 }

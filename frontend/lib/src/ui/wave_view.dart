@@ -21,7 +21,7 @@ class WaveSettingsPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Watch((context) {
+    return SignalBuilder(builder: (context) {
       final currentSeeds = currentWaveSeedsSignal();
       final isNarrow = context.isNarrow;
 
@@ -227,7 +227,7 @@ class WaveSettingsPanel extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildSectionTitle('Активный режим'),
-        Watch((context) {
+        SignalBuilder(builder: (context) {
           final catsFuture = waveStationsSignal.value;
           var label = seed;
 
@@ -534,7 +534,7 @@ class _AllStationsSheetState extends State<_AllStationsSheet> {
 
   @override
   Widget build(BuildContext context) {
-    return Watch((context) {
+    return SignalBuilder(builder: (context) {
       final stationsFuture = waveStationsSignal.value;
       if (stationsFuture.isLoading) {
         return const Center(child: CircularProgressIndicator());

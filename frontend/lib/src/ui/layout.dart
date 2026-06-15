@@ -30,7 +30,7 @@ class _AppLayoutState extends State<AppLayout> {
 
   @override
   Widget build(BuildContext context) {
-    return Watch((context) {
+    return SignalBuilder(builder: (context) {
       currentRootSignal();
       final navState = currentNavStateSignal();
       final isHome = navState.section == AppSection.home;
@@ -43,7 +43,7 @@ class _AppLayoutState extends State<AppLayout> {
       final isNarrow = screenWidth < 600;
 
       return PopScope(
-        canPop: !canGoBackSignal.watch(context),
+        canPop: !canGoBackSignal.value,
         onPopInvokedWithResult: (didPop, result) {
           if (didPop) return;
           if (canGoBackSignal.value) {
@@ -62,7 +62,7 @@ class _AppLayoutState extends State<AppLayout> {
                 const Positioned.fill(child: WaveBackground()),
 
                 // 2. Dimming when leaving home or showing lyrics
-                Watch((context) {
+                SignalBuilder(builder: (context) {
                   final showLyrics = showLyricsSignal.value;
                   final hideOverlay = hideLyricsOverlaySignal.value;
                   final isDimmed = !isHome || (showLyrics && !hideOverlay);
@@ -156,7 +156,7 @@ class _RootBucket extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Watch((context) {
+    return SignalBuilder(builder: (context) {
       final activeRoot = currentRootSignal.value;
       final stack = rootStacksSignal.value[root] ?? [NavState(root)];
       final isVisible = activeRoot == root;
@@ -221,7 +221,7 @@ class _AnimatedPlayerBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Watch((context) {
+    return SignalBuilder(builder: (context) {
       final showLyrics = showLyricsSignal.value;
       final shouldShowBar = !isHome || showLyrics;
 
@@ -258,7 +258,7 @@ class _WindowContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Watch((context) {
+    return SignalBuilder(builder: (context) {
       final isHome = state.section == AppSection.home;
       final showLyrics = showLyricsSignal.value;
       final screenWidth = MediaQuery.sizeOf(context).width;
@@ -331,7 +331,7 @@ class _WindowContent extends StatelessWidget {
 class _FloatingBackButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return Watch((context) {
+    return SignalBuilder(builder: (context) {
       if (!canGoBackSignal.value) return const SizedBox.shrink();
 
       return Positioned(

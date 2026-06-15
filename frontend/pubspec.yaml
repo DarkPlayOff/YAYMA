@@ -22,7 +22,7 @@ dependencies:
   json_annotation: ^4.11.0
   path: ^1.9.1
   path_provider: ^2.1.5
-  signals_flutter: ^6.3.0
+  signals_flutter: ^7.1.0
   tray_manager: ^0.5.2
   webview_all: ^1.0.3
   window_manager: ^0.5.1
