@@ -6,8 +6,8 @@ use rodio::{
 fn extract_display_name(raw: &str) -> &str {
     if let Some(pos) = raw.find(" (") {
         let inner = &raw[pos + 2..];
-        if inner.ends_with(')') {
-            return &inner[..inner.len() - 1];
+        if let Some(stripped) = inner.strip_suffix(')') {
+            return stripped;
         }
     }
     raw
@@ -39,20 +39,16 @@ pub(crate) fn get_windows_full_device_names() -> Vec<String> {
             &MMDeviceEnumerator,
             None,
             CLSCTX_ALL,
-        ) {
-            if let Ok(collection) = enumerator.EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE) {
-                if let Ok(count) = collection.GetCount() {
-                    for i in 0..count {
-                        if let Ok(device) = collection.Item(i) {
-                            if let Ok(prop_store) = device.OpenPropertyStore(STGM_READ) {
-                                if let Ok(name_var) =
-                                    prop_store.GetValue(&pkey_friendly_name)
-                                {
-                                    result.push(name_var.to_string());
-                                }
-                            }
-                        }
-                    }
+        )
+            && let Ok(collection) = enumerator.EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE)
+            && let Ok(count) = collection.GetCount()
+        {
+            for i in 0..count {
+                if let Ok(device) = collection.Item(i)
+                    && let Ok(prop_store) = device.OpenPropertyStore(STGM_READ)
+                    && let Ok(name_var) = prop_store.GetValue(&pkey_friendly_name)
+                {
+                    result.push(name_var.to_string());
                 }
             }
         }
@@ -64,12 +60,11 @@ pub(crate) fn get_windows_full_device_names() -> Vec<String> {
 }
 
 fn parse_device_spec(name: &str) -> (&str, usize) {
-    if let Some(rest) = name.strip_suffix(')') {
-        if let Some((base, num)) = rest.rsplit_once(" (") {
-            if let Ok(n) = num.parse::<usize>() {
-                return (base, n);
-            }
-        }
+    if let Some(rest) = name.strip_suffix(')')
+        && let Some((base, num)) = rest.rsplit_once(" (")
+        && let Ok(n) = num.parse::<usize>()
+    {
+        return (base, n);
     }
     (name, 1)
 }

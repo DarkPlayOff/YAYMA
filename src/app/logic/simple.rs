@@ -101,8 +101,8 @@ pub async fn set_close_to_tray_enabled(ctx: &AppContext, enabled: bool) {
 fn extract_display_name(raw: &str) -> String {
     if let Some(pos) = raw.find(" (") {
         let inner = &raw[pos + 2..];
-        if inner.ends_with(')') {
-            return inner[..inner.len() - 1].to_string();
+        if let Some(stripped) = inner.strip_suffix(')') {
+            return stripped.to_string();
         }
     }
     raw.to_string()

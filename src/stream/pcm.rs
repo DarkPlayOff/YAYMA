@@ -300,22 +300,18 @@ fn run_decode_loop(
             }
             // Stay alive: wait for a Seek command to restart decoding
             // or a Stop command to exit cleanly
-            loop {
-                match cmd_rx.recv() {
-                    Ok(DecoderCommand::Seek { position, generation: new_gen }) => {
-                        let _ = decoder.try_seek(position);
-                        if progress_generation == progress.get_generation() {
-                            progress.set_current_position(position);
-                        }
-                        active_generation = new_gen;
-                        pending_chunk = None;
-                        break;
+            match cmd_rx.recv() {
+                Ok(DecoderCommand::Seek { position, generation: new_gen }) => {
+                    let _ = decoder.try_seek(position);
+                    if progress_generation == progress.get_generation() {
+                        progress.set_current_position(position);
                     }
-                    Ok(DecoderCommand::Stop) => return,
-                    Err(_) => return,
+                    active_generation = new_gen;
+                    pending_chunk = None;
+                    continue;
                 }
+                Ok(DecoderCommand::Stop) | Err(_) => return,
             }
-            continue;
         }
 
         let send_chunk = std::mem::replace(&mut chunk, Vec::with_capacity(PCM_CHUNK_SAMPLES));

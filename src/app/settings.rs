@@ -19,11 +19,11 @@ pub async fn load_persisted_settings(ctx: &AppContext) {
         ctx.audio.signals.discord_rpc.set(rpc_enabled);
     }
 
-    if let Ok(Some(device)) = ctx.core.db.lock().await.load_setting::<String>("audio_device").await {
-        if !device.is_empty() {
-            ctx.audio.signals.selected_device.set(Some(device));
-            let _ = ctx.audio.tx.send(AudioMessage::RecreateStream).await;
-        }
+    if let Ok(Some(device)) = ctx.core.db.lock().await.load_setting::<String>("audio_device").await
+        && !device.is_empty()
+    {
+        ctx.audio.signals.selected_device.set(Some(device));
+        let _ = ctx.audio.tx.send(AudioMessage::RecreateStream).await;
     }
 
     // Extract required data while holding the synchronous read lock to avoid keeping it across await points
