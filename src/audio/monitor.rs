@@ -5,161 +5,6 @@ use std::sync::{
 
 use crate::util::reactive::Signal;
 
-pub const DEFAULT_WAVEFORM_SIZE: usize = 2048;
-pub const DEFAULT_SPECTRUM_SIZE: usize = 512;
-
-#[allow(dead_code)]
-#[flutter_rust_bridge::frb(ignore)]
-pub struct AudioRingBuffer<const N: usize = DEFAULT_WAVEFORM_SIZE> {
-    buffer: Box<[AtomicU32; N]>,
-    write_head: AtomicUsize,
-    read_head: AtomicUsize,
-    samples_written: AtomicU64,
-}
-
-impl<const N: usize> AudioRingBuffer<N> {
-    pub fn new() -> Self {
-        let buffer: Box<[AtomicU32; N]> = {
-            let mut v = Vec::with_capacity(N);
-            for _ in 0..N {
-                v.push(AtomicU32::new(0));
-            }
-            v.into_boxed_slice().try_into().ok().unwrap()
-        };
-        Self {
-            buffer,
-            write_head: AtomicUsize::new(0),
-            read_head: AtomicUsize::new(0),
-            samples_written: AtomicU64::new(0),
-        }
-    }
-    #[inline]
-    pub fn push(&self, sample: f32) {
-        let head = self.write_head.load(Ordering::Relaxed);
-        self.buffer[head].store(sample.to_bits(), Ordering::Relaxed);
-        self.write_head
-            .store((head + 1) & (N - 1), Ordering::Release);
-        self.samples_written.fetch_add(1, Ordering::Relaxed);
-    }
-    #[inline]
-    pub fn push_slice(&self, samples: &[f32]) {
-        let mut head = self.write_head.load(Ordering::Relaxed);
-        for &sample in samples {
-            self.buffer[head].store(sample.to_bits(), Ordering::Relaxed);
-            head = (head + 1) & (N - 1);
-        }
-        self.write_head.store(head, Ordering::Release);
-        self.samples_written
-            .fetch_add(samples.len() as u64, Ordering::Relaxed);
-    }
-    #[inline]
-    pub fn write_head(&self) -> usize {
-        self.write_head.load(Ordering::Acquire)
-    }
-    #[inline]
-    pub fn samples_written(&self) -> u64 {
-        self.samples_written.load(Ordering::Relaxed)
-    }
-    #[inline]
-    pub fn read_latest(&self, count: usize, out: &mut [f32]) {
-        let head = self.write_head.load(Ordering::Acquire);
-        let count = count.min(N).min(out.len());
-        for (i, item) in out.iter_mut().enumerate().take(count) {
-            let idx = (head + N - count + i) & (N - 1);
-            *item = f32::from_bits(self.buffer[idx].load(Ordering::Relaxed));
-        }
-    }
-    #[inline]
-    pub fn sample_at(&self, offset: usize) -> f32 {
-        let head = self.write_head.load(Ordering::Acquire);
-        let idx = (head + N - 1 - offset) & (N - 1);
-        f32::from_bits(self.buffer[idx].load(Ordering::Relaxed))
-    }
-    #[inline]
-    pub const fn capacity(&self) -> usize {
-        N
-    }
-    pub fn clear(&self) {
-        for sample in self.buffer.iter() {
-            sample.store(0, Ordering::Relaxed);
-        }
-        self.write_head.store(0, Ordering::Release);
-        self.samples_written.store(0, Ordering::Relaxed);
-    }
-}
-
-impl<const N: usize> Default for AudioRingBuffer<N> {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-unsafe impl<const N: usize> Send for AudioRingBuffer<N> {}
-unsafe impl<const N: usize> Sync for AudioRingBuffer<N> {}
-
-#[flutter_rust_bridge::frb(ignore)]
-pub struct WaveformBridge<const N: usize = DEFAULT_WAVEFORM_SIZE> {
-    buffer: Arc<AudioRingBuffer<N>>,
-    head_signal: Signal<usize>,
-    notify_threshold: usize,
-    samples_since_notify: AtomicUsize,
-}
-
-impl<const N: usize> WaveformBridge<N> {
-    pub fn new(notify_threshold: usize) -> Self {
-        Self {
-            buffer: Arc::new(AudioRingBuffer::new()),
-            head_signal: Signal::new(0),
-            notify_threshold,
-            samples_since_notify: AtomicUsize::new(0),
-        }
-    }
-    pub fn buffer(&self) -> Arc<AudioRingBuffer<N>> {
-        Arc::clone(&self.buffer)
-    }
-    pub fn head_signal(&self) -> &Signal<usize> {
-        &self.head_signal
-    }
-    #[inline]
-    pub fn push(&self, sample: f32) {
-        self.buffer.push(sample);
-        let count = self.samples_since_notify.fetch_add(1, Ordering::Relaxed) + 1;
-        if count >= self.notify_threshold {
-            self.samples_since_notify.store(0, Ordering::Relaxed);
-            self.head_signal.set(self.buffer.write_head());
-        }
-    }
-    #[inline]
-    pub fn push_slice(&self, samples: &[f32]) {
-        self.buffer.push_slice(samples);
-        let count = self
-            .samples_since_notify
-            .fetch_add(samples.len(), Ordering::Relaxed)
-            + samples.len();
-        if count >= self.notify_threshold {
-            self.samples_since_notify.store(0, Ordering::Relaxed);
-            self.head_signal.set(self.buffer.write_head());
-        }
-    }
-    pub fn notify(&self) {
-        self.head_signal.set(self.buffer.write_head());
-    }
-    #[inline]
-    pub fn read_latest(&self, count: usize, out: &mut [f32]) {
-        self.buffer.read_latest(count, out);
-    }
-}
-
-impl<const N: usize> Clone for WaveformBridge<N> {
-    fn clone(&self) -> Self {
-        Self {
-            buffer: Arc::clone(&self.buffer),
-            head_signal: self.head_signal.clone(),
-            notify_threshold: self.notify_threshold,
-            samples_since_notify: AtomicUsize::new(0),
-        }
-    }
-}
-
 #[flutter_rust_bridge::frb(ignore)]
 pub struct AmplitudeTracker {
     current: AtomicU32,
@@ -233,84 +78,6 @@ impl Clone for AmplitudeTracker {
     }
 }
 
-#[flutter_rust_bridge::frb(ignore)]
-pub struct SpectrumBridge<const N: usize = DEFAULT_SPECTRUM_SIZE> {
-    magnitudes: Box<[AtomicU32; N]>,
-    generation: AtomicU64,
-    update_signal: Signal<u64>,
-}
-impl<const N: usize> SpectrumBridge<N> {
-    pub fn new() -> Self {
-        let magnitudes: Box<[AtomicU32; N]> = {
-            let mut v = Vec::with_capacity(N);
-            for _ in 0..N {
-                v.push(AtomicU32::new(0));
-            }
-            v.into_boxed_slice().try_into().ok().unwrap()
-        };
-        Self {
-            magnitudes,
-            generation: AtomicU64::new(0),
-            update_signal: Signal::new(0),
-        }
-    }
-    pub fn update(&self, data: &[f32]) {
-        let len = data.len().min(N);
-        for (i, &value) in data.iter().take(len).enumerate() {
-            self.magnitudes[i].store(value.to_bits(), Ordering::Relaxed);
-        }
-        let generation = self.generation.fetch_add(1, Ordering::Release) + 1;
-        self.update_signal.set(generation);
-    }
-    pub fn read(&self, out: &mut [f32]) {
-        let len = out.len().min(N);
-        for (item, magnitude) in out.iter_mut().zip(self.magnitudes.iter()).take(len) {
-            *item = f32::from_bits(magnitude.load(Ordering::Relaxed));
-        }
-    }
-    #[inline]
-    pub fn bin(&self, index: usize) -> f32 {
-        if index < N {
-            f32::from_bits(self.magnitudes[index].load(Ordering::Relaxed))
-        } else {
-            0.0
-        }
-    }
-    pub fn signal(&self) -> &Signal<u64> {
-        &self.update_signal
-    }
-    pub fn generation(&self) -> u64 {
-        self.generation.load(Ordering::Acquire)
-    }
-    pub const fn bins(&self) -> usize {
-        N
-    }
-}
-impl<const N: usize> Default for SpectrumBridge<N> {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-impl<const N: usize> Clone for SpectrumBridge<N> {
-    fn clone(&self) -> Self {
-        let mut cloned_magnitudes: Vec<AtomicU32> = Vec::with_capacity(N);
-        for magnitude in self.magnitudes.iter() {
-            cloned_magnitudes.push(AtomicU32::new(magnitude.load(Ordering::Relaxed)));
-        }
-        Self {
-            magnitudes: cloned_magnitudes
-                .into_boxed_slice()
-                .try_into()
-                .ok()
-                .unwrap(),
-            generation: AtomicU64::new(self.generation.load(Ordering::Relaxed)),
-            update_signal: self.update_signal.clone(),
-        }
-    }
-}
-unsafe impl<const N: usize> Send for SpectrumBridge<N> {}
-unsafe impl<const N: usize> Sync for SpectrumBridge<N> {}
-
 struct MonitorInternal {
     combined_amplitude: AtomicU32,
     bass_amp: AtomicU32,
@@ -326,22 +93,18 @@ struct MonitorInternal {
 
 #[flutter_rust_bridge::frb(ignore)]
 pub struct Monitor {
-    pub waveform: WaveformBridge,
     pub amplitude_left: AmplitudeTracker,
     pub amplitude_right: AmplitudeTracker,
-    pub spectrum: SpectrumBridge,
     pub vibe: Arc<tokio::sync::Mutex<crate::audio::vibe::VibeEngine>>,
     playing: Signal<bool>,
     internal: Arc<MonitorInternal>,
 }
 
 impl Monitor {
-    pub fn new(notify_samples: usize) -> Self {
+    pub fn new(_notify_samples: usize) -> Self {
         Self {
-            waveform: WaveformBridge::new(notify_samples),
             amplitude_left: AmplitudeTracker::default(),
             amplitude_right: AmplitudeTracker::default(),
-            spectrum: SpectrumBridge::new(),
             vibe: Arc::new(tokio::sync::Mutex::new(
                 crate::audio::vibe::VibeEngine::new(),
             )),
@@ -391,8 +154,6 @@ impl Monitor {
             let r = right[i];
             let mono = (l + r) * 0.5;
             let abs_mono = mono.abs();
-
-            self.waveform.push(mono);
 
             // Filter cascade
             let low = l_f + (abs_mono - l_f) * 0.05;
@@ -493,7 +254,6 @@ impl Monitor {
         self.amplitude_left.reset();
         self.amplitude_right.reset();
         self.internal.combined_amplitude.store(0, Ordering::Relaxed);
-        self.waveform.buffer().clear();
     }
 }
 
@@ -505,10 +265,8 @@ impl Default for Monitor {
 impl Clone for Monitor {
     fn clone(&self) -> Self {
         Self {
-            waveform: self.waveform.clone(),
             amplitude_left: self.amplitude_left.clone(),
             amplitude_right: self.amplitude_right.clone(),
-            spectrum: self.spectrum.clone(),
             vibe: self.vibe.clone(),
             playing: self.playing.clone(),
             internal: self.internal.clone(),

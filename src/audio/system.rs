@@ -109,7 +109,7 @@ impl AudioSystem {
             (smtc, smtc_cmd_rx)
         };
 
-        let yandex = YandexProvider::new(api.clone(), event_tx.clone(), signals.clone());
+        let yandex = YandexProvider::new(api.clone(), signals.clone());
 
         let effect_handles = controller.get_effect_handles();
 

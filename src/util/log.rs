@@ -1,7 +1,6 @@
 use std::path::PathBuf;
 use std::sync::LazyLock;
 
-use directories::ProjectDirs;
 use tracing_subscriber::{self, Layer, layer::SubscriberExt, util::SubscriberInitExt};
 
 pub static PROJECT_NAME: LazyLock<String> =
@@ -16,22 +15,8 @@ pub static LOG_FILE: LazyLock<String> = LazyLock::new(|| format!("{}.log", env!(
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
-fn project_directory() -> Option<ProjectDirs> {
-    ProjectDirs::from("", "", env!("CARGO_PKG_NAME"))
-}
-
-pub fn get_data_dir() -> PathBuf {
-    if let Some(s) = DATA_FOLDER.clone() {
-        s
-    } else if let Some(proj_dirs) = project_directory() {
-        proj_dirs.data_local_dir().to_path_buf()
-    } else {
-        PathBuf::from(".").join(".data")
-    }
-}
-
 pub fn initialize_logging() -> Result<()> {
-    let directory = get_data_dir();
+    let directory = crate::app::get_data_dir().unwrap_or_else(|| PathBuf::from("."));
     std::fs::create_dir_all(directory.clone())?;
     let log_path = directory.join(LOG_FILE.clone());
     let log_file = std::fs::File::create(log_path)?;

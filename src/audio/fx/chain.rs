@@ -7,8 +7,6 @@ use super::Effect;
 use super::param::{EffectHandle, EffectParams};
 
 struct EffectSlot {
-    #[allow(dead_code)]
-    id: String,
     effect: Box<dyn Effect>,
     params: Arc<EffectParams>,
 }
@@ -52,7 +50,6 @@ impl EffectChain {
 
         self.handles.insert(id_str.clone(), handle.clone());
         self.slots.push(EffectSlot {
-            id: id_str,
             effect,
             params,
         });

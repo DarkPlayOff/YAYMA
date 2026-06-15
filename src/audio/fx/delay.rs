@@ -1,13 +1,3 @@
-#[inline(always)]
-#[allow(dead_code)]
-pub fn fast_tanh(x: f32) -> f32 {
-    let x2 = x * x;
-    let x3 = x2 * x;
-    let x5 = x3 * x2;
-    let a = x + 0.16489087 * x3 + 0.00985468 * x5;
-    a / (1.0 + a * a).sqrt()
-}
-
 pub struct DelayLine {
     buffer: Vec<f32>,
     pos: usize,
@@ -47,92 +37,6 @@ impl DelayLine {
     }
 
     pub fn clear(&mut self) {
-        self.buffer.fill(0.0);
-        self.pos = 0;
-    }
-}
-
-pub struct CombFilter {
-    buffer: Vec<f32>,
-    pos: usize,
-    size: usize,
-    pub feedback: f32,
-    damp1: f32,
-    damp2: f32,
-    filter_state: f32,
-}
-
-impl CombFilter {
-    pub fn new(size: usize) -> Self {
-        Self {
-            buffer: vec![0.0; size],
-            pos: 0,
-            size,
-            feedback: 0.5,
-            damp1: 0.5,
-            damp2: 0.5,
-            filter_state: 0.0,
-        }
-    }
-
-    pub fn set_damp(&mut self, damp: f32) {
-        self.damp1 = 1.0 - damp;
-        self.damp2 = damp;
-    }
-
-    #[inline(always)]
-    pub fn process(&mut self, input: f32) -> f32 {
-        let output = unsafe { *self.buffer.get_unchecked(self.pos) };
-        self.filter_state = output * self.damp1 + self.filter_state * self.damp2;
-        unsafe {
-            *self.buffer.get_unchecked_mut(self.pos) = input + self.filter_state * self.feedback;
-        }
-        self.pos += 1;
-        if self.pos >= self.size {
-            self.pos = 0;
-        }
-        output
-    }
-
-    pub fn reset(&mut self) {
-        self.buffer.fill(0.0);
-        self.filter_state = 0.0;
-        self.pos = 0;
-    }
-}
-
-pub struct AllpassFilter {
-    buffer: Vec<f32>,
-    pos: usize,
-    size: usize,
-    feedback: f32,
-}
-
-impl AllpassFilter {
-    pub fn new(size: usize, feedback: f32) -> Self {
-        Self {
-            buffer: vec![0.0; size],
-            pos: 0,
-            size,
-            feedback,
-        }
-    }
-
-    #[inline(always)]
-    pub fn process(&mut self, input: f32) -> f32 {
-        let buffered = unsafe { *self.buffer.get_unchecked(self.pos) };
-        let output = buffered - input;
-        unsafe {
-            *self.buffer.get_unchecked_mut(self.pos) = input + buffered * self.feedback;
-        }
-        self.pos += 1;
-        if self.pos >= self.size {
-            self.pos = 0;
-        }
-        output
-    }
-
-    pub fn reset(&mut self) {
         self.buffer.fill(0.0);
         self.pos = 0;
     }

@@ -329,42 +329,6 @@ impl AppDatabase {
         Ok(results)
     }
 
-    pub async fn search_liked_tracks(&mut self, query: &str) -> toasty::Result<Vec<String>> {
-        let q = query.to_lowercase();
-        let liked_ids = self.load_liked_tracks().await?;
-
-        if liked_ids.is_empty() {
-            return Ok(vec![]);
-        }
-
-        let mut matches = Vec::new();
-
-        for chunk in liked_ids.chunks(900) {
-            let entities: Vec<TrackMetadataEntity> = TrackMetadataEntity::filter(
-                TrackMetadataEntity::fields().track_id().in_list(chunk),
-            )
-            .include(TrackMetadataEntity::fields().artists())
-            .exec(&mut self.db)
-            .await?;
-
-            for m in entities {
-                if m.title.to_lowercase().contains(&q)
-                    || m.album.as_deref().unwrap_or("").to_lowercase().contains(&q)
-                {
-                    matches.push(m.track_id);
-                    continue;
-                }
-
-                let track_artists: &[TrackMetadataArtist] = m.artists.get();
-                if track_artists.iter().any(|a| a.name.to_lowercase().contains(&q)) {
-                    matches.push(m.track_id);
-                }
-            }
-        }
-
-        Ok(matches)
-    }
-
     pub async fn save_equalizer(&mut self, enabled: bool, bands: &[f32]) -> toasty::Result<()> {
         self.save_setting("equalizer", &(enabled, bands)).await
     }

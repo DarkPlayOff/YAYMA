@@ -1,8 +1,6 @@
-use crate::audio::events::Event;
 use crate::audio::queue::PlaybackContext;
 use crate::audio::signals::AudioSignals;
 use crate::http::ApiService;
-use flume::Sender;
 use im::Vector;
 use std::sync::Arc;
 use yandex_music::model::track::Track;
@@ -17,7 +15,7 @@ pub struct YandexProvider {
 }
 
 impl YandexProvider {
-    pub fn new(api: Arc<ApiService>, _event_tx: Sender<Event>, signals: AudioSignals) -> Self {
+    pub fn new(api: Arc<ApiService>, signals: AudioSignals) -> Self {
         Self { api, signals }
     }
 

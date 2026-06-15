@@ -27,62 +27,6 @@ use crate::audio::fx::Effect;
 use super::biquad::FilterType;
 use super::param::{EffectParams, ParamInfo};
 
-pub fn bass_boost(sample_rate: f32) -> (Box<dyn Effect>, Arc<EffectParams>) {
-    let info = vec![
-        ParamInfo {
-            name: "Frequency",
-            min: 40.0,
-            max: 250.0,
-            default: 80.0,
-            step: 1.0,
-            unit: "Hz",
-        },
-        ParamInfo {
-            name: "Gain",
-            min: 0.0,
-            max: 12.0,
-            default: 6.0,
-            step: 0.5,
-            unit: "dB",
-        },
-    ];
-    let params = Arc::new(EffectParams::new(&info));
-    let effect = Box::new(BiquadEffect::new(
-        params.clone(),
-        FilterType::LowShelf,
-        sample_rate,
-    ));
-    (effect, params)
-}
-
-pub fn treble_boost(sample_rate: f32) -> (Box<dyn Effect>, Arc<EffectParams>) {
-    let info = vec![
-        ParamInfo {
-            name: "Frequency",
-            min: 2000.0,
-            max: 16000.0,
-            default: 8000.0,
-            step: 10.0,
-            unit: "Hz",
-        },
-        ParamInfo {
-            name: "Gain",
-            min: 0.0,
-            max: 12.0,
-            default: 3.0,
-            step: 0.5,
-            unit: "dB",
-        },
-    ];
-    let params = Arc::new(EffectParams::new(&info));
-    let effect = Box::new(BiquadEffect::new(
-        params.clone(),
-        FilterType::HighShelf,
-        sample_rate,
-    ));
-    (effect, params)
-}
-
 pub fn lowpass(sample_rate: f32) -> (Box<dyn Effect>, Arc<EffectParams>) {
     let info = vec![
         ParamInfo {

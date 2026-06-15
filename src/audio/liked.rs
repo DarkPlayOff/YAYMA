@@ -115,21 +115,4 @@ impl LikedCache {
     pub fn is_disliked(&self, track_id: &str) -> bool {
         self.disliked_ids.contains(track_id.to_base_id())
     }
-
-    pub fn is_album_liked(&self, album_id: u32) -> bool {
-        self.liked_albums_ids.contains(&album_id)
-    }
-
-    pub fn is_artist_liked(&self, artist_id: &str) -> bool {
-        self.liked_artists_ids.contains(artist_id)
-    }
-
-    pub fn is_artist_disliked(&self, artist_id: &str) -> bool {
-        self.disliked_artists_ids.contains(artist_id)
-    }
-
-    pub fn is_playlist_liked(&self, uid: u64, kind: u32) -> bool {
-        self.liked_playlists_ids
-            .contains(&format!("{}:{}", uid, kind))
-    }
 }
