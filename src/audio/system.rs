@@ -208,7 +208,7 @@ impl AudioSystem {
     {
         let tx = self.tx.clone();
         let event_tx = self.event_tx.clone();
-        self.signals.is_buffering.set(true);
+        self.signals.set_buffering(true);
         tokio::spawn(async move {
             match fetcher().await {
                 Ok((ctx, tracks, index)) => {
@@ -376,7 +376,7 @@ impl AudioSystem {
                 let yandex = self.yandex.clone();
                 let tx = self.tx.clone();
                 let event_tx = self.event_tx.clone();
-                self.signals.is_buffering.set(true);
+                self.signals.set_buffering(true);
                 tokio::spawn(async move {
                     match yandex.fetch_wave_context(seeds).await {
                         Ok((ctx, tracks, index)) => {
@@ -474,7 +474,7 @@ impl AudioSystem {
             AudioMessage::ReloadCurrentTrack => {
                 if let Some(track) = self.signals.current_track.get() {
                     let position_ms = self.signals.position_ms.get();
-                    self.signals.is_buffering.set(true);
+                    self.signals.set_buffering(true);
                     self.controller.invalidate_track(&track.id);
                     self.controller.replace_track(track, position_ms).await;
                 }

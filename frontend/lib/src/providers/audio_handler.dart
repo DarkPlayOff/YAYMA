@@ -131,6 +131,7 @@ class YaymaAudioHandler extends BaseAudioHandler {
 
   AudioProcessingState _mapProcessingState(rust.PlaybackState? state) {
     if (state == null) return AudioProcessingState.idle;
+    if (state.isBuffering) return AudioProcessingState.buffering;
     if (state.currentTrack == null) return AudioProcessingState.idle;
     return AudioProcessingState.ready;
   }

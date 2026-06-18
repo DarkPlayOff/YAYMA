@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:signals_flutter/signals_flutter.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:windows_taskbar/windows_taskbar.dart';
 import 'package:yayma/src/providers/auth_provider.dart';
 import 'package:yayma/src/providers/library_provider.dart';
@@ -62,6 +63,7 @@ Future<void> initPlayback() async {
   _activatePersistentColorScheme();
   _activateVibePalette();
   _activateLyricsOverlayReset();
+  _activateWakelock();
   if (Platform.isWindows) {
     _activateTaskbarEffect();
   }
@@ -71,6 +73,17 @@ void _activatePersistentColorScheme() => _persistentColorSchemeEffect;
 void _activateVibePalette() => _vibePaletteEffect;
 void _activateTaskbarEffect() => _taskbarEffect;
 void _activateLyricsOverlayReset() => _lyricsOverlayResetEffect;
+void _activateWakelock() => _wakelockEffect;
+
+// WakeLock effect to prevent Android/iOS from sleeping during buffering or playback
+final EffectCleanup _wakelockEffect = effect(() {
+  if (!Platform.isAndroid && !Platform.isIOS) return;
+
+  final state = playerStateSignal();
+  final shouldHold = (state?.isBuffering ?? false) || (state?.isPlaying ?? false);
+
+  unawaited(WakelockPlus.toggle(enable: shouldHold));
+});
 
 // Signal for current track ID only
 final FlutterComputed<String?> currentTrackIdSignal = computed(

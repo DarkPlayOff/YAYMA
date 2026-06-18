@@ -160,7 +160,7 @@ impl AudioController {
             self.engine.stop();
         }
 
-        self.signals.is_buffering.set(true);
+        self.signals.set_buffering(true);
 
         if !soft_reload {
             self.signals.is_stopped.set(false);
@@ -248,7 +248,7 @@ impl AudioController {
                         guard.set_current_position(start_pos);
                     }
 
-                    signals.is_buffering.set(false);
+                    signals.set_buffering(false);
 
                     if start_paused {
                         engine.pause();
@@ -262,7 +262,7 @@ impl AudioController {
                     }
                 }
                 Err(_e) => {
-                    signals.is_buffering.set(false);
+                    signals.set_buffering(false);
                     signals.set_playing(false);
                     signals.is_stopped.set(true);
                     let _ = event_tx.send(Event::TrackEnded);
@@ -285,7 +285,7 @@ impl AudioController {
         self.signals.set_playing(false);
         self.signals.set_current_track(None);
         self.signals.is_stopped.set(true);
-        self.signals.is_buffering.set(false);
+        self.signals.set_buffering(false);
         self.signals.update_progress(0, 0);
         self.signals.update_buffered_ratio(0.0);
     }

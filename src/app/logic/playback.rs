@@ -11,6 +11,7 @@ pub fn get_playback_state_internal<S: std::hash::BuildHasher>(
     let current_track = signals.current_track.get();
     PlaybackState {
         is_playing: signals.is_playing.get(),
+        is_buffering: signals.is_buffering.get(),
         volume: signals.volume.get(),
         is_muted: signals.is_muted.get(),
         repeat_mode: match signals.repeat_mode.get() {

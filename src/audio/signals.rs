@@ -181,6 +181,11 @@ impl AudioSignals {
         self.changed.send_replace(());
     }
 
+    pub fn set_buffering(&self, buffering: bool) {
+        self.is_buffering.set(buffering);
+        self.changed.send_replace(());
+    }
+
     pub fn set_stream_info(&self, codec: Option<String>) {
         self.codec.set(codec);
         self.changed.send_replace(());

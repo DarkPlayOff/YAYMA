@@ -199,6 +199,7 @@ pub enum RepeatModeDto {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct PlaybackState {
     pub is_playing: bool,
+    pub is_buffering: bool,
     pub volume: u8,
     pub is_muted: bool,
     pub repeat_mode: RepeatModeDto,
