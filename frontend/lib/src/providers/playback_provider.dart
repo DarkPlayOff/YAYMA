@@ -80,7 +80,8 @@ final EffectCleanup _wakelockEffect = effect(() {
   if (!Platform.isAndroid && !Platform.isIOS) return;
 
   final state = playerStateSignal();
-  final shouldHold = (state?.isBuffering ?? false) || (state?.isPlaying ?? false);
+  final shouldHold =
+      (state?.isBuffering ?? false) || (state?.isPlaying ?? false);
 
   unawaited(WakelockPlus.toggle(enable: shouldHold));
 });
@@ -472,7 +473,9 @@ class PlaybackController {
       runRustAction(
         (ctx) => rust.startWave(
           ctx: ctx,
-          seeds: [if (title != null) 'track:$trackId:$title' else 'track:$trackId'],
+          seeds: [
+            if (title != null) 'track:$trackId:$title' else 'track:$trackId',
+          ],
         ),
       );
   static Future<void> changeVolume(int volume) =>

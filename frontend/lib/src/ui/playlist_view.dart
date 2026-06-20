@@ -83,31 +83,35 @@ class _PlaylistViewState extends State<PlaylistView> {
       return const Center(child: Text('Плейлист не выбран'));
     }
 
-    return SignalBuilder(builder: (context) {
-      final meta = _playlistMetadata.value;
-      final state = _playlistAsync.value;
+    return SignalBuilder(
+      builder: (context) {
+        final meta = _playlistMetadata.value;
+        final state = _playlistAsync.value;
 
-      // Show full loader only if we have NO data yet
-      if (meta == null && state.isLoading) {
-        return const Center(child: CommonLoadingWidget());
-      }
+        // Show full loader only if we have NO data yet
+        if (meta == null && state.isLoading) {
+          return const Center(child: CommonLoadingWidget());
+        }
 
-      if (state.hasError && meta == null) {
-        return Center(child: CommonErrorWidget(error: state.error.toString()));
-      }
+        if (state.hasError && meta == null) {
+          return Center(
+            child: CommonErrorWidget(error: state.error.toString()),
+          );
+        }
 
-      if (meta == null) {
-        return const Center(child: Text('Плейлист не найден'));
-      }
+        if (meta == null) {
+          return const Center(child: Text('Плейлист не найден'));
+        }
 
-      return _PlaylistContent(
-        playlist: meta,
-        tracks: state.value?.tracks ?? [],
-        isLoading: state.isLoading,
-        refresh: () => _playlistAsync.refresh(),
-        searchController: _searchController,
-      );
-    });
+        return _PlaylistContent(
+          playlist: meta,
+          tracks: state.value?.tracks ?? [],
+          isLoading: state.isLoading,
+          refresh: () => _playlistAsync.refresh(),
+          searchController: _searchController,
+        );
+      },
+    );
   }
 }
 

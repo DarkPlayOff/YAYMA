@@ -85,7 +85,8 @@ class AppContextMenu<T> extends StatelessWidget {
       builder: (context, value, child) {
         // Staggered effect: calculate a delayed value based on index
         final startDelay = (index * 0.1).clamp(0.0, 0.5);
-        final effectiveValue = ((value - startDelay) / (1.0 - startDelay)).clamp(0.0, 1.0);
+        final effectiveValue = ((value - startDelay) / (1.0 - startDelay))
+            .clamp(0.0, 1.0);
 
         return Opacity(
           opacity: effectiveValue,
@@ -107,7 +108,8 @@ class AppContextMenu<T> extends StatelessWidget {
     AppContextMenuItem<T> item,
     int index,
   ) {
-    final leading = item.leading ??
+    final leading =
+        item.leading ??
         (item.icon != null
             ? Icon(
                 item.icon,

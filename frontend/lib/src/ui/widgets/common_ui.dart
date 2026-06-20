@@ -227,33 +227,35 @@ class _CommonVolumeSliderState extends State<CommonVolumeSlider> {
   Widget build(BuildContext context) {
     final activeColor =
         widget.activeColor ?? Theme.of(context).colorScheme.primary;
-    return SignalBuilder(builder: (context) {
-      final volume = playerVolumeSignal().toDouble();
-      final displayVolume = _dragVolume ?? volume;
+    return SignalBuilder(
+      builder: (context) {
+        final volume = playerVolumeSignal().toDouble();
+        final displayVolume = _dragVolume ?? volume;
 
-      return SizedBox(
-        width: widget.width,
-        child: SliderTheme(
-          data: SliderTheme.of(context).copyWith(
-            trackHeight: 2,
-            activeTrackColor: activeColor,
-            thumbColor: activeColor,
-            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 4),
+        return SizedBox(
+          width: widget.width,
+          child: SliderTheme(
+            data: SliderTheme.of(context).copyWith(
+              trackHeight: 2,
+              activeTrackColor: activeColor,
+              thumbColor: activeColor,
+              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 4),
+            ),
+            child: Slider(
+              value: displayVolume.clamp(0, 100),
+              max: 100,
+              onChanged: (val) {
+                setState(() => _dragVolume = val);
+                unawaited(PlaybackController.changeVolume(val.toInt()));
+              },
+              onChangeEnd: (_) {
+                setState(() => _dragVolume = null);
+              },
+            ),
           ),
-          child: Slider(
-            value: displayVolume.clamp(0, 100),
-            max: 100,
-            onChanged: (val) {
-              setState(() => _dragVolume = val);
-              unawaited(PlaybackController.changeVolume(val.toInt()));
-            },
-            onChangeEnd: (_) {
-              setState(() => _dragVolume = null);
-            },
-          ),
-        ),
-      );
-    });
+        );
+      },
+    );
   }
 }
 
@@ -283,51 +285,53 @@ class _AudioDeviceButtonState extends State<AudioDeviceButton> {
 
   @override
   Widget build(BuildContext context) {
-    return SignalBuilder(builder: (context) {
-      final devices = audioDevicesSignal.value;
-      final selectedDevice = selectedAudioDeviceSignal.value;
-      final accentColor = accentColorSignal.value;
+    return SignalBuilder(
+      builder: (context) {
+        final devices = audioDevicesSignal.value;
+        final selectedDevice = selectedAudioDeviceSignal.value;
+        final accentColor = accentColorSignal.value;
 
-      final items = [
-        AppContextMenuItem<String>(
-          value: '',
-          label: 'По умолчанию',
-          icon: Icons.computer_rounded,
-          isSelected: selectedDevice == null,
-          color: selectedDevice == null ? accentColor : null,
-        ),
-        ...devices.map(
-          (device) => AppContextMenuItem<String>(
-            value: device,
-            label: device,
-            icon: Icons.speaker_rounded,
-            isSelected: device == selectedDevice,
-            color: device == selectedDevice ? accentColor : null,
+        final items = [
+          AppContextMenuItem<String>(
+            value: '',
+            label: 'По умолчанию',
+            icon: Icons.computer_rounded,
+            isSelected: selectedDevice == null,
+            color: selectedDevice == null ? accentColor : null,
           ),
-        ),
-      ];
+          ...devices.map(
+            (device) => AppContextMenuItem<String>(
+              value: device,
+              label: device,
+              icon: Icons.speaker_rounded,
+              isSelected: device == selectedDevice,
+              color: device == selectedDevice ? accentColor : null,
+            ),
+          ),
+        ];
 
-      return AppContextMenu<String>(
-        onOpen: () {
-          if (!_devicesLoaded) {
-            unawaited(_loadDevices());
-          }
-        },
-        onSelected: (value) {
-          unawaited(setAudioDevice(value));
-        },
-        items: items,
-        child: IconButton(
-          icon: Icon(
-            Icons.speaker_group_rounded,
-            size: widget.iconSize,
-            color: selectedDevice != null ? accentColor : Colors.white38,
+        return AppContextMenu<String>(
+          onOpen: () {
+            if (!_devicesLoaded) {
+              unawaited(_loadDevices());
+            }
+          },
+          onSelected: (value) {
+            unawaited(setAudioDevice(value));
+          },
+          items: items,
+          child: IconButton(
+            icon: Icon(
+              Icons.speaker_group_rounded,
+              size: widget.iconSize,
+              color: selectedDevice != null ? accentColor : Colors.white38,
+            ),
+            tooltip: selectedDevice ?? 'Устройство вывода',
+            onPressed: null, // AppContextMenu handles clicks
           ),
-          tooltip: selectedDevice ?? 'Устройство вывода',
-          onPressed: null, // AppContextMenu handles clicks
-        ),
-      );
-    });
+        );
+      },
+    );
   }
 }
 
@@ -422,161 +426,163 @@ class _CommonProgressSliderState extends State<CommonProgressSlider> {
   Widget build(BuildContext context) {
     return ConstrainedBox(
       constraints: BoxConstraints(maxWidth: widget.maxWidth),
-      child: SignalBuilder(builder: (context) {
-        final progress = trackProgressSignal();
-        final dur = progress.durationMs;
-        final displayPosition = _dragValue ?? progress.positionMs;
-        final trackHeight = widget.compact ? 4.0 : 6.0;
-        final thumbRadius = widget.compact ? 4.0 : 6.0;
-        final fontSize = widget.compact ? 11.0 : 12.0;
-        final accentColor = widget.accentColor ?? accentColorSignal.value;
+      child: SignalBuilder(
+        builder: (context) {
+          final progress = trackProgressSignal();
+          final dur = progress.durationMs;
+          final displayPosition = _dragValue ?? progress.positionMs;
+          final trackHeight = widget.compact ? 4.0 : 6.0;
+          final thumbRadius = widget.compact ? 4.0 : 6.0;
+          final fontSize = widget.compact ? 11.0 : 12.0;
+          final accentColor = widget.accentColor ?? accentColorSignal.value;
 
-        return widget.compact
-            ? Row(
-                children: [
-                  SizedBox(
-                    width: 40,
-                    child: Text(
-                      formatDuration(displayPosition.toInt()),
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: Colors.white38,
-                        fontSize: fontSize,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                  Expanded(
-                    child: SliderTheme(
-                      data: SliderTheme.of(context).copyWith(
-                        trackHeight: trackHeight,
-                        activeTrackColor: accentColor,
-                        inactiveTrackColor: Colors.white10,
-                        thumbColor: accentColor,
-                        thumbShape: RoundSliderThumbShape(
-                          enabledThumbRadius: thumbRadius,
-                        ),
-                        overlayShape: const RoundSliderOverlayShape(
-                          overlayRadius: 10,
-                        ),
-                        trackShape: const RoundedRectSliderTrackShape(),
-                      ),
-                      child: Slider(
-                        value: displayPosition.clamp(
-                          0,
-                          dur > 0 ? dur : 1.0,
-                        ),
-                        max: dur > 0 ? dur : 1.0,
-                        onChangeStart: (val) {
-                          setState(() => _dragValue = val);
-                        },
-                        onChanged: (val) {
-                          setState(() => _dragValue = val);
-                        },
-                        onChangeEnd: (val) {
-                          setState(() => _dragValue = val);
-                          _dragEndTimer?.cancel();
-                          _dragEndTimer = Timer(
-                            const Duration(milliseconds: 500),
-                            () {
-                              if (mounted) {
-                                setState(() => _dragValue = null);
-                              }
-                            },
-                          );
-                          unawaited(
-                            PlaybackController.seekTo(
-                              Duration(milliseconds: val.toInt()),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                  ),
-                  SizedBox(
-                    width: 40,
-                    child: Text(
-                      formatDuration(dur.toInt()),
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: Colors.white38,
-                        fontSize: fontSize,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ],
-              )
-            : Column(
-                children: [
-                  Theme(
-                    data: Theme.of(context).copyWith(
-                      sliderTheme: SliderThemeData(
-                        overlayShape: SliderComponentShape.noOverlay,
-                      ),
-                    ),
-                    child: SliderTheme(
-                      data: SliderTheme.of(context).copyWith(
-                        trackHeight: trackHeight,
-                        activeTrackColor: accentColor,
-                        inactiveTrackColor: Colors.white10,
-                        thumbColor: accentColor,
-                        thumbShape: RoundSliderThumbShape(
-                          enabledThumbRadius: thumbRadius,
-                        ),
-                        trackShape: const RoundedRectSliderTrackShape(),
-                      ),
-                      child: Slider(
-                        value: displayPosition.clamp(0.0, dur),
-                        max: dur,
-                        onChangeStart: (val) {
-                          setState(() => _dragValue = val);
-                        },
-                        onChanged: (val) {
-                          setState(() => _dragValue = val);
-                        },
-                        onChangeEnd: (val) {
-                          setState(() => _dragValue = val);
-                          _dragEndTimer?.cancel();
-                          _dragEndTimer = Timer(
-                            const Duration(milliseconds: 500),
-                            () {
-                              if (mounted) {
-                                setState(() => _dragValue = null);
-                              }
-                            },
-                          );
-                          unawaited(
-                            PlaybackController.seekTo(
-                              Duration(milliseconds: val.toInt()),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                  ),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
+          return widget.compact
+              ? Row(
+                  children: [
+                    SizedBox(
+                      width: 40,
+                      child: Text(
                         formatDuration(displayPosition.toInt()),
+                        textAlign: TextAlign.center,
                         style: TextStyle(
                           color: Colors.white38,
                           fontSize: fontSize,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
-                      Text(
+                    ),
+                    Expanded(
+                      child: SliderTheme(
+                        data: SliderTheme.of(context).copyWith(
+                          trackHeight: trackHeight,
+                          activeTrackColor: accentColor,
+                          inactiveTrackColor: Colors.white10,
+                          thumbColor: accentColor,
+                          thumbShape: RoundSliderThumbShape(
+                            enabledThumbRadius: thumbRadius,
+                          ),
+                          overlayShape: const RoundSliderOverlayShape(
+                            overlayRadius: 10,
+                          ),
+                          trackShape: const RoundedRectSliderTrackShape(),
+                        ),
+                        child: Slider(
+                          value: displayPosition.clamp(
+                            0,
+                            dur > 0 ? dur : 1.0,
+                          ),
+                          max: dur > 0 ? dur : 1.0,
+                          onChangeStart: (val) {
+                            setState(() => _dragValue = val);
+                          },
+                          onChanged: (val) {
+                            setState(() => _dragValue = val);
+                          },
+                          onChangeEnd: (val) {
+                            setState(() => _dragValue = val);
+                            _dragEndTimer?.cancel();
+                            _dragEndTimer = Timer(
+                              const Duration(milliseconds: 500),
+                              () {
+                                if (mounted) {
+                                  setState(() => _dragValue = null);
+                                }
+                              },
+                            );
+                            unawaited(
+                              PlaybackController.seekTo(
+                                Duration(milliseconds: val.toInt()),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                    SizedBox(
+                      width: 40,
+                      child: Text(
                         formatDuration(dur.toInt()),
+                        textAlign: TextAlign.center,
                         style: TextStyle(
                           color: Colors.white38,
                           fontSize: fontSize,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
-                    ],
-                  ),
-                ],
-              );
-      }),
+                    ),
+                  ],
+                )
+              : Column(
+                  children: [
+                    Theme(
+                      data: Theme.of(context).copyWith(
+                        sliderTheme: SliderThemeData(
+                          overlayShape: SliderComponentShape.noOverlay,
+                        ),
+                      ),
+                      child: SliderTheme(
+                        data: SliderTheme.of(context).copyWith(
+                          trackHeight: trackHeight,
+                          activeTrackColor: accentColor,
+                          inactiveTrackColor: Colors.white10,
+                          thumbColor: accentColor,
+                          thumbShape: RoundSliderThumbShape(
+                            enabledThumbRadius: thumbRadius,
+                          ),
+                          trackShape: const RoundedRectSliderTrackShape(),
+                        ),
+                        child: Slider(
+                          value: displayPosition.clamp(0.0, dur),
+                          max: dur,
+                          onChangeStart: (val) {
+                            setState(() => _dragValue = val);
+                          },
+                          onChanged: (val) {
+                            setState(() => _dragValue = val);
+                          },
+                          onChangeEnd: (val) {
+                            setState(() => _dragValue = val);
+                            _dragEndTimer?.cancel();
+                            _dragEndTimer = Timer(
+                              const Duration(milliseconds: 500),
+                              () {
+                                if (mounted) {
+                                  setState(() => _dragValue = null);
+                                }
+                              },
+                            );
+                            unawaited(
+                              PlaybackController.seekTo(
+                                Duration(milliseconds: val.toInt()),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          formatDuration(displayPosition.toInt()),
+                          style: TextStyle(
+                            color: Colors.white38,
+                            fontSize: fontSize,
+                          ),
+                        ),
+                        Text(
+                          formatDuration(dur.toInt()),
+                          style: TextStyle(
+                            color: Colors.white38,
+                            fontSize: fontSize,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                );
+        },
+      ),
     );
   }
 }

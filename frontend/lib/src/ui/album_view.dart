@@ -112,137 +112,146 @@ class _AlbumViewState extends State<AlbumView> {
       return const Center(child: Text('Альбом не выбран'));
     }
 
-    return SignalBuilder(builder: (context) {
-      return CommonAsyncView<AlbumDetailsDto?>(
-        state: _albumAsync.value,
-        isEmpty: (album) => album == null,
-        empty: const Center(child: Text('Альбом не найден')),
-        builder: (context, album) {
-          final albumData = album!;
-          return SignalBuilder(builder: (context) {
-            final isLiked = likedAlbumsSignal
-                .value
-                .any((likedAlbum) => likedAlbum.id == albumData.id);
-            final isDownloading = _isDownloadingAlbum.value;
+    return SignalBuilder(
+      builder: (context) {
+        return CommonAsyncView<AlbumDetailsDto?>(
+          state: _albumAsync.value,
+          isEmpty: (album) => album == null,
+          empty: const Center(child: Text('Альбом не найден')),
+          builder: (context, album) {
+            final albumData = album!;
+            return SignalBuilder(
+              builder: (context) {
+                final isLiked = likedAlbumsSignal.value.any(
+                  (likedAlbum) => likedAlbum.id == albumData.id,
+                );
+                final isDownloading = _isDownloadingAlbum.value;
 
-            return CommonDetailSliverLayout(
-              header: CommonDetailHeader(
-                type: 'Альбом',
-                title: albumData.title,
-                artists: albumData.artists,
-                secondarySubtitle: albumData.year?.toString(),
-                coverUrl: albumData.coverUrl,
-                actions: [
-                  ElevatedButton.icon(
-                    onPressed: () => unawaited(
-                      _toggleAlbumLike(albumData, isLiked),
-                    ),
-                    icon: Icon(
-                      isLiked
-                          ? Icons.favorite_rounded
-                          : Icons.favorite_border_rounded,
-                    ),
-                    label: Text(isLiked ? 'В любимых' : 'В любимые'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: isLiked
-                          ? Theme.of(context).colorScheme.primary
-                          : Colors.white.withValues(alpha: 0.1),
-                      foregroundColor: isLiked ? Colors.black : Colors.white,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 14,
-                      ),
-                    ),
-                  ),
-                  ElevatedButton.icon(
-                    onPressed: () => unawaited(_copyAlbumLink(albumData)),
-                    icon: const Icon(Icons.link_rounded),
-                    label: const Text('Ссылка'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.white.withValues(alpha: 0.1),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 14,
-                      ),
-                    ),
-                  ),
-                  ElevatedButton.icon(
-                    onPressed: isDownloading
-                        ? null
-                        : () => unawaited(_downloadAlbum(albumData)),
-                    icon: isDownloading
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.download_rounded),
-                    label: const Text('Скачать альбом'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.white.withValues(alpha: 0.1),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 14,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              slivers: [
-                SliverFixedExtentList(
-                  itemExtent: 84,
-                  delegate: SliverChildBuilderDelegate((context, index) {
-                    final track = albumData.tracks[index];
-                    return CommonTrackTile(
-                      trackId: track.id,
-                      title: track.title,
-                      version: track.version,
-                      artists: track.artists,
-                      albumId: albumData.id,
-                      leading: SizedBox(
-                        width: 32,
-                        child: Center(
-                          child: Text(
-                            '${index + 1}',
-                            style: const TextStyle(
-                              color: Colors.white38,
-                              fontSize: 16,
-                            ),
+                return CommonDetailSliverLayout(
+                  header: CommonDetailHeader(
+                    type: 'Альбом',
+                    title: albumData.title,
+                    artists: albumData.artists,
+                    secondarySubtitle: albumData.year?.toString(),
+                    coverUrl: albumData.coverUrl,
+                    actions: [
+                      ElevatedButton.icon(
+                        onPressed: () => unawaited(
+                          _toggleAlbumLike(albumData, isLiked),
+                        ),
+                        icon: Icon(
+                          isLiked
+                              ? Icons.favorite_rounded
+                              : Icons.favorite_border_rounded,
+                        ),
+                        label: Text(isLiked ? 'В любимых' : 'В любимые'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: isLiked
+                              ? Theme.of(context).colorScheme.primary
+                              : Colors.white.withValues(alpha: 0.1),
+                          foregroundColor: isLiked
+                              ? Colors.black
+                              : Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 14,
                           ),
                         ),
                       ),
-                      trailing: Text(
-                        formatDuration(track.durationMs),
-                        style: const TextStyle(color: Colors.white38),
-                      ),
-                      hoverActions: [
-                        IconButton(
-                          icon: Icon(
-                            Icons.play_arrow_rounded,
-                            color: Theme.of(context).colorScheme.primary,
+                      ElevatedButton.icon(
+                        onPressed: () => unawaited(_copyAlbumLink(albumData)),
+                        icon: const Icon(Icons.link_rounded),
+                        label: const Text('Ссылка'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.white.withValues(alpha: 0.1),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 14,
                           ),
-                          onPressed: () => PlaybackController.playAlbumTrack(
+                        ),
+                      ),
+                      ElevatedButton.icon(
+                        onPressed: isDownloading
+                            ? null
+                            : () => unawaited(_downloadAlbum(albumData)),
+                        icon: isDownloading
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.download_rounded),
+                        label: const Text('Скачать альбом'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.white.withValues(alpha: 0.1),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 14,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  slivers: [
+                    SliverFixedExtentList(
+                      itemExtent: 84,
+                      delegate: SliverChildBuilderDelegate((context, index) {
+                        final track = albumData.tracks[index];
+                        return CommonTrackTile(
+                          trackId: track.id,
+                          title: track.title,
+                          version: track.version,
+                          artists: track.artists,
+                          albumId: albumData.id,
+                          leading: SizedBox(
+                            width: 32,
+                            child: Center(
+                              child: Text(
+                                '${index + 1}',
+                                style: const TextStyle(
+                                  color: Colors.white38,
+                                  fontSize: 16,
+                                ),
+                              ),
+                            ),
+                          ),
+                          trailing: Text(
+                            formatDuration(track.durationMs),
+                            style: const TextStyle(color: Colors.white38),
+                          ),
+                          hoverActions: [
+                            IconButton(
+                              icon: Icon(
+                                Icons.play_arrow_rounded,
+                                color: Theme.of(context).colorScheme.primary,
+                              ),
+                              onPressed: () =>
+                                  PlaybackController.playAlbumTrack(
+                                    int.parse(albumData.id),
+                                    track.id,
+                                  ),
+                            ),
+                          ],
+                          onTap: () => PlaybackController.playAlbumTrack(
                             int.parse(albumData.id),
                             track.id,
                           ),
-                        ),
-                      ],
-                      onTap: () => PlaybackController.playAlbumTrack(
-                        int.parse(albumData.id),
-                        track.id,
-                      ),
-                      onTitleTap: () =>
-                          navigateTo(AppSection.album, albumData.id),
-                    );
-                  }, childCount: albumData.tracks.length),
-                ),
-              ],
+                          onTitleTap: () =>
+                              navigateTo(AppSection.album, albumData.id),
+                        );
+                      }, childCount: albumData.tracks.length),
+                    ),
+                  ],
+                );
+              },
             );
-          });
-        },
-      );
-    });
+          },
+        );
+      },
+    );
   }
 }

@@ -164,109 +164,123 @@ class _SettingsViewState extends State<SettingsView> {
                 children: [
                   const _SectionTitle(title: 'Загрузки'),
                   const SizedBox(height: 24),
-                  SignalBuilder(builder: (context) {
-                    final path = _pathSignal.value;
-                    return _SettingItem(
-                      title: 'Путь для сохранения треков',
-                      subtitle: path.value ?? 'По умолчанию (Загрузки)',
-                      icon: Icons.folder_open_rounded,
-                      onTap: () => unawaited(_pickPath()),
-                    );
-                  }),
+                  SignalBuilder(
+                    builder: (context) {
+                      final path = _pathSignal.value;
+                      return _SettingItem(
+                        title: 'Путь для сохранения треков',
+                        subtitle: path.value ?? 'По умолчанию (Загрузки)',
+                        icon: Icons.folder_open_rounded,
+                        onTap: () => unawaited(_pickPath()),
+                      );
+                    },
+                  ),
                   const SizedBox(height: 48),
                   const _SectionTitle(title: 'Внешний вид'),
                   const SizedBox(height: 24),
                   if (context.isDesktop) ...[
-                    SignalBuilder(builder: (context) {
-                      final enabled = _customTitlebarSignal.value;
-                      return _SettingItem(
-                        title: 'Собственная рамка окна',
-                        subtitle: 'Отключает стандартную рамку ОС',
-                        icon: Icons.web_asset_rounded,
-                        onTap: () => unawaited(
-                          _toggleCustomTitlebar(!(enabled.value ?? false)),
-                        ),
-                        trailing: Switch(
-                          value: enabled.value ?? false,
-                          onChanged: (v) => unawaited(_toggleCustomTitlebar(v)),
-                        ),
-                      );
-                    }),
+                    SignalBuilder(
+                      builder: (context) {
+                        final enabled = _customTitlebarSignal.value;
+                        return _SettingItem(
+                          title: 'Собственная рамка окна',
+                          subtitle: 'Отключает стандартную рамку ОС',
+                          icon: Icons.web_asset_rounded,
+                          onTap: () => unawaited(
+                            _toggleCustomTitlebar(!(enabled.value ?? false)),
+                          ),
+                          trailing: Switch(
+                            value: enabled.value ?? false,
+                            onChanged: (v) =>
+                                unawaited(_toggleCustomTitlebar(v)),
+                          ),
+                        );
+                      },
+                    ),
                     const SizedBox(height: 16),
-                    SignalBuilder(builder: (context) {
-                      final enabled = _autoHideNavbarSignal.value;
-                      return _SettingItem(
-                        title: 'Скрывать боковую панель',
-                        subtitle:
-                            'Автоматически скрывать навигацию на главном экране',
-                        icon: Icons.vertical_split_rounded,
-                        onTap: () => unawaited(
-                          _toggleAutoHideNavbar(!(enabled.value ?? false)),
-                        ),
-                        trailing: Switch(
-                          value: enabled.value ?? false,
-                          onChanged: (v) => unawaited(_toggleAutoHideNavbar(v)),
-                        ),
-                      );
-                    }),
+                    SignalBuilder(
+                      builder: (context) {
+                        final enabled = _autoHideNavbarSignal.value;
+                        return _SettingItem(
+                          title: 'Скрывать боковую панель',
+                          subtitle:
+                              'Автоматически скрывать навигацию на главном экране',
+                          icon: Icons.vertical_split_rounded,
+                          onTap: () => unawaited(
+                            _toggleAutoHideNavbar(!(enabled.value ?? false)),
+                          ),
+                          trailing: Switch(
+                            value: enabled.value ?? false,
+                            onChanged: (v) =>
+                                unawaited(_toggleAutoHideNavbar(v)),
+                          ),
+                        );
+                      },
+                    ),
                     const SizedBox(height: 48),
                   ],
                   if (context.isDesktop) ...[
                     const _SectionTitle(title: 'Интеграции'),
                     const SizedBox(height: 24),
-                    SignalBuilder(builder: (context) {
-                      final enabled = _discordRpcSignal.value;
-                      return _SettingItem(
-                        title: 'Discord Rich Presence',
-                        subtitle: 'Показывать текущий трек в статусе Discord',
-                        icon: Icons.discord_rounded,
-                        onTap: () => unawaited(
-                          _toggleDiscordRpc(!(enabled.value ?? true)),
-                        ),
-                        trailing: Switch(
-                          value: enabled.value ?? true,
-                          onChanged: (v) => unawaited(_toggleDiscordRpc(v)),
-                        ),
-                      );
-                    }),
+                    SignalBuilder(
+                      builder: (context) {
+                        final enabled = _discordRpcSignal.value;
+                        return _SettingItem(
+                          title: 'Discord Rich Presence',
+                          subtitle: 'Показывать текущий трек в статусе Discord',
+                          icon: Icons.discord_rounded,
+                          onTap: () => unawaited(
+                            _toggleDiscordRpc(!(enabled.value ?? true)),
+                          ),
+                          trailing: Switch(
+                            value: enabled.value ?? true,
+                            onChanged: (v) => unawaited(_toggleDiscordRpc(v)),
+                          ),
+                        );
+                      },
+                    ),
                     const SizedBox(height: 48),
                   ],
                   if (context.isDesktop) ...[
                     const _SectionTitle(title: 'Система'),
                     const SizedBox(height: 24),
-                    SignalBuilder(builder: (context) {
-                      final enabled = _closeToTraySignal.value;
-                      return _SettingItem(
-                        title: 'Сворачивать в трей при закрытии',
-                        subtitle:
-                            'При нажатии на крестик приложение будет скрыто в трей',
-                        icon: Icons.window_rounded,
-                        onTap: () => unawaited(
-                          _toggleCloseToTray(!(enabled.value ?? true)),
-                        ),
-                        trailing: Switch(
-                          value: enabled.value ?? true,
-                          onChanged: (v) => unawaited(_toggleCloseToTray(v)),
-                        ),
-                      );
-                    }),
+                    SignalBuilder(
+                      builder: (context) {
+                        final enabled = _closeToTraySignal.value;
+                        return _SettingItem(
+                          title: 'Сворачивать в трей при закрытии',
+                          subtitle:
+                              'При нажатии на крестик приложение будет скрыто в трей',
+                          icon: Icons.window_rounded,
+                          onTap: () => unawaited(
+                            _toggleCloseToTray(!(enabled.value ?? true)),
+                          ),
+                          trailing: Switch(
+                            value: enabled.value ?? true,
+                            onChanged: (v) => unawaited(_toggleCloseToTray(v)),
+                          ),
+                        );
+                      },
+                    ),
                     const SizedBox(height: 48),
                   ],
                   const _SectionTitle(title: 'Кэш'),
                   const SizedBox(height: 24),
-                  SignalBuilder(builder: (context) {
-                    final size = _cacheSizeSignal.value;
-                    return _SettingItem(
-                      title: 'Очистить кэш изображений и данных',
-                      subtitle: size.map(
-                        data: (d) => 'Занято: ${_formatBytes(d)}',
-                        error: (e, s) => 'Ошибка при получении размера',
-                        loading: () => 'Подсчет...',
-                      ),
-                      icon: Icons.delete_sweep_rounded,
-                      onTap: () => unawaited(_clearCache()),
-                    );
-                  }),
+                  SignalBuilder(
+                    builder: (context) {
+                      final size = _cacheSizeSignal.value;
+                      return _SettingItem(
+                        title: 'Очистить кэш изображений и данных',
+                        subtitle: size.map(
+                          data: (d) => 'Занято: ${_formatBytes(d)}',
+                          error: (e, s) => 'Ошибка при получении размера',
+                          loading: () => 'Подсчет...',
+                        ),
+                        icon: Icons.delete_sweep_rounded,
+                        onTap: () => unawaited(_clearCache()),
+                      );
+                    },
+                  ),
                   const SizedBox(height: 48),
                   const _SectionTitle(title: 'О приложении'),
                   const SizedBox(height: 24),
@@ -289,16 +303,18 @@ class _SettingsViewState extends State<SettingsView> {
                           ),
                         ),
                         const SizedBox(height: 8),
-                        SignalBuilder(builder: (context) {
-                          final version = _versionSignal.value;
-                          return Text(
-                            'Альтернативный клиент для Яндекс Музыки.\nВерсия ${version.value ?? '...'}',
-                            style: const TextStyle(
-                              color: Colors.white54,
-                              fontSize: 16,
-                            ),
-                          );
-                        }),
+                        SignalBuilder(
+                          builder: (context) {
+                            final version = _versionSignal.value;
+                            return Text(
+                              'Альтернативный клиент для Яндекс Музыки.\nВерсия ${version.value ?? '...'}',
+                              style: const TextStyle(
+                                color: Colors.white54,
+                                fontSize: 16,
+                              ),
+                            );
+                          },
+                        ),
                       ],
                     ),
                   ),

@@ -218,115 +218,117 @@ class _LikedTracksTab extends StatelessWidget {
     final screenWidth = MediaQuery.sizeOf(context).width;
     final isNarrow = screenWidth < 600;
 
-    return SignalBuilder(builder: (context) {
-      final tracks = likedTracksSignal.value;
-      final query = librarySearchQuerySignal.value;
+    return SignalBuilder(
+      builder: (context) {
+        final tracks = likedTracksSignal.value;
+        final query = librarySearchQuerySignal.value;
 
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: EdgeInsets.fromLTRB(
-              isNarrow ? 20 : 40,
-              8,
-              isNarrow ? 20 : 40,
-              16,
-            ),
-            child: TextField(
-              controller: searchController,
-              onChanged: setLibrarySearchQuery,
-              style: const TextStyle(color: Colors.white, fontSize: 14),
-              decoration: InputDecoration(
-                hintText: 'Поиск в любимых треках...',
-                hintStyle: const TextStyle(color: Colors.white24),
-                prefixIcon: const Icon(
-                  Icons.search,
-                  color: Colors.white38,
-                  size: 20,
-                ),
-                suffixIcon: searchController.text.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(
-                          Icons.clear,
-                          color: Colors.white38,
-                          size: 18,
-                        ),
-                        onPressed: () {
-                          searchController.clear();
-                          setLibrarySearchQuery('');
-                        },
-                      )
-                    : null,
-                filled: true,
-                fillColor: Colors.white.withValues(alpha: 0.05),
-                isDense: true,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none,
-                ),
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 10,
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: EdgeInsets.fromLTRB(
+                isNarrow ? 20 : 40,
+                8,
+                isNarrow ? 20 : 40,
+                16,
+              ),
+              child: TextField(
+                controller: searchController,
+                onChanged: setLibrarySearchQuery,
+                style: const TextStyle(color: Colors.white, fontSize: 14),
+                decoration: InputDecoration(
+                  hintText: 'Поиск в любимых треках...',
+                  hintStyle: const TextStyle(color: Colors.white24),
+                  prefixIcon: const Icon(
+                    Icons.search,
+                    color: Colors.white38,
+                    size: 20,
+                  ),
+                  suffixIcon: searchController.text.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(
+                            Icons.clear,
+                            color: Colors.white38,
+                            size: 18,
+                          ),
+                          onPressed: () {
+                            searchController.clear();
+                            setLibrarySearchQuery('');
+                          },
+                        )
+                      : null,
+                  filled: true,
+                  fillColor: Colors.white.withValues(alpha: 0.05),
+                  isDense: true,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 10,
+                  ),
                 ),
               ),
             ),
-          ),
-          Expanded(
-            child: tracks.isEmpty
-                ? Center(
-                    child: Text(
-                      query.isEmpty
-                          ? 'Нет любимых треков'
-                          : 'Ничего не найдено',
-                      style: const TextStyle(color: Colors.white38),
-                    ),
-                  )
-                : ListView.builder(
-                    padding: const EdgeInsets.only(bottom: 140),
-                    itemCount: tracks.length,
-                    itemBuilder: (context, index) {
-                      final track = tracks[index];
-                      return CommonTrackTile(
-                        trackId: track.id,
-                        title: track.title,
-                        version: track.version,
-                        artists: track.artists,
-                        albumId: track.albumId,
-                        leading: TrackCover(url: track.coverUrl),
-                        contentPadding: EdgeInsets.symmetric(
-                          horizontal: isNarrow ? 20 : 40,
-                          vertical: 8,
-                        ),
-                        trailing: Text(
-                          formatDuration(track.durationMs),
-                          style: const TextStyle(color: Colors.white38),
-                        ),
-                        hoverActions: [
-                          IconButton(
-                            icon: Icon(
-                              Icons.play_arrow_rounded,
-                              color: Theme.of(context).colorScheme.primary,
-                            ),
-                            onPressed: () => unawaited(
-                              PlaybackController.playLikedTrack(track.id),
-                            ),
+            Expanded(
+              child: tracks.isEmpty
+                  ? Center(
+                      child: Text(
+                        query.isEmpty
+                            ? 'Нет любимых треков'
+                            : 'Ничего не найдено',
+                        style: const TextStyle(color: Colors.white38),
+                      ),
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.only(bottom: 140),
+                      itemCount: tracks.length,
+                      itemBuilder: (context, index) {
+                        final track = tracks[index];
+                        return CommonTrackTile(
+                          trackId: track.id,
+                          title: track.title,
+                          version: track.version,
+                          artists: track.artists,
+                          albumId: track.albumId,
+                          leading: TrackCover(url: track.coverUrl),
+                          contentPadding: EdgeInsets.symmetric(
+                            horizontal: isNarrow ? 20 : 40,
+                            vertical: 8,
                           ),
-                        ],
-                        onTap: () => unawaited(
-                          PlaybackController.playLikedTrack(track.id),
-                        ),
-                        onTitleTap: () {
-                          if (track.albumId != null) {
-                            navigateTo(AppSection.album, track.albumId);
-                          }
-                        },
-                      );
-                    },
-                  ),
-          ),
-        ],
-      );
-    });
+                          trailing: Text(
+                            formatDuration(track.durationMs),
+                            style: const TextStyle(color: Colors.white38),
+                          ),
+                          hoverActions: [
+                            IconButton(
+                              icon: Icon(
+                                Icons.play_arrow_rounded,
+                                color: Theme.of(context).colorScheme.primary,
+                              ),
+                              onPressed: () => unawaited(
+                                PlaybackController.playLikedTrack(track.id),
+                              ),
+                            ),
+                          ],
+                          onTap: () => unawaited(
+                            PlaybackController.playLikedTrack(track.id),
+                          ),
+                          onTitleTap: () {
+                            if (track.albumId != null) {
+                              navigateTo(AppSection.album, track.albumId);
+                            }
+                          },
+                        );
+                      },
+                    ),
+            ),
+          ],
+        );
+      },
+    );
   }
 }
 
@@ -338,38 +340,40 @@ class _PlaylistsTab extends StatelessWidget {
     final screenWidth = MediaQuery.sizeOf(context).width;
     final isNarrow = screenWidth < 600;
 
-    return SignalBuilder(builder: (context) {
-      final playlists = playlistsSignal.value;
+    return SignalBuilder(
+      builder: (context) {
+        final playlists = playlistsSignal.value;
 
-      if (playlists.isEmpty) {
-        return const Center(
-          child: Text(
-            'Нет плейлистов',
-            style: TextStyle(color: Colors.white38),
+        if (playlists.isEmpty) {
+          return const Center(
+            child: Text(
+              'Нет плейлистов',
+              style: TextStyle(color: Colors.white38),
+            ),
+          );
+        }
+
+        return GridView.builder(
+          padding: EdgeInsets.fromLTRB(
+            isNarrow ? 20 : 40,
+            isNarrow ? 20 : 40,
+            isNarrow ? 20 : 40,
+            140,
           ),
+          gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+            maxCrossAxisExtent: isNarrow ? 180 : 200,
+            mainAxisSpacing: isNarrow ? 16 : 24,
+            crossAxisSpacing: isNarrow ? 16 : 24,
+            childAspectRatio: isNarrow ? 0.7 : 0.75,
+          ),
+          itemCount: playlists.length,
+          itemBuilder: (context, index) {
+            final playlist = playlists[index];
+            return _PlaylistCard(playlist: playlist);
+          },
         );
-      }
-
-      return GridView.builder(
-        padding: EdgeInsets.fromLTRB(
-          isNarrow ? 20 : 40,
-          isNarrow ? 20 : 40,
-          isNarrow ? 20 : 40,
-          140,
-        ),
-        gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-          maxCrossAxisExtent: isNarrow ? 180 : 200,
-          mainAxisSpacing: isNarrow ? 16 : 24,
-          crossAxisSpacing: isNarrow ? 16 : 24,
-          childAspectRatio: isNarrow ? 0.7 : 0.75,
-        ),
-        itemCount: playlists.length,
-        itemBuilder: (context, index) {
-          final playlist = playlists[index];
-          return _PlaylistCard(playlist: playlist);
-        },
-      );
-    });
+      },
+    );
   }
 }
 
@@ -381,40 +385,42 @@ class _LikedAlbumsTab extends StatelessWidget {
     final screenWidth = MediaQuery.sizeOf(context).width;
     final isNarrow = screenWidth < 600;
 
-    return SignalBuilder(builder: (context) {
-      final albums = likedAlbumsSignal.value;
+    return SignalBuilder(
+      builder: (context) {
+        final albums = likedAlbumsSignal.value;
 
-      if (albums.isEmpty) {
-        return const Center(
-          child: Text(
-            'Нет любимых альбомов',
-            style: TextStyle(color: Colors.white38),
+        if (albums.isEmpty) {
+          return const Center(
+            child: Text(
+              'Нет любимых альбомов',
+              style: TextStyle(color: Colors.white38),
+            ),
+          );
+        }
+
+        return SingleChildScrollView(
+          padding: EdgeInsets.fromLTRB(
+            isNarrow ? 12 : 32,
+            isNarrow ? 12 : 24,
+            isNarrow ? 12 : 32,
+            140,
+          ),
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final album in albums)
+                CommonMediaCard(
+                  title: album.title,
+                  artists: album.artists,
+                  coverUrl: album.coverUrl,
+                  onTap: () => navigateTo(AppSection.album, album.id),
+                ),
+            ],
           ),
         );
-      }
-
-      return SingleChildScrollView(
-        padding: EdgeInsets.fromLTRB(
-          isNarrow ? 12 : 32,
-          isNarrow ? 12 : 24,
-          isNarrow ? 12 : 32,
-          140,
-        ),
-        child: Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            for (final album in albums)
-              CommonMediaCard(
-                title: album.title,
-                artists: album.artists,
-                coverUrl: album.coverUrl,
-                onTap: () => navigateTo(AppSection.album, album.id),
-              ),
-          ],
-        ),
-      );
-    });
+      },
+    );
   }
 }
 
@@ -426,41 +432,43 @@ class _LikedArtistsTab extends StatelessWidget {
     final screenWidth = MediaQuery.sizeOf(context).width;
     final isNarrow = screenWidth < 600;
 
-    return SignalBuilder(builder: (context) {
-      final artists = likedArtistsSignal.value;
+    return SignalBuilder(
+      builder: (context) {
+        final artists = likedArtistsSignal.value;
 
-      if (artists.isEmpty) {
-        return const Center(
-          child: Text(
-            'Нет любимых исполнителей',
-            style: TextStyle(color: Colors.white38),
+        if (artists.isEmpty) {
+          return const Center(
+            child: Text(
+              'Нет любимых исполнителей',
+              style: TextStyle(color: Colors.white38),
+            ),
+          );
+        }
+
+        return SingleChildScrollView(
+          padding: EdgeInsets.fromLTRB(
+            isNarrow ? 12 : 32,
+            isNarrow ? 12 : 24,
+            isNarrow ? 12 : 32,
+            140,
+          ),
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final artist in artists)
+                CommonMediaCard(
+                  title: artist.name,
+                  coverUrl: artist.coverUrl,
+                  isCircle: true,
+                  size: 140,
+                  onTap: () => navigateTo(AppSection.artist, artist.id),
+                ),
+            ],
           ),
         );
-      }
-
-      return SingleChildScrollView(
-        padding: EdgeInsets.fromLTRB(
-          isNarrow ? 12 : 32,
-          isNarrow ? 12 : 24,
-          isNarrow ? 12 : 32,
-          140,
-        ),
-        child: Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            for (final artist in artists)
-              CommonMediaCard(
-                title: artist.name,
-                coverUrl: artist.coverUrl,
-                isCircle: true,
-                size: 140,
-                onTap: () => navigateTo(AppSection.artist, artist.id),
-              ),
-          ],
-        ),
-      );
-    });
+      },
+    );
   }
 }
 

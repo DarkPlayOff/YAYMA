@@ -178,7 +178,9 @@ class _LoginScreenState extends State<LoginScreen> {
                                 children: [
                                   Expanded(child: Divider()),
                                   Padding(
-                                    padding: EdgeInsets.symmetric(horizontal: 16),
+                                    padding: EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                    ),
                                     child: Text(
                                       'ИЛИ ВВЕДИТЕ ТОКЕН',
                                       style: TextStyle(

@@ -68,166 +68,176 @@ class _FloatingNavBarState extends State<FloatingNavBar>
 
   @override
   Widget build(BuildContext context) {
-    return SignalBuilder(builder: (context) {
-      final currentState = currentNavStateSignal.value;
-      final currentSection = currentState.section;
-      final isHome = currentSection == AppSection.home;
-      final isAutoHideEnabled = autoHideNavbarSignal.value;
-      final barColor = playerBarColorSignal.value;
+    return SignalBuilder(
+      builder: (context) {
+        final currentState = currentNavStateSignal.value;
+        final currentSection = currentState.section;
+        final isHome = currentSection == AppSection.home;
+        final isAutoHideEnabled = autoHideNavbarSignal.value;
+        final barColor = playerBarColorSignal.value;
 
-      final isVisible =
-          !isHome ||
-          !isAutoHideEnabled ||
-          _isNavbarHovered ||
-          _isHovered ||
-          _isAccountMenuOpen;
-      final isNarrow = MediaQuery.sizeOf(context).width < 600;
+        final isVisible =
+            !isHome ||
+            !isAutoHideEnabled ||
+            _isNavbarHovered ||
+            _isHovered ||
+            _isAccountMenuOpen;
+        final isNarrow = MediaQuery.sizeOf(context).width < 600;
 
-      final alpha = isHome ? 0.5 : 0.7;
+        final alpha = isHome ? 0.5 : 0.7;
 
-      final children = [
-        if (!isNarrow)
-          MouseRegion(
-            onEnter: (_) {
-              setState(() {
-                _isHovered = true;
-              });
-              _showWaveTimer?.cancel();
-              _showWaveTimer = Timer(
-                const Duration(milliseconds: 200),
-                _showWaveSettings,
-              );
-            },
-            onExit: (_) {
-              _showWaveTimer?.cancel();
-              _showWaveTimer = null;
-              setState(() {
-                _isHovered = false;
-              });
-              _hideWaveSettings();
-            },
-            child: SignalBuilder(
-              builder: (context) {
-                final isWaveActive = currentWaveSeedsSignal().isNotEmpty;
-                final isPlaying = isPlayingSignal();
-
-                return IconButton(
-                  onPressed: () {
-                    if (isWaveActive) {
-                      unawaited(PlaybackController.togglePlay());
-                    } else {
-                      unawaited(HomeController.startMyWave());
-                    }
-                  },
-                  style: IconButton.styleFrom(
-                    backgroundColor: Theme.of(
-                      context,
-                    ).colorScheme.primary.withValues(alpha: 0.1),
-                    hoverColor: Theme.of(
-                      context,
-                    ).colorScheme.primary.withValues(alpha: 0.2),
-                  ),
-                  icon: Icon(
-                    isWaveActive && isPlaying
-                        ? Icons.pause_rounded
-                        : Icons.play_arrow_rounded,
-                    size: 32,
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
+        final children = [
+          if (!isNarrow)
+            MouseRegion(
+              onEnter: (_) {
+                setState(() {
+                  _isHovered = true;
+                });
+                _showWaveTimer?.cancel();
+                _showWaveTimer = Timer(
+                  const Duration(milliseconds: 200),
+                  _showWaveSettings,
                 );
               },
-            ),
-          ),
-        if (!isNarrow)
-          SizedBox(height: isNarrow ? 0 : 12, width: isNarrow ? 12 : 0),
-        _NavIcon(
-          icon: Icons.home_rounded,
-          isSelected: currentSection == AppSection.home,
-          onTap: () => setSection(AppSection.home),
-          isNarrow: isNarrow,
-        ),
-        _NavIcon(
-          icon: Icons.search_rounded,
-          isSelected: currentSection == AppSection.search,
-          onTap: () => setSection(AppSection.search),
-          isNarrow: isNarrow,
-        ),
-        _NavIcon(
-          icon: Icons.library_music_rounded,
-          isSelected:
-              currentSection == AppSection.liked ||
-              currentSection == AppSection.playlists,
-          onTap: () => setSection(AppSection.liked),
-          isNarrow: isNarrow,
-        ),
-        SizedBox(height: isNarrow ? 0 : 12, width: isNarrow ? 12 : 0),
-        _AccountButton(
-          onOpened: () => setState(() => _isAccountMenuOpen = true),
-          onClosed: () => setState(() => _isAccountMenuOpen = false),
-        ),
-      ];
+              onExit: (_) {
+                _showWaveTimer?.cancel();
+                _showWaveTimer = null;
+                setState(() {
+                  _isHovered = false;
+                });
+                _hideWaveSettings();
+              },
+              child: SignalBuilder(
+                builder: (context) {
+                  final isWaveActive = currentWaveSeedsSignal().isNotEmpty;
+                  final isPlaying = isPlayingSignal();
 
-      return MouseRegion(
-        opaque: false,
-        onEnter: (_) => setState(() => _isNavbarHovered = true),
-        onExit: (_) => setState(() => _isNavbarHovered = false),
-        child: Padding(
-          padding: isNarrow
-              ? const EdgeInsets.only(bottom: 12, left: 24, right: 24)
-              : const EdgeInsets.only(left: 16, right: 48, top: 48, bottom: 48),
-          child: AnimatedSlide(
-            offset: isVisible
-                ? Offset.zero
-                : (isNarrow ? const Offset(0, 1.5) : const Offset(-1.5, 0)),
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeOutCubic,
-            child: AnimatedOpacity(
-              opacity: isVisible ? 1.0 : 0.0,
-              duration: const Duration(milliseconds: 200),
-              child: CompositedTransformTarget(
-                link: _layerLink,
-                child: Container(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(32),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: isHome ? 0.8 : 0.4),
-                        blurRadius: 30,
-                        spreadRadius: 2,
-                      ),
-                    ],
+                  return IconButton(
+                    onPressed: () {
+                      if (isWaveActive) {
+                        unawaited(PlaybackController.togglePlay());
+                      } else {
+                        unawaited(HomeController.startMyWave());
+                      }
+                    },
+                    style: IconButton.styleFrom(
+                      backgroundColor: Theme.of(
+                        context,
+                      ).colorScheme.primary.withValues(alpha: 0.1),
+                      hoverColor: Theme.of(
+                        context,
+                      ).colorScheme.primary.withValues(alpha: 0.2),
+                    ),
+                    icon: Icon(
+                      isWaveActive && isPlaying
+                          ? Icons.pause_rounded
+                          : Icons.play_arrow_rounded,
+                      size: 32,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                  );
+                },
+              ),
+            ),
+          if (!isNarrow)
+            SizedBox(height: isNarrow ? 0 : 12, width: isNarrow ? 12 : 0),
+          _NavIcon(
+            icon: Icons.home_rounded,
+            isSelected: currentSection == AppSection.home,
+            onTap: () => setSection(AppSection.home),
+            isNarrow: isNarrow,
+          ),
+          _NavIcon(
+            icon: Icons.search_rounded,
+            isSelected: currentSection == AppSection.search,
+            onTap: () => setSection(AppSection.search),
+            isNarrow: isNarrow,
+          ),
+          _NavIcon(
+            icon: Icons.library_music_rounded,
+            isSelected:
+                currentSection == AppSection.liked ||
+                currentSection == AppSection.playlists,
+            onTap: () => setSection(AppSection.liked),
+            isNarrow: isNarrow,
+          ),
+          SizedBox(height: isNarrow ? 0 : 12, width: isNarrow ? 12 : 0),
+          _AccountButton(
+            onOpened: () => setState(() => _isAccountMenuOpen = true),
+            onClosed: () => setState(() => _isAccountMenuOpen = false),
+          ),
+        ];
+
+        return MouseRegion(
+          opaque: false,
+          onEnter: (_) => setState(() => _isNavbarHovered = true),
+          onExit: (_) => setState(() => _isNavbarHovered = false),
+          child: Padding(
+            padding: isNarrow
+                ? const EdgeInsets.only(bottom: 12, left: 24, right: 24)
+                : const EdgeInsets.only(
+                    left: 16,
+                    right: 48,
+                    top: 48,
+                    bottom: 48,
                   ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(32),
-                    child: BackdropFilter(
-                      filter: ui.ImageFilter.blur(
-                        sigmaX: isHome ? 0 : 3,
-                        sigmaY: isHome ? 0 : 3,
-                      ),
-                      child: Container(
-                        width: isNarrow ? null : 64,
-                        height: isNarrow ? 64 : null,
-                        padding: EdgeInsets.symmetric(
-                          vertical: isNarrow ? 0 : 12,
-                          horizontal: isNarrow ? 12 : 0,
-                        ),
-                        decoration: BoxDecoration(
-                          color: barColor.withValues(alpha: alpha),
-                          borderRadius: BorderRadius.circular(32),
-                          border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.1),
+            child: AnimatedSlide(
+              offset: isVisible
+                  ? Offset.zero
+                  : (isNarrow ? const Offset(0, 1.5) : const Offset(-1.5, 0)),
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeOutCubic,
+              child: AnimatedOpacity(
+                opacity: isVisible ? 1.0 : 0.0,
+                duration: const Duration(milliseconds: 200),
+                child: CompositedTransformTarget(
+                  link: _layerLink,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(32),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(
+                            alpha: isHome ? 0.8 : 0.4,
                           ),
+                          blurRadius: 30,
+                          spreadRadius: 2,
                         ),
-                        child: isNarrow
-                            ? Row(
-                                mainAxisSize: MainAxisSize.min,
-                                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                                children: children,
-                              )
-                            : Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: children,
-                              ),
+                      ],
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(32),
+                      child: BackdropFilter(
+                        filter: ui.ImageFilter.blur(
+                          sigmaX: isHome ? 0 : 3,
+                          sigmaY: isHome ? 0 : 3,
+                        ),
+                        child: Container(
+                          width: isNarrow ? null : 64,
+                          height: isNarrow ? 64 : null,
+                          padding: EdgeInsets.symmetric(
+                            vertical: isNarrow ? 0 : 12,
+                            horizontal: isNarrow ? 12 : 0,
+                          ),
+                          decoration: BoxDecoration(
+                            color: barColor.withValues(alpha: alpha),
+                            borderRadius: BorderRadius.circular(32),
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.1),
+                            ),
+                          ),
+                          child: isNarrow
+                              ? Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceEvenly,
+                                  children: children,
+                                )
+                              : Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: children,
+                                ),
+                        ),
                       ),
                     ),
                   ),
@@ -235,9 +245,9 @@ class _FloatingNavBarState extends State<FloatingNavBar>
               ),
             ),
           ),
-        ),
-      );
-    });
+        );
+      },
+    );
   }
 
   @override

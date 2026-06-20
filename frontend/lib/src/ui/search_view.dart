@@ -35,91 +35,93 @@ class _SearchViewState extends State<SearchView> {
 
   @override
   Widget build(BuildContext context) {
-    return SignalBuilder(builder: (context) {
-      final searchResultsAsync = searchResultsSignal.value;
-      final screenWidth = MediaQuery.sizeOf(context).width;
-      final isNarrow = screenWidth < 600;
+    return SignalBuilder(
+      builder: (context) {
+        final searchResultsAsync = searchResultsSignal.value;
+        final screenWidth = MediaQuery.sizeOf(context).width;
+        final isNarrow = screenWidth < 600;
 
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: isNarrow
-                ? const EdgeInsets.fromLTRB(20, 16, 20, 8)
-                : context.viewPadding,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Поиск',
-                  style: TextStyle(
-                    fontSize: isNarrow ? 24 : 48,
-                    fontWeight: FontWeight.w900,
-                    color: Colors.white,
-                    letterSpacing: -1,
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: isNarrow
+                  ? const EdgeInsets.fromLTRB(20, 16, 20, 8)
+                  : context.viewPadding,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Поиск',
+                    style: TextStyle(
+                      fontSize: isNarrow ? 24 : 48,
+                      fontWeight: FontWeight.w900,
+                      color: Colors.white,
+                      letterSpacing: -1,
+                    ),
                   ),
-                ),
-                if (!isNarrow) const SizedBox(height: 24),
-                if (isNarrow) const SizedBox(height: 8),
-                TextField(
-                  controller: _controller,
-                  onChanged: setSearchQuery,
-                  style: TextStyle(
-                    fontSize: isNarrow ? 18 : 24,
-                    color: Colors.white,
-                  ),
-                  decoration: InputDecoration(
-                    hintText: 'Треки, альбомы, артисты...',
-                    hintStyle: const TextStyle(color: Colors.white38),
-                    prefixIcon: Padding(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: isNarrow ? 12 : 16,
+                  if (!isNarrow) const SizedBox(height: 24),
+                  if (isNarrow) const SizedBox(height: 8),
+                  TextField(
+                    controller: _controller,
+                    onChanged: setSearchQuery,
+                    style: TextStyle(
+                      fontSize: isNarrow ? 18 : 24,
+                      color: Colors.white,
+                    ),
+                    decoration: InputDecoration(
+                      hintText: 'Треки, альбомы, артисты...',
+                      hintStyle: const TextStyle(color: Colors.white38),
+                      prefixIcon: Padding(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: isNarrow ? 12 : 16,
+                        ),
+                        child: Icon(
+                          Icons.search,
+                          color: Colors.white54,
+                          size: isNarrow ? 24 : 32,
+                        ),
                       ),
-                      child: Icon(
-                        Icons.search,
-                        color: Colors.white54,
-                        size: isNarrow ? 24 : 32,
+                      filled: true,
+                      fillColor: Colors.white.withValues(alpha: 0.05),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(isNarrow ? 16 : 24),
+                        borderSide: BorderSide.none,
+                      ),
+                      contentPadding: EdgeInsets.symmetric(
+                        vertical: isNarrow ? 16 : 24,
+                        horizontal: 20,
                       ),
                     ),
-                    filled: true,
-                    fillColor: Colors.white.withValues(alpha: 0.05),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(isNarrow ? 16 : 24),
-                      borderSide: BorderSide.none,
-                    ),
-                    contentPadding: EdgeInsets.symmetric(
-                      vertical: isNarrow ? 16 : 24,
-                      horizontal: 20,
-                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-          Expanded(
-            child: searchResultsAsync.map(
-              data: (results) {
-                if (results == null) return const _EmptySearchState();
-                if (results.tracks.isEmpty &&
-                    results.albums.isEmpty &&
-                    results.artists.isEmpty) {
-                  return const Center(
-                    child: Text(
-                      'Ничего не найдено',
-                      style: TextStyle(color: Colors.white38, fontSize: 18),
-                    ),
-                  );
-                }
-                return _SearchResults(results: results);
-              },
-              loading: () => const CommonLoadingWidget(),
-              error: (Object e, StackTrace? _) =>
-                  CommonErrorWidget(error: e.toString()),
+            Expanded(
+              child: searchResultsAsync.map(
+                data: (results) {
+                  if (results == null) return const _EmptySearchState();
+                  if (results.tracks.isEmpty &&
+                      results.albums.isEmpty &&
+                      results.artists.isEmpty) {
+                    return const Center(
+                      child: Text(
+                        'Ничего не найдено',
+                        style: TextStyle(color: Colors.white38, fontSize: 18),
+                      ),
+                    );
+                  }
+                  return _SearchResults(results: results);
+                },
+                loading: () => const CommonLoadingWidget(),
+                error: (Object e, StackTrace? _) =>
+                    CommonErrorWidget(error: e.toString()),
+              ),
             ),
-          ),
-        ],
-      );
-    });
+          ],
+        );
+      },
+    );
   }
 }
 
