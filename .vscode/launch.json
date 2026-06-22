@@ -5,8 +5,8 @@
             "name": "Debug",
             "request": "launch",
             "type": "dart",
-            "program": "${workspaceFolder}/frontend/lib/main.dart",
-            "cwd": "${workspaceFolder}/frontend",
+            "program": "${workspaceFolder}/src/lib/main.dart",
+            "cwd": "${workspaceFolder}/src",
             "preLaunchTask": "generate-code"
         },
         {
@@ -14,8 +14,8 @@
             "request": "launch",
             "type": "dart",
             "flutterMode": "profile",
-            "program": "${workspaceFolder}/frontend/lib/main.dart",
-            "cwd": "${workspaceFolder}/frontend",
+            "program": "${workspaceFolder}/src/lib/main.dart",
+            "cwd": "${workspaceFolder}/src",
             "preLaunchTask": "generate-code"
         },
         {
@@ -23,8 +23,8 @@
             "request": "launch",
             "type": "dart",
             "flutterMode": "release",
-            "program": "${workspaceFolder}/frontend/lib/main.dart",
-            "cwd": "${workspaceFolder}/frontend",
+            "program": "${workspaceFolder}/src/lib/main.dart",
+            "cwd": "${workspaceFolder}/src",
             "preLaunchTask": "generate-code"
         }
     ]

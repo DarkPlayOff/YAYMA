@@ -4,9 +4,9 @@
         {
             "label": "generate-code",
             "type": "shell",
-            "command": "flutter_rust_bridge_codegen generate; dart run build_runner build --delete-conflicting-outputs",
+            "command": "flutter_rust_bridge_codegen generate; dart run build_runner build",
             "options": {
-                "cwd": "${workspaceFolder}/frontend"
+                "cwd": "${workspaceFolder}/src"
             },
             "group": "build",
             "presentation": {
@@ -21,7 +21,7 @@
             "type": "shell",
             "command": "flutter build ${input:platform} --split-debug-info=debug_info",
             "options": {
-                "cwd": "${workspaceFolder}/frontend"
+                "cwd": "${workspaceFolder}/src"
             },
             "group": {
                 "kind": "build",

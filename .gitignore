@@ -1,7 +1,7 @@
 /target
 .env
 .cargo
-frontend/lib/src/rust/frb_generated.web.dart
+src/lib/src/rust/frb_generated.web.dart
 
 # Miscellaneous
 *.class
@@ -25,14 +25,14 @@ migrate_working_dir/
 .metadata
 
 # Flutter/Dart/Pub related
-frontend/**/doc/api/
-frontend/**/ios/Flutter/.last_build_id
-frontend/.dart_tool/
-frontend/.flutter-plugins-dependencies
-frontend/.pub-cache/
-frontend/.pub/
-frontend/build/
-frontend/coverage/
+src/**/doc/api/
+src/**/ios/Flutter/.last_build_id
+src/.dart_tool/
+src/.flutter-plugins-dependencies
+src/.pub-cache/
+src/.pub/
+src/build/
+src/coverage/
 
 # Symbolication related
 app.*.symbols
@@ -46,33 +46,33 @@ app.*.map.json
 /android/app/release
 
 # Flutter Rust Bridge (FRB) Generated Files
-frontend/lib/src/rust/frb_generated*
-frontend/lib/src/rust/api/
-frontend/rust/src/frb_generated*
-frontend/lib/src/rust/api/simple.dart
+src/lib/src/rust/frb_generated*
+src/lib/src/rust/api/
+src/rust/src/frb_generated*
+src/lib/src/rust/api/simple.dart
 
 # Riverpod & Freezed Generated Files
 *.g.dart
 *.freezed.dart
 
 # Others
-frontend/windows/flutter/ephemeral/
-frontend/android/gradlew.bat
-frontend/android/app/src/main/java/io/flutter/plugins/
-frontend/linux/flutter/ephemeral/*
-frontend/macos/Flutter/ephemeral/*
-frontend/rust_builder/cargokit/build_tool/.dart_tool/*
-frontend/android/gradle/wrapper/gradle-wrapper.jar
-frontend/android/gradlew
-frontend/android/local.properties
+src/windows/flutter/ephemeral/
+src/android/gradlew.bat
+src/android/app/src/main/java/io/flutter/plugins/
+src/linux/flutter/ephemeral/*
+src/macos/Flutter/ephemeral/*
+src/android/gradle/wrapper/gradle-wrapper.jar
+src/android/gradlew
+src/android/local.properties
 
-frontend/android/.gradle/
-frontend/android/.kotlin/sessions/
-frontend/android/build/
-frontend/android/app/build/
-frontend/android/app/.cxx/
-frontend/rust_builder/.dart_tool
-frontend/rust_builder/pubspec.lock
-frontend/rust_builder/android/build/
+src/android/.gradle/
+src/android/.kotlin/sessions/
+src/android/build/
+src/android/app/build/
+src/android/app/.cxx/
 .gemini/
-src/frb_generated.rs
+src/rust/src/frb_generated.rs
+src/rust/target/
+src/lib/src/rust/app/context.dart
+src/lib/src/rust/audio/signals.dart
+src/lib/src/rust/lib.dart

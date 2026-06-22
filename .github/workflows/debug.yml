@@ -32,8 +32,8 @@ jobs:
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
-            frontend/target/
-          key: rust-frb-debug-linux-${{ hashFiles('**/Cargo.lock') }}
+            src/target/
+          key: rust-frb-debug-linux-${{ hashFiles('src/rust/Cargo.lock') }}
 
       - name: Install Tools
         run: |
@@ -42,7 +42,7 @@ jobs:
             curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
           fi
           # Install others via binstall
-          cargo binstall -y flutter_rust_bridge_codegen --version 2.12.0
+          cargo binstall -y flutter_rust_bridge_codegen --version 2.13.0-beta.2
           cargo binstall -y cargo-expand
 
       - name: Setup Flutter
@@ -52,7 +52,7 @@ jobs:
           cache: true
 
       - name: Build
-        working-directory: ./frontend
+        working-directory: ./src
         run: |
           flutter config --no-analytics
           flutter pub get
@@ -61,7 +61,7 @@ jobs:
 
       - name: Archive
         run: |
-          tar -czvf linux_debug.tar.gz -C frontend/build/linux/x64/debug/bundle/ .
+          tar -czvf linux_debug.tar.gz -C src/build/linux/x64/debug/bundle/ .
 
       - name: Upload
         uses: actions/upload-artifact@v4
@@ -92,8 +92,8 @@ jobs:
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
-            frontend/target/
-          key: rust-frb-debug-windows-${{ hashFiles('**/Cargo.lock') }}
+            src/target/
+          key: rust-frb-debug-windows-${{ hashFiles('src/rust/Cargo.lock') }}
 
       - name: Install Tools
         run: |
@@ -103,7 +103,7 @@ jobs:
             powershell -ExecutionPolicy RemoteSigned -File install-binstall.ps1 -Force
           }
           # Install others via binstall
-          cargo binstall -y flutter_rust_bridge_codegen --version 2.12.0
+          cargo binstall -y flutter_rust_bridge_codegen --version 2.13.0-beta.2
           cargo binstall -y cargo-expand
         shell: powershell
 
@@ -114,7 +114,7 @@ jobs:
           cache: true
 
       - name: Build
-        working-directory: ./frontend
+        working-directory: ./src
         run: |
           flutter config --no-analytics
           flutter pub get
@@ -124,7 +124,7 @@ jobs:
 
       - name: Archive
         run: |
-          Compress-Archive -Path "frontend\build\windows\x64\runner\Debug\*" -DestinationPath "windows_debug.zip"
+          Compress-Archive -Path "src\build\windows\x64\runner\Debug\*" -DestinationPath "windows_debug.zip"
         shell: powershell
 
       - name: Upload

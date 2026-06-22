@@ -33,15 +33,15 @@ jobs:
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
-            frontend/target/
-          key: rust-frb-2.12.0-linux-${{ hashFiles('**/Cargo.lock') }}
+            src/target/
+          key: rust-frb-2.13.0-beta.2-linux-${{ hashFiles('src/rust/Cargo.lock') }}
 
       - name: Install Tools
         run: |
           if [ ! -f "$HOME/.cargo/bin/cargo-binstall" ]; then
             curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
           fi
-          cargo binstall -y flutter_rust_bridge_codegen --version 2.12.0
+          cargo binstall -y flutter_rust_bridge_codegen --version 2.13.0-beta.2
           cargo binstall -y cargo-expand
 
       - name: Setup Flutter
@@ -51,7 +51,7 @@ jobs:
           cache: true
 
       - name: Build
-        working-directory: ./frontend
+        working-directory: ./src
         run: |
           flutter config --no-analytics
           flutter pub get
@@ -62,7 +62,7 @@ jobs:
         run: |
           VERSION=${GITHUB_REF#refs/tags/v}
           if [ "$VERSION" == "$GITHUB_REF" ]; then VERSION="manual"; fi
-          tar -czvf yayma-linux-${VERSION}.tar.gz -C frontend/build/linux/x64/release/bundle/ .
+          tar -czvf yayma-linux-${VERSION}.tar.gz -C src/build/linux/x64/release/bundle/ .
 
       - name: Upload
         uses: actions/upload-artifact@v4
@@ -93,8 +93,8 @@ jobs:
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
-            frontend/target/
-          key: rust-frb-2.12.0-windows-${{ hashFiles('**/Cargo.lock') }}
+            src/target/
+          key: rust-frb-2.13.0-beta.2-windows-${{ hashFiles('src/rust/Cargo.lock') }}
 
       - name: Install Tools
         run: |
@@ -102,7 +102,7 @@ jobs:
             curl.exe -L --proto "=https" --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.ps1 -o install-binstall.ps1
             powershell -ExecutionPolicy RemoteSigned -File install-binstall.ps1 -Force
           }
-          cargo binstall -y flutter_rust_bridge_codegen --version 2.12.0
+          cargo binstall -y flutter_rust_bridge_codegen --version 2.13.0-beta.2
           cargo binstall -y cargo-expand
         shell: powershell
 
@@ -113,7 +113,7 @@ jobs:
           cache: true
 
       - name: Build
-        working-directory: ./frontend
+        working-directory: ./src
         run: |
           flutter config --no-analytics
           flutter pub get
@@ -125,7 +125,7 @@ jobs:
         run: |
           $VERSION = $env:GITHUB_REF -replace 'refs/tags/v', ''
           if ($VERSION -eq $env:GITHUB_REF) { $VERSION = "manual" }
-          Compress-Archive -Path "frontend\build\windows\x64\runner\Release\*" -DestinationPath "yayma-windows-$VERSION.zip"
+          Compress-Archive -Path "src\build\windows\x64\runner\Release\*" -DestinationPath "yayma-windows-$VERSION.zip"
         shell: powershell
 
       - name: Upload
@@ -165,15 +165,15 @@ jobs:
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
-            frontend/target/
-          key: rust-frb-2.12.0-android-${{ hashFiles('**/Cargo.lock') }}
+            src/target/
+          key: rust-frb-2.13.0-beta.2-android-${{ hashFiles('src/rust/Cargo.lock') }}
 
       - name: Install Tools
         run: |
           if [ ! -f "$HOME/.cargo/bin/cargo-binstall" ]; then
             curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
           fi
-          cargo binstall -y flutter_rust_bridge_codegen --version 2.12.0
+          cargo binstall -y flutter_rust_bridge_codegen --version 2.13.0-beta.2
           cargo binstall -y cargo-expand
 
       - name: Setup Flutter
@@ -183,7 +183,7 @@ jobs:
           cache: true
 
       - name: Build
-        working-directory: ./frontend
+        working-directory: ./src
         run: |
           flutter config --no-analytics
           flutter pub get
@@ -195,7 +195,7 @@ jobs:
           VERSION=${GITHUB_REF#refs/tags/v}
           if [ "$VERSION" == "$GITHUB_REF" ]; then VERSION="manual"; fi
           mkdir -p android_artifacts
-          for apk in frontend/build/app/outputs/flutter-apk/app-*-release.apk; do
+          for apk in src/build/app/outputs/flutter-apk/app-*-release.apk; do
             abi=$(basename "$apk" | sed -E 's/app-(.*)-release\.apk/\1/')
             cp "$apk" "android_artifacts/yayma-android-${abi}-${VERSION}.apk"
           done
