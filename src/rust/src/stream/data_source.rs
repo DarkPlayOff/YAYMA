@@ -14,7 +14,7 @@ use super::buffer::BufferState;
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
-const PREFETCH_SIZE: usize = 1024 * 1024;
+const DEFAULT_PREFETCH_SIZE: usize = 1024 * 1024;
 const MIN_INITIAL_DATA: usize = 128 * 1024;
 const MAX_ATTEMPTS: usize = 30; // Fewer attempts but longer wait
 
@@ -36,6 +36,7 @@ pub struct StreamingDataSource {
     fetch_rx: Receiver<()>,
     task_handle: Option<tokio::task::JoinHandle<()>>,
     buffering_signal: Option<Signal<bool>>,
+    prefetch_size: usize,
 }
 
 impl StreamingDataSource {
@@ -44,10 +45,12 @@ impl StreamingDataSource {
         url: String,
         progress: Arc<TrackProgress>,
         buffering_signal: Option<Signal<bool>>,
+        duration_ms: Option<u64>,
     ) -> Result<Self> {
         let progress_generation = progress.get_generation();
 
-        let range_header = format!("bytes=0-{}", PREFETCH_SIZE - 1);
+        // 1. Fetch first chunk to get total content size
+        let range_header = format!("bytes=0-{}", DEFAULT_PREFETCH_SIZE - 1);
         let resp = client
             .get(&url)
             .header("Range", range_header)
@@ -77,9 +80,38 @@ impl StreamingDataSource {
 
         progress.set_total_bytes(total);
 
+        // 2. Calculate dynamic buffer sizes based on bit rate
+        // We target: 
+        // - BUFFER_SIZE = 30 seconds of audio
+        // - PREFETCH_TRIGGER = 15 seconds of audio
+        // - PREFETCH_SIZE = 10 seconds of audio
+        let (buffer_size, prefetch_trigger, prefetch_size) = if let Some(dur_ms) = duration_ms && dur_ms > 0 {
+            let bytes_per_ms = total as f64 / dur_ms as f64;
+            let buf_size = (30_000.0 * bytes_per_ms) as usize;
+            let trigger = (15_000.0 * bytes_per_ms) as usize;
+            let fetch = (10_000.0 * bytes_per_ms) as usize;
+
+            // Clamping to reasonable bounds:
+            // buffer_size: min 4MB, max 32MB
+            // prefetch_trigger: min 256KB, max 4MB
+            // prefetch_size: min 512KB, max 4MB
+            (
+                buf_size.clamp(4 * 1024 * 1024, 32 * 1024 * 1024),
+                trigger.clamp(256 * 1024, 4 * 1024 * 1024),
+                fetch.clamp(512 * 1024, 4 * 1024 * 1024),
+            )
+        } else {
+            // Default constants if duration is missing
+            (
+                8 * 1024 * 1024,
+                256 * 1024,
+                1024 * 1024,
+            )
+        };
+
         let initial_data = resp.bytes().await?;
 
-        let buffer = Arc::new(Mutex::new(BufferState::new(total)));
+        let buffer = Arc::new(Mutex::new(BufferState::new(total, buffer_size, prefetch_trigger)));
         {
             let mut b = buffer.lock();
             b.append(initial_data, 0);
@@ -124,6 +156,7 @@ impl StreamingDataSource {
             fetch_rx: rx_res,
             task_handle: Some(task_handle),
             buffering_signal,
+            prefetch_size,
         };
 
         src.wait_for(0, MIN_INITIAL_DATA)?;
@@ -265,7 +298,7 @@ impl StreamingDataSource {
             buf.clear(pos);
         }
 
-        let size = PREFETCH_SIZE
+        let size = self.prefetch_size
             .max(MIN_INITIAL_DATA)
             .min((self.total_bytes.saturating_sub(pos)) as usize) as u64;
         if size > 0 {
@@ -282,7 +315,7 @@ impl StreamingDataSource {
             let buf = self.buffer.lock();
             if buf.should_prefetch(pos) {
                 let start = buf.end_pos();
-                let size = PREFETCH_SIZE.min((self.total_bytes.saturating_sub(start)) as usize);
+                let size = self.prefetch_size.min((self.total_bytes.saturating_sub(start)) as usize);
                 (size > 0, start, size)
             } else {
                 (false, 0, 0)

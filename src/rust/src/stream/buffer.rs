@@ -1,9 +1,6 @@
 use bytes::Bytes;
 use std::collections::VecDeque;
 
-pub(crate) const BUFFER_SIZE: usize = 8 * 1024 * 1024;
-pub(crate) const PREFETCH_TRIGGER: usize = 256 * 1024;
-
 #[derive(Debug)]
 pub struct BufferState {
     data: VecDeque<Bytes>,
@@ -14,10 +11,12 @@ pub struct BufferState {
     max_buffered_from_start: u64,
     buffering_base: u64,
     current_bytes_len: usize,
+    buffer_size: usize,
+    prefetch_trigger: usize,
 }
 
 impl BufferState {
-    pub fn new(total_bytes: u64) -> Self {
+    pub fn new(total_bytes: u64, buffer_size: usize, prefetch_trigger: usize) -> Self {
         Self {
             data: VecDeque::new(),
             start_pos: 0,
@@ -27,6 +26,8 @@ impl BufferState {
             max_buffered_from_start: 0,
             buffering_base: 0,
             current_bytes_len: 0,
+            buffer_size,
+            prefetch_trigger,
         }
     }
 
@@ -97,7 +98,7 @@ impl BufferState {
             }
         }
 
-        let overflow = (self.current_bytes_len + new.len()).saturating_sub(BUFFER_SIZE);
+        let overflow = (self.current_bytes_len + new.len()).saturating_sub(self.buffer_size);
         if overflow > 0 {
             let mut remaining_to_drop = overflow;
             while remaining_to_drop > 0 {
@@ -150,10 +151,14 @@ impl BufferState {
     }
 
     pub fn discard_before(&mut self, pos: u64) {
-        if pos <= self.start_pos {
+        // Keep 256 KB of history to prevent immediate network re-fetches for tiny backwards reads
+        let keep_history = 256 * 1024;
+        let safe_pos = pos.saturating_sub(keep_history);
+
+        if safe_pos <= self.start_pos {
             return;
         }
-        let drop_amount = ((pos - self.start_pos) as usize).min(self.current_bytes_len);
+        let drop_amount = ((safe_pos - self.start_pos) as usize).min(self.current_bytes_len);
         if drop_amount == 0 {
             return;
         }
@@ -191,7 +196,7 @@ impl BufferState {
     }
 
     pub fn should_prefetch(&self, pos: u64) -> bool {
-        !self.eof && self.pending.is_none() && self.available_from(pos) < PREFETCH_TRIGGER
+        !self.eof && self.pending.is_none() && self.available_from(pos) < self.prefetch_trigger
     }
 
     pub fn mark_pending(&mut self, start: u64, end: u64) {

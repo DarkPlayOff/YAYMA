@@ -91,10 +91,17 @@ impl StreamManager {
         let codec_clone = codec.clone();
 
         let client = self.http_client.clone();
+        let duration_ms = track.duration.map(|d| d.as_millis() as u64);
         let data_source =
-            stream::StreamingDataSource::new(client, url, Arc::clone(&progress), buffering_signal)
-                .await
-                .map_err(|e| Box::<dyn std::error::Error + Send + Sync>::from(e.to_string()))?;
+            stream::StreamingDataSource::new(
+                client, 
+                url, 
+                Arc::clone(&progress), 
+                buffering_signal,
+                duration_ms,
+            )
+            .await
+            .map_err(|e| Box::<dyn std::error::Error + Send + Sync>::from(e.to_string()))?;
 
         let session = tokio::task::spawn_blocking(move || {
             stream::create_streaming_session(data_source, codec_clone, progress_clone)
