@@ -215,8 +215,7 @@ final FutureSignal<List<SimpleTrackDto>> queueTracksSignal = computedAsync(
 
     // Depend on key queue parameters to re-trigger when queue changes
     final _ = state.queueCount;
-    final _ = state.queueIndex;
-    final _ = state.currentTrack?.id;
+    final _ = state.isShuffled;
 
     return rust.getQueue(ctx: ctx);
   },
@@ -274,7 +273,7 @@ final FutureSignal<ColorScheme?> colorSchemeSignal = computedAsync(() async {
 }, options: const AsyncSignalOptions(name: 'colorSchemeSignal'));
 
 // Store last successful color scheme to prevent flickering during track changes
-final FlutterSignal<ColorScheme?> _persistentColorScheme = signal<ColorScheme?>(
+final FlutterSignal<ColorScheme?> persistentColorSchemeSignal = signal<ColorScheme?>(
   null,
 );
 
@@ -284,15 +283,15 @@ final EffectCleanup _persistentColorSchemeEffect = effect(() {
   final scheme = colorSchemeSignal().value;
 
   if (url == null) {
-    _persistentColorScheme.value = null;
+    persistentColorSchemeSignal.value = null;
   } else if (scheme != null) {
-    _persistentColorScheme.value = scheme;
+    persistentColorSchemeSignal.value = scheme;
   }
 });
 
 // Accent color
 final FlutterComputed<Color> accentColorSignal = computed(
-  () => _persistentColorScheme()?.primary ?? Colors.deepOrange,
+  () => persistentColorSchemeSignal()?.primary ?? Colors.deepOrange,
   options: const ComputedOptions(name: 'accentColorSignal'),
 );
 
@@ -300,7 +299,7 @@ final FlutterComputed<Color> accentColorSignal = computed(
 final FlutterComputed<Color> playerBarColorSignal = computed(
   () =>
       Color.lerp(
-        _persistentColorScheme()?.surfaceContainerHighest,
+        persistentColorSchemeSignal()?.surfaceContainerHighest,
         Colors.black,
         0.4,
       ) ??

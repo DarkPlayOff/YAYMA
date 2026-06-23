@@ -93,8 +93,6 @@ class _HomeCoverWidgetState extends State<HomeCoverWidget> {
                             imageUrl: meta.coverUrl,
                             width: size,
                             height: size,
-                            cacheWidth: size.toInt(),
-                            cacheHeight: size.toInt(),
                             errorWidget: const CoverErrorPlaceholder(),
                           )
                         : const CoverErrorPlaceholder(),
@@ -441,8 +439,6 @@ class _CarouselCard extends StatelessWidget {
                   imageUrl: track.coverUrl,
                   width: size,
                   height: size,
-                  cacheWidth: size.toInt(),
-                  cacheHeight: size.toInt(),
                   errorWidget: const CoverErrorPlaceholder(),
                 )
               : const CoverErrorPlaceholder(),
