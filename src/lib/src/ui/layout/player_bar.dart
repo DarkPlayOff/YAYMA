@@ -6,6 +6,7 @@ import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/providers/navigation_provider.dart';
 import 'package:yayma/src/providers/playback_provider.dart';
 import 'package:yayma/src/rust/api/models.dart';
+import 'package:yayma/src/ui/layout/mobile_mini_player.dart';
 import 'package:yayma/src/ui/widgets/common_ui.dart';
 import 'package:yayma/src/ui/widgets/quality_selector.dart';
 import 'package:yayma/src/ui/widgets/rust_cached_image.dart';
@@ -40,9 +41,11 @@ class PlayerBar extends StatelessWidget {
         return LayoutBuilder(
           builder: (context, constraints) {
             final width = constraints.maxWidth;
-            final accentColor = colorScheme.primary;
-            final isNarrow = width < 600;
+            if (width < 600) {
+              return const MobileMiniPlayer();
+            }
 
+            final accentColor = colorScheme.primary;
             double coverSize = 75;
             double volumeWidth = 120;
 
@@ -61,16 +64,9 @@ class PlayerBar extends StatelessWidget {
 
             return AnimatedContainer(
               duration: const Duration(milliseconds: 600),
-              height: isNarrow ? 80 : 100,
-              padding: EdgeInsets.symmetric(
-                horizontal: isNarrow ? 16 : 24,
-              ),
-              margin: EdgeInsets.fromLTRB(
-                isNarrow ? 16 : 16,
-                0,
-                isNarrow ? 16 : 16,
-                isNarrow ? 8 : 16,
-              ),
+              height: 100,
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
               decoration: BoxDecoration(
                 color: barColor.withValues(alpha: alpha),
                 borderRadius: BorderRadius.circular(24),
@@ -82,28 +78,21 @@ class PlayerBar extends StatelessWidget {
                   filter: ui.ImageFilter.blur(sigmaX: blur, sigmaY: blur),
                   child: Row(
                     children: [
-                      if (isNarrow) ...[
-                        Expanded(
-                          child: _TrackInfo(coverSize: coverSize),
+                      Expanded(
+                        flex: 3,
+                        child: _TrackInfo(coverSize: coverSize),
+                      ),
+                      Expanded(
+                        flex: 4,
+                        child: _PlayerControls(accentColor: accentColor),
+                      ),
+                      Expanded(
+                        flex: 3,
+                        child: _VolumeAndQuality(
+                          accentColor: accentColor,
+                          volumeWidth: volumeWidth,
                         ),
-                        const _PlayPauseButton(),
-                      ] else ...[
-                        Expanded(
-                          flex: 3,
-                          child: _TrackInfo(coverSize: coverSize),
-                        ),
-                        Expanded(
-                          flex: 4,
-                          child: _PlayerControls(accentColor: accentColor),
-                        ),
-                        Expanded(
-                          flex: 3,
-                          child: _VolumeAndQuality(
-                            accentColor: accentColor,
-                            volumeWidth: volumeWidth,
-                          ),
-                        ),
-                      ],
+                      ),
                     ],
                   ),
                 ),
@@ -420,28 +409,6 @@ class _VolumeAndQuality extends StatelessWidget {
           ],
         ],
       ),
-    );
-  }
-}
-
-class _PlayPauseButton extends StatelessWidget {
-  const _PlayPauseButton();
-
-  @override
-  Widget build(BuildContext context) {
-    return SignalBuilder(
-      builder: (context) {
-        final isPlaying = isPlayingSignal();
-        return IconButton(
-          iconSize: 48,
-          icon: Icon(
-            isPlaying
-                ? Icons.pause_circle_filled_rounded
-                : Icons.play_circle_filled_rounded,
-          ),
-          onPressed: PlaybackController.togglePlay,
-        );
-      },
     );
   }
 }
