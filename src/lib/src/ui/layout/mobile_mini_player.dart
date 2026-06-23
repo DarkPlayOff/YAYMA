@@ -36,7 +36,7 @@ class _MobileMiniPlayerState extends State<MobileMiniPlayer> {
     final screenWidth = MediaQuery.sizeOf(context).width;
     final defaultWidth = screenWidth - 32;
     const minWidth = 80.0;
-    
+
     final collapseLeftOffset = minWidth - defaultWidth;
     final collapseRightOffset = defaultWidth - minWidth;
     final velocity = details.primaryVelocity ?? 0;
@@ -82,17 +82,20 @@ class _MobileMiniPlayerState extends State<MobileMiniPlayer> {
   Widget _buildContentTransition(Widget child, Animation<double> animation) {
     final meta = trackMetadataSignal();
     final isIncoming = child.key == ValueKey(meta.id);
-    
+
     final slideOffset = _isNext ? const Offset(1, 0) : const Offset(-1, 0);
 
     return SlideTransition(
-      position: Tween<Offset>(
-        begin: isIncoming ? slideOffset : -slideOffset,
-        end: Offset.zero,
-      ).animate(CurvedAnimation(
-        parent: animation,
-        curve: Curves.easeOutCubic,
-      )),
+      position:
+          Tween<Offset>(
+            begin: isIncoming ? slideOffset : -slideOffset,
+            end: Offset.zero,
+          ).animate(
+            CurvedAnimation(
+              parent: animation,
+              curve: Curves.easeOutCubic,
+            ),
+          ),
       child: FadeTransition(
         opacity: animation,
         child: child,
@@ -126,7 +129,10 @@ class _MobileMiniPlayerState extends State<MobileMiniPlayer> {
         final defaultWidth = screenWidth - 32;
 
         final slideTranslation = _dragOffset > 0 ? _dragOffset : 0.0;
-        final slideWidth = (defaultWidth - _dragOffset.abs()).clamp(80.0, defaultWidth);
+        final slideWidth = (defaultWidth - _dragOffset.abs()).clamp(
+          80.0,
+          defaultWidth,
+        );
 
         final contentOpacity = (1.0 - _dragOffset.abs() / 150).clamp(0.0, 1.0);
         final buttonOpacity = (1.0 - _dragOffset.abs() / 100).clamp(0.0, 1.0);
@@ -300,10 +306,10 @@ class _MobileCover extends StatelessWidget {
                       ),
                     )
                   : Container(
-                        width: coverSize,
-                        height: coverSize,
-                        color: Colors.white10,
-                      ),
+                      width: coverSize,
+                      height: coverSize,
+                      color: Colors.white10,
+                    ),
             ),
           ),
         );
@@ -406,7 +412,9 @@ class _MiniProgressBarState extends State<_MiniProgressBar> {
 
   Future<void> _finalizeSeek(double durationMs) async {
     if (_dragValueMs != null) {
-      await PlaybackController.seekTo(Duration(milliseconds: _dragValueMs!.toInt()));
+      await PlaybackController.seekTo(
+        Duration(milliseconds: _dragValueMs!.toInt()),
+      );
       if (mounted) {
         setState(() {
           _dragValueMs = null;
@@ -423,10 +431,12 @@ class _MiniProgressBarState extends State<_MiniProgressBar> {
         final progress = trackProgressSignal();
         final duration = progress.durationMs;
         final position = progress.positionMs;
-        
+
         final currentPosition = _dragValueMs ?? position;
-        final ratio = duration > 0 ? (currentPosition / duration).clamp(0.0, 1.0) : 0.0;
-        
+        final ratio = duration > 0
+            ? (currentPosition / duration).clamp(0.0, 1.0)
+            : 0.0;
+
         final theme = Theme.of(context);
         final colorScheme = theme.colorScheme;
         final accentColor = colorScheme.primary;
@@ -487,13 +497,19 @@ class _MiniProgressBarState extends State<_MiniProgressBar> {
               if (_dragValueMs != null && _dragProgressBarX != null)
                 Positioned(
                   top: -44,
-                  left: (_dragProgressBarX! - 25).clamp(8.0, widget.width - 58.0),
+                  left: (_dragProgressBarX! - 25).clamp(
+                    8.0,
+                    widget.width - 58.0,
+                  ),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(8),
                     child: BackdropFilter(
                       filter: ui.ImageFilter.blur(sigmaX: blur, sigmaY: blur),
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
                         decoration: BoxDecoration(
                           color: barColor.withValues(alpha: alpha),
                           borderRadius: BorderRadius.circular(8),

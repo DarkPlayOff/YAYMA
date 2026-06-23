@@ -28,7 +28,6 @@ class HomeCoverWidget extends StatefulWidget {
 }
 
 class _HomeCoverWidgetState extends State<HomeCoverWidget> {
-
   @override
   Widget build(BuildContext context) {
     return SignalBuilder(
@@ -52,10 +51,13 @@ class _HomeCoverWidgetState extends State<HomeCoverWidget> {
         }
 
         return MouseRegion(
-          cursor: meta.albumId != null ? SystemMouseCursors.click : SystemMouseCursors.basic,
+          cursor: meta.albumId != null
+              ? SystemMouseCursors.click
+              : SystemMouseCursors.basic,
           child: GestureDetector(
             onTap: () {
-              if (meta.albumId != null) navigateTo(AppSection.album, meta.albumId);
+              if (meta.albumId != null)
+                navigateTo(AppSection.album, meta.albumId);
             },
             child: AnimatedScale(
               scale: scale,
@@ -75,7 +77,10 @@ class _HomeCoverWidgetState extends State<HomeCoverWidget> {
                     return FadeTransition(
                       opacity: animation,
                       child: ScaleTransition(
-                        scale: Tween<double>(begin: 0.9, end: 1).animate(animation),
+                        scale: Tween<double>(
+                          begin: 0.9,
+                          end: 1,
+                        ).animate(animation),
                         child: child,
                       ),
                     );
@@ -113,14 +118,17 @@ class _AndroidCarousel extends StatefulWidget {
   State<_AndroidCarousel> createState() => _AndroidCarouselState();
 }
 
-class _AndroidCarouselState extends State<_AndroidCarousel> with SingleTickerProviderStateMixin {
+class _AndroidCarouselState extends State<_AndroidCarousel>
+    with SingleTickerProviderStateMixin {
   late AnimationController _pageController;
   int _targetPage = 0;
   double _dragOffset = 0;
   bool _isDragging = false;
-  
+
   EffectCleanup? _cleanup;
-  late final FlutterSignal<bool> _visualPlaying = signal<bool>(isPlayingSignal.value);
+  late final FlutterSignal<bool> _visualPlaying = signal<bool>(
+    isPlayingSignal.value,
+  );
   Timer? _bufferingTimer;
   EffectCleanup? _cleanupPlayback;
 
@@ -141,16 +149,16 @@ class _AndroidCarouselState extends State<_AndroidCarousel> with SingleTickerPro
       final queueIndex = state.queueIndex;
       final queue = queueTracksSignal.value.value ?? const [];
       if (queue.isEmpty) return;
-      
+
       if (!_isDragging) {
         final currentMod = _targetPage % queue.length;
         var diff = queueIndex - currentMod;
-        
+
         if (diff > queue.length / 2) diff -= queue.length;
         if (diff < -queue.length / 2) diff += queue.length;
-        
+
         final newTarget = _targetPage + diff;
-        
+
         if (_targetPage != newTarget) {
           _targetPage = newTarget;
           if (diff.abs() == 1) {
@@ -197,11 +205,13 @@ class _AndroidCarouselState extends State<_AndroidCarousel> with SingleTickerPro
   }
 
   void _animateToPage(double page) {
-    unawaited(_pageController.animateTo(
-      page,
-      duration: const Duration(milliseconds: 400),
-      curve: Curves.easeInOutCubic,
-    ));
+    unawaited(
+      _pageController.animateTo(
+        page,
+        duration: const Duration(milliseconds: 400),
+        curve: Curves.easeInOutCubic,
+      ),
+    );
   }
 
   void _handleDragStart(DragStartDetails details) {
@@ -213,62 +223,65 @@ class _AndroidCarouselState extends State<_AndroidCarousel> with SingleTickerPro
   void _handleDragUpdate(DragUpdateDetails details) {
     if (!_isDragging) return;
     _dragOffset += details.primaryDelta ?? 0;
-    
+
     final queue = queueTracksSignal.value.value ?? const [];
     if (queue.isEmpty) return;
-    
+
     final state = playerStateSignal.value;
     final isRepeatAll = state?.repeatMode == RepeatModeDto.all;
-    
+
     final pageDelta = -(_dragOffset / (widget.size * 0.59));
     final clampedDelta = pageDelta.clamp(-1.0, 1.0);
     _dragOffset = -clampedDelta * (widget.size * 0.59);
-    
+
     var rawPage = _targetPage.toDouble() + clampedDelta;
-    
+
     if (!isRepeatAll) {
       final currentIndex = _targetPage % queue.length;
       final minPage = _targetPage - currentIndex;
       final maxPage = _targetPage + (queue.length - 1 - currentIndex);
       rawPage = rawPage.clamp(minPage.toDouble(), maxPage.toDouble());
     }
-    
+
     _pageController.value = rawPage;
   }
 
   void _handleDragEnd(DragEndDetails details) {
     if (!_isDragging) return;
     _isDragging = false;
-    
+
     final queue = queueTracksSignal.value.value ?? const [];
     if (queue.isEmpty) return;
-    
+
     final state = playerStateSignal.value;
     final isRepeatAll = state?.repeatMode == RepeatModeDto.all;
-    
+
     final velocity = details.primaryVelocity ?? 0.0;
     var nextPage = _pageController.value.roundToDouble();
-    
+
     if (velocity < -300) {
       nextPage = (_pageController.value + 0.5).floorToDouble() + 1;
     } else if (velocity > 300) {
       nextPage = (_pageController.value - 0.5).ceilToDouble() - 1;
     }
-    
-    nextPage = nextPage.clamp(_targetPage.toDouble() - 1.0, _targetPage.toDouble() + 1.0);
-    
+
+    nextPage = nextPage.clamp(
+      _targetPage.toDouble() - 1.0,
+      _targetPage.toDouble() + 1.0,
+    );
+
     if (!isRepeatAll) {
       final currentIndex = _targetPage % queue.length;
       final minPage = _targetPage - currentIndex;
       final maxPage = _targetPage + (queue.length - 1 - currentIndex);
       nextPage = nextPage.clamp(minPage.toDouble(), maxPage.toDouble());
     }
-    
+
     final diff = (nextPage - _targetPage).toInt();
     _targetPage = nextPage.toInt();
-    
+
     _animateToPage(nextPage);
-    
+
     if (diff > 0) {
       for (var i = 0; i < diff; i++) {
         unawaited(PlaybackController.next());
@@ -299,10 +312,10 @@ class _AndroidCarouselState extends State<_AndroidCarousel> with SingleTickerPro
             final page = _pageController.value;
             final state = playerStateSignal.value;
             final isRepeatAll = state?.repeatMode == RepeatModeDto.all;
-            
+
             final minIndex = (page - 1).floor();
             final maxIndex = (page + 1).ceil();
-            
+
             final visibleIndices = <int>[];
             for (var i = minIndex; i <= maxIndex; i++) {
               if (!isRepeatAll) {
@@ -313,27 +326,28 @@ class _AndroidCarouselState extends State<_AndroidCarousel> with SingleTickerPro
               }
               visibleIndices.add(i);
             }
-            
+
             visibleIndices.sort((a, b) {
               final distA = (page - a).abs();
               final distB = (page - b).abs();
               return distB.compareTo(distA);
             });
-            
+
             return Stack(
               clipBehavior: Clip.none,
               alignment: Alignment.center,
               children: visibleIndices.map((index) {
-                final qIndex = ((index % queue.length) + queue.length) % queue.length;
+                final qIndex =
+                    ((index % queue.length) + queue.length) % queue.length;
                 final track = queue[qIndex];
                 final diff = (page - index).clamp(-1.0, 1.0);
-                
+
                 final isCenter = diff.abs() < 0.2;
                 final itemScale = 1.0 - (0.28 * diff.abs());
                 final opacity = 1.0 - (0.65 * diff.abs());
-                
+
                 final offset = (index - page) * 0.59 * widget.size;
-                
+
                 return Positioned(
                   left: offset,
                   width: widget.size,
@@ -342,8 +356,9 @@ class _AndroidCarouselState extends State<_AndroidCarousel> with SingleTickerPro
                     builder: (context) {
                       final isPlaying = _visualPlaying();
                       final centerScale = isPlaying ? 1.0 : 0.92;
-                      final activeScale = centerScale + (1.0 - centerScale) * diff.abs();
-                      
+                      final activeScale =
+                          centerScale + (1.0 - centerScale) * diff.abs();
+
                       return Transform.scale(
                         scale: itemScale,
                         child: AnimatedScale(
@@ -373,12 +388,15 @@ class _AndroidCarouselState extends State<_AndroidCarousel> with SingleTickerPro
                                   }
                                 }
                               },
-                              child: _CarouselCard(track: track, size: widget.size),
+                              child: _CarouselCard(
+                                track: track,
+                                size: widget.size,
+                              ),
                             ),
                           ),
                         ),
                       );
-                    }
+                    },
                   ),
                 );
               }).toList(),

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -87,6 +88,157 @@ class _CommonTrackTileState extends State<CommonTrackTile> {
               horizontal: context.horizontalPadding,
               vertical: isNarrow ? 4 : 8,
             );
+
+        Widget buildContextMenu() {
+          return SignalBuilder(
+            builder: (watchContext) {
+              final playlists = playlistsSignal.value;
+              return AppContextMenu<String>(
+                onOpen: () => _isMenuOpen.value = true,
+                onClose: () {
+                  _isMenuOpen.value = false;
+                  _isHovered.value = false;
+                },
+                onSelected: (value) async {
+                  if (!mounted) return;
+                  _isHovered.value = false;
+
+                  if (value.startsWith('add_to_')) {
+                    final kindStr = value.substring(7);
+                    final kind = int.tryParse(kindStr);
+                    if (kind != null) {
+                      final success = await addTrackToPlaylistAction(
+                        kind,
+                        widget.trackId,
+                        widget.albumId,
+                      );
+                      if (success) {
+                        showAppSuccess(
+                          'Добавлено в плейлист',
+                        );
+                      } else {
+                        showAppError(
+                          'Ошибка при добавлении',
+                        );
+                      }
+                    }
+                    return;
+                  }
+
+                  switch (value) {
+                    case 'go_to_album':
+                      if (widget.albumId != null) {
+                        navigateTo(
+                          AppSection.album,
+                          widget.albumId,
+                        );
+                      }
+                    case 'lyrics':
+                      LyricsReaderDialog.show(
+                        context,
+                        widget.trackId,
+                        widget.title,
+                      );
+                    case 'wave':
+                      unawaited(
+                        PlaybackController.startTrackWave(
+                          widget.trackId,
+                          widget.title,
+                        ),
+                      );
+                    case 'about':
+                      TrackDetailsDialog.show(
+                        context,
+                        widget.trackId,
+                      );
+                    case 'copy_link':
+                      final link = widget.albumId != null
+                          ? 'https://music.yandex.ru/album/${widget.albumId}/track/${widget.trackId}'
+                          : 'https://music.yandex.ru/track/${widget.trackId}';
+                      await Clipboard.setData(
+                        ClipboardData(text: link),
+                      );
+                      showAppSuccess(
+                        'Ссылка скопирована',
+                      );
+                    case 'download':
+                      showAppSuccess(
+                        'Скачивание началось...',
+                      );
+                      final ctx = appContextSignal.value;
+                      if (ctx != null) {
+                        try {
+                          final path = await rust.downloadTrack(
+                            ctx: ctx,
+                            trackId: widget.trackId,
+                          );
+                          showAppSuccess(
+                            'Трек сохранен: $path',
+                          );
+                        } on Object catch (e) {
+                          showAppError('Ошибка: $e');
+                        }
+                      }
+                  }
+                },
+                items: [
+                  AppContextMenuItem(
+                    label: 'Добавить в плейлист',
+                    icon: Icons.playlist_add_rounded,
+                    subItems: playlists
+                        .map(
+                          (p) => AppContextMenuItem(
+                            value: 'add_to_${p.kind}',
+                            label: p.title,
+                            icon: Icons.library_music_rounded,
+                          ),
+                        )
+                        .toList(),
+                  ),
+                  if (widget.albumId != null)
+                    const AppContextMenuItem(
+                      value: 'go_to_album',
+                      label: 'Перейти к альбому',
+                      icon: Icons.album_rounded,
+                    ),
+                  const AppContextMenuItem(
+                    value: 'lyrics',
+                    label: 'Открыть текст',
+                    icon: Icons.lyrics_rounded,
+                  ),
+                  const AppContextMenuItem(
+                    value: 'copy_link',
+                    label: 'Скопировать ссылку',
+                    icon: Icons.link_rounded,
+                  ),
+                  const AppContextMenuItem(
+                    value: 'wave',
+                    label: 'Моя волна по треку',
+                    icon: Icons.waves_rounded,
+                  ),
+                  const AppContextMenuItem(
+                    value: 'about',
+                    label: 'О треке',
+                    icon: Icons.info_outline_rounded,
+                  ),
+                  const AppContextMenuItem(
+                    value: 'download',
+                    label: 'Скачать',
+                    icon: Icons.download_rounded,
+                  ),
+                ],
+                child: const IconButton(
+                  icon: Icon(
+                    Icons.more_horiz_rounded,
+                    color: Colors.white70,
+                  ),
+                  onPressed: null,
+                  tooltip: 'Действия',
+                ),
+              );
+            },
+          );
+        }
 
         return Material(
           color: Colors.transparent,
@@ -210,162 +362,16 @@ class _CommonTrackTileState extends State<CommonTrackTile> {
                           Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              if (!showHighlighted && widget.trailing != null)
-                                widget.trailing!,
-                              if (showHighlighted) ...[
-                                if (widget.hoverActions != null)
-                                  ...widget.hoverActions!,
-                                SignalBuilder(
-                                  builder: (watchContext) {
-                                    final playlists = playlistsSignal.value;
-                                    return AppContextMenu<String>(
-                                      onOpen: () => _isMenuOpen.value = true,
-                                      onClose: () {
-                                        _isMenuOpen.value = false;
-                                        _isHovered.value = false;
-                                      },
-                                      onSelected: (value) async {
-                                        if (!mounted) return;
-                                        _isHovered.value = false;
-
-                                        if (value.startsWith('add_to_')) {
-                                          final kindStr = value.substring(7);
-                                          final kind = int.tryParse(kindStr);
-                                          if (kind != null) {
-                                            final success =
-                                                await addTrackToPlaylistAction(
-                                                  kind,
-                                                  widget.trackId,
-                                                  widget.albumId,
-                                                );
-                                            if (success) {
-                                              showAppSuccess(
-                                                'Добавлено в плейлист',
-                                              );
-                                            } else {
-                                              showAppError(
-                                                'Ошибка при добавлении',
-                                              );
-                                            }
-                                          }
-                                          return;
-                                        }
-
-                                        switch (value) {
-                                          case 'go_to_album':
-                                            if (widget.albumId != null) {
-                                              navigateTo(
-                                                AppSection.album,
-                                                widget.albumId,
-                                              );
-                                            }
-                                          case 'lyrics':
-                                            LyricsReaderDialog.show(
-                                              context,
-                                              widget.trackId,
-                                              widget.title,
-                                            );
-                                          case 'wave':
-                                            unawaited(
-                                              PlaybackController.startTrackWave(
-                                                widget.trackId,
-                                                widget.title,
-                                              ),
-                                            );
-                                          case 'about':
-                                            TrackDetailsDialog.show(
-                                              context,
-                                              widget.trackId,
-                                            );
-                                          case 'copy_link':
-                                            final link = widget.albumId != null
-                                                ? 'https://music.yandex.ru/album/${widget.albumId}/track/${widget.trackId}'
-                                                : 'https://music.yandex.ru/track/${widget.trackId}';
-                                            await Clipboard.setData(
-                                              ClipboardData(text: link),
-                                            );
-                                            showAppSuccess(
-                                              'Ссылка скопирована',
-                                            );
-                                          case 'download':
-                                            showAppSuccess(
-                                              'Скачивание началось...',
-                                            );
-                                            final ctx = appContextSignal.value;
-                                            if (ctx != null) {
-                                              try {
-                                                final path = await rust
-                                                    .downloadTrack(
-                                                      ctx: ctx,
-                                                      trackId: widget.trackId,
-                                                    );
-                                                showAppSuccess(
-                                                  'Трек сохранен: $path',
-                                                );
-                                              } on Object catch (e) {
-                                                showAppError('Ошибка: $e');
-                                              }
-                                            }
-                                        }
-                                      },
-                                      items: [
-                                        AppContextMenuItem(
-                                          label: 'Добавить в плейлист',
-                                          icon: Icons.playlist_add_rounded,
-                                          subItems: playlists
-                                              .map(
-                                                (p) => AppContextMenuItem(
-                                                  value: 'add_to_${p.kind}',
-                                                  label: p.title,
-                                                  icon: Icons
-                                                      .library_music_rounded,
-                                                ),
-                                              )
-                                              .toList(),
-                                        ),
-                                        if (widget.albumId != null)
-                                          const AppContextMenuItem(
-                                            value: 'go_to_album',
-                                            label: 'Перейти к альбому',
-                                            icon: Icons.album_rounded,
-                                          ),
-                                        const AppContextMenuItem(
-                                          value: 'lyrics',
-                                          label: 'Открыть текст',
-                                          icon: Icons.lyrics_rounded,
-                                        ),
-                                        const AppContextMenuItem(
-                                          value: 'copy_link',
-                                          label: 'Скопировать ссылку',
-                                          icon: Icons.link_rounded,
-                                        ),
-                                        const AppContextMenuItem(
-                                          value: 'wave',
-                                          label: 'Моя волна по треку',
-                                          icon: Icons.waves_rounded,
-                                        ),
-                                        const AppContextMenuItem(
-                                          value: 'about',
-                                          label: 'О треке',
-                                          icon: Icons.info_outline_rounded,
-                                        ),
-                                        const AppContextMenuItem(
-                                          value: 'download',
-                                          label: 'Скачать',
-                                          icon: Icons.download_rounded,
-                                        ),
-                                      ],
-                                      child: const IconButton(
-                                        icon: Icon(
-                                          Icons.more_horiz_rounded,
-                                          color: Colors.white70,
-                                        ),
-                                        onPressed: null,
-                                        tooltip: 'Действия',
-                                      ),
-                                    );
-                                  },
-                                ),
+                              if (Platform.isAndroid)
+                                buildContextMenu()
+                              else ...[
+                                if (!showHighlighted && widget.trailing != null)
+                                  widget.trailing!,
+                                if (showHighlighted) ...[
+                                  if (widget.hoverActions != null)
+                                    ...widget.hoverActions!,
+                                  buildContextMenu(),
+                                ],
                               ],
                             ],
                           ),

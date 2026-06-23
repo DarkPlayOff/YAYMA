@@ -91,9 +91,6 @@ final EffectCleanup _wifiLockEffect = effect(() {
   }
 });
 
-
-
-
 // Signal for current track ID only
 final FlutterComputed<String?> currentTrackIdSignal = computed(
   () => playerStateSignal.value?.currentTrack?.id,
@@ -210,18 +207,21 @@ final FutureSignal<Uri?> localCoverUriSignal = computedAsync(() async {
 }, options: const AsyncSignalOptions(name: 'localCoverUriSignal'));
 
 // Signal for queue tracks
-final FutureSignal<List<SimpleTrackDto>> queueTracksSignal = computedAsync(() async {
-  final ctx = appContextSignal();
-  final state = playerStateSignal();
-  if (ctx == null || state == null) return const [];
+final FutureSignal<List<SimpleTrackDto>> queueTracksSignal = computedAsync(
+  () async {
+    final ctx = appContextSignal();
+    final state = playerStateSignal();
+    if (ctx == null || state == null) return const [];
 
-  // Depend on key queue parameters to re-trigger when queue changes
-  final _ = state.queueCount;
-  final _ = state.queueIndex;
-  final _ = state.currentTrack?.id;
+    // Depend on key queue parameters to re-trigger when queue changes
+    final _ = state.queueCount;
+    final _ = state.queueIndex;
+    final _ = state.currentTrack?.id;
 
-  return rust.getQueue(ctx: ctx);
-}, options: const AsyncSignalOptions(name: 'queueTracksSignal'));
+    return rust.getQueue(ctx: ctx);
+  },
+  options: const AsyncSignalOptions(name: 'queueTracksSignal'),
+);
 
 // Signal for previous track in queue
 final FlutterComputed<SimpleTrackDto?> previousTrackSignal = computed(() {

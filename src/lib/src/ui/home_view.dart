@@ -168,8 +168,6 @@ class HomeView extends StatelessWidget {
   }
 }
 
-
-
 class _HomeTrackHeader extends StatefulWidget {
   final bool small;
   final bool isNarrow;
