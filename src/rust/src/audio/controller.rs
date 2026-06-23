@@ -64,13 +64,27 @@ impl AudioController {
         let progress = self.track_progress.clone();
         let signals = self.signals.clone();
         let event_tx = self.event_tx.clone();
+        let controller = self.clone();
 
         tokio::spawn(async move {
+            let mut buffering_duration = std::time::Duration::ZERO;
+            let check_interval = std::time::Duration::from_millis(125);
+
             loop {
-                tokio::time::sleep(std::time::Duration::from_millis(125)).await;
+                tokio::time::sleep(check_interval).await;
 
                 let is_playing = signals.is_playing.get();
                 let is_buffering = signals.is_buffering.get();
+
+                if is_playing && is_buffering {
+                    buffering_duration += check_interval;
+                    if buffering_duration >= std::time::Duration::from_secs(15) {
+                        controller.pause().await;
+                        buffering_duration = std::time::Duration::ZERO;
+                    }
+                } else {
+                    buffering_duration = std::time::Duration::ZERO;
+                }
 
                 if is_playing && !is_buffering {
                     if engine.is_empty() {
