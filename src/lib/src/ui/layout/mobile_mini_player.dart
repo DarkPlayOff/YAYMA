@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/providers/navigation_provider.dart';
 import 'package:yayma/src/providers/playback_provider.dart';
+import 'package:yayma/src/ui/widgets/common_ui.dart';
 import 'package:yayma/src/ui/widgets/rust_cached_image.dart';
 import 'package:yayma/src/ui/widgets/track_elements.dart';
 
@@ -191,6 +192,17 @@ class _MobileMiniPlayerState extends State<MobileMiniPlayer> {
                                   child: const _PlayPauseButton(),
                                 ),
                               ),
+                              Positioned(
+                                bottom: 0,
+                                left: 0,
+                                right: 0,
+                                child: AnimatedOpacity(
+                                  duration: _animationDuration,
+                                  curve: Curves.easeOutCubic,
+                                  opacity: buttonOpacity,
+                                  child: _MiniProgressBar(width: slideWidth),
+                                ),
+                              ),
                             ],
                           ),
                         ),
@@ -288,10 +300,10 @@ class _MobileCover extends StatelessWidget {
                       ),
                     )
                   : Container(
-                      width: coverSize,
-                      height: coverSize,
-                      color: Colors.white10,
-                    ),
+                        width: coverSize,
+                        height: coverSize,
+                        color: Colors.white10,
+                      ),
             ),
           ),
         );
@@ -366,6 +378,150 @@ class _PlayPauseButton extends StatelessWidget {
                 : Icons.play_circle_filled_rounded,
           ),
           onPressed: PlaybackController.togglePlay,
+        );
+      },
+    );
+  }
+}
+
+class _MiniProgressBar extends StatefulWidget {
+  final double width;
+  const _MiniProgressBar({required this.width});
+
+  @override
+  State<_MiniProgressBar> createState() => _MiniProgressBarState();
+}
+
+class _MiniProgressBarState extends State<_MiniProgressBar> {
+  double? _dragValueMs;
+  double? _dragProgressBarX;
+
+  void _handleSeek(double localX, double totalWidth, double durationMs) {
+    final ratio = (localX / totalWidth).clamp(0.0, 1.0);
+    setState(() {
+      _dragValueMs = ratio * durationMs;
+      _dragProgressBarX = localX;
+    });
+  }
+
+  Future<void> _finalizeSeek(double durationMs) async {
+    if (_dragValueMs != null) {
+      await PlaybackController.seekTo(Duration(milliseconds: _dragValueMs!.toInt()));
+      if (mounted) {
+        setState(() {
+          _dragValueMs = null;
+          _dragProgressBarX = null;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SignalBuilder(
+      builder: (context) {
+        final progress = trackProgressSignal();
+        final duration = progress.durationMs;
+        final position = progress.positionMs;
+        
+        final currentPosition = _dragValueMs ?? position;
+        final ratio = duration > 0 ? (currentPosition / duration).clamp(0.0, 1.0) : 0.0;
+        
+        final theme = Theme.of(context);
+        final colorScheme = theme.colorScheme;
+        final accentColor = colorScheme.primary;
+
+        final navState = currentNavStateSignal.value;
+        final showLyrics = showLyricsSignal.value;
+        final isHome = navState.section == AppSection.home;
+
+        final useLyricsStyle = isHome && showLyrics;
+        final alpha = useLyricsStyle ? 0.5 : 0.9;
+        final blur = useLyricsStyle ? 0.0 : 3.0;
+
+        final barColor =
+            Color.lerp(
+              colorScheme.surfaceContainerHighest,
+              Colors.black,
+              0.4,
+            ) ??
+            colorScheme.surface;
+
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onHorizontalDragStart: (details) {
+            _handleSeek(details.localPosition.dx, widget.width, duration);
+          },
+          onHorizontalDragUpdate: (details) {
+            _handleSeek(details.localPosition.dx, widget.width, duration);
+          },
+          onHorizontalDragEnd: (details) async {
+            await _finalizeSeek(duration);
+          },
+          onTapDown: (details) async {
+            _handleSeek(details.localPosition.dx, widget.width, duration);
+            await _finalizeSeek(duration);
+          },
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Opacity(
+                opacity: 0.8,
+                child: Container(
+                  height: 16,
+                  alignment: Alignment.bottomCenter,
+                  child: Container(
+                    height: 3,
+                    color: Colors.white.withValues(alpha: 0.08),
+                    alignment: Alignment.centerLeft,
+                    child: FractionallySizedBox(
+                      widthFactor: ratio,
+                      child: Container(
+                        height: 3,
+                        color: accentColor,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              if (_dragValueMs != null && _dragProgressBarX != null)
+                Positioned(
+                  top: -44,
+                  left: (_dragProgressBarX! - 25).clamp(8.0, widget.width - 58.0),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: BackdropFilter(
+                      filter: ui.ImageFilter.blur(sigmaX: blur, sigmaY: blur),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: barColor.withValues(alpha: alpha),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.08),
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.15),
+                              blurRadius: 4,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: Text(
+                          formatDuration(_dragValueMs!.toInt()),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
         );
       },
     );
