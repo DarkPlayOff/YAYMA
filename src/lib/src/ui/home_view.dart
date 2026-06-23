@@ -8,10 +8,10 @@ import 'package:yayma/src/providers/playback_provider.dart';
 import 'package:yayma/src/rust/api/models.dart';
 import 'package:yayma/src/ui/wave_view.dart';
 import 'package:yayma/src/ui/widgets/common_ui.dart';
+import 'package:yayma/src/ui/widgets/home_cover_widget.dart';
 import 'package:yayma/src/ui/widgets/lyrics_view.dart';
 import 'package:yayma/src/ui/widgets/quality_selector.dart';
 import 'package:yayma/src/ui/widgets/responsive.dart';
-import 'package:yayma/src/ui/widgets/rust_cached_image.dart';
 import 'package:yayma/src/ui/widgets/track_elements.dart';
 
 class HomeView extends StatelessWidget {
@@ -70,7 +70,7 @@ class HomeView extends StatelessWidget {
                                     crossAxisAlignment:
                                         CrossAxisAlignment.start,
                                     children: [
-                                      const Center(child: _HomeCoverWidget()),
+                                      const Center(child: HomeCoverWidget()),
                                       SizedBox(height: verticalSpacing * 1.5),
                                       _HomeTrackHeader(
                                         small: height < 750,
@@ -102,7 +102,7 @@ class HomeView extends StatelessWidget {
                                           MainAxisAlignment.center,
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        const _HomeCoverWidget(),
+                                        const HomeCoverWidget(),
                                         SizedBox(height: verticalSpacing),
                                         _HomeTrackHeader(small: height < 750),
                                         SizedBox(height: trackHeaderSpacing),
@@ -168,118 +168,7 @@ class HomeView extends StatelessWidget {
   }
 }
 
-class _HomeCoverWidget extends StatefulWidget {
-  const _HomeCoverWidget();
 
-  @override
-  State<_HomeCoverWidget> createState() => _HomeCoverWidgetState();
-}
-
-class _HomeCoverWidgetState extends State<_HomeCoverWidget> {
-  final ValueNotifier<bool> _isCoverHovered = ValueNotifier(false);
-
-  @override
-  void dispose() {
-    _isCoverHovered.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return SignalBuilder(
-      builder: (context) {
-        final meta = trackMetadataSignal();
-        final showLyrics = showLyricsSignal.value;
-        final isPlaying = isPlayingSignal();
-        final height = MediaQuery.of(context).size.height;
-
-        final width = MediaQuery.of(context).size.width;
-        final isNarrow = width < 600;
-
-        var size = showLyrics ? 280.0 : 360.0;
-        if (height < 800) size = showLyrics ? 240.0 : 300.0;
-        if (height < 650) size = showLyrics ? 180.0 : 220.0;
-
-        if (isNarrow && !showLyrics) {
-          size = width * 0.75; // Reduced from width - 48
-        }
-
-        // Animation scale for play/pause
-        final scale = isPlaying ? 1.0 : 0.92;
-
-        return MouseRegion(
-          onEnter: (_) => _isCoverHovered.value = true,
-          onExit: (_) => _isCoverHovered.value = false,
-          cursor: meta.albumId != null
-              ? SystemMouseCursors.click
-              : SystemMouseCursors.basic,
-          child: GestureDetector(
-            onTap: () {
-              if (meta.albumId != null) {
-                navigateTo(AppSection.album, meta.albumId);
-              }
-            },
-            child: ValueListenableBuilder<bool>(
-              valueListenable: _isCoverHovered,
-              builder: (context, hovered, _) {
-                return AnimatedScale(
-                  scale: scale,
-                  duration: const Duration(milliseconds: 350),
-                  curve: Curves.easeInOutCubic,
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 350),
-                    curve: Curves.easeInOutCubic,
-                    width: size,
-                    height: size,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(32),
-                    ),
-                    child: AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 500),
-                      transitionBuilder: (child, animation) {
-                        return FadeTransition(
-                          opacity: animation,
-                          child: ScaleTransition(
-                            scale: Tween<double>(
-                              begin: 0.9,
-                              end: 1,
-                            ).animate(animation),
-                            child: child,
-                          ),
-                        );
-                      },
-                      child: ClipRRect(
-                        key: ValueKey(meta.coverUrl),
-                        borderRadius: BorderRadius.circular(32),
-                        child: meta.coverUrl != null
-                            ? RustCachedImage(
-                                imageUrl: meta.coverUrl,
-                                errorWidget: const _CoverErrorPlaceholder(),
-                              )
-                            : const _CoverErrorPlaceholder(),
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-        );
-      },
-    );
-  }
-}
-
-class _CoverErrorPlaceholder extends StatelessWidget {
-  const _CoverErrorPlaceholder();
-  @override
-  Widget build(BuildContext context) {
-    return const ColoredBox(
-      color: Colors.white10,
-      child: Icon(Icons.music_note, size: 120, color: Colors.white24),
-    );
-  }
-}
 
 class _HomeTrackHeader extends StatefulWidget {
   final bool small;

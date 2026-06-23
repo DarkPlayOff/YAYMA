@@ -15,6 +15,8 @@ class RustCachedImage extends StatefulWidget {
   final Widget? errorWidget;
   final Color? color;
   final BlendMode? colorBlendMode;
+  final int? cacheWidth;
+  final int? cacheHeight;
 
   const RustCachedImage({
     required this.imageUrl,
@@ -27,6 +29,8 @@ class RustCachedImage extends StatefulWidget {
     this.errorWidget,
     this.color,
     this.colorBlendMode,
+    this.cacheWidth,
+    this.cacheHeight,
   });
 
   @override
@@ -121,6 +125,8 @@ class _RustCachedImageState extends State<RustCachedImage> {
         fit: widget.fit,
         color: widget.color,
         colorBlendMode: widget.colorBlendMode,
+        cacheWidth: widget.cacheWidth,
+        cacheHeight: widget.cacheHeight,
         frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
           if (wasSynchronouslyLoaded) {
             return child;

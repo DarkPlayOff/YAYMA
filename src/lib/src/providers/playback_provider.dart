@@ -201,6 +201,54 @@ final FutureSignal<Uri?> localCoverUriSignal = computedAsync(() async {
   return Uri.parse(url); // Fallback to remote if not yet cached
 }, options: const AsyncSignalOptions(name: 'localCoverUriSignal'));
 
+// Signal for queue tracks
+final FutureSignal<List<SimpleTrackDto>> queueTracksSignal = computedAsync(() async {
+  final ctx = appContextSignal();
+  final state = playerStateSignal();
+  if (ctx == null || state == null) return const [];
+
+  // Depend on key queue parameters to re-trigger when queue changes
+  final _ = state.queueCount;
+  final _ = state.queueIndex;
+  final _ = state.currentTrack?.id;
+
+  return rust.getQueue(ctx: ctx);
+}, options: const AsyncSignalOptions(name: 'queueTracksSignal'));
+
+// Signal for previous track in queue
+final FlutterComputed<SimpleTrackDto?> previousTrackSignal = computed(() {
+  final state = playerStateSignal.value;
+  final queue = queueTracksSignal().value ?? const [];
+  if (state == null || queue.isEmpty) return null;
+
+  final index = state.queueIndex;
+  final repeatMode = state.repeatMode;
+
+  if (index > 0 && index < queue.length) {
+    return queue[index - 1];
+  } else if (index == 0 && repeatMode == RepeatModeDto.all) {
+    return queue.last;
+  }
+  return null;
+}, options: const ComputedOptions(name: 'previousTrackSignal'));
+
+// Signal for next track in queue
+final FlutterComputed<SimpleTrackDto?> nextTrackSignal = computed(() {
+  final state = playerStateSignal.value;
+  final queue = queueTracksSignal().value ?? const [];
+  if (state == null || queue.isEmpty) return null;
+
+  final index = state.queueIndex;
+  final repeatMode = state.repeatMode;
+
+  if (index + 1 < queue.length) {
+    return queue[index + 1];
+  } else if (index + 1 == queue.length && repeatMode == RepeatModeDto.all) {
+    return queue.first;
+  }
+  return null;
+}, options: const ComputedOptions(name: 'nextTrackSignal'));
+
 // Color scheme generated from cover image
 final FutureSignal<ColorScheme?> colorSchemeSignal = computedAsync(() async {
   final url = currentCoverUrlSignal();

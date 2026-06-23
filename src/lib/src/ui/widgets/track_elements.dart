@@ -202,6 +202,8 @@ class TrackCover extends StatelessWidget {
             imageUrl: url,
             width: size,
             height: size,
+            cacheWidth: size.toInt(),
+            cacheHeight: size.toInt(),
             errorWidget: _CoverPlaceholder(isCircle: isCircle, size: size),
           )
         : _CoverPlaceholder(isCircle: isCircle, size: size);

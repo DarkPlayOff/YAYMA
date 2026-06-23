@@ -29,14 +29,16 @@ class BlurredCoverBackground extends SignalWidget {
                       clipBehavior: Clip.hardEdge,
                       child: ImageFiltered(
                         imageFilter: ui.ImageFilter.blur(
-                          sigmaX: 25,
-                          sigmaY: 25,
+                          sigmaX: 5,
+                          sigmaY: 5,
                           tileMode: ui.TileMode.mirror,
                         ),
                         child: RustCachedImage(
                           imageUrl: coverUrl,
-                          width: 250,
-                          height: 250,
+                          width: 60,
+                          height: 60,
+                          cacheWidth: 60,
+                          cacheHeight: 60,
                           color: Colors.black.withValues(alpha: 0.3),
                           colorBlendMode: BlendMode.darken,
                           errorWidget: Container(color: Colors.black),

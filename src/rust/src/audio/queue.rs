@@ -29,7 +29,7 @@ const FETCH_BATCH_SIZE: usize = 10;
 const URL_PREFETCH_WINDOW: usize = 5;
 const URL_PREFETCH_BATCH_SIZE: usize = 3;
 const FETCH_THRESHOLD: usize = 2;
-const WAVE_VISIBLE_TRACKS: usize = 1;
+const WAVE_VISIBLE_TRACKS: usize = 3;
 
 #[derive(Debug, Clone)]
 pub enum WaveTrackOutcome {
