@@ -51,6 +51,7 @@ impl StreamController {
 
 pub struct BufferedStreamingSource {
     rx: CbReceiver<SampleMessage>,
+    recycle_tx: CbSender<Vec<f32>>,
     pending_samples: Vec<f32>,
     sample_pos: usize,
     pending_generation: u64,
@@ -63,8 +64,16 @@ pub struct BufferedStreamingSource {
 }
 
 impl BufferedStreamingSource {
+    fn recycle_current(&mut self) {
+        if self.pending_samples.capacity() > 0 {
+            let old = std::mem::replace(&mut self.pending_samples, Vec::new());
+            let _ = self.recycle_tx.try_send(old);
+        }
+    }
+
     fn new(
         rx: CbReceiver<SampleMessage>,
+        recycle_tx: CbSender<Vec<f32>>,
         generation: Arc<AtomicU64>,
         sample_rate: u32,
         channels: u16,
@@ -74,6 +83,7 @@ impl BufferedStreamingSource {
         let pending_generation = generation.load(Ordering::SeqCst);
         Self {
             rx,
+            recycle_tx,
             pending_samples: Vec::new(),
             sample_pos: 0,
             pending_generation,
@@ -94,7 +104,7 @@ impl Iterator for BufferedStreamingSource {
         let current_generation = self.generation.load(Ordering::Acquire);
         if self.pending_generation != current_generation {
             self.pending_generation = current_generation;
-            self.pending_samples.clear();
+            self.recycle_current();
             self.sample_pos = 0;
             self.finished_generation = None;
         }
@@ -109,8 +119,10 @@ impl Iterator for BufferedStreamingSource {
             match self.rx.try_recv() {
                 Ok(SampleMessage::Samples(samples, msg_gen)) => {
                     if msg_gen != current_generation {
+                        let _ = self.recycle_tx.try_send(samples);
                         return self.next();
                     }
+                    self.recycle_current();
                     self.pending_samples = samples;
                     self.sample_pos = 0;
                 }
@@ -152,7 +164,7 @@ impl Source for BufferedStreamingSource {
     }
 
     fn try_seek(&mut self, pos: Duration) -> std::result::Result<(), rodio::source::SeekError> {
-        self.pending_samples.clear();
+        self.recycle_current();
         self.sample_pos = 0;
         self.finished_generation = None;
         self.controller.seek(pos);
@@ -190,6 +202,7 @@ pub fn create_streaming_session(
     }
 
     let (sample_tx, sample_rx) = cb_bounded::<SampleMessage>(SAMPLE_CHANNEL_CAPACITY);
+    let (recycle_tx, recycle_rx) = cb_bounded::<Vec<f32>>(SAMPLE_CHANNEL_CAPACITY + 2);
     let (cmd_tx, cmd_rx) = crossbeam_channel::unbounded::<DecoderCommand>();
     let generation = Arc::new(AtomicU64::new(0));
     let controller = StreamController {
@@ -207,6 +220,7 @@ pub fn create_streaming_session(
                 decoder,
                 sample_tx,
                 cmd_rx,
+                recycle_rx,
                 decoder_generation,
                 progress_clone,
                 progress_generation,
@@ -216,6 +230,7 @@ pub fn create_streaming_session(
 
     let source = BufferedStreamingSource::new(
         sample_rx,
+        recycle_tx,
         generation,
         sample_rate.get(),
         channels.get(),
@@ -234,12 +249,22 @@ fn run_decode_loop(
     mut decoder: Decoder<StreamingDataSource>,
     sample_tx: CbSender<SampleMessage>,
     cmd_rx: CbReceiver<DecoderCommand>,
+    recycle_rx: CbReceiver<Vec<f32>>,
     generation: Arc<AtomicU64>,
     progress: Arc<TrackProgress>,
     progress_generation: u64,
 ) {
     let mut active_generation = generation.load(Ordering::Acquire);
-    let mut chunk = Vec::with_capacity(PCM_CHUNK_SAMPLES);
+    
+    let get_buffer = || match recycle_rx.try_recv() {
+        Ok(mut v) => {
+            v.clear();
+            v
+        }
+        Err(_) => Vec::with_capacity(PCM_CHUNK_SAMPLES),
+    };
+
+    let mut chunk = get_buffer();
     let mut pending_chunk: Option<Vec<f32>> = None;
 
     loop {
@@ -254,7 +279,10 @@ fn run_decode_loop(
                         progress.set_current_position(position);
                     }
                     active_generation = new_gen;
-                    pending_chunk = None;
+                    if let Some(mut pc) = pending_chunk.take() {
+                        pc.clear();
+                        chunk = pc;
+                    }
                 }
                 Ok(DecoderCommand::Stop) => return,
                 Err(crossbeam_channel::TryRecvError::Empty) => break,
@@ -277,6 +305,10 @@ fn run_decode_loop(
                                 progress.set_current_position(position);
                             }
                             active_generation = new_gen;
+                            if let Some(mut pc) = pending_chunk.take() {
+                                pc.clear();
+                                chunk = pc;
+                            }
                             continue;
                         }
                         Ok(DecoderCommand::Stop) => return,
@@ -307,14 +339,18 @@ fn run_decode_loop(
                         progress.set_current_position(position);
                     }
                     active_generation = new_gen;
-                    pending_chunk = None;
+                    if let Some(mut pc) = pending_chunk.take() {
+                        pc.clear();
+                        chunk = pc;
+                    }
                     continue;
                 }
                 Ok(DecoderCommand::Stop) | Err(_) => return,
             }
         }
 
-        let send_chunk = std::mem::replace(&mut chunk, Vec::with_capacity(PCM_CHUNK_SAMPLES));
+        let new_chunk = get_buffer();
+        let send_chunk = std::mem::replace(&mut chunk, new_chunk);
 
         match sample_tx.try_send(SampleMessage::Samples(send_chunk, active_generation)) {
             Ok(()) => {}

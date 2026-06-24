@@ -392,20 +392,11 @@ pub async fn liked_tracks_stream(
                 if let Some(m) = metadata_map.remove(&id) {
                     // Apply search filter if active
                     if let Some(ref q) = query_lower {
-                        let title = m.title.to_lowercase();
-                        let artists = m
-                            .artists
-                            .iter()
-                            .map(|a| a.name.to_lowercase())
-                            .collect::<Vec<_>>()
-                            .join(" ");
-                        let album = m
-                            .album
-                            .as_ref()
-                            .map(|a| a.to_lowercase())
-                            .unwrap_or_default();
+                        let matches = m.title.to_lowercase().contains(q)
+                            || m.artists.iter().any(|a| a.name.to_lowercase().contains(q))
+                            || m.album.as_ref().is_some_and(|a| a.to_lowercase().contains(q));
 
-                        if !title.contains(q) && !artists.contains(q) && !album.contains(q) {
+                        if !matches {
                             continue;
                         }
                     }

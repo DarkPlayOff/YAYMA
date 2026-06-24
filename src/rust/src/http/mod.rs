@@ -267,28 +267,33 @@ impl ApiService {
         plural_key: &str,
         singular_key: &str,
     ) -> Vec<T> {
-        Self::liked_items(body, plural_key)
-            .into_iter()
-            .filter_map(|item| {
-                let value = if item.get(singular_key).is_some() {
-                    item[singular_key].clone()
-                } else {
-                    item
-                };
-                serde_json::from_value::<T>(value).ok()
-            })
-            .collect()
+        if let Some(items) = Self::liked_items(body, plural_key) {
+            items
+                .iter()
+                .filter_map(|item| {
+                    let value = if item.get(singular_key).is_some() {
+                        &item[singular_key]
+                    } else {
+                        item
+                    };
+                    serde_json::from_value::<T>(value.clone()).ok()
+                })
+                .collect()
+        } else {
+            vec![]
+        }
     }
 
-    fn liked_items(body: &serde_json::Value, plural_key: &str) -> Vec<serde_json::Value> {
+    fn liked_items<'a>(
+        body: &'a serde_json::Value,
+        plural_key: &str,
+    ) -> Option<&'a Vec<serde_json::Value>> {
         let result = &body["result"];
         body.as_array()
             .or_else(|| result.as_array())
             .or_else(|| result[plural_key].as_array())
             .or_else(|| result["likes"].as_array())
             .or_else(|| result["library"][plural_key].as_array())
-            .cloned()
-            .unwrap_or_default()
     }
 
     pub async fn fetch_playlist(&self, kind: u32) -> Result<Playlist> {
