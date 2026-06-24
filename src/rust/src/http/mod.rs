@@ -136,7 +136,6 @@ impl ApiService {
         let http_client = reqwest::Client::builder()
             .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 YandexMusic/5.95.0")
             .default_headers(headers.clone())
-            .pool_max_idle_per_host(0)
             .brotli(true)
             .build()?;
 

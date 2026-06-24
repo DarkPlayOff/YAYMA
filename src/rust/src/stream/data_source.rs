@@ -14,7 +14,6 @@ use super::buffer::BufferState;
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
-const DEFAULT_PREFETCH_SIZE: usize = 1024 * 1024;
 const MIN_INITIAL_DATA: usize = 128 * 1024;
 const MAX_ATTEMPTS: usize = 30; // Fewer attempts but longer wait
 
@@ -50,7 +49,7 @@ impl StreamingDataSource {
         let progress_generation = progress.get_generation();
 
         // 1. Fetch first chunk to get total content size
-        let range_header = format!("bytes=0-{}", DEFAULT_PREFETCH_SIZE - 1);
+        let range_header = format!("bytes=0-{}", MIN_INITIAL_DATA - 1);
         let resp = client
             .get(&url)
             .header("Range", range_header)
