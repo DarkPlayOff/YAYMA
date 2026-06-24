@@ -8,9 +8,13 @@ pub mod events;
 pub mod fx;
 pub mod liked;
 pub mod monitor;
+pub mod fetcher;
+pub mod history;
 pub mod playback;
+pub mod prefetcher;
 pub mod progress;
 pub mod queue;
+pub mod shuffle;
 pub mod signals;
 #[cfg(not(any(target_os = "android")))]
 pub mod smtc;
