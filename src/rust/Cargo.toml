@@ -90,24 +90,7 @@ members = ["."]
 
 [workspace.dependencies]
 mimalloc = { version = "*" }
-keyring = "3.6.3"
 
-[target.'cfg(target_os = "linux")'.dependencies.keyring]
-workspace = true
-features = [
-  "linux-native",
-  "linux-native-sync-persistent",
-  "sync-secret-service",
-  "crypto-rust",
-]
-
-[target.'cfg(target_os = "macos")'.dependencies.keyring]
-workspace = true
-features = ["apple-native", "crypto-rust"]
-
-[target.'cfg(target_os = "windows")'.dependencies.keyring]
-workspace = true
-features = ["windows-native", "crypto-rust"]
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(frb_expand)'] }

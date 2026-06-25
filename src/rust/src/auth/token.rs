@@ -1,11 +1,5 @@
-#[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
-use keyring::Entry;
-use std::sync::{Arc, LazyLock};
+use std::sync::Arc;
 use yandex_music::YandexMusicClient;
-
-#[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
-static SERVICE_NAME: LazyLock<String> =
-    LazyLock::new(|| format!("{}_auth", env!("CARGO_PKG_NAME")));
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
@@ -13,77 +7,21 @@ pub struct TokenProvider;
 
 impl TokenProvider {
     pub async fn resolve() -> Option<(String, u64)> {
-        #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
-        {
-            let stored = Self::load_from_keyring().ok()?;
-            let mut parts = stored.split(':');
-            let token = parts.next()?.to_string();
-            let uid = parts.next()?.parse().ok()?;
-            Some((token, uid))
-        }
-        #[cfg(target_os = "android")]
-        {
-            let mut db = crate::storage::db::AppDatabase::init(crate::app::get_data_dir())
-                .await
-                .ok()?;
-            db.load_auth_token().await.ok().flatten()
-        }
-        #[cfg(not(any(
-            target_os = "windows",
-            target_os = "macos",
-            target_os = "linux",
-            target_os = "android"
-        )))]
-        None
+        let mut db = crate::storage::db::AppDatabase::init(crate::app::get_data_dir())
+            .await
+            .ok()?;
+        db.load_auth_token().await.ok().flatten()
     }
 
     pub async fn store(token: &str, user_id: u64) -> Result<()> {
-        #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
-        {
-            let entry = Entry::new(&SERVICE_NAME, "default")?;
-            entry.set_password(&format!("{}:{}", token, user_id))?;
-            Ok(())
-        }
-        #[cfg(target_os = "android")]
-        {
-            let mut db = crate::storage::db::AppDatabase::init(crate::app::get_data_dir()).await?;
-            db.save_auth_token(token, user_id).await?;
-            Ok(())
-        }
-        #[cfg(not(any(
-            target_os = "windows",
-            target_os = "macos",
-            target_os = "linux",
-            target_os = "android"
-        )))]
-        {
-            let _ = (token, user_id);
-            Err("Auth storage not supported on this platform".into())
-        }
-    }
-
-    #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
-    fn load_from_keyring() -> Result<String> {
-        Ok(Entry::new(&SERVICE_NAME, "default")?.get_password()?)
+        let mut db = crate::storage::db::AppDatabase::init(crate::app::get_data_dir()).await?;
+        db.save_auth_token(token, user_id).await?;
+        Ok(())
     }
 
     pub async fn delete() -> Result<()> {
-        #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
-        {
-            Ok(Entry::new(&SERVICE_NAME, "default")?.delete_credential()?)
-        }
-        #[cfg(target_os = "android")]
-        {
-            let mut db = crate::storage::db::AppDatabase::init(crate::app::get_data_dir()).await?;
-            db.delete_auth_token().await?;
-            Ok(())
-        }
-        #[cfg(not(any(
-            target_os = "windows",
-            target_os = "macos",
-            target_os = "linux",
-            target_os = "android"
-        )))]
+        let mut db = crate::storage::db::AppDatabase::init(crate::app::get_data_dir()).await?;
+        db.delete_auth_token().await?;
         Ok(())
     }
 

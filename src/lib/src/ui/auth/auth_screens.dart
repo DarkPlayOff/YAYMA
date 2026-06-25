@@ -639,7 +639,7 @@ class _YandexDeviceLoginDialogState extends State<YandexDeviceLoginDialog> {
         mainAxisSize: MainAxisSize.min,
         children: [
           const Text(
-            'Перейдите на страницу Яндекс и введите код подтверждения:',
+            'Перейдите на страницу ya.ru/device и введите код подтверждения:',
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 16),
           ),
@@ -688,7 +688,7 @@ class _YandexDeviceLoginDialogState extends State<YandexDeviceLoginDialog> {
               ElevatedButton.icon(
                 onPressed: _openBrowser,
                 icon: const Icon(Icons.open_in_browser_rounded),
-                label: const Text('Открыть браузер'),
+                label: const Text('Открыть ссылку'),
               ),
             ],
           ),
@@ -703,7 +703,7 @@ class _YandexDeviceLoginDialogState extends State<YandexDeviceLoginDialog> {
               ),
               SizedBox(width: 12),
               Text(
-                'Ожидание ввода кода на сайте Яндекс...',
+                'Ожидание ввода кода на сайте',
                 style: TextStyle(color: Colors.white54, fontSize: 13),
               ),
             ],
