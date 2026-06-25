@@ -268,6 +268,7 @@ impl AudioController {
                         engine.pause();
                         signals.set_playing(false);
                     } else {
+                        engine.play();
                         signals.set_playing(true);
                     }
 

@@ -313,7 +313,7 @@ impl StreamingDataSource {
             let pos = self.position.load(Ordering::Relaxed);
             let buf = self.buffer.lock();
             if buf.should_prefetch(pos) {
-                let start = buf.end_pos();
+                let start = buf.end_pos(pos);
                 let size = self.prefetch_size.min((self.total_bytes.saturating_sub(start)) as usize);
                 (size > 0, start, size)
             } else {
