@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:webview_all/webview_all.dart';
 import 'package:window_manager/window_manager.dart';
@@ -81,6 +83,15 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
+  void _showDeviceLogin() {
+    unawaited(
+      showDialog<void>(
+        context: context,
+        builder: (context) => const YandexDeviceLoginDialog(),
+      ),
+    );
+  }
+
   void _handleLogin(String val) {
     var token = val.trim();
     try {
@@ -113,6 +124,59 @@ class _LoginScreenState extends State<LoginScreen> {
         final isDesktop =
             Platform.isWindows || Platform.isLinux || Platform.isMacOS;
         final isCustomTitlebar = isDesktop && customTitlebarSignal.value;
+        final showBrowserFirst = Platform.isLinux;
+
+        final webViewButton = showBrowserFirst
+            ? OutlinedButton.icon(
+                onPressed: _showWebView,
+                icon: const Icon(Icons.open_in_new_rounded),
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(double.infinity, 50),
+                ),
+                label: const Text(
+                  'Открыть окно входа',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              )
+            : ElevatedButton.icon(
+                onPressed: _showWebView,
+                icon: const Icon(Icons.open_in_new_rounded),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: theme.colorScheme.primary,
+                  foregroundColor: Colors.black,
+                  minimumSize: const Size(double.infinity, 50),
+                ),
+                label: const Text(
+                  'Открыть окно входа',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              );
+
+        final browserButton = showBrowserFirst
+            ? ElevatedButton.icon(
+                onPressed: _showDeviceLogin,
+                icon: const Icon(Icons.devices_rounded),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: theme.colorScheme.primary,
+                  foregroundColor: Colors.black,
+                  minimumSize: const Size(double.infinity, 50),
+                ),
+                label: const Text(
+                  'Войти через браузер',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              )
+            : OutlinedButton.icon(
+                onPressed: _showDeviceLogin,
+                icon: const Icon(Icons.devices_rounded),
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(double.infinity, 50),
+                ),
+                label: const Text(
+                  'Войти через браузер',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              );
 
         return Scaffold(
           resizeToAvoidBottomInset: false,
@@ -157,21 +221,15 @@ class _LoginScreenState extends State<LoginScreen> {
                               style: TextStyle(color: Colors.white54),
                             ),
                             const SizedBox(height: 32),
-                            ElevatedButton.icon(
-                              onPressed: _showWebView,
-                              icon: const Icon(Icons.open_in_browser_rounded),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Theme.of(
-                                  context,
-                                ).colorScheme.primary,
-                                foregroundColor: Colors.black,
-                                minimumSize: const Size(double.infinity, 56),
-                              ),
-                              label: const Text(
-                                'ОТКРЫТЬ ОКНО ВХОДА',
-                                style: TextStyle(fontWeight: FontWeight.bold),
-                              ),
-                            ),
+                            if (showBrowserFirst) ...[
+                              browserButton,
+                              const SizedBox(height: 12),
+                              webViewButton,
+                            ] else ...[
+                              webViewButton,
+                              const SizedBox(height: 12),
+                              browserButton,
+                            ],
                             const Padding(
                               padding: EdgeInsets.symmetric(vertical: 24),
                               child: Row(
@@ -182,7 +240,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                       horizontal: 16,
                                     ),
                                     child: Text(
-                                      'ИЛИ ВВЕДИТЕ ТОКЕН',
+                                      'Или введите токен',
                                       style: TextStyle(
                                         color: Colors.white24,
                                         fontSize: 12,
@@ -199,6 +257,8 @@ class _LoginScreenState extends State<LoginScreen> {
                                 labelText: 'Ссылка или OAuth токен',
                                 hintText:
                                     'https://music.yandex.ru/#access_token=y0_...',
+                                helperText:
+                                    'Используйте это поле только если хотите ввести готовый OAuth токен вручную.',
                                 border: const OutlineInputBorder(),
                                 suffixIcon: IconButton(
                                   icon: const Icon(Icons.login_rounded),
@@ -373,6 +433,316 @@ class _YandexLoginDialogState extends State<YandexLoginDialog> {
                 ],
               ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class YandexDeviceLoginDialog extends StatefulWidget {
+  const YandexDeviceLoginDialog({super.key});
+
+  @override
+  State<YandexDeviceLoginDialog> createState() =>
+      _YandexDeviceLoginDialogState();
+}
+
+class _YandexDeviceLoginDialogState extends State<YandexDeviceLoginDialog> {
+  String? _userCode;
+  String? _deviceCode;
+  String? _verificationUrl;
+  int _interval = 5;
+  Timer? _timer;
+  bool _isLoading = true;
+  String? _error;
+  bool _isFinalized = false;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_initDeviceFlow());
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _initDeviceFlow() async {
+    final client = HttpClient();
+    try {
+      final request = await client.postUrl(
+        Uri.parse('https://oauth.yandex.ru/device/code'),
+      );
+      request.headers.set('content-type', 'application/x-www-form-urlencoded');
+      request.write('client_id=23cabbbdc6cd418abb4b39c32c41195d');
+      final response = await request.close();
+      final body = await response.transform(utf8.decoder).join();
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(body) as Map<String, dynamic>;
+        setState(() {
+          _userCode = data['user_code'] as String?;
+          _deviceCode = data['device_code'] as String?;
+          _verificationUrl = data['verification_url'] as String?;
+          _interval = (data['interval'] as num?)?.toInt() ?? 5;
+          _isLoading = false;
+        });
+        _startPolling();
+      } else {
+        setState(() {
+          _error = 'Не удалось получить код устройства от Яндекс.';
+          _isLoading = false;
+        });
+      }
+    } on Object catch (e) {
+      setState(() {
+        _error = 'Ошибка сети: $e';
+        _isLoading = false;
+      });
+    } finally {
+      client.close();
+    }
+  }
+
+  void _startPolling() {
+    _timer = Timer.periodic(Duration(seconds: _interval), (timer) {
+      unawaited(_pollToken());
+    });
+  }
+
+  Future<void> _pollToken() async {
+    if (_isFinalized || _deviceCode == null) return;
+
+    final client = HttpClient();
+    try {
+      final request = await client.postUrl(
+        Uri.parse('https://oauth.yandex.ru/token'),
+      );
+      request.headers.set('content-type', 'application/x-www-form-urlencoded');
+      request.write(
+        'grant_type=device_code'
+        '&client_id=23cabbbdc6cd418abb4b39c32c41195d'
+        '&client_secret=53bc75238f0c4d08a118e51fe9203300'
+        '&code=$_deviceCode',
+      );
+      final response = await request.close();
+      final body = await response.transform(utf8.decoder).join();
+      final data = jsonDecode(body) as Map<String, dynamic>;
+
+      if (response.statusCode == 200) {
+        final token = data['access_token'] as String?;
+        if (token != null) {
+          _timer?.cancel();
+          await _handleFoundToken(token);
+        }
+      } else {
+        final error = data['error'] as String?;
+        if (error != 'authorization_pending') {
+          _timer?.cancel();
+          setState(() {
+            _error =
+                data['error_description'] as String? ??
+                'Ошибка авторизации ($error).';
+          });
+        }
+      }
+    } on Object catch (e) {
+      debugPrint('Error polling token: $e');
+    } finally {
+      client.close();
+    }
+  }
+
+  Future<void> _handleFoundToken(String token) async {
+    if (_isFinalized) return;
+    _isFinalized = true;
+    await login(token);
+
+    if (mounted) {
+      Navigator.of(context).pop();
+    }
+  }
+
+  void _openBrowser() {
+    final url = _verificationUrl ?? 'https://ya.ru/device';
+    unawaited(
+      () async {
+        try {
+          if (Platform.isWindows) {
+            await Process.run('cmd', ['/c', 'start', '', url]);
+          } else if (Platform.isMacOS) {
+            await Process.run('open', [url]);
+          } else if (Platform.isLinux) {
+            await Process.run('xdg-open', [url]);
+          }
+        } on Object catch (e) {
+          debugPrint('Error launching browser: $e');
+        }
+      }(),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    Widget content;
+    if (_isLoading) {
+      content = const Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text('Получение кода авторизации...'),
+          ],
+        ),
+      );
+    } else if (_error != null) {
+      content = Center(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.error_outline_rounded,
+                color: Colors.redAccent,
+                size: 48,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                _error!,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.redAccent),
+              ),
+              const SizedBox(height: 24),
+              ElevatedButton(
+                onPressed: () {
+                  setState(() {
+                    _isLoading = true;
+                    _error = null;
+                  });
+                  unawaited(_initDeviceFlow());
+                },
+                child: const Text('Повторить'),
+              ),
+            ],
+          ),
+        ),
+      );
+    } else {
+      content = Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text(
+            'Перейдите на страницу Яндекс и введите код подтверждения:',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 16),
+          ),
+          const SizedBox(height: 24),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surfaceContainerHigh,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: theme.colorScheme.outlineVariant,
+              ),
+            ),
+            child: Text(
+              _userCode ?? '',
+              style: const TextStyle(
+                fontSize: 32,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 4,
+                fontFamily: 'monospace',
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              OutlinedButton.icon(
+                onPressed: () async {
+                  if (_userCode != null) {
+                    await Clipboard.setData(ClipboardData(text: _userCode!));
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Код скопирован в буфер обмена'),
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
+                    }
+                  }
+                },
+                icon: const Icon(Icons.copy_rounded),
+                label: const Text('Копировать код'),
+              ),
+              const SizedBox(width: 16),
+              ElevatedButton.icon(
+                onPressed: _openBrowser,
+                icon: const Icon(Icons.open_in_browser_rounded),
+                label: const Text('Открыть браузер'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          const Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+              SizedBox(width: 12),
+              Text(
+                'Ожидание ввода кода на сайте Яндекс...',
+                style: TextStyle(color: Colors.white54, fontSize: 13),
+              ),
+            ],
+          ),
+        ],
+      );
+    }
+
+    return Dialog(
+      child: Container(
+        width: 500,
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.devices_rounded,
+                  color: theme.colorScheme.primary,
+                  size: 28,
+                ),
+                const SizedBox(width: 12),
+                const Text(
+                  'Вход по коду устройства',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const Spacer(),
+                IconButton(
+                  icon: const Icon(Icons.close_rounded),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ],
+            ),
+            const Divider(height: 32),
+            content,
           ],
         ),
       ),
