@@ -51,7 +51,7 @@ jobs:
           flutter config --no-analytics
           flutter pub get
           flutter_rust_bridge_codegen generate
-          flutter build linux --release --no-pub
+          flutter build linux --release
 
       - name: Archive
         run: |
@@ -108,7 +108,7 @@ jobs:
           flutter config --no-analytics
           flutter pub get
           flutter_rust_bridge_codegen generate
-          flutter build windows --release --no-pub
+          flutter build windows --release
         shell: powershell
 
       - name: Archive
