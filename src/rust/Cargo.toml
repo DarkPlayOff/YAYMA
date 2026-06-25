@@ -36,7 +36,7 @@ rodio = { version = "0.22.2", default-features = false, features = [
 
 yandex-music = "0.6.0"
 chrono = { version = "0.4.44", features = ["serde"] }
-flutter_rust_bridge = { git = "https://github.com/fzyzcjy/flutter_rust_bridge.git", rev = "511b109273a29fb6b8e09e018d3c6e4e36309695" }
+flutter_rust_bridge = { version = "=2.13.0-beta.2" }
 serde = { version = "1.0.228", features = ["derive"] }
 
 # Logging

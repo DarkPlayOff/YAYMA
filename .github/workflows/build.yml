@@ -25,23 +25,18 @@ jobs:
         with:
           components: rust-src
 
-      - name: Cache Rust
-        uses: actions/cache@v4
+      - name: Setup Rust Cache
+        uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            src/target/
-          key: rust-frb-511b109-linux-${{ hashFiles('src/rust/Cargo.lock') }}
+          workspaces: "src/rust -> src/target"
+          key: "6e00177713e85d9e34ffa4f19e3a67d4c93a1854"
 
       - name: Install Tools
         run: |
           if [ ! -f "$HOME/.cargo/bin/cargo-binstall" ]; then
             curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
           fi
-          cargo install flutter_rust_bridge_codegen --git https://github.com/fzyzcjy/flutter_rust_bridge.git --rev 511b109273a29fb6b8e09e018d3c6e4e36309695
+          cargo install flutter_rust_bridge_codegen --git https://github.com/fzyzcjy/flutter_rust_bridge.git --rev 6e00177713e85d9e34ffa4f19e3a67d4c93a1854
           cargo binstall -y cargo-expand
 
       - name: Setup Flutter
@@ -85,16 +80,11 @@ jobs:
         with:
           components: rust-src
 
-      - name: Cache Rust
-        uses: actions/cache@v4
+      - name: Setup Rust Cache
+        uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            src/target/
-          key: rust-frb-511b109-windows-${{ hashFiles('src/rust/Cargo.lock') }}
+          workspaces: "src/rust -> src/target"
+          key: "6e00177713e85d9e34ffa4f19e3a67d4c93a1854"
 
       - name: Install Tools
         run: |
@@ -102,7 +92,7 @@ jobs:
             curl.exe -L --proto "=https" --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.ps1 -o install-binstall.ps1
             powershell -ExecutionPolicy RemoteSigned -File install-binstall.ps1 -Force
           }
-          cargo install flutter_rust_bridge_codegen --git https://github.com/fzyzcjy/flutter_rust_bridge.git --rev 511b109273a29fb6b8e09e018d3c6e4e36309695
+          cargo install flutter_rust_bridge_codegen --git https://github.com/fzyzcjy/flutter_rust_bridge.git --rev 6e00177713e85d9e34ffa4f19e3a67d4c93a1854
           cargo binstall -y cargo-expand
         shell: powershell
 
@@ -157,23 +147,18 @@ jobs:
           targets: aarch64-linux-android, armv7-linux-androideabi, x86_64-linux-android
           components: rust-src
 
-      - name: Cache Rust
-        uses: actions/cache@v4
+      - name: Setup Rust Cache
+        uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            src/target/
-          key: rust-frb-511b109-android-${{ hashFiles('src/rust/Cargo.lock') }}
+          workspaces: "src/rust -> src/target"
+          key: "6e00177713e85d9e34ffa4f19e3a67d4c93a1854"
 
       - name: Install Tools
         run: |
           if [ ! -f "$HOME/.cargo/bin/cargo-binstall" ]; then
             curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
           fi
-          cargo install flutter_rust_bridge_codegen --git https://github.com/fzyzcjy/flutter_rust_bridge.git --rev 511b109273a29fb6b8e09e018d3c6e4e36309695
+          cargo install flutter_rust_bridge_codegen --git https://github.com/fzyzcjy/flutter_rust_bridge.git --rev 6e00177713e85d9e34ffa4f19e3a67d4c93a1854
           cargo binstall -y cargo-expand
 
       - name: Setup Flutter
