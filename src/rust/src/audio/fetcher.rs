@@ -1,8 +1,6 @@
-use crate::audio::events::Event;
 use crate::http::{ApiService, SessionExt};
 use crate::util::reactive::Signal;
 use chrono::Utc;
-use flume::Sender;
 use im::Vector;
 use parking_lot::Mutex;
 use std::sync::Arc;
@@ -43,6 +41,12 @@ impl Clone for FetchState {
             pending_track_ids: self.pending_track_ids.clone(),
             wave_session: self.wave_session.clone(),
         }
+    }
+}
+
+impl Default for FetchState {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -97,7 +101,7 @@ impl FetchState {
         self.wave_session.clone()
     }
 
-    pub fn trigger_playlist_batch(&mut self, api: Arc<ApiService>, event_tx: Option<Sender<Event>>) {
+    pub fn trigger_playlist_batch(&mut self, api: Arc<ApiService>) {
         debug_assert!(!self.is_fetching());
         let count = FETCH_BATCH_SIZE.min(self.pending_track_ids.len());
         let ids: Vec<String> = self.pending_track_ids.drain(0..count).collect();
@@ -109,11 +113,6 @@ impl FetchState {
                         .into_iter()
                         .filter(|t| t.available.unwrap_or(false))
                         .collect();
-                    if !valid.is_empty()
-                        && let Some(tx) = event_tx
-                    {
-                        let _ = tx.send(Event::QueueUpdated);
-                    }
                     (valid, None)
                 }
                 Err(e) => {
@@ -127,7 +126,6 @@ impl FetchState {
     pub fn trigger_wave_batch(
         &mut self,
         api: Arc<ApiService>,
-        event_tx: Option<Sender<Event>>,
         wave_seeds: Vec<String>,
         pending_feedback: Vec<WaveTrackEvent>,
     ) {
@@ -171,11 +169,6 @@ impl FetchState {
                         .iter()
                         .map(|item| item.track.clone())
                         .collect();
-                    if !new_tracks.is_empty()
-                        && let Some(tx) = event_tx
-                    {
-                        let _ = tx.send(Event::QueueUpdated);
-                    }
                     (new_tracks, Some(response))
                 }
                 Err(e) => {
@@ -197,7 +190,6 @@ pub struct WaveExtensionHandles {
     pub queue_length: Signal<usize>,
     pub wave_session: Arc<Mutex<Option<Session>>>,
     pub playback_context: Arc<Mutex<crate::audio::queue::PlaybackContext>>,
-    pub event_tx: Option<Sender<Event>>,
 }
 
 impl WaveExtensionHandles {
@@ -214,16 +206,5 @@ impl WaveExtensionHandles {
         self.queue.update(|q| q.extend(visible));
         self.queue_length
             .set(self.queue.with(|q: &Vector<Track>| q.len()));
-
-        if let Some(tx) = self.event_tx.clone() {
-            let _ = tx.send(Event::QueueUpdated);
-        }
-
-        let hidden: Vec<Track> = additional.into_iter().skip(WAVE_VISIBLE_TRACKS).collect();
-        if !hidden.is_empty()
-            && let Some(tx) = self.event_tx
-        {
-            let _ = tx.send(Event::WaveBuffer(hidden));
-        }
     }
 }

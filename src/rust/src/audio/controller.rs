@@ -272,9 +272,7 @@ impl AudioController {
                         signals.set_playing(true);
                     }
 
-                    if !soft_reload {
-                        let _ = event_tx.send(Event::TrackStarted(track_clone, 0));
-                    }
+
                 }
                 Err(_e) => {
                     signals.set_buffering(false);

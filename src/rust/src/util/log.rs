@@ -16,32 +16,18 @@ pub static LOG_FILE: LazyLock<String> = LazyLock::new(|| format!("{}.log", env!(
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
 pub fn initialize_logging() -> Result<()> {
-    let directory = crate::app::get_data_dir().unwrap_or_else(|| PathBuf::from("."));
-    std::fs::create_dir_all(directory.clone())?;
-    let log_path = directory.join(LOG_FILE.clone());
-    let log_file = std::fs::File::create(log_path)?;
-
     let filter =
         tracing_subscriber::filter::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
             tracing_subscriber::filter::EnvFilter::new(format!("{}=info", env!("CARGO_CRATE_NAME")))
         });
 
-    let file_subscriber = tracing_subscriber::fmt::layer()
-        .with_file(true)
-        .with_line_number(true)
-        .with_writer(log_file)
-        .with_target(false)
-        .with_ansi(false)
-        .with_filter(filter);
-
     // Add logging to the standard Flutter output stream (via flutter_rust_bridge)
     let console_subscriber = tracing_subscriber::fmt::layer()
         .with_writer(std::io::stdout)
         .with_ansi(true)
-        .with_filter(tracing_subscriber::filter::EnvFilter::new("info"));
+        .with_filter(filter);
 
     let _ = tracing_subscriber::registry()
-        .with(file_subscriber)
         .with(console_subscriber)
         .try_init();
 

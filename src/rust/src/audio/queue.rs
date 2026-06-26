@@ -319,7 +319,6 @@ impl QueueManager {
             queue_length: self.signals.raw_queue_length_handle(),
             wave_session: self.fetch.wave_session_arc(),
             playback_context: self.playback_context.clone(),
-            event_tx: self.event_tx.clone(),
         };
 
         tokio::spawn(async move {
@@ -566,7 +565,7 @@ impl QueueManager {
 
         if !self.fetch.pending_track_ids.is_empty() {
             self.fetch
-                .trigger_playlist_batch(self.api.clone(), self.event_tx.clone());
+                .trigger_playlist_batch(self.api.clone());
             return;
         }
 
@@ -575,7 +574,6 @@ impl QueueManager {
             let pending_feedback = std::mem::take(&mut self.wave_feedbacks);
             self.fetch.trigger_wave_batch(
                 self.api.clone(),
-                self.event_tx.clone(),
                 history_seeds,
                 pending_feedback,
             );

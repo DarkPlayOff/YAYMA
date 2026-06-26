@@ -85,17 +85,12 @@ impl AudioSystem {
 
         // Load liked tracks from DB for instant start
         {
-            let db_clone = db.clone();
-            let state_clone = state.clone();
-            let signals_clone = signals.clone();
-            tokio::spawn(async move {
-                let mut db = db_clone.lock().await;
-                if let Ok(ids) = db.load_liked_tracks().await {
-                    let mut state = state_clone.write().await;
-                    state.liked.set_liked_ids(ids);
-                    signals_clone.library_changed.send_replace(());
-                }
-            });
+            let mut db = db.lock().await;
+            if let Ok(ids) = db.load_liked_tracks().await {
+                let mut state = state.write().await;
+                state.liked.set_liked_ids(ids);
+                signals.library_changed.send_replace(());
+            }
         }
 
         #[cfg(not(any(target_os = "android")))]
@@ -616,13 +611,8 @@ impl AudioSystem {
         if let Ok(ids) = api.fetch_liked_ids().await {
             let count = ids.len();
 
-            // Sync with DB
-            let ids_for_db = ids.clone();
-            let db_arc_clone = db_arc.clone();
-            tokio::spawn(async move {
-                let mut db = db_arc_clone.lock().await;
-                let _ = db.save_liked_tracks(&ids_for_db).await;
-            });
+            let mut db = db_arc.lock().await;
+            let _ = db.save_liked_tracks(&ids).await;
 
             {
                 let mut state = state.write().await;

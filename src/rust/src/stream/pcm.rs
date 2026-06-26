@@ -66,7 +66,7 @@ pub struct BufferedStreamingSource {
 impl BufferedStreamingSource {
     fn recycle_current(&mut self) {
         if self.pending_samples.capacity() > 0 {
-            let old = std::mem::replace(&mut self.pending_samples, Vec::new());
+            let old = std::mem::take(&mut self.pending_samples);
             let _ = self.recycle_tx.try_send(old);
         }
     }

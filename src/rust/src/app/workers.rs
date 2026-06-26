@@ -39,7 +39,6 @@ pub fn spawn_event_worker(
                         Event::Error(msg) => {
                             ctx.send_event(crate::api::simple::AppEvent::Error(msg));
                         }
-                        _ => {}
                     }
                 }
                 _ = shutdown_rx.changed() => {
@@ -149,40 +148,35 @@ pub fn spawn_settings_worker(ctx: Arc<AppContext>, mut shutdown_rx: watch::Recei
                 _ = SETTINGS_CHANGED.notified() => {
                     tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
 
-                    let ctx_clone = ctx.clone();
-                    let db_arc = ctx.core.db.clone();
-                    tokio::spawn(async move {
-                        // Extract everything needed out of the non-Send guard
-                        let (eq_bands, eq_enabled, effects, quality) = {
-                            let guard = ctx_clone.audio.effect_handles.read();
-                            let eq = guard.get("eq");
-                            let eq_bands = eq.map(|e| (0..e.param_count()).map(|i| e.get_param(i)).collect::<Vec<_>>());
-                            let eq_enabled = eq.map(|e| e.is_enabled()).unwrap_or(false);
+                    let (eq_bands, eq_enabled, effects, quality) = {
+                        let guard = ctx.audio.effect_handles.read();
+                        let eq = guard.get("eq");
+                        let eq_bands = eq.map(|e| (0..e.param_count()).map(|i| e.get_param(i)).collect::<Vec<_>>());
+                        let eq_enabled = eq.map(|e| e.is_enabled()).unwrap_or(false);
 
-                            let mut effects = Vec::new();
-                            for (id, handle) in guard.iter() {
-                                if matches!(id.as_str(), "eq" | "monitor" | "fade") {
-                                    continue;
-                                }
-                                let params: Vec<_> = (0..handle.param_count()).map(|i| handle.get_param(i)).collect();
-                                effects.push((id.clone(), handle.is_enabled(), params));
+                        let mut effects = Vec::new();
+                        for (id, handle) in guard.iter() {
+                            if matches!(id.as_str(), "eq" | "monitor" | "fade") {
+                                continue;
                             }
-
-                            (eq_bands, eq_enabled, effects, ctx_clone.core.api.get_quality())
-                        };
-
-                        let mut db = db_arc.lock().await;
-
-                        if let Some(bands) = eq_bands {
-                            let _ = db.save_equalizer(eq_enabled, &bands).await;
+                            let params: Vec<_> = (0..handle.param_count()).map(|i| handle.get_param(i)).collect();
+                            effects.push((id.clone(), handle.is_enabled(), params));
                         }
 
-                        let _ = db.save_setting("audio_quality", &quality).await;
+                        (eq_bands, eq_enabled, effects, ctx.core.api.get_quality())
+                    };
 
-                        for (id, enabled, params) in effects {
-                            let _ = db.save_effect(&id, enabled, &params).await;
-                        }
-                    });
+                    let mut db = ctx.core.db.lock().await;
+
+                    if let Some(bands) = eq_bands {
+                        let _ = db.save_equalizer(eq_enabled, &bands).await;
+                    }
+
+                    let _ = db.save_setting("audio_quality", &quality).await;
+
+                    for (id, enabled, params) in effects {
+                        let _ = db.save_effect(&id, enabled, &params).await;
+                    }
                 }
                 _ = shutdown_rx.changed() => {
                     if *shutdown_rx.borrow() { break; }

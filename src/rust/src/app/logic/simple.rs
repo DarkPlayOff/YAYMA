@@ -34,6 +34,19 @@ pub async fn clear_cache(ctx: &AppContext) {
     let _ = cache.clear().await;
 }
 
+static INIT_DB: tokio::sync::OnceCell<Option<tokio::sync::Mutex<crate::storage::db::AppDatabase>>> = tokio::sync::OnceCell::const_new();
+
+async fn get_init_db() -> Option<&'static tokio::sync::Mutex<crate::storage::db::AppDatabase>> {
+    INIT_DB.get_or_init(|| async {
+        crate::storage::db::AppDatabase::init(crate::app::get_data_dir())
+            .await
+            .ok()
+            .map(tokio::sync::Mutex::new)
+    })
+    .await
+    .as_ref()
+}
+
 pub fn is_discord_rpc_enabled(ctx: &AppContext) -> bool {
     ctx.audio.signals.discord_rpc.get()
 }
@@ -50,7 +63,8 @@ pub async fn is_custom_titlebar_enabled(ctx: &AppContext) -> bool {
 }
 
 pub async fn is_custom_titlebar_enabled_init() -> bool {
-    if let Ok(mut db) = crate::storage::db::AppDatabase::init(crate::app::get_data_dir()).await {
+    if let Some(db_mutex) = get_init_db().await {
+        let mut db = db_mutex.lock().await;
         db.load_setting("custom_titlebar").await.unwrap_or(Some(true)).unwrap_or(true)
     } else {
         true
@@ -68,7 +82,8 @@ pub async fn is_auto_hide_navbar_enabled(ctx: &AppContext) -> bool {
 }
 
 pub async fn is_auto_hide_navbar_enabled_init() -> bool {
-    if let Ok(mut db) = crate::storage::db::AppDatabase::init(crate::app::get_data_dir()).await {
+    if let Some(db_mutex) = get_init_db().await {
+        let mut db = db_mutex.lock().await;
         db.load_setting("auto_hide_navbar").await.unwrap_or(Some(false)).unwrap_or(false)
     } else {
         false
@@ -86,7 +101,8 @@ pub async fn is_close_to_tray_enabled(ctx: &AppContext) -> bool {
 }
 
 pub async fn is_close_to_tray_enabled_init() -> bool {
-    if let Ok(mut db) = crate::storage::db::AppDatabase::init(crate::app::get_data_dir()).await {
+    if let Some(db_mutex) = get_init_db().await {
+        let mut db = db_mutex.lock().await;
         db.load_setting("close_to_tray").await.unwrap_or(Some(true)).unwrap_or(true)
     } else {
         true

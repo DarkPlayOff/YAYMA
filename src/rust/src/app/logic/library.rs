@@ -264,6 +264,7 @@ async fn fetch_and_save_missing_metadata(
 
     for chunk in missing_ids.chunks(50) {
         if let Ok(tracks) = ctx.core.api.fetch_tracks(chunk.to_vec()).await {
+            let mut db = ctx.core.db.lock().await;
             for mut t in tracks {
                 let artists: Vec<crate::api::models::TrackArtistDto> = t
                     .artists
@@ -290,13 +291,7 @@ async fn fetch_and_save_missing_metadata(
                     duration_ms,
                 };
 
-                let _ = ctx
-                    .core
-                    .db
-                    .lock()
-                    .await
-                    .upsert_track_metadata(metadata_to_save.clone())
-                    .await;
+                let _ = db.upsert_track_metadata(metadata_to_save.clone()).await;
                 metadata_map.insert(metadata_to_save.id.clone(), metadata_to_save);
             }
         }
