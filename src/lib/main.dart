@@ -51,7 +51,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return SignalBuilder(
       builder: (context) {
-        final trackScheme = colorSchemeSignal().value;
+        final trackScheme = colorSchemeSignal();
         final currentScheme =
             trackScheme ??
             ColorScheme.fromSeed(

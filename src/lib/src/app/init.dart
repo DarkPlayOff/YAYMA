@@ -78,12 +78,8 @@ class AppInit {
     await initPlayback();
 
     // Fetch network-dependent data in the background
-    unawaited(
-      Future.wait([
-        _loadAccountInfo(context),
-        initLibrary(),
-      ]),
-    );
+    unawaited(_loadAccountInfo(context));
+    unawaited(initLibrary());
 
     authSignal.value = const AsyncData(true);
   }
@@ -105,12 +101,8 @@ class AppInit {
 
       await initPlayback();
 
-      unawaited(
-        Future.wait([
-          _loadAccountInfo(context),
-          initLibrary(),
-        ]),
-      );
+      unawaited(_loadAccountInfo(context));
+      unawaited(initLibrary());
 
       authSignal.value = const AsyncData(true);
     } on Object catch (e, st) {

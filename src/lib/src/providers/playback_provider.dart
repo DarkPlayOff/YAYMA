@@ -256,42 +256,37 @@ final FlutterComputed<SimpleTrackDto?> nextTrackSignal = computed(() {
   return null;
 }, options: const ComputedOptions(name: 'nextTrackSignal'));
 
-// Color scheme generated from cover image
-final FutureSignal<ColorScheme?> colorSchemeSignal = computedAsync(() async {
-  final url = currentCoverUrlSignal();
-  final ctx = appContextSignal.value;
-  if (url == null || ctx == null) return null;
+// Store color scheme, updated automatically when local cover URI changes
+final FlutterSignal<ColorScheme?> colorSchemeSignal = signal<ColorScheme?>(null);
 
-  final path = await rust.getCachedImagePath(ctx: ctx, url: url);
-  if (path == null) return null;
-
-  // Resize to minimum for faster quantization
-  return ColorScheme.fromImageProvider(
-    provider: ResizeImage(FileImage(File(path)), width: 32, height: 32),
-    brightness: Brightness.dark,
-  );
-}, options: const AsyncSignalOptions(name: 'colorSchemeSignal'));
-
-// Store last successful color scheme to prevent flickering during track changes
-final FlutterSignal<ColorScheme?> persistentColorSchemeSignal = signal<ColorScheme?>(
-  null,
-);
-
-// Effect to update persistent color scheme
+// Effect to update color scheme from cached image path
 final EffectCleanup _persistentColorSchemeEffect = effect(() {
   final url = currentCoverUrlSignal();
-  final scheme = colorSchemeSignal().value;
+  final ctx = appContextSignal.value;
 
-  if (url == null) {
-    persistentColorSchemeSignal.value = null;
-  } else if (scheme != null) {
-    persistentColorSchemeSignal.value = scheme;
+  if (url == null || ctx == null) {
+    colorSchemeSignal.value = null;
+    return;
   }
+
+  unawaited(() async {
+    final path = await rust.getCachedImagePath(ctx: ctx, url: url);
+    if (path == null) return;
+    
+    // Check if the track hasn't changed while we were fetching path
+    if (currentCoverUrlSignal() == url) {
+      final scheme = await ColorScheme.fromImageProvider(
+        provider: ResizeImage(FileImage(File(path)), width: 32, height: 32),
+        brightness: Brightness.dark,
+      );
+      colorSchemeSignal.value = scheme;
+    }
+  }());
 });
 
 // Accent color
 final FlutterComputed<Color> accentColorSignal = computed(
-  () => persistentColorSchemeSignal()?.primary ?? Colors.deepOrange,
+  () => colorSchemeSignal()?.primary ?? Colors.deepOrange,
   options: const ComputedOptions(name: 'accentColorSignal'),
 );
 
@@ -299,7 +294,7 @@ final FlutterComputed<Color> accentColorSignal = computed(
 final FlutterComputed<Color> playerBarColorSignal = computed(
   () =>
       Color.lerp(
-        persistentColorSchemeSignal()?.surfaceContainerHighest,
+        colorSchemeSignal()?.surfaceContainerHighest,
         Colors.black,
         0.4,
       ) ??
@@ -309,7 +304,7 @@ final FlutterComputed<Color> playerBarColorSignal = computed(
 
 // Sync palette with Rust for Vibe effect
 final EffectCleanup _vibePaletteEffect = effect(() {
-  final scheme = colorSchemeSignal().value;
+  final scheme = colorSchemeSignal();
   final ctx = appContextSignal.value;
   if (scheme != null && ctx != null) {
     List<double> c(Color col) => [col.r, col.g, col.b];
@@ -518,11 +513,7 @@ class PlaybackController {
       runRustAction((ctx) => rust.toggleLike(ctx: ctx, trackId: trackId));
   static Future<void> toggleDislike({required String trackId}) =>
       runRustAction((ctx) => rust.toggleDislike(ctx: ctx, trackId: trackId));
-  static Future<void> startMyWave() {
-    final currentSeeds = currentWaveSeedsSignal();
-    final seeds = currentSeeds.isNotEmpty ? currentSeeds : ['user:onyourwave'];
-    return runRustAction((ctx) => rust.startWave(ctx: ctx, seeds: seeds));
-  }
+
 
   static Future<void> startTrackWave(String trackId, [String? title]) =>
       runRustAction(

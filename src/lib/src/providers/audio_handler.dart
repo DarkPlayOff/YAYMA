@@ -112,23 +112,6 @@ class YaymaAudioHandler extends BaseAudioHandler {
     }
   }
 
-  // Remove the old hacky overrides for fastForward and rewind
-  // (We just let the default implementations exist, doing nothing or their default action)
-
-  @override
-  Future<void> setRating(Rating rating, [Map<String, dynamic>? extras]) {
-    final trackId = playerStateSignal.value?.currentTrack?.id;
-    if (trackId == null) return Future.value();
-    return PlaybackController.toggleLike(trackId: trackId);
-  }
-
-  @override
-  Future<void> playFromSearch(String query, [Map<String, dynamic>? extras]) {
-    final trackId = playerStateSignal.value?.currentTrack?.id;
-    if (trackId == null) return Future.value();
-    return PlaybackController.toggleLike(trackId: trackId);
-  }
-
   AudioProcessingState _mapProcessingState(rust.PlaybackState? state) {
     if (state == null) return AudioProcessingState.idle;
     if (state.isBuffering) return AudioProcessingState.buffering;
@@ -138,12 +121,11 @@ class YaymaAudioHandler extends BaseAudioHandler {
 
   AudioServiceRepeatMode _mapRepeatMode(rust.RepeatModeDto? mode) {
     switch (mode) {
-      case rust.RepeatModeDto.none:
-        return AudioServiceRepeatMode.none;
       case rust.RepeatModeDto.all:
         return AudioServiceRepeatMode.all;
       case rust.RepeatModeDto.single:
         return AudioServiceRepeatMode.one;
+      case rust.RepeatModeDto.none:
       case null:
         return AudioServiceRepeatMode.none;
     }
