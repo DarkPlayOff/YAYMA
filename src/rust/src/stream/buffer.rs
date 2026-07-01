@@ -70,7 +70,7 @@ pub struct BufferState {
     segments: Vec<Segment>,
     total_bytes: u64,
     pub(crate) eof: bool,
-    pending: Option<(u64, u64)>,
+    pub(crate) pending: Option<(u64, u64)>,
     max_buffered_from_start: u64,
     buffering_base: u64,
     buffer_size: usize,

@@ -14,6 +14,17 @@ use super::buffer::BufferState;
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
+type FetchFuture = std::pin::Pin<
+    Box<
+        dyn std::future::Future<
+            Output = std::result::Result<
+                Result<bytes::Bytes>,
+                tokio::time::error::Elapsed,
+            >,
+        > + Send + 'static,
+    >,
+>;
+
 const MIN_INITIAL_DATA: usize = 128 * 1024;
 const MAX_ATTEMPTS: usize = 30; // Fewer attempts but longer wait
 
@@ -163,54 +174,111 @@ impl StreamingDataSource {
     }
 
     async fn fetch_loop_async(ctx: FetchContext) {
-        while let Ok(cmd) = ctx.rx_cmd.recv_async().await {
-            match cmd {
-                FetchCommand::Fetch {
-                    start,
-                    end,
-                    generation: request_generation,
-                } => {
-                    {
-                        let mut buf = ctx.buffer.lock();
-                        buf.mark_pending(start, end);
+        let mut current_fetch = None;
+
+        loop {
+            let has_fetch = current_fetch.is_some();
+
+            tokio::select! {
+                res = async {
+                    if let Some((ref mut fut, _, _, _)) = current_fetch {
+                        fut.await
+                    } else {
+                        std::future::pending().await
                     }
-                    match Self::fetch_range_async(&ctx.client, &ctx.url, start, end).await {
-                        Ok(data) => {
-                            if request_generation != ctx.generation.load(Ordering::Acquire) {
-                                let _ = ctx.tx_res.send(());
-                                continue;
-                            }
+                }, if has_fetch => {
+                    let (_, start, end, request_generation) = current_fetch.take().unwrap();
+                    match res {
+                        Ok(Ok(data)) => {
+                            let current_gen = ctx.generation.load(Ordering::Acquire);
+                            if request_generation == current_gen {
+                                let maybe_buffered = {
+                                    let mut buf = ctx.buffer.lock();
+                                    if buf.append(data, start) {
+                                        Some(buf.max_buffered_from_start())
+                                    } else {
+                                        None
+                                    }
+                                };
 
-                            let maybe_buffered = {
-                                let mut buf = ctx.buffer.lock();
-                                if buf.append(data, start) {
-                                    Some(buf.max_buffered_from_start())
-                                } else {
-                                    None
+                                if request_generation == current_gen
+                                    && ctx.progress_generation == ctx.progress.get_generation()
+                                    && let Some(buffered_pos) = maybe_buffered
+                                  {
+                                    ctx.progress.set_buffered_bytes(buffered_pos);
                                 }
-                            };
-
-                            if request_generation == ctx.generation.load(Ordering::Acquire)
-                                && ctx.progress_generation == ctx.progress.get_generation()
-                                && let Some(buffered_pos) = maybe_buffered
-                            {
-                                ctx.progress.set_buffered_bytes(buffered_pos);
                             }
                             let _ = ctx.tx_res.send(());
                         }
-                        Err(err) => {
-                            let mut buf = ctx.buffer.lock();
-                            buf.clear_pending();
+                        Ok(Err(err)) => {
+                            {
+                                let mut buf = ctx.buffer.lock();
+                                buf.clear_pending();
+                            }
                             let _ = ctx.tx_res.send(());
-                            eprintln!("fetch_range_async error: {:?}", err);
+                        }
+                        Err(_) => {
+                            {
+                                let mut buf = ctx.buffer.lock();
+                                buf.clear_pending();
+                            }
+                            let _ = ctx.tx_res.send(());
                         }
                     }
                 }
-                FetchCommand::Shutdown => {
-                    break;
+                cmd_res = ctx.rx_cmd.recv_async() => {
+                    match cmd_res {
+                        Ok(FetchCommand::Shutdown) => break,
+                        Ok(FetchCommand::Fetch { start: new_start, end: new_end, generation: new_gen }) => {
+                            let current_gen = ctx.generation.load(Ordering::Acquire);
+                            if new_gen == current_gen {
+                                if let Some((_, _, _, old_gen)) = current_fetch {
+                                    if new_gen > old_gen {
+                                        {
+                                            let mut buf = ctx.buffer.lock();
+                                            buf.clear_pending();
+                                            buf.mark_pending(new_start, new_end);
+                                        }
+                                        let client = ctx.client.clone();
+                                        let url = ctx.url.clone();
+                                        let fut = Self::fetch_range_timeout(client, url, new_start, new_end);
+                                        current_fetch = Some((fut, new_start, new_end, new_gen));
+                                    } else {
+                                        let _ = ctx.tx_res.send(());
+                                    }
+                                } else {
+                                    {
+                                        let mut buf = ctx.buffer.lock();
+                                        buf.mark_pending(new_start, new_end);
+                                    }
+                                    let client = ctx.client.clone();
+                                    let url = ctx.url.clone();
+                                    let fut = Self::fetch_range_timeout(client, url, new_start, new_end);
+                                    current_fetch = Some((fut, new_start, new_end, new_gen));
+                                }
+                            } else {
+                                let _ = ctx.tx_res.send(());
+                            }
+                        }
+                        Err(_) => break,
+                    }
                 }
             }
         }
+    }
+
+    fn fetch_range_timeout(
+        client: Client,
+        url: String,
+        start: u64,
+        end: u64,
+    ) -> FetchFuture {
+        Box::pin(tokio::time::timeout(
+            Duration::from_secs(15),
+            async move {
+                Self::fetch_range_async(&client, &url, start, end).await
+            }
+        ))
     }
 
     async fn fetch_range_async(
@@ -284,9 +352,27 @@ impl StreamingDataSource {
     }
 
     fn ensure(&self, pos: u64) -> Result<()> {
-        {
+        let (is_pending, pending_end) = {
             let buf = self.buffer.lock();
             if buf.contains(pos) {
+                return Ok(());
+            }
+            if let Some((s, e)) = buf.pending && pos >= s && pos < e {
+                (true, e)
+            } else {
+                (false, 0)
+            }
+        };
+
+        if is_pending {
+            let needed_bytes = (pending_end - pos) as usize;
+            self.wait_for(pos, MIN_INITIAL_DATA.min(needed_bytes))?;
+
+            let has_data = {
+                let buf = self.buffer.lock();
+                buf.contains(pos) || buf.eof
+            };
+            if has_data {
                 return Ok(());
             }
         }
