@@ -28,7 +28,7 @@ class AppInit {
 
     await RustLib.init();
 
-    if (Platform.isAndroid || Platform.isIOS) {
+    if (Platform.isAndroid) {
       await _initAudioService();
     }
 
@@ -49,9 +49,62 @@ class AppInit {
     unawaited(_initializeAuthAndServices());
   }
 
+  static int? _originalVolume;
+  static bool _isDucked = false;
+
   static Future<void> _initAudioService() async {
     final session = await AudioSession.instance;
-    await session.configure(const AudioSessionConfiguration.music());
+    await session.configure(const AudioSessionConfiguration(
+      androidAudioAttributes: AndroidAudioAttributes(
+        contentType: AndroidAudioContentType.music,
+        usage: AndroidAudioUsage.media,
+      ),
+      androidAudioFocusGainType: AndroidAudioFocusGainType.gain,
+      androidWillPauseWhenDucked: false,
+    ));
+
+    session.interruptionEventStream.listen((event) async {
+      if (event.begin) {
+        switch (event.type) {
+          case AudioInterruptionType.duck:
+            if (!_isDucked) {
+              _isDucked = true;
+              final currentVolume = playerVolumeSignal.value;
+              _originalVolume = currentVolume;
+              final duckVolume = (currentVolume * 0.2).round().clamp(0, 100);
+              await PlaybackController.changeVolume(duckVolume);
+            }
+          case AudioInterruptionType.pause:
+          case AudioInterruptionType.unknown:
+            await PlaybackController.pause();
+        }
+      } else {
+        switch (event.type) {
+          case AudioInterruptionType.duck:
+            if (_isDucked) {
+              _isDucked = false;
+              if (_originalVolume != null) {
+                await PlaybackController.changeVolume(_originalVolume!);
+                _originalVolume = null;
+              }
+            }
+          case AudioInterruptionType.pause:
+            await PlaybackController.play();
+          case AudioInterruptionType.unknown:
+            break;
+        }
+      }
+    });
+
+    effect(() {
+      final state = playerStateSignal();
+      final isPlaying = state?.isPlaying ?? false;
+      if (isPlaying) {
+        session.setActive(true).catchError((_) => false);
+      } else {
+        session.setActive(false).catchError((_) => false);
+      }
+    });
 
     await AudioService.init(
       builder: YaymaAudioHandler.new,
