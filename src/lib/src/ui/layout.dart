@@ -108,7 +108,11 @@ class _AppLayoutState extends State<AppLayout> {
                                   Positioned(
                                     left: 0,
                                     right: 0,
-                                    bottom: isNarrow ? 80 : 0,
+                                    bottom: (isNarrow &&
+                                            !(Platform.isAndroid &&
+                                                showLyricsSignal.value))
+                                        ? 80
+                                        : 0,
                                     child: _AnimatedPlayerBar(isHome: isHome),
                                   ),
                                 ],
@@ -117,11 +121,20 @@ class _AppLayoutState extends State<AppLayout> {
                           ),
 
                           // 4. Navigation
-                          Align(
-                            alignment: isNarrow
-                                ? Alignment.bottomCenter
-                                : Alignment.centerLeft,
-                            child: const FloatingNavBar(),
+                          SignalBuilder(
+                            builder: (context) {
+                              final showLyrics = showLyricsSignal.value;
+                              final isAndroid = Platform.isAndroid;
+                              if (isAndroid && showLyrics) {
+                                return const SizedBox.shrink();
+                              }
+                              return Align(
+                                alignment: isNarrow
+                                    ? Alignment.bottomCenter
+                                    : Alignment.centerLeft,
+                                child: const FloatingNavBar(),
+                              );
+                            },
                           ),
 
                           // 5. Back button

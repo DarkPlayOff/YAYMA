@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -139,8 +140,12 @@ class _MobileMiniPlayerState extends State<MobileMiniPlayer> {
 
         final meta = trackMetadataSignal();
 
+        final double bottomPadding = Platform.isAndroid && showLyrics
+            ? (MediaQuery.paddingOf(context).bottom + 16.0)
+            : 8.0;
+
         return Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+          padding: EdgeInsets.fromLTRB(16, 0, 16, bottomPadding),
           child: SizedBox(
             height: 80,
             width: defaultWidth,

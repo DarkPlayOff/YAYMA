@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -110,7 +111,7 @@ class _LyricsWidgetState extends State<LyricsWidget> {
     super.dispose();
   }
 
-  static const double _rowHeight = 110;
+  double get _rowHeight => Platform.isAndroid ? 60.0 : 110.0;
 
   void _scrollToIndex(int index) {
     if (_scrollController.hasClients) {
@@ -286,7 +287,9 @@ class _LyricRow extends StatelessWidget {
       child: Center(
         child: Container(
           width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 48),
+          padding: EdgeInsets.symmetric(
+            horizontal: Platform.isAndroid ? 16 : 48,
+          ),
           alignment: Alignment.center,
           child: AnimatedScale(
             duration: const Duration(milliseconds: 600),
@@ -304,7 +307,7 @@ class _LyricRow extends StatelessWidget {
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       color: Colors.white,
-                      fontSize: 48,
+                      fontSize: Platform.isAndroid ? 32 : 48,
                       fontWeight: isActive ? FontWeight.w900 : FontWeight.w800,
                       letterSpacing: -2.2,
                       height: 1.1,

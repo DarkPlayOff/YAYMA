@@ -133,26 +133,51 @@ class HomeView extends StatelessWidget {
                         top: 0,
                         bottom: 0,
                         child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 60,
-                            vertical: 40,
+                          padding: EdgeInsets.only(
+                            left: Platform.isAndroid ? 20 : 60,
+                            right: Platform.isAndroid ? 20 : 60,
+                            top: Platform.isAndroid ? 20 : 40,
+                            bottom: Platform.isAndroid ? 100 : 40,
                           ),
-                          child: SignalBuilder(
-                            builder: (context) {
-                              final trackId = trackMetadataSignal().id;
-                              if (trackId == null) {
-                                return const Center(
-                                  child: Text(
-                                    'Выберите трек',
-                                    style: TextStyle(color: Colors.white38),
+                          child: Stack(
+                            children: [
+                              Positioned.fill(
+                                child: SignalBuilder(
+                                  builder: (context) {
+                                    final trackId = trackMetadataSignal().id;
+                                    if (trackId == null) {
+                                      return const Center(
+                                        child: Text(
+                                          'Выберите трек',
+                                          style: TextStyle(color: Colors.white38),
+                                        ),
+                                      );
+                                    }
+                                    return LyricsWidget(
+                                      trackId: trackId,
+                                      visible: showLyrics,
+                                    );
+                                  },
+                                ),
+                              ),
+                              if (Platform.isAndroid)
+                                Positioned(
+                                  top: 10,
+                                  left: 0,
+                                  child: SafeArea(
+                                    child: IconButton(
+                                      icon: const Icon(
+                                        Icons.arrow_back_ios_new_rounded,
+                                        color: Colors.white70,
+                                        size: 24,
+                                      ),
+                                      onPressed: () {
+                                        showLyricsSignal.value = false;
+                                      },
+                                    ),
                                   ),
-                                );
-                              }
-                              return LyricsWidget(
-                                trackId: trackId,
-                                visible: showLyrics,
-                              );
-                            },
+                                ),
+                            ],
                           ),
                         ),
                       ),
