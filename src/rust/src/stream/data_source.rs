@@ -26,7 +26,7 @@ type FetchFuture = std::pin::Pin<
 >;
 
 const MIN_INITIAL_DATA: usize = 128 * 1024;
-const MAX_ATTEMPTS: usize = 30; // Fewer attempts but longer wait
+const MAX_ATTEMPTS: usize = 150; // Wait up to 75 seconds for buffering
 
 enum FetchCommand {
     Fetch {
@@ -274,7 +274,7 @@ impl StreamingDataSource {
         end: u64,
     ) -> FetchFuture {
         Box::pin(tokio::time::timeout(
-            Duration::from_secs(15),
+            Duration::from_secs(75),
             async move {
                 Self::fetch_range_async(&client, &url, start, end).await
             }
@@ -288,8 +288,33 @@ impl StreamingDataSource {
         end: u64,
     ) -> Result<bytes::Bytes> {
         let hdr = format!("bytes={}-{}", start, end.saturating_sub(1));
-        let resp = client.get(url).header("Range", hdr).send().await?;
-        Ok(resp.bytes().await?)
+        let mut attempts = 0;
+        let max_retries = 6;
+        let mut backoff = Duration::from_secs(1);
+
+        loop {
+            match client.get(url).header("Range", &hdr).send().await {
+                Ok(resp) => {
+                    match resp.bytes().await {
+                        Ok(bytes) => return Ok(bytes),
+                        Err(e) => {
+                            attempts += 1;
+                            if attempts >= max_retries {
+                                return Err(e.into());
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    attempts += 1;
+                    if attempts >= max_retries {
+                        return Err(e.into());
+                    }
+                }
+            }
+            tokio::time::sleep(backoff).await;
+            backoff *= 2;
+        }
     }
 
     fn fetch(&self, start: u64, size: u64) -> Result<()> {
