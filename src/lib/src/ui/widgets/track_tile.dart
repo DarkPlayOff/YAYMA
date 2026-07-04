@@ -162,21 +162,64 @@ class _CommonTrackTileState extends State<CommonTrackTile> {
                         'Ссылка скопирована',
                       );
                     case 'download':
-                      showAppSuccess(
-                        'Скачивание началось...',
-                      );
+                      showAppSuccess('Скачивание началось...');
                       final ctx = appContextSignal.value;
                       if (ctx != null) {
+                        downloadingTracksSignal.value = {
+                          ...downloadingTracksSignal.value,
+                          widget.trackId,
+                        };
                         try {
                           final path = await rust.downloadTrack(
                             ctx: ctx,
                             trackId: widget.trackId,
+                            toCache: true,
                           );
-                          showAppSuccess(
-                            'Трек сохранен: $path',
-                          );
+                          showAppSuccess('Трек скачан');
+                          unawaited(refreshDownloadedTracks());
                         } on Object catch (e) {
                           showAppError('Ошибка: $e');
+                        } finally {
+                          final newSet = {...downloadingTracksSignal.value};
+                          newSet.remove(widget.trackId);
+                          downloadingTracksSignal.value = newSet;
+                        }
+                      }
+                    case 'delete_downloaded':
+                      final ctx = appContextSignal.value;
+                      if (ctx != null) {
+                        try {
+                          await rust.deleteDownloadedTrack(
+                            ctx: ctx,
+                            trackId: widget.trackId,
+                          );
+                          showAppSuccess('Трек удален из загрузок');
+                          unawaited(refreshDownloadedTracks());
+                        } on Object catch (e) {
+                          showAppError('Ошибка: $e');
+                        }
+                      }
+                    case 'download_to_file':
+                      showAppSuccess('Скачивание в файл началось...');
+                      final ctx = appContextSignal.value;
+                      if (ctx != null) {
+                        downloadingTracksSignal.value = {
+                          ...downloadingTracksSignal.value,
+                          widget.trackId,
+                        };
+                        try {
+                          final path = await rust.downloadTrack(
+                            ctx: ctx,
+                            trackId: widget.trackId,
+                            toCache: false,
+                          );
+                          showAppSuccess('Трек сохранен: $path');
+                        } on Object catch (e) {
+                          showAppError('Ошибка: $e');
+                        } finally {
+                          final newSet = {...downloadingTracksSignal.value};
+                          newSet.remove(widget.trackId);
+                          downloadingTracksSignal.value = newSet;
                         }
                       }
                   }
@@ -221,10 +264,22 @@ class _CommonTrackTileState extends State<CommonTrackTile> {
                     label: 'О треке',
                     icon: Icons.info_outline_rounded,
                   ),
+                  if (downloadedTracksSignal.value.contains(widget.trackId))
+                    const AppContextMenuItem(
+                      value: 'delete_downloaded',
+                      label: 'Удалить из загрузок',
+                      icon: Icons.remove_circle_outline_rounded,
+                    )
+                  else
+                    const AppContextMenuItem(
+                      value: 'download',
+                      label: 'Скачать',
+                      icon: Icons.download_done_rounded,
+                    ),
                   const AppContextMenuItem(
-                    value: 'download',
-                    label: 'Скачать',
-                    icon: Icons.download_rounded,
+                    value: 'download_to_file',
+                    label: 'Скачать в файл',
+                    icon: Icons.file_download_rounded,
                   ),
                 ],
                 child: const IconButton(
@@ -343,6 +398,34 @@ class _CommonTrackTileState extends State<CommonTrackTile> {
                                           ),
                                         ),
                                       ),
+                                    ),
+                                    SignalBuilder(
+                                      builder: (context) {
+                                        final isDownloading = downloadingTracksSignal.value.contains(widget.trackId);
+                                        final isDownloaded = downloadedTracksSignal.value.contains(widget.trackId);
+
+                                        if (!isDownloading && !isDownloaded) {
+                                          return const SizedBox.shrink();
+                                        }
+
+                                        return Padding(
+                                          padding: const EdgeInsets.only(left: 6),
+                                          child: isDownloading
+                                              ? SizedBox(
+                                                  width: isNarrow ? 12 : 14,
+                                                  height: isNarrow ? 12 : 14,
+                                                  child: CircularProgressIndicator(
+                                                    strokeWidth: 2,
+                                                    color: Theme.of(context).colorScheme.primary,
+                                                  ),
+                                                )
+                                              : Icon(
+                                                  Icons.download_done_rounded,
+                                                  size: isNarrow ? 14 : 16,
+                                                  color: Theme.of(context).colorScheme.primary,
+                                                ),
+                                        );
+                                      },
                                     ),
                                     TrackVersionWidget(
                                       version: widget.version,

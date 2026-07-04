@@ -11,7 +11,7 @@ use std::sync::{
 use std::thread;
 use std::time::Duration;
 
-use super::data_source::StreamingDataSource;
+
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
@@ -178,12 +178,13 @@ pub struct StreamingSession {
     pub codec: String,
 }
 
-pub fn create_streaming_session(
-    data_source: StreamingDataSource,
+pub fn create_streaming_session<R: std::io::Read + std::io::Seek + Send + Sync + 'static>(
+    data_source: R,
+    total_bytes: u64,
     codec: String,
     progress: Arc<TrackProgress>,
 ) -> Result<StreamingSession> {
-    let total_bytes = data_source.total_bytes();
+
 
     let decoder = Decoder::builder()
         .with_data(data_source)
@@ -245,8 +246,8 @@ pub fn create_streaming_session(
     })
 }
 
-fn run_decode_loop(
-    mut decoder: Decoder<StreamingDataSource>,
+fn run_decode_loop<R: std::io::Read + std::io::Seek + Send + Sync + 'static>(
+    mut decoder: Decoder<R>,
     sample_tx: CbSender<SampleMessage>,
     cmd_rx: CbReceiver<DecoderCommand>,
     recycle_rx: CbReceiver<Vec<f32>>,

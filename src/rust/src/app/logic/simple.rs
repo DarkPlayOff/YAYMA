@@ -11,6 +11,9 @@ pub fn app_event_stream(ctx: &AppContext, sink: StreamSink<AppEvent>) {
 }
 
 pub async fn get_cached_image_path(ctx: &AppContext, url: String) -> Option<String> {
+    if let Some(path) = ctx.core.track_cache.get_cover(&url).await {
+        return Some(path.to_string_lossy().into_owned());
+    }
     let cache = &ctx.core.http_cache;
     cache
         .get_file(&url)
@@ -32,6 +35,14 @@ pub async fn get_cache_size(ctx: &AppContext) -> i64 {
 pub async fn clear_cache(ctx: &AppContext) {
     let cache = &ctx.core.http_cache;
     let _ = cache.clear().await;
+}
+
+pub async fn get_track_cache_size(ctx: &AppContext) -> i64 {
+    ctx.core.track_cache.get_size().await.unwrap_or(0)
+}
+
+pub async fn clear_track_cache(ctx: &AppContext) {
+    let _ = ctx.core.track_cache.clear().await;
 }
 
 static INIT_DB: tokio::sync::OnceCell<Option<tokio::sync::Mutex<crate::storage::db::AppDatabase>>> = tokio::sync::OnceCell::const_new();

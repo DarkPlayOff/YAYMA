@@ -4,6 +4,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/providers/auth_provider.dart';
+import 'package:yayma/src/providers/library_provider.dart';
 import 'package:yayma/src/providers/navigation_provider.dart';
 import 'package:yayma/src/providers/notification_provider.dart';
 import 'package:yayma/src/rust/api/content.dart' as rust;
@@ -20,6 +21,7 @@ class SettingsView extends StatefulWidget {
 class _SettingsViewState extends State<SettingsView> {
   late final FutureSignal<String?> _pathSignal;
   late final FutureSignal<int> _cacheSizeSignal;
+  late final FutureSignal<int> _trackCacheSizeSignal;
   late final FutureSignal<String> _versionSignal;
   late final FutureSignal<bool> _discordRpcSignal;
   late final FutureSignal<bool> _customTitlebarSignal;
@@ -38,6 +40,11 @@ class _SettingsViewState extends State<SettingsView> {
       final ctx = appContextSignal.value;
       if (ctx == null) return 0;
       return simple.getCacheSize(ctx: ctx);
+    });
+    _trackCacheSizeSignal = futureSignal(() async {
+      final ctx = appContextSignal.value;
+      if (ctx == null) return 0;
+      return simple.getTrackCacheSize(ctx: ctx);
     });
     _versionSignal = futureSignal(() async {
       return simple.getAppVersion();
@@ -124,6 +131,16 @@ class _SettingsViewState extends State<SettingsView> {
     await simple.clearCache(ctx: ctx);
     unawaited(_cacheSizeSignal.refresh());
     showAppSuccess('Кэш успешно очищен');
+  }
+
+  Future<void> _clearTrackCache() async {
+    final ctx = appContextSignal.value;
+    if (ctx == null) return;
+    await simple.clearTrackCache(ctx: ctx);
+    unawaited(_trackCacheSizeSignal.refresh());
+    // Also notify the downloaded tracks signal
+    unawaited(refreshDownloadedTracks());
+    showAppSuccess('Скачанные треки успешно удалены');
   }
 
   @override
@@ -276,8 +293,24 @@ class _SettingsViewState extends State<SettingsView> {
                           error: (e, s) => 'Ошибка при получении размера',
                           loading: () => 'Подсчет...',
                         ),
-                        icon: Icons.delete_sweep_rounded,
+                        icon: Icons.image_not_supported_rounded,
                         onTap: () => unawaited(_clearCache()),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  SignalBuilder(
+                    builder: (context) {
+                      final size = _trackCacheSizeSignal.value;
+                      return _SettingItem(
+                        title: 'Удалить скачанные треки',
+                        subtitle: size.map(
+                          data: (d) => 'Занято: ${_formatBytes(d)}',
+                          error: (e, s) => 'Ошибка при получении размера',
+                          loading: () => 'Подсчет...',
+                        ),
+                        icon: Icons.music_off_rounded,
+                        onTap: () => unawaited(_clearTrackCache()),
                       );
                     },
                   ),

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/providers/auth_provider.dart';
 import 'package:yayma/src/providers/playback_provider.dart';
+import 'package:yayma/src/rust/api/content.dart';
 import 'package:yayma/src/rust/api/library.dart';
 import 'package:yayma/src/rust/api/models.dart';
 
@@ -16,6 +17,8 @@ final FlutterSignal<List<SimpleArtistDto>> likedArtistsSignal =
     signal<List<SimpleArtistDto>>([]);
 final FlutterSignal<bool> isLibraryLoadingSignal = signal<bool>(false);
 final FlutterSignal<String> librarySearchQuerySignal = signal<String>('');
+final FlutterSignal<Set<String>> downloadedTracksSignal = signal<Set<String>>({});
+final FlutterSignal<Set<String>> downloadingTracksSignal = signal<Set<String>>({});
 
 StreamSubscription<List<SimpleTrackDto>>? _likedSub;
 Timer? _librarySearchDebounce;
@@ -23,7 +26,15 @@ Timer? _librarySearchDebounce;
 Future<void> initLibrary() async {
   // Load only playlists as they are lightweight and might be needed for navigation
   await refreshPlaylists();
+  await refreshDownloadedTracks();
   // Liked tracks are loaded on demand when the library screen is opened
+}
+
+Future<void> refreshDownloadedTracks() async {
+  final ids = await runRustFetch((ctx) => getDownloadedTrackIds(ctx: ctx));
+  if (ids != null) {
+    downloadedTracksSignal.value = ids.toSet();
+  }
 }
 
 Future<void> refreshPlaylists() async {

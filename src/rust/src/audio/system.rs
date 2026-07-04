@@ -40,6 +40,7 @@ impl AudioSystem {
         api: Arc<ApiService>,
         db: Arc<tokio::sync::Mutex<crate::db::AppDatabase>>,
         _http_cache: Arc<crate::storage::cache::HttpCache>,
+        track_cache: Arc<crate::storage::cache::TrackCache>,
     ) -> Result<(
         mpsc::Sender<AudioMessage>,
         AudioSignals,
@@ -54,7 +55,8 @@ impl AudioSystem {
             tokio::task::spawn_blocking({
                 let api = api.clone();
                 let url_cache = url_cache.clone();
-                move || StreamManager::new(api, url_cache)
+                let track_cache = track_cache.clone();
+                move || StreamManager::new(api, url_cache, track_cache)
             })
             .await
             .map_err(|e| Box::<dyn std::error::Error + Send + Sync>::from(e.to_string()))?,

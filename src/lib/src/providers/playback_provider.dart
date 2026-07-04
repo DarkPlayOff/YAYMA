@@ -53,6 +53,21 @@ Future<void> initPlayback() async {
         accountSignal.value = account;
       case rust.AppEvent_Error(field0: final message):
         showAppError(message);
+      case rust.AppEvent_TrackDownloadStarted(field0: final trackId):
+        downloadingTracksSignal.value = {
+          ...downloadingTracksSignal.value,
+          trackId,
+        };
+      case rust.AppEvent_TrackDownloadFinished(field0: final trackId):
+        final newSet = {...downloadingTracksSignal.value};
+        newSet.remove(trackId);
+        downloadingTracksSignal.value = newSet;
+        unawaited(refreshDownloadedTracks());
+      case rust.AppEvent_TrackDownloadFailed(field0: final trackId, field1: final error):
+        final newSet = {...downloadingTracksSignal.value};
+        newSet.remove(trackId);
+        downloadingTracksSignal.value = newSet;
+        showAppError('Ошибка загрузки трека: $error');
       case _:
         break;
     }

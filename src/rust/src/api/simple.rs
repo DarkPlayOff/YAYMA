@@ -13,6 +13,9 @@ pub enum AppEvent {
     AccountUpdated(UserAccountDto),
     Notification(String, String), // Title, Message
     Error(String),
+    TrackDownloadStarted(String),
+    TrackDownloadFinished(String),
+    TrackDownloadFailed(String, String),
 }
 
 pub fn init_app_infrastructure(base_path: Option<String>) {
@@ -41,6 +44,14 @@ pub async fn get_cache_size(ctx: &AppContext) -> i64 {
 
 pub async fn clear_cache(ctx: &AppContext) {
     logic::clear_cache(ctx).await
+}
+
+pub async fn get_track_cache_size(ctx: &AppContext) -> i64 {
+    logic::get_track_cache_size(ctx).await
+}
+
+pub async fn clear_track_cache(ctx: &AppContext) {
+    logic::clear_track_cache(ctx).await
 }
 
 pub fn is_discord_rpc_enabled(ctx: &AppContext) -> bool {

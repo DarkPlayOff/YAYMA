@@ -89,18 +89,22 @@ class _AlbumViewState extends State<AlbumView> {
     _isDownloadingAlbum.value = true;
     showAppSuccess('Скачивание альбома началось...');
 
-    var downloaded = 0;
     try {
-      for (final track in album.tracks) {
-        await rust.downloadTrack(ctx: ctx, trackId: track.id);
-        downloaded++;
-      }
+      final trackIds = album.tracks
+          .where((t) => !downloadedTracksSignal.value.contains(t.id))
+          .map((t) => t.id)
+          .toList();
 
+      if (trackIds.isNotEmpty) {
+        await rust.downloadTracksBatch(ctx: ctx, trackIds: trackIds);
+        unawaited(refreshDownloadedTracks());
+      }
+      
       if (!mounted) return;
-      showAppSuccess('Альбом сохранён: $downloaded треков');
+      showAppSuccess('Альбом сохранён');
     } on Object catch (e) {
       if (!mounted) return;
-      showAppError('Ошибка при скачивании альбома: $e');
+      showAppError('Ошибка при скачивании: $e');
     } finally {
       _isDownloadingAlbum.value = false;
     }

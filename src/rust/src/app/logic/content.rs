@@ -49,7 +49,7 @@ pub async fn get_downloads_size(_ctx: &AppContext) -> i64 {
     0
 }
 
-pub async fn download_track(ctx: &AppContext, track_id: String) -> Result<String, AppError> {
+pub async fn download_track(ctx: &AppContext, track_id: String, to_cache: bool) -> Result<String, AppError> {
     let api = &ctx.core.api;
     let (liked, disliked) = get_liked_snapshot(ctx).await;
 
@@ -61,21 +61,9 @@ pub async fn download_track(ctx: &AppContext, track_id: String) -> Result<String
         .ok_or_else(|| AppError::NotFound(format!("Track {}", track_id)))?;
 
     let dto = SimpleTrackDto::from_yandex_owned(track, &liked, &disliked);
-    let artist_name = dto
-        .artists
-        .first()
-        .map(|a| a.name.as_str())
-        .unwrap_or("Unknown Artist");
 
-    let safe_base_name: String = format!("{} - {}", artist_name, dto.title)
-        .chars()
-        .map(|c| match c {
-            '?' | '/' | '\\' | '*' | '\"' | '<' | '>' | '|' => '_',
-            _ => c,
-        })
-        .collect();
 
-    let (url, codec) = api.fetch_track_url_for_download(track_id).await?;
+    let (url, codec) = api.fetch_track_url_for_download(track_id.clone()).await?;
 
     let ext = if codec.contains("flac") {
         "flac"
@@ -85,7 +73,11 @@ pub async fn download_track(ctx: &AppContext, track_id: String) -> Result<String
         "mp3"
     };
 
-    let dest_path = {
+    let dest_path = if to_cache {
+        let mut dir = ctx.core.track_cache.get_cache_dir().to_path_buf();
+        dir.push(format!("{}.{}", track_id, ext));
+        dir
+    } else {
         let mut dir = ctx
             .core
             .db
@@ -101,11 +93,38 @@ pub async fn download_track(ctx: &AppContext, track_id: String) -> Result<String
             })
             .ok_or_else(|| AppError::Unknown("Could not find download directory".into()))?;
 
+        let artist_name = dto
+            .artists
+            .first()
+            .map(|a| a.name.as_str())
+            .unwrap_or("Unknown Artist");
+
+        let safe_base_name: String = format!("{} - {}", artist_name, dto.title)
+            .chars()
+            .map(|c| match c {
+                '?' | '/' | '\\' | '*' | '\"' | '<' | '>' | '|' => '_',
+                _ => c,
+            })
+            .collect();
+
         dir.push(format!("{}.{}", safe_base_name, ext));
         dir
     };
 
     let bytes = reqwest::get(url).await?.bytes().await?;
+
+    if to_cache {
+        tokio::fs::write(&dest_path, &bytes).await?;
+        if let Some(mut url) = dto.cover_url {
+            if url.starts_with("//") {
+                url.insert_str(0, "https:");
+            }
+            if let Ok(http_path) = ctx.core.http_cache.get_file(&url).await {
+                let _ = ctx.core.track_cache.save_cover(&url, &http_path).await;
+            }
+        }
+        return Ok(dest_path.to_string_lossy().into_owned());
+    }
 
     if ext == "flac" && !bytes.starts_with(b"fLaC") {
         let temp_path = dest_path.with_extension("m4a_tmp");
@@ -133,6 +152,38 @@ pub async fn download_track(ctx: &AppContext, track_id: String) -> Result<String
     let cache = ctx.core.http_cache.clone();
     let _ = embed_metadata(&dest_path, dto, cache).await;
     Ok(dest_path.to_string_lossy().into_owned())
+}
+
+pub async fn delete_downloaded_track(ctx: &AppContext, track_id: String) -> Result<(), AppError> {
+    ctx.core.track_cache.delete_track(&track_id).await.map_err(|e| AppError::Unknown(e.to_string()))?;
+    Ok(())
+}
+
+pub async fn download_tracks_batch(ctx: &AppContext, track_ids: Vec<String>) -> Result<(), AppError> {
+    use futures::stream::{self, StreamExt};
+    use crate::api::simple::AppEvent;
+
+    let ctx = ctx.clone();
+    tokio::spawn(async move {
+        let stream = stream::iter(track_ids).map(|track_id| {
+            let ctx = ctx.clone();
+            async move {
+                ctx.send_event(AppEvent::TrackDownloadStarted(track_id.clone()));
+                match download_track(&ctx, track_id.clone(), true).await {
+                    Ok(_) => {
+                        ctx.send_event(AppEvent::TrackDownloadFinished(track_id));
+                    }
+                    Err(e) => {
+                        ctx.send_event(AppEvent::TrackDownloadFailed(track_id, e.to_string()));
+                    }
+                }
+            }
+        });
+
+        stream.buffer_unordered(5).collect::<Vec<()>>().await;
+    });
+
+    Ok(())
 }
 
 async fn embed_metadata(

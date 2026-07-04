@@ -6,7 +6,7 @@ use crate::audio::state::SystemState;
 use crate::db::AppDatabase;
 use crate::frb_generated::StreamSink;
 use crate::http::ApiService;
-use crate::storage::cache::HttpCache;
+use crate::storage::cache::{HttpCache, TrackCache};
 use foldhash::HashMap;
 use parking_lot::RwLock as StdRwLock;
 use std::sync::Arc;
@@ -23,6 +23,7 @@ pub struct AppCoreContext {
     pub api: Arc<ApiService>,
     pub db: Arc<Mutex<AppDatabase>>,
     pub http_cache: Arc<HttpCache>,
+    pub track_cache: Arc<TrackCache>,
 }
 
 pub struct AppSystemContext {
@@ -47,6 +48,7 @@ impl AppContext {
         api: Arc<ApiService>,
         db: Arc<Mutex<AppDatabase>>,
         http_cache: Arc<HttpCache>,
+        track_cache: Arc<TrackCache>,
         signals: AudioSignals,
         state: Arc<RwLock<SystemState>>,
         effect_handles: Arc<StdRwLock<HashMap<String, EffectHandle>>>,
@@ -63,6 +65,7 @@ impl AppContext {
                 api,
                 db,
                 http_cache,
+                track_cache,
             },
             system: AppSystemContext {
                 event_sink: Arc::new(OnceCell::new()),

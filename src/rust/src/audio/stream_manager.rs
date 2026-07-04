@@ -1,6 +1,7 @@
 use crate::audio::cache::UrlCache;
 use crate::audio::progress::TrackProgress;
 use crate::http::ApiService;
+use crate::storage::cache::TrackCache;
 use crate::stream;
 use foldhash::HashMap;
 use foldhash::HashMapExt;
@@ -17,12 +18,13 @@ pub type PrewarmResult = (stream::StreamingSession, Arc<TrackProgress>, String);
 pub struct StreamManager {
     api: Arc<ApiService>,
     url_cache: UrlCache,
+    track_cache: Arc<TrackCache>,
     prewarm_cache: Arc<Mutex<HashMap<String, PrewarmResult>>>,
     http_client: reqwest::Client,
 }
 
 impl StreamManager {
-    pub fn new(api: Arc<ApiService>, url_cache: UrlCache) -> Self {
+    pub fn new(api: Arc<ApiService>, url_cache: UrlCache, track_cache: Arc<TrackCache>) -> Self {
         let http_client = reqwest::Client::builder()
             .pool_max_idle_per_host(4)
             .pool_idle_timeout(std::time::Duration::from_secs(60))
@@ -32,6 +34,7 @@ impl StreamManager {
         Self {
             api,
             url_cache,
+            track_cache,
             prewarm_cache: Arc::new(Mutex::new(HashMap::new())),
             http_client,
         }
@@ -72,6 +75,29 @@ impl StreamManager {
             }
         }
 
+        let progress = Arc::new(TrackProgress::new());
+
+        let progress_clone = progress.clone();
+
+        // 1. Check if track is fully downloaded in offline cache
+        if let Some((path, codec)) = self.track_cache.get_track_file(&track.id).await {
+            let codec_clone = codec.clone();
+            
+            // For a local file, we know the length immediately and we don't have to wait for buffering
+            let file = std::fs::File::open(&path)
+                .map_err(|e| Box::<dyn std::error::Error + Send + Sync>::from(format!("failed to open offline file: {}", e)))?;
+            let total_bytes = file.metadata().map(|m| m.len()).unwrap_or(0);
+            
+            let session = tokio::task::spawn_blocking(move || {
+                stream::create_streaming_session(file, total_bytes, codec_clone, progress_clone)
+            })
+            .await
+            .map_err(|e| Box::<dyn std::error::Error + Send + Sync>::from(e.to_string()))??;
+
+            return Ok((session, progress, codec));
+        }
+
+        // 2. Fallback to streaming
         let (url, codec) = if let Some((url, codec)) = self.url_cache.get(&track.id) {
             (url, codec)
         } else {
@@ -85,9 +111,6 @@ impl StreamManager {
             (url, codec)
         };
 
-        let progress = Arc::new(TrackProgress::new());
-
-        let progress_clone = progress.clone();
         let codec_clone = codec.clone();
 
         let client = self.http_client.clone();
@@ -103,8 +126,9 @@ impl StreamManager {
             .await
             .map_err(|e| Box::<dyn std::error::Error + Send + Sync>::from(e.to_string()))?;
 
+        let total_bytes = data_source.total_bytes();
         let session = tokio::task::spawn_blocking(move || {
-            stream::create_streaming_session(data_source, codec_clone, progress_clone)
+            stream::create_streaming_session(data_source, total_bytes, codec_clone, progress_clone)
         })
         .await
         .map_err(|e| Box::<dyn std::error::Error + Send + Sync>::from(e.to_string()))??;

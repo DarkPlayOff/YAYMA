@@ -2,10 +2,12 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:signals_flutter/signals_flutter.dart';
+import 'package:yayma/src/providers/auth_provider.dart';
 import 'package:yayma/src/providers/library_provider.dart';
 import 'package:yayma/src/providers/navigation_provider.dart';
 import 'package:yayma/src/providers/notification_provider.dart';
 import 'package:yayma/src/providers/playback_provider.dart';
+import 'package:yayma/src/rust/api/content.dart' as rust;
 import 'package:yayma/src/rust/api/models.dart';
 import 'package:yayma/src/ui/widgets/common_ui.dart';
 import 'package:yayma/src/ui/widgets/media_card.dart';
@@ -209,9 +211,102 @@ class _LibraryViewState extends State<LibraryView>
   }
 }
 
-class _LikedTracksTab extends StatelessWidget {
+class _LikedTracksTab extends StatefulWidget {
   final TextEditingController searchController;
   const _LikedTracksTab({required this.searchController});
+
+  @override
+  State<_LikedTracksTab> createState() => _LikedTracksTabState();
+}
+
+class _LikedTracksTabState extends State<_LikedTracksTab> {
+  final FlutterSignal<bool> _isDownloadingAll = signal(false);
+
+  Future<void> _downloadAllLikedTracks(List<SimpleTrackDto> tracks) async {
+    if (_isDownloadingAll.value) return;
+
+    final ctx = appContextSignal.value;
+    if (ctx == null) return;
+
+    _isDownloadingAll.value = true;
+    showAppSuccess('Скачивание ${tracks.length} треков началось...');
+
+    try {
+      final trackIds = tracks
+          .where((t) => !downloadedTracksSignal.value.contains(t.id))
+          .map((t) => t.id)
+          .toList();
+
+      if (trackIds.isNotEmpty) {
+        await rust.downloadTracksBatch(ctx: ctx, trackIds: trackIds);
+      }
+    } on Object catch (e) {
+      if (!mounted) return;
+      showAppError('Ошибка при скачивании: $e');
+    } finally {
+      _isDownloadingAll.value = false;
+    }
+  }
+
+  Future<void> _deleteAllLikedTracks(List<SimpleTrackDto> tracks) async {
+    final ctx = appContextSignal.value;
+    if (ctx == null) return;
+
+    var deleted = 0;
+    try {
+      for (final track in tracks) {
+        if (!mounted) break;
+        final downloadedTracks = downloadedTracksSignal.value;
+        if (downloadedTracks.contains(track.id)) {
+          await rust.deleteDownloadedTrack(ctx: ctx, trackId: track.id);
+          unawaited(refreshDownloadedTracks());
+          deleted++;
+        }
+      }
+
+      if (!mounted) return;
+      if (deleted > 0) {
+        showAppSuccess('Удалено треков: $deleted');
+      }
+    } on Object catch (e) {
+      if (!mounted) return;
+      showAppError('Ошибка при удалении: $e');
+    }
+  }
+
+  void _showDeleteAllConfirmation(BuildContext context, List<SimpleTrackDto> tracks) {
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1E1E1E),
+        title: const Text(
+          'Удалить всё?',
+          style: TextStyle(color: Colors.white),
+        ),
+        content: const Text(
+          'Вы действительно хотите удалить все скачанные любимые треки?',
+          style: TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Отмена'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red.shade900,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () {
+              Navigator.pop(context);
+              unawaited(_deleteAllLikedTracks(tracks));
+            },
+            child: const Text('Удалить'),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -233,43 +328,87 @@ class _LikedTracksTab extends StatelessWidget {
                 isNarrow ? 20 : 40,
                 16,
               ),
-              child: TextField(
-                controller: searchController,
-                onChanged: setLibrarySearchQuery,
-                style: const TextStyle(color: Colors.white, fontSize: 14),
-                decoration: InputDecoration(
-                  hintText: 'Поиск в любимых треках...',
-                  hintStyle: const TextStyle(color: Colors.white24),
-                  prefixIcon: const Icon(
-                    Icons.search,
-                    color: Colors.white38,
-                    size: 20,
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: widget.searchController,
+                      onChanged: setLibrarySearchQuery,
+                      style: const TextStyle(color: Colors.white, fontSize: 14),
+                      decoration: InputDecoration(
+                        hintText: 'Поиск в любимых треках...',
+                        hintStyle: const TextStyle(color: Colors.white24),
+                        prefixIcon: const Icon(
+                          Icons.search,
+                          color: Colors.white38,
+                          size: 20,
+                        ),
+                        suffixIcon: widget.searchController.text.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(
+                                  Icons.clear,
+                                  color: Colors.white38,
+                                  size: 18,
+                                ),
+                                onPressed: () {
+                                  widget.searchController.clear();
+                                  setLibrarySearchQuery('');
+                                },
+                              )
+                            : null,
+                        filled: true,
+                        fillColor: Colors.white.withValues(alpha: 0.05),
+                        isDense: true,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide.none,
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 10,
+                        ),
+                      ),
+                    ),
                   ),
-                  suffixIcon: searchController.text.isNotEmpty
-                      ? IconButton(
-                          icon: const Icon(
-                            Icons.clear,
-                            color: Colors.white38,
-                            size: 18,
+                  const SizedBox(width: 12),
+                  SignalBuilder(
+                    builder: (context) {
+                      final isDownloading = _isDownloadingAll.value;
+                      final downloadedTracks = downloadedTracksSignal.value;
+                      final allDownloaded = tracks.isNotEmpty && tracks.every((t) => downloadedTracks.contains(t.id));
+
+                      if (allDownloaded) {
+                        return IconButton(
+                          onPressed: () => _showDeleteAllConfirmation(context, tracks),
+                          icon: const Icon(Icons.delete_sweep_rounded),
+                          tooltip: 'Удалить всё из кэша',
+                          style: IconButton.styleFrom(
+                            backgroundColor: Colors.white.withValues(alpha: 0.05),
+                            foregroundColor: Colors.red.shade400,
                           ),
-                          onPressed: () {
-                            searchController.clear();
-                            setLibrarySearchQuery('');
-                          },
-                        )
-                      : null,
-                  filled: true,
-                  fillColor: Colors.white.withValues(alpha: 0.05),
-                  isDense: true,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide.none,
+                        );
+                      }
+
+                      return IconButton(
+                        onPressed: isDownloading || tracks.isEmpty
+                            ? null
+                            : () => unawaited(_downloadAllLikedTracks(tracks)),
+                        icon: isDownloading
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.download_rounded),
+                        tooltip: 'Скачать всё',
+                        style: IconButton.styleFrom(
+                          backgroundColor: Colors.white.withValues(alpha: 0.05),
+                          foregroundColor: Theme.of(context).colorScheme.primary,
+                        ),
+                      );
+                    },
                   ),
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 10,
-                  ),
-                ),
+                ],
               ),
             ),
             Expanded(

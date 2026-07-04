@@ -242,3 +242,141 @@ impl HttpCache {
         Ok(())
     }
 }
+
+pub struct TrackCache {
+    cache_dir: PathBuf,
+}
+
+impl TrackCache {
+    pub fn new(base_path: Option<PathBuf>) -> Self {
+        let cache_dir = if let Some(path) = base_path {
+            path.join("offline_tracks")
+        } else if let Some(proj_dirs) = ProjectDirs::from("com", "yamusic", "yamusic") {
+            proj_dirs.data_dir().join("offline_tracks")
+        } else {
+            std::env::current_dir()
+                .unwrap_or_default()
+                .join("data")
+                .join("offline_tracks")
+        };
+
+        Self { cache_dir }
+    }
+
+    pub fn get_cache_dir(&self) -> &Path {
+        &self.cache_dir
+    }
+
+    fn hash_url(&self, url: &str) -> String {
+        let mut s = FixedState::with_seed(0).build_hasher();
+        s.write(url.as_bytes());
+        format!("{:x}", s.finish())
+    }
+
+    pub async fn save_cover(&self, url: &str, source_path: &Path) -> Result<(), std::io::Error> {
+        let covers_dir = self.cache_dir.join("covers");
+        fs::create_dir_all(&covers_dir).await?;
+        let filename = self.hash_url(url);
+        let dest_path = covers_dir.join(format!("{}.jpg", filename));
+        if !dest_path.exists() {
+            fs::copy(source_path, dest_path).await?;
+        }
+        Ok(())
+    }
+
+    pub async fn get_cover(&self, url: &str) -> Option<PathBuf> {
+        let covers_dir = self.cache_dir.join("covers");
+        let filename = self.hash_url(url);
+        let dest_path = covers_dir.join(format!("{}.jpg", filename));
+        if dest_path.exists() {
+            Some(dest_path)
+        } else {
+            None
+        }
+    }
+
+    pub async fn get_track_file(&self, track_id: &str) -> Option<(PathBuf, String)> {
+        // Try to find the file with any supported extension
+        for ext in ["flac", "m4a", "mp3"] {
+            let path = self.cache_dir.join(format!("{}.{}", track_id, ext));
+            if path.exists() {
+                let codec = if ext == "m4a" { "aac" } else { ext };
+                return Some((path, codec.to_string()));
+            }
+        }
+        None
+    }
+    
+    pub async fn init(&self) -> Result<(), std::io::Error> {
+        fs::create_dir_all(&self.cache_dir).await
+    }
+
+    pub async fn get_all_track_ids(&self) -> Vec<String> {
+        let mut ids = Vec::new();
+        if !self.cache_dir.exists() {
+            return ids;
+        }
+        
+        if let Ok(mut entries) = fs::read_dir(&self.cache_dir).await {
+            while let Ok(Some(entry)) = entries.next_entry().await {
+                if let Ok(metadata) = entry.metadata().await {
+                    if metadata.is_file() {
+                        let path = entry.path();
+                        if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
+                            ids.push(stem.to_string());
+                        }
+                    }
+                }
+            }
+        }
+        ids
+    }
+
+    pub async fn get_size(&self) -> Result<i64, std::io::Error> {
+        let mut size = 0;
+        if self.cache_dir.exists() {
+            // Include tracks
+            let mut entries = fs::read_dir(&self.cache_dir).await?;
+            while let Ok(Some(entry)) = entries.next_entry().await {
+                if let Ok(metadata) = entry.metadata().await {
+                    if metadata.is_file() {
+                        size += metadata.len() as i64;
+                    }
+                }
+            }
+            // Include covers
+            let covers_dir = self.cache_dir.join("covers");
+            if covers_dir.exists() {
+                let mut covers = fs::read_dir(&covers_dir).await?;
+                while let Ok(Some(entry)) = covers.next_entry().await {
+                    if let Ok(metadata) = entry.metadata().await {
+                        if metadata.is_file() {
+                            size += metadata.len() as i64;
+                        }
+                    }
+                }
+            }
+        }
+        Ok(size)
+    }
+
+    pub async fn clear(&self) -> Result<(), std::io::Error> {
+        if self.cache_dir.exists() {
+            let _ = fs::remove_dir_all(&self.cache_dir).await;
+            let _ = fs::create_dir_all(&self.cache_dir).await;
+        }
+        Ok(())
+    }
+
+    pub async fn delete_track(&self, track_id: &str) -> Result<(), std::io::Error> {
+        // Delete the track file
+        for ext in ["flac", "m4a", "mp3", "aac"] {
+            let path = self.cache_dir.join(format!("{}.{}", track_id, ext));
+            if path.exists() {
+                let _ = fs::remove_file(path).await;
+            }
+        }
+        Ok(())
+    }
+}
+

@@ -5,7 +5,7 @@ use crate::app::workers;
 use crate::audio::system::AudioSystem;
 use crate::db::AppDatabase;
 use crate::http::ApiService;
-use crate::storage::cache::HttpCache;
+use crate::storage::cache::{HttpCache, TrackCache};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::OnceLock;
@@ -50,12 +50,15 @@ async fn initialize_services(
     let db = AppDatabase::init(DATA_DIR.get().cloned()).await?;
     let db_arc = Arc::new(Mutex::new(db));
     let http_cache = Arc::new(HttpCache::new(db_arc.clone(), DATA_DIR.get().cloned()));
+    let track_cache = Arc::new(TrackCache::new(DATA_DIR.get().cloned()));
+    let _ = track_cache.init().await;
 
     let (audio_tx, signals, state, effect_handles) = AudioSystem::spawn(
         event_tx.clone(),
         api_arc.clone(),
         db_arc.clone(),
         http_cache.clone(),
+        track_cache.clone(),
     )
     .await?;
 
@@ -64,6 +67,7 @@ async fn initialize_services(
         api_arc.clone(),
         db_arc,
         http_cache,
+        track_cache,
         signals.clone(),
         state,
         effect_handles.clone(),
