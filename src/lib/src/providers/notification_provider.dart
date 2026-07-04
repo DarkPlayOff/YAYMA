@@ -16,7 +16,16 @@ final FlutterSignal<AppNotification?> appNotificationSignal =
     signal<AppNotification?>(null);
 
 void showAppError(String message) {
-  appNotificationSignal.value = AppNotification(message: message);
+  var msg = message;
+  final lowerMsg = message.toLowerCase();
+  if (lowerMsg.contains('networkerror') ||
+      lowerMsg.contains('network error') ||
+      lowerMsg.contains('connection error') ||
+      lowerMsg.contains('timed out') ||
+      lowerMsg.contains('timeout')) {
+    msg = 'Отсутствует подключение к сети. Проверьте интернет-соединение.';
+  }
+  appNotificationSignal.value = AppNotification(message: msg);
 }
 
 void showAppSuccess(String message) {
