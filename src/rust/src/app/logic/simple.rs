@@ -45,17 +45,19 @@ pub async fn clear_track_cache(ctx: &AppContext) {
     let _ = ctx.core.track_cache.clear().await;
 }
 
-static INIT_DB: tokio::sync::OnceCell<Option<tokio::sync::Mutex<crate::storage::db::AppDatabase>>> = tokio::sync::OnceCell::const_new();
+static INIT_DB: tokio::sync::OnceCell<Option<tokio::sync::Mutex<crate::storage::db::AppDatabase>>> =
+    tokio::sync::OnceCell::const_new();
 
 async fn get_init_db() -> Option<&'static tokio::sync::Mutex<crate::storage::db::AppDatabase>> {
-    INIT_DB.get_or_init(|| async {
-        crate::storage::db::AppDatabase::init(crate::app::get_data_dir())
-            .await
-            .ok()
-            .map(tokio::sync::Mutex::new)
-    })
-    .await
-    .as_ref()
+    INIT_DB
+        .get_or_init(|| async {
+            crate::storage::db::AppDatabase::init(crate::app::get_data_dir())
+                .await
+                .ok()
+                .map(tokio::sync::Mutex::new)
+        })
+        .await
+        .as_ref()
 }
 
 pub fn is_discord_rpc_enabled(ctx: &AppContext) -> bool {
@@ -65,18 +67,26 @@ pub fn is_discord_rpc_enabled(ctx: &AppContext) -> bool {
 pub async fn set_discord_rpc_enabled(ctx: &AppContext, enabled: bool) {
     ctx.audio.signals.discord_rpc.set(enabled);
     let mut db = ctx.core.db.lock().await;
-    let _ = db.save_setting("discord_rpc", &enabled).await;
+    if let Err(e) = db.save_setting("discord_rpc", &enabled).await {
+        tracing::error!("Failed to save discord_rpc setting: {:?}", e);
+    }
 }
 
 pub async fn is_custom_titlebar_enabled(ctx: &AppContext) -> bool {
     let mut db = ctx.core.db.lock().await;
-    db.load_setting("custom_titlebar").await.unwrap_or(Some(true)).unwrap_or(true)
+    db.load_setting("custom_titlebar")
+        .await
+        .unwrap_or(Some(true))
+        .unwrap_or(true)
 }
 
 pub async fn is_custom_titlebar_enabled_init() -> bool {
     if let Some(db_mutex) = get_init_db().await {
         let mut db = db_mutex.lock().await;
-        db.load_setting("custom_titlebar").await.unwrap_or(Some(true)).unwrap_or(true)
+        db.load_setting("custom_titlebar")
+            .await
+            .unwrap_or(Some(true))
+            .unwrap_or(true)
     } else {
         true
     }
@@ -84,18 +94,26 @@ pub async fn is_custom_titlebar_enabled_init() -> bool {
 
 pub async fn set_custom_titlebar_enabled(ctx: &AppContext, enabled: bool) {
     let mut db = ctx.core.db.lock().await;
-    let _ = db.save_setting("custom_titlebar", &enabled).await;
+    if let Err(e) = db.save_setting("custom_titlebar", &enabled).await {
+        tracing::error!("Failed to save custom_titlebar setting: {:?}", e);
+    }
 }
 
 pub async fn is_auto_hide_navbar_enabled(ctx: &AppContext) -> bool {
     let mut db = ctx.core.db.lock().await;
-    db.load_setting("auto_hide_navbar").await.unwrap_or(Some(false)).unwrap_or(false)
+    db.load_setting("auto_hide_navbar")
+        .await
+        .unwrap_or(Some(false))
+        .unwrap_or(false)
 }
 
 pub async fn is_auto_hide_navbar_enabled_init() -> bool {
     if let Some(db_mutex) = get_init_db().await {
         let mut db = db_mutex.lock().await;
-        db.load_setting("auto_hide_navbar").await.unwrap_or(Some(false)).unwrap_or(false)
+        db.load_setting("auto_hide_navbar")
+            .await
+            .unwrap_or(Some(false))
+            .unwrap_or(false)
     } else {
         false
     }
@@ -103,18 +121,26 @@ pub async fn is_auto_hide_navbar_enabled_init() -> bool {
 
 pub async fn set_auto_hide_navbar_enabled(ctx: &AppContext, enabled: bool) {
     let mut db = ctx.core.db.lock().await;
-    let _ = db.save_setting("auto_hide_navbar", &enabled).await;
+    if let Err(e) = db.save_setting("auto_hide_navbar", &enabled).await {
+        tracing::error!("Failed to save auto_hide_navbar setting: {:?}", e);
+    }
 }
 
 pub async fn is_close_to_tray_enabled(ctx: &AppContext) -> bool {
     let mut db = ctx.core.db.lock().await;
-    db.load_setting("close_to_tray").await.unwrap_or(Some(true)).unwrap_or(true)
+    db.load_setting("close_to_tray")
+        .await
+        .unwrap_or(Some(true))
+        .unwrap_or(true)
 }
 
 pub async fn is_close_to_tray_enabled_init() -> bool {
     if let Some(db_mutex) = get_init_db().await {
         let mut db = db_mutex.lock().await;
-        db.load_setting("close_to_tray").await.unwrap_or(Some(true)).unwrap_or(true)
+        db.load_setting("close_to_tray")
+            .await
+            .unwrap_or(Some(true))
+            .unwrap_or(true)
     } else {
         true
     }
@@ -122,7 +148,9 @@ pub async fn is_close_to_tray_enabled_init() -> bool {
 
 pub async fn set_close_to_tray_enabled(ctx: &AppContext, enabled: bool) {
     let mut db = ctx.core.db.lock().await;
-    let _ = db.save_setting("close_to_tray", &enabled).await;
+    if let Err(e) = db.save_setting("close_to_tray", &enabled).await {
+        tracing::error!("Failed to save close_to_tray setting: {:?}", e);
+    }
 }
 
 fn extract_display_name(raw: &str) -> String {
@@ -143,8 +171,8 @@ pub fn get_audio_devices(_ctx: &AppContext) -> Vec<String> {
 
     #[cfg(not(target_os = "windows"))]
     let raw_names: Vec<String> = {
-        use rodio::cpal::traits::HostTrait;
         use rodio::DeviceTrait;
+        use rodio::cpal::traits::HostTrait;
         let host = rodio::cpal::default_host();
         host.output_devices()
             .map(|devs| {

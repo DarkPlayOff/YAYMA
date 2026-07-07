@@ -29,7 +29,9 @@ pub extern "C" fn Java_io_github_darkplayoff_yayma_MainActivity_initRustls(
             INIT_NDK.call_once(|| {
                 unsafe {
                     let vm = env.get_java_vm().expect("Failed to get JavaVM");
-                    let context_global = env.new_global_ref(&context).expect("Failed to create Global");
+                    let context_global = env
+                        .new_global_ref(&context)
+                        .expect("Failed to create Global");
                     let context_raw = context_global.as_raw();
 
                     ndk_context::initialize_android_context(

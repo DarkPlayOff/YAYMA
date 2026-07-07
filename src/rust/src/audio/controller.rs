@@ -271,8 +271,6 @@ impl AudioController {
                         engine.play();
                         signals.set_playing(true);
                     }
-
-
                 }
                 Err(_e) => {
                     signals.set_buffering(false);

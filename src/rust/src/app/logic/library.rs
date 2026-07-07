@@ -11,19 +11,24 @@ pub async fn toggle_like(ctx: &AppContext, track_id: String) {
 
     // Instant local update (Optimistic UI)
     {
-        let mut state = ctx.audio.state.write().await;
-        state.liked.set_like_status(&track_id, !is_liked);
+        {
+            let mut state = ctx.audio.state.write().await;
+            state.liked.set_like_status(&track_id, !is_liked);
+            ctx.audio.signals.library_changed.send_replace(());
+            ctx.audio.signals.changed.send_replace(());
+        }
 
         // Update DB immediately for search and offline access
         let mut db = ctx.core.db.lock().await;
         if is_liked {
-            let _ = db.remove_liked_track(&track_id).await;
+            if let Err(e) = db.remove_liked_track(&track_id).await {
+                tracing::error!("Failed to remove liked track from DB: {:?}", e);
+            }
         } else {
-            let _ = db.add_liked_track(&track_id).await;
+            if let Err(e) = db.add_liked_track(&track_id).await {
+                tracing::error!("Failed to add liked track to DB: {:?}", e);
+            }
         }
-
-        ctx.audio.signals.library_changed.send_replace(());
-        ctx.audio.signals.changed.send_replace(());
     }
 
     // Perform API request in background
@@ -77,9 +82,7 @@ pub async fn toggle_dislike(ctx: &AppContext, track_id: String) {
         } else {
             let _ = api.add_dislike_track(track_id.clone()).await;
             let _ = audio_tx
-                .send(crate::audio::commands::AudioMessage::WaveDislike(
-                    track_id,
-                ))
+                .send(crate::audio::commands::AudioMessage::WaveDislike(track_id))
                 .await;
         }
     });
@@ -133,14 +136,23 @@ pub async fn get_playlists(ctx: &AppContext) -> Vec<SimplePlaylistDto> {
             .into_iter()
             .map(SimplePlaylistDto::from_yandex)
             .collect(),
-        Err(_) => vec![],
+        Err(e) => {
+            tracing::error!("Failed to fetch playlists: {:?}", e);
+            vec![]
+        }
     }
 }
 
 pub async fn get_liked_albums(ctx: &AppContext) -> Vec<SimpleAlbumDto> {
     match ctx.core.api.fetch_liked_albums().await {
-        Ok(albums) => albums.into_iter().map(SimpleAlbumDto::from_yandex).collect(),
-        Err(_) => vec![],
+        Ok(albums) => albums
+            .into_iter()
+            .map(SimpleAlbumDto::from_yandex)
+            .collect(),
+        Err(e) => {
+            tracing::error!("Failed to fetch liked albums: {:?}", e);
+            vec![]
+        }
     }
 }
 
@@ -150,7 +162,10 @@ pub async fn get_liked_artists(ctx: &AppContext) -> Vec<SimpleArtistDto> {
             .into_iter()
             .map(SimpleArtistDto::from_yandex)
             .collect(),
-        Err(_) => vec![],
+        Err(e) => {
+            tracing::error!("Failed to fetch liked artists: {:?}", e);
+            vec![]
+        }
     }
 }
 
@@ -272,7 +287,11 @@ async fn fetch_and_save_missing_metadata(
                     .map(crate::api::models::TrackArtistDto::from_yandex)
                     .collect();
                 let album = t.albums.first_mut().and_then(|a| a.title.take());
-                let album_id = t.albums.first_mut().and_then(|a| a.id.take()).map(|id| id.to_string());
+                let album_id = t
+                    .albums
+                    .first_mut()
+                    .and_then(|a| a.id.take())
+                    .map(|id| id.to_string());
                 let cover_url = t
                     .og_image
                     .take()
@@ -291,7 +310,9 @@ async fn fetch_and_save_missing_metadata(
                     duration_ms,
                 };
 
-                let _ = db.upsert_track_metadata(metadata_to_save.clone()).await;
+                if let Err(e) = db.upsert_track_metadata(metadata_to_save.clone()).await {
+                    tracing::error!("Failed to upsert track metadata in DB: {:?}", e);
+                }
                 metadata_map.insert(metadata_to_save.id.clone(), metadata_to_save);
             }
         }
@@ -389,7 +410,9 @@ pub async fn liked_tracks_stream(
                     if let Some(ref q) = query_lower {
                         let matches = m.title.to_lowercase().contains(q)
                             || m.artists.iter().any(|a| a.name.to_lowercase().contains(q))
-                            || m.album.as_ref().is_some_and(|a| a.to_lowercase().contains(q));
+                            || m.album
+                                .as_ref()
+                                .is_some_and(|a| a.to_lowercase().contains(q));
 
                         if !matches {
                             continue;
@@ -399,7 +422,10 @@ pub async fn liked_tracks_stream(
                     dtos.push(metadata_to_dto(m, true, disliked_ids_set.contains(&id)));
 
                     if dtos.len() >= 50 {
-                        if sink.add(std::mem::take(&mut dtos)).is_err() {
+                        if sink
+                            .add(std::mem::replace(&mut dtos, Vec::with_capacity(50)))
+                            .is_err()
+                        {
                             return;
                         }
                         sent_any = true;
@@ -415,10 +441,9 @@ pub async fn liked_tracks_stream(
             }
 
             // If we were searching but found nothing, send empty list to show "No results"
-            if !sent_any && query_lower.is_some()
-                && sink.add(vec![]).is_err() {
-                    return;
-                }
+            if !sent_any && query_lower.is_some() && sink.add(vec![]).is_err() {
+                return;
+            }
         }
 
         // Wait for signal changes

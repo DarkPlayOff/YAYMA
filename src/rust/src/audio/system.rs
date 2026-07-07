@@ -459,10 +459,7 @@ impl AudioSystem {
             }
             AudioMessage::RecreateStream => {
                 let device = self.signals.selected_device.get();
-                if let Err(e) = self
-                    .controller
-                    .recreate_engine(device.as_deref())
-                {
+                if let Err(e) = self.controller.recreate_engine(device.as_deref()) {
                     tracing::error!("Failed to recreate stream: {}", e);
                 } else {
                     let _ = self.tx.send(AudioMessage::ReloadCurrentTrack).await;

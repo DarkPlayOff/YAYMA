@@ -11,8 +11,6 @@ use std::sync::{
 use std::thread;
 use std::time::Duration;
 
-
-
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
 const PCM_CHUNK_SAMPLES: usize = 16384;
@@ -184,8 +182,6 @@ pub fn create_streaming_session<R: std::io::Read + std::io::Seek + Send + Sync +
     codec: String,
     progress: Arc<TrackProgress>,
 ) -> Result<StreamingSession> {
-
-
     let decoder = Decoder::builder()
         .with_data(data_source)
         .with_hint(codec.as_str())
@@ -256,7 +252,7 @@ fn run_decode_loop<R: std::io::Read + std::io::Seek + Send + Sync + 'static>(
     progress_generation: u64,
 ) {
     let mut active_generation = generation.load(Ordering::Acquire);
-    
+
     let get_buffer = || match recycle_rx.try_recv() {
         Ok(mut v) => {
             v.clear();
@@ -328,13 +324,19 @@ fn run_decode_loop<R: std::io::Read + std::io::Seek + Send + Sync + 'static>(
         }
 
         if chunk.is_empty() {
-            if sample_tx.send(SampleMessage::Finished(active_generation)).is_err() {
+            if sample_tx
+                .send(SampleMessage::Finished(active_generation))
+                .is_err()
+            {
                 return;
             }
             // Stay alive: wait for a Seek command to restart decoding
             // or a Stop command to exit cleanly
             match cmd_rx.recv() {
-                Ok(DecoderCommand::Seek { position, generation: new_gen }) => {
+                Ok(DecoderCommand::Seek {
+                    position,
+                    generation: new_gen,
+                }) => {
                     let _ = decoder.try_seek(position);
                     if progress_generation == progress.get_generation() {
                         progress.set_current_position(position);

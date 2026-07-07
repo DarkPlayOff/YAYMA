@@ -21,11 +21,18 @@ pub async fn get_downloads_size(ctx: &AppContext) -> i64 {
     logic::get_downloads_size(ctx).await
 }
 
-pub async fn download_track(ctx: &AppContext, track_id: String, to_cache: bool) -> Result<String, AppError> {
+pub async fn download_track(
+    ctx: &AppContext,
+    track_id: String,
+    to_cache: bool,
+) -> Result<String, AppError> {
     logic::download_track(ctx, track_id, to_cache).await
 }
 
-pub async fn download_tracks_batch(ctx: &AppContext, track_ids: Vec<String>) -> Result<(), AppError> {
+pub async fn download_tracks_batch(
+    ctx: &AppContext,
+    track_ids: Vec<String>,
+) -> Result<(), AppError> {
     logic::download_tracks_batch(ctx, track_ids).await
 }
 

@@ -59,7 +59,8 @@ impl AppDatabase {
     }
 
     pub async fn save_auth_token(&mut self, token: &str, user_id: u64) -> toasty::Result<()> {
-        self.save_setting("auth_token", &(token.to_string(), user_id)).await
+        self.save_setting("auth_token", &(token.to_string(), user_id))
+            .await
     }
 
     pub async fn load_auth_token(&mut self) -> toasty::Result<Option<(String, u64)>> {
@@ -80,7 +81,10 @@ impl AppDatabase {
     ) -> toasty::Result<()> {
         let now = chrono::Utc::now().timestamp();
         let expires_at = now + DEFAULT_CACHE_TTL_SECS;
-        let existing = CacheMetadata::filter_by_url(url).first().exec(&mut self.db).await?;
+        let existing = CacheMetadata::filter_by_url(url)
+            .first()
+            .exec(&mut self.db)
+            .await?;
         if let Some(mut cache) = existing {
             cache
                 .update()
@@ -110,7 +114,10 @@ impl AppDatabase {
         &mut self,
         url: &str,
     ) -> toasty::Result<Option<(String, Option<String>, bool)>> {
-        let res = CacheMetadata::filter_by_url(url).first().exec(&mut self.db).await?;
+        let res = CacheMetadata::filter_by_url(url)
+            .first()
+            .exec(&mut self.db)
+            .await?;
         if let Some(mut cache) = res {
             let now = chrono::Utc::now().timestamp();
             let is_expired = now >= cache.expires_at;
@@ -191,7 +198,11 @@ impl AppDatabase {
         position_ms: u64,
         is_playing: bool,
     ) -> toasty::Result<()> {
-        self.save_setting("playback_state", &(track_id.to_string(), position_ms, is_playing)).await
+        self.save_setting(
+            "playback_state",
+            &(track_id.to_string(), position_ms, is_playing),
+        )
+        .await
     }
 
     pub async fn load_playback_state(&mut self) -> toasty::Result<Option<(String, u64, bool)>> {
@@ -233,7 +244,10 @@ impl AppDatabase {
     }
 
     pub async fn upsert_track_metadata(&mut self, metadata: TrackMetadata) -> toasty::Result<()> {
-        let res = TrackMetadataEntity::filter_by_track_id(&metadata.id).first().exec(&mut self.db).await?;
+        let res = TrackMetadataEntity::filter_by_track_id(&metadata.id)
+            .first()
+            .exec(&mut self.db)
+            .await?;
         if let Some(mut entity) = res {
             entity
                 .update()
@@ -302,9 +316,10 @@ impl AppDatabase {
 
             for entity in entities {
                 let track_artists: &[TrackMetadataArtist] = entity.artists.get();
-                let mut track_artists_refs: Vec<&TrackMetadataArtist> = track_artists.iter().collect();
+                let mut track_artists_refs: Vec<&TrackMetadataArtist> =
+                    track_artists.iter().collect();
                 track_artists_refs.sort_by_key(|a| a.position);
-                
+
                 let mut artist_dtos = Vec::new();
                 for a in track_artists_refs {
                     artist_dtos.push(TrackArtistDto {
@@ -343,29 +358,46 @@ impl AppDatabase {
         enabled: bool,
         params: &[f32],
     ) -> toasty::Result<()> {
-        self.save_setting(&format!("effect_{}", id), &(enabled, params)).await
+        self.save_setting(&format!("effect_{}", id), &(enabled, params))
+            .await
     }
 
     pub async fn load_effect(&mut self, id: &str) -> toasty::Result<Option<(bool, Vec<f32>)>> {
         self.load_setting(&format!("effect_{}", id)).await
     }
 
-    pub async fn save_setting<T: serde::Serialize>(&mut self, key: &str, value: &T) -> toasty::Result<()> {
-        let val = serde_json::to_string(value).unwrap_or_default();
-        self.save_app_setting(key, &val).await
+    pub async fn save_setting<T: serde::Serialize>(
+        &mut self,
+        key: &str,
+        value: &T,
+    ) -> toasty::Result<()> {
+        match serde_json::to_string(value) {
+            Ok(val) => self.save_app_setting(key, &val).await,
+            Err(e) => {
+                tracing::error!("Failed to serialize setting '{}': {}", key, e);
+                Ok(())
+            }
+        }
     }
 
-    pub async fn load_setting<T: serde::de::DeserializeOwned>(&mut self, key: &str) -> toasty::Result<Option<T>> {
+    pub async fn load_setting<T: serde::de::DeserializeOwned>(
+        &mut self,
+        key: &str,
+    ) -> toasty::Result<Option<T>> {
         let val = self.load_app_setting(key).await?;
         if let Some(v) = val
-            && let Ok(parsed) = serde_json::from_str(&v) {
-                return Ok(Some(parsed));
-            }
+            && let Ok(parsed) = serde_json::from_str(&v)
+        {
+            return Ok(Some(parsed));
+        }
         Ok(None)
     }
 
     pub async fn save_app_setting(&mut self, key: &str, value: &str) -> toasty::Result<()> {
-        let res = AppSetting::filter_by_key(key).first().exec(&mut self.db).await?;
+        let res = AppSetting::filter_by_key(key)
+            .first()
+            .exec(&mut self.db)
+            .await?;
         if let Some(mut setting) = res {
             setting
                 .update()
@@ -384,7 +416,10 @@ impl AppDatabase {
     }
 
     async fn load_app_setting(&mut self, key: &str) -> toasty::Result<Option<String>> {
-        let res = AppSetting::filter_by_key(key).first().exec(&mut self.db).await?;
+        let res = AppSetting::filter_by_key(key)
+            .first()
+            .exec(&mut self.db)
+            .await?;
         if let Some(setting) = res {
             Ok(Some(setting.value))
         } else {

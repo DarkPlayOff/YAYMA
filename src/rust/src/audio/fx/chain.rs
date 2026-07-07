@@ -49,10 +49,7 @@ impl EffectChain {
         };
 
         self.handles.insert(id_str.clone(), handle.clone());
-        self.slots.push(EffectSlot {
-            effect,
-            params,
-        });
+        self.slots.push(EffectSlot { effect, params });
 
         handle
     }

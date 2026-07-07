@@ -82,12 +82,16 @@ impl StreamManager {
         // 1. Check if track is fully downloaded in offline cache
         if let Some((path, codec)) = self.track_cache.get_track_file(&track.id).await {
             let codec_clone = codec.clone();
-            
+
             // For a local file, we know the length immediately and we don't have to wait for buffering
-            let file = std::fs::File::open(&path)
-                .map_err(|e| Box::<dyn std::error::Error + Send + Sync>::from(format!("failed to open offline file: {}", e)))?;
+            let file = std::fs::File::open(&path).map_err(|e| {
+                Box::<dyn std::error::Error + Send + Sync>::from(format!(
+                    "failed to open offline file: {}",
+                    e
+                ))
+            })?;
             let total_bytes = file.metadata().map(|m| m.len()).unwrap_or(0);
-            
+
             let session = tokio::task::spawn_blocking(move || {
                 stream::create_streaming_session(file, total_bytes, codec_clone, progress_clone)
             })
@@ -115,16 +119,15 @@ impl StreamManager {
 
         let client = self.http_client.clone();
         let duration_ms = track.duration.map(|d| d.as_millis() as u64);
-        let data_source =
-            stream::StreamingDataSource::new(
-                client, 
-                url, 
-                Arc::clone(&progress), 
-                buffering_signal,
-                duration_ms,
-            )
-            .await
-            .map_err(|e| Box::<dyn std::error::Error + Send + Sync>::from(e.to_string()))?;
+        let data_source = stream::StreamingDataSource::new(
+            client,
+            url,
+            Arc::clone(&progress),
+            buffering_signal,
+            duration_ms,
+        )
+        .await
+        .map_err(|e| Box::<dyn std::error::Error + Send + Sync>::from(e.to_string()))?;
 
         let total_bytes = data_source.total_bytes();
         let session = tokio::task::spawn_blocking(move || {

@@ -132,10 +132,14 @@ impl SimpleTrackDto {
             id: t.id,
             title: t.title.take().unwrap_or_default(),
             version: t.version.take(),
-            artists: t.artists.into_iter().map(|mut a| TrackArtistDto {
-                id: a.id.take().map(|id| id.to_string()).unwrap_or_default(),
-                name: a.name.take().unwrap_or_default()
-            }).collect(),
+            artists: t
+                .artists
+                .into_iter()
+                .map(|mut a| TrackArtistDto {
+                    id: a.id.take().map(|id| id.to_string()).unwrap_or_default(),
+                    name: a.name.take().unwrap_or_default(),
+                })
+                .collect(),
             album: album_title,
             album_id,
             duration_ms: t.duration.map(|d| d.as_millis() as u32).unwrap_or(0),
@@ -174,10 +178,14 @@ impl TrackDetailsDto {
         Self {
             id: t.id,
             title: t.title.take().unwrap_or_default(),
-            artists: t.artists.into_iter().map(|mut a| TrackArtistDto {
-                id: a.id.take().map(|id| id.to_string()).unwrap_or_default(),
-                name: a.name.take().unwrap_or_default()
-            }).collect(),
+            artists: t
+                .artists
+                .into_iter()
+                .map(|mut a| TrackArtistDto {
+                    id: a.id.take().map(|id| id.to_string()).unwrap_or_default(),
+                    name: a.name.take().unwrap_or_default(),
+                })
+                .collect(),
             album: album_title,
             label,
             music_authors,

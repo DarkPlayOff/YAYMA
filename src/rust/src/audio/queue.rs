@@ -17,7 +17,7 @@ use yandex_music::model::{
 };
 
 use crate::audio::fetcher::{
-    FetchState, WaveExtensionHandles, WaveTrackEvent, WaveTrackOutcome, WAVE_VISIBLE_TRACKS,
+    FetchState, WAVE_VISIBLE_TRACKS, WaveExtensionHandles, WaveTrackEvent, WaveTrackOutcome,
 };
 use crate::audio::history::HistoryState;
 use crate::audio::prefetcher::UrlPrefetcher;
@@ -564,19 +564,15 @@ impl QueueManager {
         }
 
         if !self.fetch.pending_track_ids.is_empty() {
-            self.fetch
-                .trigger_playlist_batch(self.api.clone());
+            self.fetch.trigger_playlist_batch(self.api.clone());
             return;
         }
 
         if self.fetch_wave_session_clone().is_some() {
             let history_seeds = self.build_wave_history_seeds();
             let pending_feedback = std::mem::take(&mut self.wave_feedbacks);
-            self.fetch.trigger_wave_batch(
-                self.api.clone(),
-                history_seeds,
-                pending_feedback,
-            );
+            self.fetch
+                .trigger_wave_batch(self.api.clone(), history_seeds, pending_feedback);
         }
     }
 

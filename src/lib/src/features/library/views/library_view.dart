@@ -401,54 +401,49 @@ class _LikedTracksTabState extends State<_LikedTracksTab> {
                         style: const TextStyle(color: Colors.white38),
                       ),
                     )
-                  : Center(
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 1000),
-                        child: ListView.builder(
-                          padding: const EdgeInsets.only(bottom: 140),
-                          itemCount: tracks.length,
-                          itemBuilder: (context, index) {
-                            final track = tracks[index];
-                            return CommonTrackTile(
-                              trackId: track.id,
-                              title: track.title,
-                              version: track.version,
-                              artists: track.artists,
-                              albumId: track.albumId,
-                              leading: TrackCover(url: track.coverUrl),
-                              contentPadding: EdgeInsets.symmetric(
-                                horizontal: isNarrow ? 20 : 40,
-                                vertical: 8,
+                  : ListView.builder(
+                      padding: const EdgeInsets.only(bottom: 140),
+                      itemCount: tracks.length,
+                      itemBuilder: (context, index) {
+                        final track = tracks[index];
+                        return CommonTrackTile(
+                          trackId: track.id,
+                          title: track.title,
+                          version: track.version,
+                          artists: track.artists,
+                          albumId: track.albumId,
+                          leading: TrackCover(url: track.coverUrl),
+                          contentPadding: EdgeInsets.symmetric(
+                            horizontal: isNarrow ? 20 : 40,
+                            vertical: 8,
+                          ),
+                          trailing: Text(
+                            formatDuration(track.durationMs),
+                            style: const TextStyle(color: Colors.white38),
+                          ),
+                          hoverActions: [
+                            IconButton(
+                              icon: Icon(
+                                Icons.play_arrow_rounded,
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.primary,
                               ),
-                              trailing: Text(
-                                formatDuration(track.durationMs),
-                                style: const TextStyle(color: Colors.white38),
-                              ),
-                              hoverActions: [
-                                IconButton(
-                                  icon: Icon(
-                                    Icons.play_arrow_rounded,
-                                    color: Theme.of(
-                                      context,
-                                    ).colorScheme.primary,
-                                  ),
-                                  onPressed: () => unawaited(
-                                    PlaybackController.playLikedTrack(track.id),
-                                  ),
-                                ),
-                              ],
-                              onTap: () => unawaited(
+                              onPressed: () => unawaited(
                                 PlaybackController.playLikedTrack(track.id),
                               ),
-                              onTitleTap: () {
-                                if (track.albumId != null) {
-                                  navigateTo(AppSection.album, track.albumId);
-                                }
-                              },
-                            );
+                            ),
+                          ],
+                          onTap: () => unawaited(
+                            PlaybackController.playLikedTrack(track.id),
+                          ),
+                          onTitleTap: () {
+                            if (track.albumId != null) {
+                              navigateTo(AppSection.album, track.albumId);
+                            }
                           },
-                        ),
-                      ),
+                        );
+                      },
                     ),
             ),
           ],

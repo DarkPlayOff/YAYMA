@@ -17,7 +17,9 @@ pub async fn restore_saved_state(ctx: &AppContext) -> Option<SavedStateDto> {
 }
 
 pub async fn clear_token() {
-    let _ = TokenProvider::delete().await;
+    if let Err(e) = TokenProvider::delete().await {
+        tracing::error!("Failed to delete auth token: {:?}", e);
+    }
 }
 
 pub async fn login_with_token(token: String) -> Result<AppContext, AppError> {
@@ -25,7 +27,9 @@ pub async fn login_with_token(token: String) -> Result<AppContext, AppError> {
         .await
         .map_err(|_| AppError::InvalidToken)?;
 
-    let _ = TokenProvider::store(&token, user_id).await;
+    if let Err(e) = TokenProvider::store(&token, user_id).await {
+        tracing::error!("Failed to store auth token during login: {:?}", e);
+    }
 
     let api = ApiService::new(token, Some(client), Some(user_id))
         .await
@@ -48,9 +52,10 @@ pub async fn try_auto_login() -> Option<AppContext> {
             Some(user_id),
         )
         .await
-            && let Ok(ctx) = initialize_app(api).await {
-                return Some(ctx);
-            }
+        && let Ok(ctx) = initialize_app(api).await
+    {
+        return Some(ctx);
+    }
 
     // Fallback if the fast path fails for any reason
     login_with_token(token).await.ok()
@@ -67,21 +72,34 @@ pub async fn get_account_info(ctx: &AppContext) -> Option<UserAccountDto> {
         // Return cached immediately, but spawn a refresh in background
         let ctx_clone = ctx.clone();
         tokio::spawn(async move {
-            if let Ok(fresh) = ctx_clone.core.api.get_account_info().await {
-                let mut db = ctx_clone.core.db.lock().await;
-                let _ = db.save_setting("account_info", &fresh).await;
-                ctx_clone.send_event(crate::api::simple::AppEvent::AccountUpdated(fresh));
+            match ctx_clone.core.api.get_account_info().await {
+                Ok(fresh) => {
+                    let mut db = ctx_clone.core.db.lock().await;
+                    if let Err(e) = db.save_setting("account_info", &fresh).await {
+                        tracing::error!("Failed to cache account info: {:?}", e);
+                    }
+                    ctx_clone.send_event(crate::api::simple::AppEvent::AccountUpdated(fresh));
+                }
+                Err(e) => {
+                    tracing::error!("Failed to refresh account info: {:?}", e);
+                }
             }
         });
         return Some(account);
     }
 
     // 2. If no cache, wait for API
-    if let Ok(account) = ctx.core.api.get_account_info().await {
-        let mut db = ctx.core.db.lock().await;
-        let _ = db.save_setting("account_info", &account).await;
-        return Some(account);
+    match ctx.core.api.get_account_info().await {
+        Ok(account) => {
+            let mut db = ctx.core.db.lock().await;
+            if let Err(e) = db.save_setting("account_info", &account).await {
+                tracing::error!("Failed to cache account info: {:?}", e);
+            }
+            Some(account)
+        }
+        Err(e) => {
+            tracing::error!("Failed to fetch account info: {:?}", e);
+            None
+        }
     }
-
-    None
 }

@@ -49,7 +49,11 @@ pub async fn get_downloads_size(_ctx: &AppContext) -> i64 {
     0
 }
 
-pub async fn download_track(ctx: &AppContext, track_id: String, to_cache: bool) -> Result<String, AppError> {
+pub async fn download_track(
+    ctx: &AppContext,
+    track_id: String,
+    to_cache: bool,
+) -> Result<String, AppError> {
     let api = &ctx.core.api;
     let (liked, disliked) = get_liked_snapshot(ctx).await;
 
@@ -61,7 +65,6 @@ pub async fn download_track(ctx: &AppContext, track_id: String, to_cache: bool) 
         .ok_or_else(|| AppError::NotFound(format!("Track {}", track_id)))?;
 
     let dto = SimpleTrackDto::from_yandex_owned(track, &liked, &disliked);
-
 
     let (url, codec) = api.fetch_track_url_for_download(track_id.clone()).await?;
 
@@ -155,13 +158,20 @@ pub async fn download_track(ctx: &AppContext, track_id: String, to_cache: bool) 
 }
 
 pub async fn delete_downloaded_track(ctx: &AppContext, track_id: String) -> Result<(), AppError> {
-    ctx.core.track_cache.delete_track(&track_id).await.map_err(|e| AppError::Unknown(e.to_string()))?;
+    ctx.core
+        .track_cache
+        .delete_track(&track_id)
+        .await
+        .map_err(|e| AppError::Unknown(e.to_string()))?;
     Ok(())
 }
 
-pub async fn download_tracks_batch(ctx: &AppContext, track_ids: Vec<String>) -> Result<(), AppError> {
-    use futures::stream::{self, StreamExt};
+pub async fn download_tracks_batch(
+    ctx: &AppContext,
+    track_ids: Vec<String>,
+) -> Result<(), AppError> {
     use crate::api::simple::AppEvent;
+    use futures::stream::{self, StreamExt};
 
     let ctx = ctx.clone();
     tokio::spawn(async move {
@@ -305,7 +315,12 @@ pub async fn get_artist_details(
             .api
             .fetch_artist_albums(artist_id.clone(), 0, page_size)
             .await
-            .map(|albums| albums.into_iter().map(SimpleAlbumDto::from_yandex).collect())
+            .map(|albums| {
+                albums
+                    .into_iter()
+                    .map(SimpleAlbumDto::from_yandex)
+                    .collect()
+            })
             .unwrap_or_default()
     } else {
         Vec::new()
@@ -367,13 +382,13 @@ pub async fn fetch_wave_stations(ctx: &AppContext) -> Vec<StationCategoryDto> {
         let station = rotor.station;
         let mut item_type = station.id.item_type;
         let seed = format!("{}:{}", item_type, station.id.tag);
-        
+
         let cat_key = if item_type == "mix" {
             "Моя волна".to_string()
         } else {
             std::mem::take(&mut item_type)
         };
-        
+
         grouped.entry(cat_key).or_default().push(StationItemDto {
             label: station.name,
             seed,

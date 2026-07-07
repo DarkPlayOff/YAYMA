@@ -306,7 +306,7 @@ impl TrackCache {
         }
         None
     }
-    
+
     pub async fn init(&self) -> Result<(), std::io::Error> {
         fs::create_dir_all(&self.cache_dir).await
     }
@@ -316,17 +316,16 @@ impl TrackCache {
         if !self.cache_dir.exists() {
             return ids;
         }
-        
+
         if let Ok(mut entries) = fs::read_dir(&self.cache_dir).await {
             while let Ok(Some(entry)) = entries.next_entry().await {
-                if let Ok(metadata) = entry.metadata().await {
-                    if metadata.is_file() {
+                if let Ok(metadata) = entry.metadata().await
+                    && metadata.is_file() {
                         let path = entry.path();
                         if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
                             ids.push(stem.to_string());
                         }
                     }
-                }
             }
         }
         ids
@@ -338,22 +337,20 @@ impl TrackCache {
             // Include tracks
             let mut entries = fs::read_dir(&self.cache_dir).await?;
             while let Ok(Some(entry)) = entries.next_entry().await {
-                if let Ok(metadata) = entry.metadata().await {
-                    if metadata.is_file() {
+                if let Ok(metadata) = entry.metadata().await
+                    && metadata.is_file() {
                         size += metadata.len() as i64;
                     }
-                }
             }
             // Include covers
             let covers_dir = self.cache_dir.join("covers");
             if covers_dir.exists() {
                 let mut covers = fs::read_dir(&covers_dir).await?;
                 while let Ok(Some(entry)) = covers.next_entry().await {
-                    if let Ok(metadata) = entry.metadata().await {
-                        if metadata.is_file() {
+                    if let Ok(metadata) = entry.metadata().await
+                        && metadata.is_file() {
                             size += metadata.len() as i64;
                         }
-                    }
                 }
             }
         }
@@ -379,4 +376,3 @@ impl TrackCache {
         Ok(())
     }
 }
-

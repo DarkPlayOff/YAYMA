@@ -15,15 +15,15 @@ fn extract_display_name(raw: &str) -> &str {
 
 #[cfg(target_os = "windows")]
 pub(crate) fn get_windows_full_device_names() -> Vec<String> {
-    use windows::core::GUID;
     use windows::Win32::Foundation::PROPERTYKEY;
     use windows::Win32::Media::Audio::{
-        eRender, IMMDeviceEnumerator, MMDeviceEnumerator, DEVICE_STATE_ACTIVE,
+        DEVICE_STATE_ACTIVE, IMMDeviceEnumerator, MMDeviceEnumerator, eRender,
     };
     use windows::Win32::System::Com::{
-        CoCreateInstance, CoInitializeEx, CoUninitialize, STGM_READ, CLSCTX_ALL,
-        COINIT_MULTITHREADED,
+        CLSCTX_ALL, COINIT_MULTITHREADED, CoCreateInstance, CoInitializeEx, CoUninitialize,
+        STGM_READ,
     };
+    use windows::core::GUID;
 
     let pkey_friendly_name = PROPERTYKEY {
         fmtid: GUID::from_u128(0xa45c254e_df1c_4efd_8020_67d146a850e0),
@@ -35,11 +35,8 @@ pub(crate) fn get_windows_full_device_names() -> Vec<String> {
     unsafe {
         let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
 
-        if let Ok(enumerator) = CoCreateInstance::<_, IMMDeviceEnumerator>(
-            &MMDeviceEnumerator,
-            None,
-            CLSCTX_ALL,
-        )
+        if let Ok(enumerator) =
+            CoCreateInstance::<_, IMMDeviceEnumerator>(&MMDeviceEnumerator, None, CLSCTX_ALL)
             && let Ok(collection) = enumerator.EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE)
             && let Ok(count) = collection.GetCount()
         {
@@ -90,7 +87,10 @@ pub fn setup_device_config(device_name: Option<&str>) -> (Device, StreamConfig, 
                 if let Ok(desc) = dev.description() {
                     #[cfg(target_os = "windows")]
                     let display = {
-                        let full = windows_names.get(i).map(|s| s.as_str()).unwrap_or(desc.name());
+                        let full = windows_names
+                            .get(i)
+                            .map(|s| s.as_str())
+                            .unwrap_or(desc.name());
                         extract_display_name(full).to_string()
                     };
                     #[cfg(not(target_os = "windows"))]

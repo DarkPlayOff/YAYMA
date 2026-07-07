@@ -117,7 +117,8 @@ impl BufferState {
         }
 
         if let Some((s, e)) = self.pending
-            && start >= s && start < e
+            && start >= s
+            && start < e
         {
             self.pending = None;
         }
@@ -150,7 +151,11 @@ impl BufferState {
         self.merge_segments();
         self.enforce_buffer_limit();
 
-        if let Some(s) = self.segments.iter().find(|s| s.contains(self.buffering_base) || s.start_pos == self.buffering_base) {
+        if let Some(s) = self
+            .segments
+            .iter()
+            .find(|s| s.contains(self.buffering_base) || s.start_pos == self.buffering_base)
+        {
             self.max_buffered_from_start = self.max_buffered_from_start.max(s.end_pos());
         }
 
@@ -172,7 +177,7 @@ impl BufferState {
                         self.segments.remove(i + 1);
                         continue;
                     }
-                    
+
                     let mut next_seg = self.segments.remove(i + 1);
                     let mut remaining_to_drop = overlap;
                     while remaining_to_drop > 0 {
@@ -252,16 +257,16 @@ impl BufferState {
             let overflow = total_len.saturating_sub(self.buffer_size);
             if overflow > 0 {
                 let seg = &mut self.segments[0];
-                
+
                 let max_from_start = if ref_pos >= seg.start_pos {
                     (ref_pos - seg.start_pos) as usize
                 } else {
                     0
                 };
-                
+
                 let to_drop_from_start = overflow.min(max_from_start);
                 let to_drop_from_end = overflow.saturating_sub(to_drop_from_start);
-                
+
                 if to_drop_from_start > 0 {
                     let mut remaining_to_drop = to_drop_from_start;
                     while remaining_to_drop > 0 {
@@ -283,7 +288,7 @@ impl BufferState {
                         }
                     }
                 }
-                
+
                 if to_drop_from_end > 0 {
                     let mut remaining_to_drop = to_drop_from_end;
                     while remaining_to_drop > 0 {
@@ -293,7 +298,8 @@ impl BufferState {
                                 seg.len -= dropped.len();
                                 remaining_to_drop -= dropped.len();
                             } else {
-                                let truncated = back_chunk.slice(..back_chunk.len() - remaining_to_drop);
+                                let truncated =
+                                    back_chunk.slice(..back_chunk.len() - remaining_to_drop);
                                 *back_chunk = truncated;
                                 seg.len -= remaining_to_drop;
                                 remaining_to_drop = 0;
@@ -346,7 +352,11 @@ impl BufferState {
             }
         }
 
-        if let Some(s) = self.segments.iter().find(|s| s.contains(self.buffering_base) || s.start_pos == self.buffering_base) {
+        if let Some(s) = self
+            .segments
+            .iter()
+            .find(|s| s.contains(self.buffering_base) || s.start_pos == self.buffering_base)
+        {
             self.max_buffered_from_start = self.max_buffered_from_start.max(s.end_pos());
         }
     }

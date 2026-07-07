@@ -244,8 +244,7 @@ impl ApiService {
             "https://api.music.yandex.ru/users/{}/likes/albums?rich=true",
             self.user_id
         );
-        let body: serde_json::Value =
-            self.http_client.get(url).send().await?.json().await?;
+        let body: serde_json::Value = self.http_client.get(url).send().await?.json().await?;
         Ok(Self::extract_liked(&body, "albums", "album"))
     }
 
@@ -254,8 +253,7 @@ impl ApiService {
             "https://api.music.yandex.ru/users/{}/likes/artists?with-timestamps=false",
             self.user_id
         );
-        let body: serde_json::Value =
-            self.http_client.get(url).send().await?.json().await?;
+        let body: serde_json::Value = self.http_client.get(url).send().await?.json().await?;
         Ok(Self::extract_liked(&body, "artists", "artist"))
     }
 

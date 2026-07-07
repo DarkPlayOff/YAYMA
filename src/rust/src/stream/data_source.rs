@@ -17,11 +17,9 @@ type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>
 type FetchFuture = std::pin::Pin<
     Box<
         dyn std::future::Future<
-            Output = std::result::Result<
-                Result<bytes::Bytes>,
-                tokio::time::error::Elapsed,
-            >,
-        > + Send + 'static,
+                Output = std::result::Result<Result<bytes::Bytes>, tokio::time::error::Elapsed>,
+            > + Send
+            + 'static,
     >,
 >;
 
@@ -91,11 +89,13 @@ impl StreamingDataSource {
         progress.set_total_bytes(total);
 
         // 2. Calculate dynamic buffer sizes based on bit rate
-        // We target: 
+        // We target:
         // - BUFFER_SIZE = 30 seconds of audio
         // - PREFETCH_TRIGGER = 15 seconds of audio
         // - PREFETCH_SIZE = 10 seconds of audio
-        let (buffer_size, prefetch_trigger, prefetch_size) = if let Some(dur_ms) = duration_ms && dur_ms > 0 {
+        let (buffer_size, prefetch_trigger, prefetch_size) = if let Some(dur_ms) = duration_ms
+            && dur_ms > 0
+        {
             let bytes_per_ms = total as f64 / dur_ms as f64;
             let buf_size = (30_000.0 * bytes_per_ms) as usize;
             let trigger = (15_000.0 * bytes_per_ms) as usize;
@@ -112,16 +112,16 @@ impl StreamingDataSource {
             )
         } else {
             // Default constants if duration is missing
-            (
-                8 * 1024 * 1024,
-                256 * 1024,
-                1024 * 1024,
-            )
+            (8 * 1024 * 1024, 256 * 1024, 1024 * 1024)
         };
 
         let initial_data = resp.bytes().await?;
 
-        let buffer = Arc::new(Mutex::new(BufferState::new(total, buffer_size, prefetch_trigger)));
+        let buffer = Arc::new(Mutex::new(BufferState::new(
+            total,
+            buffer_size,
+            prefetch_trigger,
+        )));
         {
             let mut b = buffer.lock();
             b.append(initial_data, 0);
@@ -187,7 +187,7 @@ impl StreamingDataSource {
                         std::future::pending().await
                     }
                 }, if has_fetch => {
-                    let (_, start, end, request_generation) = current_fetch.take().unwrap();
+                    let (_, start, _end, request_generation) = current_fetch.take().unwrap();
                     match res {
                         Ok(Ok(data)) => {
                             let current_gen = ctx.generation.load(Ordering::Acquire);
@@ -211,6 +211,7 @@ impl StreamingDataSource {
                             let _ = ctx.tx_res.send(());
                         }
                         Ok(Err(err)) => {
+                            tracing::error!("Stream fetch failed: {:?}", err);
                             {
                                 let mut buf = ctx.buffer.lock();
                                 buf.clear_pending();
@@ -267,18 +268,10 @@ impl StreamingDataSource {
         }
     }
 
-    fn fetch_range_timeout(
-        client: Client,
-        url: String,
-        start: u64,
-        end: u64,
-    ) -> FetchFuture {
-        Box::pin(tokio::time::timeout(
-            Duration::from_secs(75),
-            async move {
-                Self::fetch_range_async(&client, &url, start, end).await
-            }
-        ))
+    fn fetch_range_timeout(client: Client, url: String, start: u64, end: u64) -> FetchFuture {
+        Box::pin(tokio::time::timeout(Duration::from_secs(75), async move {
+            Self::fetch_range_async(&client, &url, start, end).await
+        }))
     }
 
     async fn fetch_range_async(
@@ -294,17 +287,15 @@ impl StreamingDataSource {
 
         loop {
             match client.get(url).header("Range", &hdr).send().await {
-                Ok(resp) => {
-                    match resp.bytes().await {
-                        Ok(bytes) => return Ok(bytes),
-                        Err(e) => {
-                            attempts += 1;
-                            if attempts >= max_retries {
-                                return Err(e.into());
-                            }
+                Ok(resp) => match resp.bytes().await {
+                    Ok(bytes) => return Ok(bytes),
+                    Err(e) => {
+                        attempts += 1;
+                        if attempts >= max_retries {
+                            return Err(e.into());
                         }
                     }
-                }
+                },
                 Err(e) => {
                     attempts += 1;
                     if attempts >= max_retries {
@@ -382,7 +373,10 @@ impl StreamingDataSource {
             if buf.contains(pos) {
                 return Ok(());
             }
-            if let Some((s, e)) = buf.pending && pos >= s && pos < e {
+            if let Some((s, e)) = buf.pending
+                && pos >= s
+                && pos < e
+            {
                 (true, e)
             } else {
                 (false, 0)
@@ -408,7 +402,8 @@ impl StreamingDataSource {
             buf.clear(pos);
         }
 
-        let size = self.prefetch_size
+        let size = self
+            .prefetch_size
             .max(MIN_INITIAL_DATA)
             .min((self.total_bytes.saturating_sub(pos)) as usize) as u64;
         if size > 0 {
@@ -425,7 +420,9 @@ impl StreamingDataSource {
             let buf = self.buffer.lock();
             if buf.should_prefetch(pos) {
                 let start = buf.end_pos(pos);
-                let size = self.prefetch_size.min((self.total_bytes.saturating_sub(start)) as usize);
+                let size = self
+                    .prefetch_size
+                    .min((self.total_bytes.saturating_sub(start)) as usize);
                 (size > 0, start, size)
             } else {
                 (false, 0, 0)

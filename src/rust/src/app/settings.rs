@@ -10,7 +10,10 @@ pub async fn load_persisted_settings(ctx: &AppContext) {
         let _ = ctx.audio.tx.send(AudioMessage::SetVolume(volume)).await;
     }
 
-    if let Ok(Some(quality)) = db.load_setting::<crate::api::models::AudioQuality>("audio_quality").await {
+    if let Ok(Some(quality)) = db
+        .load_setting::<crate::api::models::AudioQuality>("audio_quality")
+        .await
+    {
         ctx.core.api.set_quality(quality);
     }
 
