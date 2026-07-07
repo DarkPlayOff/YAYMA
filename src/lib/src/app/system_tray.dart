@@ -4,8 +4,8 @@ import 'dart:io';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
-import 'package:yayma/src/providers/navigation_provider.dart';
-import 'package:yayma/src/providers/playback_provider.dart';
+import 'package:yayma/src/features/core/providers/navigation_provider.dart';
+import 'package:yayma/src/features/playback/providers/playback_provider.dart';
 
 /// Minimize-to-tray support for the desktop build.
 ///

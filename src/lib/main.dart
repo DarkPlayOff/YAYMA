@@ -6,11 +6,11 @@ import 'package:signals_flutter/signals_flutter.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:yayma/src/app/init.dart';
 import 'package:yayma/src/app/system_tray.dart';
-import 'package:yayma/src/providers/navigation_provider.dart';
-import 'package:yayma/src/providers/notification_provider.dart';
-import 'package:yayma/src/providers/playback_provider.dart';
+import 'package:yayma/src/features/auth/views/auth/auth_screens.dart';
+import 'package:yayma/src/features/core/providers/navigation_provider.dart';
+import 'package:yayma/src/features/core/providers/notification_provider.dart';
+import 'package:yayma/src/features/playback/providers/playback_provider.dart';
 import 'package:yayma/src/rust/api/simple.dart' as simple;
-import 'package:yayma/src/ui/auth/auth_screens.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
