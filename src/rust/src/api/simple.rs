@@ -105,3 +105,11 @@ pub fn get_audio_devices(ctx: &AppContext) -> Vec<String> {
 pub async fn set_audio_device(ctx: &AppContext, device_name: String) {
     logic::set_audio_device(ctx, device_name).await;
 }
+
+pub async fn is_update_check_enabled(ctx: &AppContext) -> bool {
+    logic::is_update_check_enabled(ctx).await
+}
+
+pub async fn set_update_check_enabled(ctx: &AppContext, enabled: bool) {
+    logic::set_update_check_enabled(ctx, enabled).await;
+}

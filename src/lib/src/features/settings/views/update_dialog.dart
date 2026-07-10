@@ -200,15 +200,6 @@ class _UpdateDialogState extends State<UpdateDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                'Доступна новая версия: ${info.latestVersion}',
-                style: const TextStyle(
-                  color: Colors.greenAccent,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 16),
               const Text(
                 'Список изменений в этой версии:',
                 style: TextStyle(
@@ -301,6 +292,10 @@ class _UpdateDialogState extends State<UpdateDialog> {
       content = const SizedBox.shrink();
     }
 
+    final titleText = (_info != null && _info!.hasUpdate)
+        ? 'Доступно обновление до версии ${_info!.latestVersion}'
+        : 'Обновление программы';
+
     return AlertDialog(
       backgroundColor: const Color(0xFF1E1E1E),
       surfaceTintColor: Colors.transparent,
@@ -308,13 +303,15 @@ class _UpdateDialogState extends State<UpdateDialog> {
         borderRadius: BorderRadius.circular(24),
         side: const BorderSide(color: Colors.white10),
       ),
-      title: const Row(
+      title: Row(
         children: [
-          Icon(Icons.system_update_rounded, color: Colors.white),
-          SizedBox(width: 12),
-          Text(
-            'Обновление программы',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          const Icon(Icons.system_update_rounded, color: Colors.white),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              titleText,
+              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
+            ),
           ),
         ],
       ),

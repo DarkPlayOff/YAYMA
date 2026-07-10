@@ -28,6 +28,7 @@ class _SettingsViewState extends State<SettingsView> {
   late final FutureSignal<bool> _customTitlebarSignal;
   late final FutureSignal<bool> _autoHideNavbarSignal;
   late final FutureSignal<bool> _closeToTraySignal;
+  late final FutureSignal<bool> _updateCheckSignal;
 
   @override
   void initState() {
@@ -66,6 +67,11 @@ class _SettingsViewState extends State<SettingsView> {
     _closeToTraySignal = futureSignal(() async {
       return closeToTraySignal.value;
     });
+    _updateCheckSignal = futureSignal(() async {
+      final ctx = appContextSignal.value;
+      if (ctx == null) return true;
+      return simple.isUpdateCheckEnabled(ctx: ctx);
+    });
   }
 
   Future<void> _toggleDiscordRpc(bool enabled) async {
@@ -100,6 +106,14 @@ class _SettingsViewState extends State<SettingsView> {
       await simple.setCloseToTrayEnabled(ctx: ctx, enabled: enabled);
       closeToTraySignal.value = enabled;
       unawaited(_closeToTraySignal.refresh());
+    }
+  }
+
+  Future<void> _toggleUpdateCheck(bool enabled) async {
+    final ctx = appContextSignal.value;
+    if (ctx != null) {
+      await simple.setUpdateCheckEnabled(ctx: ctx, enabled: enabled);
+      unawaited(_updateCheckSignal.refresh());
     }
   }
 
@@ -353,11 +367,22 @@ class _SettingsViewState extends State<SettingsView> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  _SettingItem(
-                    title: 'Проверить обновления',
-                    subtitle: 'Проверить наличие новых версий на GitHub',
-                    icon: Icons.system_update_rounded,
-                    onTap: () => UpdateDialog.show(context),
+                  SignalBuilder(
+                    builder: (context) {
+                      final enabled = _updateCheckSignal.value;
+                      return _SettingItem(
+                        title: 'Проверка обновлений при запуске',
+                        subtitle: 'Проверять наличие новых версий на GitHub при запуске',
+                        icon: Icons.system_update_rounded,
+                        onTap: () => unawaited(
+                          _toggleUpdateCheck(!(enabled.value ?? true)),
+                        ),
+                        trailing: Switch(
+                          value: enabled.value ?? true,
+                          onChanged: (v) => unawaited(_toggleUpdateCheck(v)),
+                        ),
+                      );
+                    },
                   ),
                 ],
               ),

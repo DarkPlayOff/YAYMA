@@ -216,3 +216,18 @@ pub async fn set_audio_device(ctx: &AppContext, device_name: String) {
         .send(crate::audio::commands::AudioMessage::SetAudioDevice(device))
         .await;
 }
+
+pub async fn is_update_check_enabled(ctx: &AppContext) -> bool {
+    let mut db = ctx.core.db.lock().await;
+    db.load_setting("update_check")
+        .await
+        .unwrap_or(Some(true))
+        .unwrap_or(true)
+}
+
+pub async fn set_update_check_enabled(ctx: &AppContext, enabled: bool) {
+    let mut db = ctx.core.db.lock().await;
+    if let Err(e) = db.save_setting("update_check", &enabled).await {
+        tracing::error!("Failed to save update_check setting: {:?}", e);
+    }
+}

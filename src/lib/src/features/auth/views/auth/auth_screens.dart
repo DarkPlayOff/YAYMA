@@ -13,6 +13,9 @@ import 'package:yayma/src/features/core/providers/navigation_provider.dart';
 import 'package:yayma/src/features/core/views/layout.dart';
 import 'package:yayma/src/rust/api/auth.dart' as rust;
 import 'package:yayma/src/rust/api/playback.dart' as rust;
+import 'package:yayma/src/features/settings/services/update_service.dart';
+import 'package:yayma/src/features/settings/views/update_dialog.dart';
+import 'package:yayma/src/rust/api/simple.dart' as simple;
 
 class RootScreen extends StatefulWidget {
   const RootScreen({super.key});
@@ -48,6 +51,21 @@ class _RootScreenState extends State<RootScreen> {
                           isPlaying: state.isPlaying,
                         );
                       }
+                      
+                      // Auto check for updates on launch if enabled
+                      unawaited(() async {
+                        try {
+                          final isUpdateCheckEnabled = await simple.isUpdateCheckEnabled(ctx: ctx);
+                          if (isUpdateCheckEnabled) {
+                            final info = await UpdateService.checkForUpdates();
+                            if (info != null && info.hasUpdate && context.mounted) {
+                              UpdateDialog.show(context, initialInfo: info);
+                            }
+                          }
+                        } catch (e) {
+                          debugPrint('Error checking for updates: $e');
+                        }
+                      }());
                     }());
                   }),
                 );
