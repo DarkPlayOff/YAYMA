@@ -41,7 +41,7 @@ use yandex_music::{
         search::get_search::SearchOptions,
         track::{
             add_disliked_tracks::AddDislikedTracksOptions, add_liked_tracks::AddLikedTracksOptions,
-            get_file_info::GetFileInfoOptions, get_lyrics::GetLyricsOptions,
+            get_lyrics::GetLyricsOptions,
             get_similar_tracks::GetSimilarTracksOptions, get_tracks::GetTracksOptions,
             remove_disliked_tracks::RemoveDislikedTracksOptions,
             remove_liked_tracks::RemoveLikedTracksOptions,
@@ -358,12 +358,104 @@ impl ApiService {
         }
     }
 
+    async fn fetch_track_url_custom(
+        &self,
+        track_id: String,
+        quality: yandex_music::model::info::file_info::Quality,
+        codecs: Vec<yandex_music::model::info::file_info::Codec>,
+    ) -> Result<(String, String)> {
+        use yandex_music::api::utils::create_file_info_sign;
+
+        let transport = "raw";
+        let quality_str = quality.to_string();
+
+        let mut codecs_concat = String::new();
+        let mut codecs_delimited = String::new();
+        for (i, codec) in codecs.iter().enumerate() {
+            let s = codec.to_string();
+            codecs_concat.push_str(&s);
+            if i > 0 {
+                codecs_delimited.push(',');
+            }
+            codecs_delimited.push_str(&s);
+        }
+
+        let (ts, sign) = create_file_info_sign(&track_id, &quality_str, &codecs_concat, transport);
+
+        let url = format!(
+            "https://api.music.yandex.net:443/get-file-info?ts={}&trackId={}&quality={}&codecs={}&transports={}&sign={}",
+            ts, track_id, quality_str, codecs_delimited, transport, sign
+        );
+
+        #[derive(serde::Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct CustomTrackFileInfo {
+            pub codec: String,
+            pub url: String,
+        }
+
+        #[derive(serde::Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct CustomGetFileInfoResult {
+            pub download_info: CustomTrackFileInfo,
+        }
+
+        #[derive(serde::Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct CustomApiResponse {
+            pub result: Option<CustomGetFileInfoResult>,
+            pub error: Option<yandex_music::error::YandexMusicError>,
+            pub name: Option<String>,
+            pub message: Option<String>,
+        }
+
+        let response_bytes = self
+            .client
+            .inner
+            .get(&url)
+            .send()
+            .await?
+            .bytes()
+            .await?;
+
+        let response: CustomApiResponse = match serde_json::from_slice(&response_bytes) {
+            Ok(res) => res,
+            Err(e) => {
+                let response_text = String::from_utf8_lossy(&response_bytes);
+                tracing::error!("Failed to parse get-file-info JSON: {}. Response: {}", e, response_text);
+                return Err(Box::new(e));
+            }
+        };
+
+        if let Some(err) = response.error {
+            return Err(Box::new(yandex_music::error::ClientError::YandexMusicError { error: err }));
+        }
+
+        if let Some(name) = response.name {
+            if name.contains("error") || response.message.is_some() {
+                return Err(Box::new(yandex_music::error::ClientError::YandexMusicError {
+                    error: yandex_music::error::YandexMusicError {
+                        name,
+                        message: response.message,
+                    }
+                }));
+            }
+        }
+
+        if let Some(res) = response.result {
+            Ok((res.download_info.url, res.download_info.codec))
+        } else {
+            Err(Box::from("Empty result in get-file-info response"))
+        }
+    }
+
     pub async fn fetch_track_url(&self, track_id: String) -> Result<(String, String)> {
         let quality = self.map_quality(self.get_quality());
-        let opts = GetFileInfoOptions::new(track_id).quality(quality);
-        let info = self.client.get_file_info(&opts).await?;
-
-        Ok((info.url, info.codec.to_string()))
+        self.fetch_track_url_custom(
+            track_id,
+            quality,
+            yandex_music::model::info::file_info::Codec::all().to_vec()
+        ).await
     }
 
     pub async fn fetch_track_url_for_download(&self, track_id: String) -> Result<(String, String)> {
@@ -379,11 +471,8 @@ impl ApiService {
 
         // If it's AAC, we try to force MP3 instead because raw AAC doesn't support tags well.
         let quality = self.map_quality(self.get_quality());
-        let opts = GetFileInfoOptions::new(track_id)
-            .quality(quality)
-            .codecs(vec![Codec::Mp3]);
-        if let Ok(info) = self.client.get_file_info(&opts).await {
-            return Ok((info.url, info.codec.to_string()));
+        if let Ok(res) = self.fetch_track_url_custom(track_id, quality, vec![Codec::Mp3]).await {
+            return Ok(res);
         }
 
         Ok((url, codec))
@@ -399,9 +488,12 @@ impl ApiService {
         for track_id in track_ids {
             let track_id = track_id.clone();
             fetch_tasks.push(async move {
-                let opts = GetFileInfoOptions::new(track_id.clone()).quality(quality);
-                match self.client.get_file_info(&opts).await {
-                    Ok(info) => Ok((track_id, info.url, info.codec.to_string())),
+                match self.fetch_track_url_custom(
+                    track_id.clone(),
+                    quality,
+                    yandex_music::model::info::file_info::Codec::all().to_vec()
+                ).await {
+                    Ok((url, codec)) => Ok((track_id, url, codec)),
                     Err(e) => Err(e),
                 }
             });

@@ -272,11 +272,12 @@ impl AudioController {
                         signals.set_playing(true);
                     }
                 }
-                Err(_e) => {
+                Err(e) => {
+                    tracing::error!("Failed to create stream session: {:?}", e);
                     signals.set_buffering(false);
                     signals.set_playing(false);
                     signals.is_stopped.set(true);
-                    let _ = event_tx.send(Event::TrackEnded);
+                    let _ = event_tx.send(Event::Error(format!("Failed to play track: {}", e)));
                 }
             }
         });

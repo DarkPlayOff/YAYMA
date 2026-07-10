@@ -53,6 +53,12 @@ Future<void> initPlayback() async {
         accountSignal.value = account;
       case rust.AppEvent_Error(field0: final message):
         showAppError(message);
+        if (message.contains('Unauthorized') ||
+            message.contains('Invalid token') ||
+            message.contains('session expired') ||
+            message.contains('401')) {
+          unawaited(logout());
+        }
       case rust.AppEvent_TrackDownloadStarted(field0: final trackId):
         downloadingTracksSignal.value = {
           ...downloadingTracksSignal.value,
