@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:signals_flutter/signals_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_all/webview_all.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:yayma/src/features/auth/providers/auth_provider.dart';
@@ -571,12 +572,9 @@ class _YandexDeviceLoginDialogState extends State<YandexDeviceLoginDialog> {
     unawaited(
       () async {
         try {
-          if (Platform.isWindows) {
-            await Process.run('cmd', ['/c', 'start', '', url]);
-          } else if (Platform.isMacOS) {
-            await Process.run('open', [url]);
-          } else if (Platform.isLinux) {
-            await Process.run('xdg-open', [url]);
+          final uri = Uri.parse(url);
+          if (await canLaunchUrl(uri)) {
+            await launchUrl(uri, mode: LaunchMode.externalApplication);
           }
         } on Object catch (e) {
           debugPrint('Error launching browser: $e');

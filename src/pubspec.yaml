@@ -36,6 +36,7 @@ dependencies:
   webview_all: ^1.0.3
   window_manager: ^0.5.1
   windows_taskbar: ^1.1.2
+  url_launcher: ^6.3.0
 
 dev_dependencies:
   build_runner: ^2.13.1

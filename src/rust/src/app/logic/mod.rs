@@ -4,3 +4,4 @@ pub mod content;
 pub mod library;
 pub mod playback;
 pub mod simple;
+pub mod updates;

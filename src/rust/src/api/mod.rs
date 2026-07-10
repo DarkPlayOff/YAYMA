@@ -5,5 +5,6 @@ pub mod library;
 pub mod models;
 pub mod playback;
 pub mod simple;
+pub mod updates;
 
 pub use crate::app::AppContext;

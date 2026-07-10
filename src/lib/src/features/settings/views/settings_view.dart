@@ -8,6 +8,7 @@ import 'package:yayma/src/features/core/providers/navigation_provider.dart';
 import 'package:yayma/src/features/core/providers/notification_provider.dart';
 import 'package:yayma/src/features/core/views/widgets/responsive.dart';
 import 'package:yayma/src/features/library/providers/library_provider.dart';
+import 'package:yayma/src/features/settings/views/update_dialog.dart';
 import 'package:yayma/src/rust/api/content.dart' as rust;
 import 'package:yayma/src/rust/api/simple.dart' as simple;
 
@@ -350,6 +351,13 @@ class _SettingsViewState extends State<SettingsView> {
                         ),
                       ],
                     ),
+                  ),
+                  const SizedBox(height: 16),
+                  _SettingItem(
+                    title: 'Проверить обновления',
+                    subtitle: 'Проверить наличие новых версий на GitHub',
+                    icon: Icons.system_update_rounded,
+                    onTap: () => UpdateDialog.show(context),
                   ),
                 ],
               ),
