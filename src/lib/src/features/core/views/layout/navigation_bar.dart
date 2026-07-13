@@ -5,6 +5,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/features/auth/providers/auth_provider.dart';
+import 'package:yayma/src/features/auth/views/yandex_id_view.dart';
 import 'package:yayma/src/features/core/providers/navigation_provider.dart';
 import 'package:yayma/src/features/core/views/widgets/rust_cached_image.dart';
 import 'package:yayma/src/features/home/providers/home_provider.dart';
@@ -440,7 +441,19 @@ class _AccountMenuDialog extends StatelessWidget {
               title: 'Управление аккаунтом',
               onTap: () {
                 Navigator.pop(context);
-                setSection(AppSection.yandexId);
+                if (Platform.isAndroid) {
+                  unawaited(
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        fullscreenDialog: true,
+                        builder: (_) => const YandexIdView(fullscreen: true),
+                      ),
+                    ),
+                  );
+                } else {
+                  setSection(AppSection.yandexId);
+                }
               },
             ),
             if (!Platform.isAndroid)

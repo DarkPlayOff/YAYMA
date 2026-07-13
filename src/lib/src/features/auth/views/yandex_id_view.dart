@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:webview_all/webview_all.dart';
 
 class YandexIdView extends StatefulWidget {
-  const YandexIdView({super.key});
+  final bool fullscreen;
+
+  const YandexIdView({super.key, this.fullscreen = false});
 
   @override
   State<YandexIdView> createState() => _YandexIdViewState();
@@ -44,6 +46,16 @@ class _YandexIdViewState extends State<YandexIdView> {
     if (!_isReady) {
       return const Center(
         child: CircularProgressIndicator(),
+      );
+    }
+
+    if (widget.fullscreen) {
+      return Scaffold(
+        appBar: AppBar(
+          leading: const BackButton(),
+          title: const Text('Управление аккаунтом'),
+        ),
+        body: WebViewWidget(controller: _controller),
       );
     }
 
