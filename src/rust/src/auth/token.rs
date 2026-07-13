@@ -1,4 +1,3 @@
-use std::sync::Arc;
 use yandex_music::YandexMusicClient;
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
@@ -25,11 +24,10 @@ impl TokenProvider {
         Ok(())
     }
 
-    pub async fn validate(token: String) -> Result<(Arc<YandexMusicClient>, u64)> {
+    pub async fn validate(token: String) -> Result<u64> {
         let client = YandexMusicClient::builder(&token).build()?;
         let status = client.get_account_status().await?;
 
-        let user_id = status.account.uid.ok_or("No user id found")?;
-        Ok((Arc::new(client), user_id))
+        status.account.uid.ok_or("No user id found".into())
     }
 }

@@ -23,7 +23,7 @@ pub async fn clear_token() {
 }
 
 pub async fn login_with_token(token: String) -> Result<AppContext, AppError> {
-    let (client, user_id) = TokenProvider::validate(token.clone())
+    let user_id = TokenProvider::validate(token.clone())
         .await
         .map_err(|_| AppError::InvalidToken)?;
 
@@ -31,7 +31,7 @@ pub async fn login_with_token(token: String) -> Result<AppContext, AppError> {
         tracing::error!("Failed to store auth token during login: {:?}", e);
     }
 
-    let api = ApiService::new(token, Some(client), Some(user_id))
+    let api = ApiService::new(token, Some(user_id))
         .await
         .map_err(|e| AppError::ApiError(e.to_string()))?;
 
@@ -44,14 +44,7 @@ pub async fn try_auto_login() -> Option<AppContext> {
     let (token, user_id) = TokenProvider::resolve().await?;
 
     // Fast path: bypass token validation on auto-login to speed up startup.
-    // We must initialize the Yandex client with the builder so it receives the token.
-    if let Ok(client) = yandex_music::YandexMusicClient::builder(&token).build()
-        && let Ok(api) = ApiService::new(
-            token.clone(),
-            Some(std::sync::Arc::new(client)),
-            Some(user_id),
-        )
-        .await
+    if let Ok(api) = ApiService::new(token.clone(), Some(user_id)).await
         && let Ok(ctx) = initialize_app(api).await
     {
         return Some(ctx);
