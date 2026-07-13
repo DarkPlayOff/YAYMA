@@ -94,21 +94,45 @@ class _LoginScreenState extends State<LoginScreen> {
   final _tokenController = TextEditingController();
 
   void _showWebView() {
-    unawaited(
-      showDialog<void>(
-        context: context,
-        builder: (context) => const YandexLoginDialog(),
-      ),
-    );
+    if (Platform.isAndroid) {
+      unawaited(
+        Navigator.push<void>(
+          context,
+          MaterialPageRoute<void>(
+            fullscreenDialog: true,
+            builder: (_) => const YandexLoginDialog(fullscreen: true),
+          ),
+        ),
+      );
+    } else {
+      unawaited(
+        showDialog<void>(
+          context: context,
+          builder: (context) => const YandexLoginDialog(),
+        ),
+      );
+    }
   }
 
   void _showDeviceLogin() {
-    unawaited(
-      showDialog<void>(
-        context: context,
-        builder: (context) => const YandexDeviceLoginDialog(),
-      ),
-    );
+    if (Platform.isAndroid) {
+      unawaited(
+        Navigator.push<void>(
+          context,
+          MaterialPageRoute<void>(
+            fullscreenDialog: true,
+            builder: (_) => const YandexDeviceLoginDialog(fullscreen: true),
+          ),
+        ),
+      );
+    } else {
+      unawaited(
+        showDialog<void>(
+          context: context,
+          builder: (context) => const YandexDeviceLoginDialog(),
+        ),
+      );
+    }
   }
 
   void _handleLogin(String val) {
@@ -316,7 +340,9 @@ class _LoginScreenState extends State<LoginScreen> {
 }
 
 class YandexLoginDialog extends StatefulWidget {
-  const YandexLoginDialog({super.key});
+  final bool fullscreen;
+
+  const YandexLoginDialog({super.key, this.fullscreen = false});
 
   @override
   State<YandexLoginDialog> createState() => _YandexLoginDialogState();
@@ -417,6 +443,16 @@ class _YandexLoginDialogState extends State<YandexLoginDialog> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.fullscreen) {
+      return Scaffold(
+        appBar: AppBar(
+          leading: const BackButton(),
+          title: const Text('Вход через Яндекс'),
+        ),
+        body: WebViewWidget(controller: _controller),
+      );
+    }
+
     return Dialog(
       child: SizedBox(
         width: 1000,
@@ -460,7 +496,9 @@ class _YandexLoginDialogState extends State<YandexLoginDialog> {
 }
 
 class YandexDeviceLoginDialog extends StatefulWidget {
-  const YandexDeviceLoginDialog({super.key});
+  final bool fullscreen;
+
+  const YandexDeviceLoginDialog({super.key, this.fullscreen = false});
 
   @override
   State<YandexDeviceLoginDialog> createState() =>
@@ -680,8 +718,10 @@ class _YandexDeviceLoginDialogState extends State<YandexDeviceLoginDialog> {
             ),
           ),
           const SizedBox(height: 24),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            alignment: WrapAlignment.center,
             children: [
               OutlinedButton.icon(
                 onPressed: () async {
@@ -700,7 +740,6 @@ class _YandexDeviceLoginDialogState extends State<YandexDeviceLoginDialog> {
                 icon: const Icon(Icons.copy_rounded),
                 label: const Text('Копировать код'),
               ),
-              const SizedBox(width: 16),
               ElevatedButton.icon(
                 onPressed: _openBrowser,
                 icon: const Icon(Icons.open_in_browser_rounded),
@@ -725,6 +764,40 @@ class _YandexDeviceLoginDialogState extends State<YandexDeviceLoginDialog> {
             ],
           ),
         ],
+      );
+    }
+
+    if (widget.fullscreen) {
+      return Scaffold(
+        appBar: AppBar(
+          leading: const BackButton(),
+          title: const Text('Вход по коду устройства'),
+        ),
+        body: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.devices_rounded,
+                  color: theme.colorScheme.primary,
+                  size: 28,
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'Вход по коду устройства',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const Divider(height: 32),
+                content,
+              ],
+            ),
+          ),
+        ),
       );
     }
 
