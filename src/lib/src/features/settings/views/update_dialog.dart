@@ -1,14 +1,33 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:yayma/src/features/settings/services/update_service.dart';
 
 class UpdateDialog extends StatefulWidget {
   final AppUpdateInfo? initialInfo;
+  final bool bottomSheet;
 
-  const UpdateDialog({this.initialInfo, super.key});
+  const UpdateDialog({this.initialInfo, this.bottomSheet = false, super.key});
 
   static void show(BuildContext context, {AppUpdateInfo? initialInfo}) {
+    if (Platform.isAndroid) {
+      unawaited(
+        showModalBottomSheet<void>(
+          context: context,
+          backgroundColor: const Color(0xFF1E1E1E),
+          isScrollControlled: true,
+          shape: const RoundedRectangleBorder(
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          builder: (context) => UpdateDialog(
+            initialInfo: initialInfo,
+            bottomSheet: true,
+          ),
+        ),
+      );
+      return;
+    }
     unawaited(
       showDialog<void>(
         context: context,
@@ -185,10 +204,14 @@ class _UpdateDialogState extends State<UpdateDialog> {
           onPressed: () => unawaited(_checkUpdates()),
           child: Text('Повторить', style: TextStyle(color: primaryColor)),
         ),
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Закрыть', style: TextStyle(color: Colors.white54)),
-        ),
+        if (!widget.bottomSheet)
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text(
+              'Закрыть',
+              style: TextStyle(color: Colors.white54),
+            ),
+          ),
       ];
     } else if (_info != null) {
       final info = _info!;
@@ -240,13 +263,14 @@ class _UpdateDialogState extends State<UpdateDialog> {
               style: TextStyle(fontWeight: FontWeight.bold),
             ),
           ),
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text(
-              'Закрыть',
-              style: TextStyle(color: Colors.white54),
+          if (!widget.bottomSheet)
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text(
+                'Закрыть',
+                style: TextStyle(color: Colors.white54),
+              ),
             ),
-          ),
         ];
       } else {
         content = Padding(
@@ -278,13 +302,14 @@ class _UpdateDialogState extends State<UpdateDialog> {
           ),
         );
         actions = [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text(
-              'Отлично',
-              style: TextStyle(color: Colors.white54),
+          if (!widget.bottomSheet)
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text(
+                'Отлично',
+                style: TextStyle(color: Colors.white54),
+              ),
             ),
-          ),
         ];
       }
     } else {
@@ -294,6 +319,68 @@ class _UpdateDialogState extends State<UpdateDialog> {
     final titleText = (_info != null && _info!.hasUpdate)
         ? 'Доступно обновление до версии ${_info!.latestVersion}'
         : 'Обновление программы';
+
+    if (widget.bottomSheet) {
+      return SafeArea(
+        child: Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.viewInsetsOf(context).bottom,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SizedBox(height: 12),
+              Center(
+                child: Container(
+                  width: 32,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.white24,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Row(
+                  children: [
+                    const Icon(Icons.system_update_rounded, color: Colors.white),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        titleText,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 18,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              Flexible(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: content,
+                ),
+              ),
+              if (actions.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: actions,
+                  ),
+                ),
+            ],
+          ),
+        ),
+      );
+    }
 
     return AlertDialog(
       backgroundColor: const Color(0xFF1E1E1E),
