@@ -170,14 +170,14 @@ class _SettingsViewState extends State<SettingsView> {
             child: Padding(
               padding: EdgeInsets.fromLTRB(
                 isNarrow ? 20 : 40,
-                isNarrow ? 40 : 60,
+                isNarrow ? 20 : 60,
                 isNarrow ? 20 : 40,
                 isNarrow ? 20 : 40,
               ),
               child: Text(
                 'Настройки',
                 style: TextStyle(
-                  fontSize: isNarrow ? 32 : 48,
+                  fontSize: isNarrow ? 28 : 48,
                   fontWeight: FontWeight.w900,
                   color: Colors.white,
                   letterSpacing: -1,
@@ -206,10 +206,10 @@ class _SettingsViewState extends State<SettingsView> {
                       );
                     },
                   ),
-                  const SizedBox(height: 48),
-                  const _SectionTitle(title: 'Внешний вид'),
-                  const SizedBox(height: 24),
                   if (context.isDesktop) ...[
+                    const SizedBox(height: 48),
+                    const _SectionTitle(title: 'Внешний вид'),
+                    const SizedBox(height: 24),
                     SignalBuilder(
                       builder: (context) {
                         final enabled = _customTitlebarSignal.value;
@@ -332,7 +332,7 @@ class _SettingsViewState extends State<SettingsView> {
                   const _SectionTitle(title: 'О приложении'),
                   const SizedBox(height: 24),
                   Container(
-                    padding: const EdgeInsets.all(24),
+                    padding: EdgeInsets.all(isNarrow ? 18 : 24),
                     decoration: BoxDecoration(
                       color: Colors.white.withValues(alpha: 0.05),
                       borderRadius: BorderRadius.circular(20),
@@ -341,11 +341,11 @@ class _SettingsViewState extends State<SettingsView> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
+                        Text(
                           'YAYMA',
                           style: TextStyle(
                             color: Colors.white,
-                            fontSize: 20,
+                            fontSize: isNarrow ? 18 : 20,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
@@ -355,9 +355,9 @@ class _SettingsViewState extends State<SettingsView> {
                             final version = _versionSignal.value;
                             return Text(
                               'Альтернативный клиент для Яндекс Музыки.\nВерсия ${version.value ?? '...'}',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 color: Colors.white54,
-                                fontSize: 16,
+                                fontSize: isNarrow ? 14 : 16,
                               ),
                             );
                           },
@@ -401,11 +401,12 @@ class _SectionTitle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isNarrow = context.isNarrow;
     return Text(
       title,
       style: TextStyle(
         color: Theme.of(context).colorScheme.primary,
-        fontSize: 24,
+        fontSize: isNarrow ? 20 : 24,
         fontWeight: FontWeight.w800,
       ),
     );
@@ -430,11 +431,12 @@ class _SettingItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final primaryColor = Theme.of(context).colorScheme.primary;
+    final isNarrow = context.isNarrow;
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(20),
       child: Container(
-        padding: const EdgeInsets.all(24),
+        padding: EdgeInsets.all(isNarrow ? 16 : 24),
         decoration: BoxDecoration(
           color: Colors.white.withValues(alpha: 0.05),
           borderRadius: BorderRadius.circular(20),
@@ -443,42 +445,45 @@ class _SettingItem extends StatelessWidget {
         child: Row(
           children: [
             Container(
-              padding: const EdgeInsets.all(12),
+              padding: EdgeInsets.all(isNarrow ? 10 : 12),
               decoration: BoxDecoration(
                 color: primaryColor.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Icon(icon, color: primaryColor, size: 28),
+              child: Icon(icon, color: primaryColor, size: isNarrow ? 22 : 28),
             ),
-            const SizedBox(width: 20),
+            SizedBox(width: isNarrow ? 14 : 20),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     title,
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: Colors.white,
-                      fontSize: 18,
+                      fontSize: isNarrow ? 15 : 18,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
                   const SizedBox(height: 6),
                   Text(
                     subtitle,
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: Colors.white38,
-                      fontSize: 15,
+                      fontSize: isNarrow ? 12 : 15,
                     ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ],
               ),
             ),
+            SizedBox(width: isNarrow ? 8 : 12),
             trailing ??
-                const Icon(
+                Icon(
                   Icons.chevron_right_rounded,
                   color: Colors.white24,
-                  size: 32,
+                  size: isNarrow ? 26 : 32,
                 ),
           ],
         ),

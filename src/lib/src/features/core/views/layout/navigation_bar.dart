@@ -456,15 +456,14 @@ class _AccountMenuDialog extends StatelessWidget {
                 }
               },
             ),
-            if (!Platform.isAndroid)
-              _MenuTile(
-                icon: Icons.settings_outlined,
-                title: 'Настройки',
-                onTap: () {
-                  Navigator.pop(context);
-                  setSection(AppSection.account);
-                },
-              ),
+            _MenuTile(
+              icon: Icons.settings_outlined,
+              title: 'Настройки',
+              onTap: () {
+                Navigator.pop(context);
+                setSection(AppSection.account);
+              },
+            ),
 
             const Divider(color: Colors.white10, height: 40),
 
