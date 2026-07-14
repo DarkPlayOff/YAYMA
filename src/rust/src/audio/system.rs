@@ -343,31 +343,82 @@ impl AudioSystem {
                 });
             }
             AudioMessage::PlayAlbumTrack(aid, tid) => {
-                let yandex = self.yandex.clone();
-                self.spawn_fetch_context(move || async move {
-                    yandex
-                        .fetch_album_context(aid, Some(tid))
-                        .await
-                        .map_err(|e| format!("Failed to load album: {e}"))
-                });
+                let local_ctx = if self.queue.stream_manager.is_track_offline(&tid).await {
+                    self.build_single_track_offline(&tid).await
+                } else {
+                    None
+                };
+
+                if let Some((tracks, index)) = local_ctx {
+                    let _ = self
+                        .tx
+                        .send(AudioMessage::LoadContext(
+                            crate::audio::queue::PlaybackContext::Standalone,
+                            tracks,
+                            index,
+                        ))
+                        .await;
+                } else {
+                    let yandex = self.yandex.clone();
+                    self.spawn_fetch_context(move || async move {
+                        yandex
+                            .fetch_album_context(aid, Some(tid))
+                            .await
+                            .map_err(|e| format!("Failed to load album: {e}"))
+                    });
+                }
             }
             AudioMessage::PlayPlaylistTrack(kind, tid) => {
-                let yandex = self.yandex.clone();
-                self.spawn_fetch_context(move || async move {
-                    yandex
-                        .fetch_playlist_context(kind, Some(tid))
-                        .await
-                        .map_err(|e| format!("Failed to load playlist track: {e}"))
-                });
+                let local_ctx = if self.queue.stream_manager.is_track_offline(&tid).await {
+                    self.build_single_track_offline(&tid).await
+                } else {
+                    None
+                };
+
+                if let Some((tracks, index)) = local_ctx {
+                    let _ = self
+                        .tx
+                        .send(AudioMessage::LoadContext(
+                            crate::audio::queue::PlaybackContext::Standalone,
+                            tracks,
+                            index,
+                        ))
+                        .await;
+                } else {
+                    let yandex = self.yandex.clone();
+                    self.spawn_fetch_context(move || async move {
+                        yandex
+                            .fetch_playlist_context(kind, Some(tid))
+                            .await
+                            .map_err(|e| format!("Failed to load playlist track: {e}"))
+                    });
+                }
             }
             AudioMessage::PlayLikedTrack(tid) => {
-                let yandex = self.yandex.clone();
-                self.spawn_fetch_context(move || async move {
-                    yandex
-                        .fetch_liked_context(Some(tid))
-                        .await
-                        .map_err(|e| format!("Failed to load liked track: {e}"))
-                });
+                let local_ctx = if self.queue.stream_manager.is_track_offline(&tid).await {
+                    self.build_local_liked_context(&tid).await
+                } else {
+                    None
+                };
+
+                if let Some((tracks, index)) = local_ctx {
+                    let _ = self
+                        .tx
+                        .send(AudioMessage::LoadContext(
+                            crate::audio::queue::PlaybackContext::Standalone,
+                            tracks,
+                            index,
+                        ))
+                        .await;
+                } else {
+                    let yandex = self.yandex.clone();
+                    self.spawn_fetch_context(move || async move {
+                        yandex
+                            .fetch_liked_context(Some(tid))
+                            .await
+                            .map_err(|e| format!("Failed to load liked track: {e}"))
+                    });
+                }
             }
             AudioMessage::StartWave(seeds) => {
                 let yandex = self.yandex.clone();
@@ -599,6 +650,51 @@ impl AudioSystem {
         let track_id = as_wave_seed(track);
         self.send_wave_feedback("undislike", Some(track_id), None, true);
         self.queue.refresh_wave_queue();
+    }
+
+    /// Builds a playback queue from locally cached (DB) metadata for the liked
+    /// tracks list, without any network access. Used so that downloaded liked
+    /// tracks can be played while offline.
+    async fn build_local_liked_context(&self, track_id: &str) -> Option<(im::Vector<Track>, usize)> {
+        let (liked_ids, _) = self.state.read().await.liked.ordered_snapshot();
+        if liked_ids.is_empty() {
+            return None;
+        }
+
+        let metadata = self.db.lock().await.get_track_metadata(&liked_ids).await.ok()?;
+        let mut metadata_map: foldhash::HashMap<String, crate::storage::db::TrackMetadata> = {
+            use foldhash::HashMapExt;
+            foldhash::HashMap::new()
+        };
+        for m in metadata {
+            metadata_map.insert(m.id.clone(), m);
+        }
+
+        let mut tracks = im::Vector::new();
+        let mut index = None;
+        for id in &liked_ids {
+            if let Some(m) = metadata_map.remove(id) {
+                if id == track_id {
+                    index = Some(tracks.len());
+                }
+                tracks.push_back(crate::util::track::track_from_metadata(&m));
+            }
+        }
+
+        Some((tracks, index?))
+    }
+
+    /// Builds a single-track playback queue from locally cached (DB) metadata,
+    /// without any network access. Used as an offline fallback for album/playlist
+    /// tracks, where (unlike liked tracks) we don't keep a local ordered track
+    /// list to reconstruct the full queue context.
+    async fn build_single_track_offline(&self, track_id: &str) -> Option<(im::Vector<Track>, usize)> {
+        let ids = vec![track_id.to_string()];
+        let metadata = self.db.lock().await.get_track_metadata(&ids).await.ok()?;
+        let m = metadata.into_iter().find(|m| m.id == track_id)?;
+        let mut tracks = im::Vector::new();
+        tracks.push_back(crate::util::track::track_from_metadata(&m));
+        Some((tracks, 0))
     }
 
     pub async fn sync_liked_collection_with(

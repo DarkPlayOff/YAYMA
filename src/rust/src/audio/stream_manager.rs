@@ -63,6 +63,10 @@ impl StreamManager {
         self.prewarm_cache.lock().remove(track_id);
     }
 
+    pub async fn is_track_offline(&self, track_id: &str) -> bool {
+        self.track_cache.get_track_file(track_id).await.is_some()
+    }
+
     pub async fn create_stream_session(
         &self,
         track: &Track,

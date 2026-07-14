@@ -1,6 +1,95 @@
 use futures::future::join_all;
+use yandex_music::model::artist::Artist;
 use yandex_music::model::playlist::PlaylistTracks;
 use yandex_music::model::track::Track;
+
+/// Builds a minimal `Track` from locally cached DB metadata, for offline playback
+/// where we can't hit the network to fetch the full track object.
+pub fn track_from_metadata(m: &crate::storage::db::TrackMetadata) -> Track {
+    let artists: Vec<Artist> = m
+        .artists
+        .iter()
+        .map(|a| Artist {
+            id: Some(a.id.clone()),
+            error: None,
+            reason: None,
+            name: Some(a.name.clone()),
+            cover: None,
+            various: None,
+            composer: None,
+            genres: None,
+            og_image: None,
+            op_image: None,
+            counts: None,
+            available: None,
+            ratings: None,
+            links: Vec::new(),
+            tickets_available: None,
+            likes_count: None,
+            popular_tracks: Vec::new(),
+            regions: Vec::new(),
+            decomposed: Vec::new(),
+            description: None,
+            countries: Vec::new(),
+            en_wikipedia_link: None,
+            db_aliases: Vec::new(),
+            aliases: Vec::new(),
+            init_date: None,
+            end_date: None,
+        })
+        .collect();
+
+    Track {
+        id: m.id.clone(),
+        title: Some(m.title.clone()),
+        available: Some(true),
+        artists,
+        albums: Vec::new(),
+        available_for_premium_users: None,
+        lyrics_available: None,
+        best: None,
+        real_id: m.id.clone(),
+        og_image: None,
+        item_type: None,
+        cover_uri: m.cover_url.clone(),
+        major: None,
+        duration: Some(std::time::Duration::from_millis(m.duration_ms)),
+        storage_dir: None,
+        file_size: None,
+        substituted: None,
+        matched_track: None,
+        normalization: Vec::new(),
+        error: None,
+        can_publish: None,
+        state: None,
+        desired_visibility: None,
+        filename: None,
+        user_info: None,
+        meta_data: None,
+        regions: Vec::new(),
+        available_as_rbt: None,
+        content_warning: None,
+        explicit: None,
+        preview_duration: None,
+        available_full_without_permission: None,
+        version: m.version.clone(),
+        remember_position: None,
+        background_video_uri: None,
+        short_description: None,
+        is_suitable_for_children: None,
+        track_source: None,
+        available_for_options: Vec::new(),
+        r128: None,
+        lyrics_info: None,
+        track_sharing_flag: None,
+        disclaimers: Vec::new(),
+        derived_colors: None,
+        fade: None,
+        special_audio_resources: Vec::new(),
+        player_id: None,
+        play_count: None,
+    }
+}
 
 pub trait CleanId {
     fn to_base_id(&self) -> &str;
