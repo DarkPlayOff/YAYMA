@@ -180,8 +180,8 @@ class _CommonTrackTileState extends State<CommonTrackTile> {
                         } on Object catch (e) {
                           showAppError('Ошибка: $e');
                         } finally {
-                          final newSet = {...downloadingTracksSignal.value};
-                          newSet.remove(widget.trackId);
+                          final newSet = {...downloadingTracksSignal.value}
+                          ..remove(widget.trackId);
                           downloadingTracksSignal.value = newSet;
                         }
                       }
@@ -217,8 +217,8 @@ class _CommonTrackTileState extends State<CommonTrackTile> {
                         } on Object catch (e) {
                           showAppError('Ошибка: $e');
                         } finally {
-                          final newSet = {...downloadingTracksSignal.value};
-                          newSet.remove(widget.trackId);
+                          final newSet = {...downloadingTracksSignal.value}
+                          ..remove(widget.trackId);
                           downloadingTracksSignal.value = newSet;
                         }
                       }

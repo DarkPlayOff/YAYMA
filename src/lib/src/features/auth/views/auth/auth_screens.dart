@@ -11,10 +11,10 @@ import 'package:window_manager/window_manager.dart';
 import 'package:yayma/src/features/auth/providers/auth_provider.dart';
 import 'package:yayma/src/features/core/providers/navigation_provider.dart';
 import 'package:yayma/src/features/core/views/layout.dart';
-import 'package:yayma/src/rust/api/auth.dart' as rust;
-import 'package:yayma/src/rust/api/playback.dart' as rust;
 import 'package:yayma/src/features/settings/services/update_service.dart';
 import 'package:yayma/src/features/settings/views/update_dialog.dart';
+import 'package:yayma/src/rust/api/auth.dart' as rust;
+import 'package:yayma/src/rust/api/playback.dart' as rust;
 import 'package:yayma/src/rust/api/simple.dart' as simple;
 
 class RootScreen extends StatefulWidget {

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:signals_flutter/signals_flutter.dart';
@@ -92,12 +93,29 @@ class CommonQualitySelector extends SignalWidget {
             } else if (val == 'eq') {
               unawaited(refreshEqualizer());
               unawaited(refreshAudioEffects());
-              unawaited(
-                showDialog<void>(
-                  context: context,
-                  builder: (context) => const AudioSettingsDialog(),
-                ),
-              );
+              if (Platform.isAndroid) {
+                unawaited(
+                  showModalBottomSheet<void>(
+                    context: context,
+                    backgroundColor: const Color(0xFF181818),
+                    isScrollControlled: true,
+                    shape: const RoundedRectangleBorder(
+                      borderRadius: BorderRadius.vertical(
+                        top: Radius.circular(24),
+                      ),
+                    ),
+                    builder: (_) =>
+                        const AudioSettingsDialog(bottomSheet: true),
+                  ),
+                );
+              } else {
+                unawaited(
+                  showDialog<void>(
+                    context: context,
+                    builder: (context) => const AudioSettingsDialog(),
+                  ),
+                );
+              }
             }
           },
           items: items,

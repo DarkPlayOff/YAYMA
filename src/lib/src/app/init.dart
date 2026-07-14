@@ -96,13 +96,13 @@ class AppInit {
       }
     });
 
-    effect(() {
+    effect(() async {
       final state = playerStateSignal();
       final isPlaying = state?.isPlaying ?? false;
       if (isPlaying) {
-        session.setActive(true).catchError((_) => false);
+        await session.setActive(true).catchError((_) => false);
       } else {
-        session.setActive(false).catchError((_) => false);
+        await session.setActive(false).catchError((_) => false);
       }
     });
 
