@@ -9,6 +9,7 @@ import 'package:yayma/src/features/auth/providers/auth_provider.dart'
     show accountSignal, appContextSignal, authSignal;
 import 'package:yayma/src/features/core/providers/navigation_provider.dart';
 import 'package:yayma/src/features/library/providers/library_provider.dart';
+import 'package:yayma/src/features/playback/providers/audio_focus_manager.dart';
 import 'package:yayma/src/features/playback/providers/audio_handler.dart';
 import 'package:yayma/src/features/playback/providers/playback_provider.dart';
 import 'package:yayma/src/rust/api/auth.dart';
@@ -48,9 +49,6 @@ class AppInit {
     unawaited(_initializeAuthAndServices());
   }
 
-  static int? _originalVolume;
-  static bool _isDucked = false;
-
   static Future<void> _initAudioService() async {
     final session = await AudioSession.instance;
     await session.configure(
@@ -63,48 +61,7 @@ class AppInit {
       ),
     );
 
-    session.interruptionEventStream.listen((event) async {
-      if (event.begin) {
-        switch (event.type) {
-          case AudioInterruptionType.duck:
-            if (!_isDucked) {
-              _isDucked = true;
-              final currentVolume = playerVolumeSignal.value;
-              _originalVolume = currentVolume;
-              final duckVolume = (currentVolume * 0.2).round().clamp(0, 100);
-              await PlaybackController.changeVolume(duckVolume);
-            }
-          case AudioInterruptionType.pause:
-          case AudioInterruptionType.unknown:
-            await PlaybackController.pause();
-        }
-      } else {
-        switch (event.type) {
-          case AudioInterruptionType.duck:
-            if (_isDucked) {
-              _isDucked = false;
-              if (_originalVolume != null) {
-                await PlaybackController.changeVolume(_originalVolume!);
-                _originalVolume = null;
-              }
-            }
-          case AudioInterruptionType.pause:
-            await PlaybackController.play();
-          case AudioInterruptionType.unknown:
-            break;
-        }
-      }
-    });
-
-    effect(() async {
-      final state = playerStateSignal();
-      final isPlaying = state?.isPlaying ?? false;
-      if (isPlaying) {
-        await session.setActive(true).catchError((_) => false);
-      } else {
-        await session.setActive(false).catchError((_) => false);
-      }
-    });
+    await AudioFocusManager.initialize(session);
 
     await AudioService.init(
       builder: YaymaAudioHandler.new,
