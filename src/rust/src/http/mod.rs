@@ -1,3 +1,8 @@
+mod file_info;
+pub use file_info::{
+    FileInfoCodec, FileInfoQuality, GetFileInfoBatchOptions, GetFileInfoOptions, TrackFileInfo,
+};
+
 use crate::api::models::AudioQuality;
 use chrono::Utc;
 use parking_lot::RwLock;
@@ -51,7 +56,7 @@ use yandex_music::{
         album::Album,
         artist::Artist,
         collection::Collection,
-        info::{file_info::Quality, lyrics::LyricsFormat, pager::Pager},
+        info::{lyrics::LyricsFormat, pager::Pager},
         playlist::{
             Playlist,
             modify::{Diff, DiffOp},
@@ -98,42 +103,6 @@ pub struct UgcUploadInfo {
     pub host: String,
 }
 
-/// HMAC key Yandex validates `get-file-info` signatures against. The
-/// `yandex-music` crate's bundled key (`p93jhgh689SBReK6ghtw62`) is no longer
-/// accepted — every request comes back 403 `track-download-info-error` /
-/// `not-allowed`. This key was extracted from the official desktop app's
-/// Windows build; we always identify as that client via the
-/// `X-Yandex-Music-Client` header below, so we always sign with its key
-/// regardless of the host OS we're actually running on.
-const FILE_INFO_SIGN_KEY: &str = "kzqU4XhfCaY6B6JTHODeq5";
-
-/// Reimplementation of `yandex_music::api::utils::create_file_info_sign`
-/// using [`FILE_INFO_SIGN_KEY`] instead of the crate's stale key.
-fn create_file_info_sign(
-    track_id: &str,
-    quality: &str,
-    codecs: &str,
-    transport: &str,
-) -> (String, String) {
-    use base64::Engine;
-    use hmac::{Hmac, Mac};
-    use sha2::Sha256;
-
-    let ts = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_secs()
-        .to_string();
-    let msg = format!("{}{}{}{}{}", ts, track_id, quality, codecs, transport);
-    let mut mac = Hmac::<Sha256>::new_from_slice(FILE_INFO_SIGN_KEY.as_bytes())
-        .expect("HMAC accepts a key of any length");
-    mac.update(msg.as_bytes());
-    let digest = base64::engine::general_purpose::STANDARD.encode(mac.finalize().into_bytes());
-    // Yandex's own signer drops the trailing base64 padding/char to match.
-    let sign = digest[..digest.len() - 1].to_string();
-    (ts, sign)
-}
-
 pub struct ApiService {
     pub client: Arc<YandexMusicClient>,
     pub http_client: reqwest::Client,
@@ -152,7 +121,7 @@ impl ApiService {
         );
         headers.insert(
             "X-Yandex-Music-Client",
-            HeaderValue::from_str("YandexMusicDesktopAppWindows/5.95.0")?,
+            HeaderValue::from_str("YandexMusicDesktopAppWindows/5.110.1")?,
         );
         headers.insert("Accept-Language", HeaderValue::from_str("ru")?);
         headers.insert("Accept", HeaderValue::from_str("*/*")?);
@@ -167,7 +136,7 @@ impl ApiService {
         );
 
         let http_client = reqwest::Client::builder()
-            .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 YandexMusic/5.95.0")
+            .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 YandexMusic/5.110.1")
             .default_headers(headers.clone())
             .brotli(true)
             .build()?;
@@ -386,188 +355,51 @@ impl ApiService {
         Ok(self.client.get_similar_tracks(&opts).await?.similar_tracks)
     }
 
-    fn map_quality(&self, q: AudioQuality) -> Quality {
-        match q {
-            AudioQuality::Low => Quality::Low,
-            AudioQuality::Normal => Quality::Normal,
-            AudioQuality::High => Quality::Lossless,
+    /// Batch counterpart of `get-file-info`; ported from
+    /// `yandex_music::api::track::get_file_info_batch`.
+    pub async fn fetch_file_info_batch(
+        &self,
+        track_ids: Vec<String>,
+        quality: FileInfoQuality,
+    ) -> Result<Vec<TrackFileInfo>> {
+        let opts = GetFileInfoBatchOptions::new(track_ids).quality(quality);
+        Ok(file_info::get_file_info_batch(&self.client, &opts).await?)
+    }
+
+    fn map_quality(quality: AudioQuality) -> FileInfoQuality {
+        match quality {
+            AudioQuality::High => FileInfoQuality::Lossless,
+            AudioQuality::Normal => FileInfoQuality::Normal,
+            AudioQuality::Low => FileInfoQuality::Low,
         }
     }
 
-    async fn fetch_track_url_custom(
+    fn codec_by_name(name: &str) -> Option<FileInfoCodec> {
+        FileInfoCodec::all()
+            .into_iter()
+            .find(|c| c.to_string() == name)
+    }
+
+    async fn fetch_track_url_with_codec(
         &self,
         track_id: String,
-        quality: yandex_music::model::info::file_info::Quality,
-        codecs: Vec<yandex_music::model::info::file_info::Codec>,
+        quality: AudioQuality,
+        preferred_codec: Option<&str>,
     ) -> Result<(String, String)> {
-        let transport = "raw";
-        let quality_str = quality.to_string();
-
-        let mut codecs_concat = String::new();
-        let mut codecs_delimited = String::new();
-        for (i, codec) in codecs.iter().enumerate() {
-            let s = codec.to_string();
-            codecs_concat.push_str(&s);
-            if i > 0 {
-                codecs_delimited.push(',');
-            }
-            codecs_delimited.push_str(&s);
+        let mut opts = GetFileInfoOptions::new(track_id).quality(Self::map_quality(quality));
+        if let Some(codec) = preferred_codec.and_then(Self::codec_by_name) {
+            opts = opts.codecs([codec]);
         }
 
-        let (ts, sign) = create_file_info_sign(&track_id, &quality_str, &codecs_concat, transport);
-
-        let url = format!(
-            "https://api.music.yandex.net:443/get-file-info?ts={}&trackId={}&quality={}&codecs={}&transports={}&sign={}",
-            ts, track_id, quality_str, codecs_delimited, transport, sign
-        );
-
-        #[derive(serde::Deserialize)]
-        #[serde(rename_all = "camelCase")]
-        struct CustomTrackFileInfo {
-            pub codec: String,
-            pub url: Option<String>,
-            pub urls: Option<Vec<String>>,
-        }
-
-        impl CustomTrackFileInfo {
-            /// `url` is the primary CDN host; `urls` are mirrors. Some
-            /// responses only populate one or the other.
-            fn pick_url(&self) -> Option<String> {
-                self.url
-                    .clone()
-                    .or_else(|| self.urls.as_ref().and_then(|u| u.first().cloned()))
-            }
-        }
-
-        #[derive(serde::Deserialize)]
-        #[serde(rename_all = "camelCase")]
-        struct CustomGetFileInfoResult {
-            pub download_info: Option<CustomTrackFileInfo>,
-            pub name: Option<String>,
-            pub message: Option<String>,
-        }
-
-        #[derive(serde::Deserialize)]
-        #[serde(rename_all = "camelCase")]
-        struct CustomApiResponse {
-            // Yandex normally wraps the payload in `result`, but has been
-            // observed returning these fields at the top level instead.
-            // Accept both shapes.
-            pub result: Option<CustomGetFileInfoResult>,
-            pub download_info: Option<CustomTrackFileInfo>,
-            pub error: Option<yandex_music::error::YandexMusicError>,
-            pub name: Option<String>,
-            pub message: Option<String>,
-        }
-
-        let response_bytes = self
-            .client
-            .inner
-            .get(&url)
-            .send()
-            .await?
-            .bytes()
-            .await?;
-
-        let response: CustomApiResponse = match serde_json::from_slice(&response_bytes) {
-            Ok(res) => res,
-            Err(e) => {
-                let response_text = String::from_utf8_lossy(&response_bytes);
-                tracing::error!("Failed to parse get-file-info JSON: {}. Response: {}", e, response_text);
-                return Err(Box::new(e));
-            }
-        };
-
-        if let Some(err) = response.error {
-            return Err(Box::new(yandex_music::error::ClientError::YandexMusicError { error: err }));
-        }
-
-        if let Some(name) = response.name {
-            if name.contains("error") || response.message.is_some() {
-                return Err(Box::new(yandex_music::error::ClientError::YandexMusicError {
-                    error: yandex_music::error::YandexMusicError {
-                        name,
-                        message: response.message,
-                    }
-                }));
-            }
-        }
-
-        if let Some(name) = response.result.as_ref().and_then(|r| r.name.clone()) {
-            let message = response.result.as_ref().and_then(|r| r.message.clone());
-            if name.contains("error") || message.is_some() {
-                return Err(Box::new(yandex_music::error::ClientError::YandexMusicError {
-                    error: yandex_music::error::YandexMusicError { name, message },
-                }));
-            }
-        }
-
-        let download_info = response
-            .result
-            .and_then(|r| r.download_info)
-            .or(response.download_info);
-
-        match download_info {
-            Some(info) => match info.pick_url() {
-                Some(url) => Ok((url, info.codec)),
-                None => Err(Box::from("Missing url/urls in get-file-info downloadInfo")),
-            },
-            None => Err(Box::from("Missing downloadInfo in get-file-info response")),
-        }
+        let info = file_info::get_file_info(&self.client, &opts).await?;
+        Ok((info.url, info.codec))
     }
 
     pub async fn fetch_track_url(&self, track_id: String) -> Result<(String, String)> {
-        use yandex_music::model::info::file_info::Quality;
-
-        let selected_quality = self.map_quality(self.get_quality());
-
-        // Try the selected quality first
-        match self.fetch_track_url_custom(
-            track_id.clone(),
-            selected_quality,
-            yandex_music::model::info::file_info::Codec::all().to_vec()
-        ).await {
-            Ok(res) => return Ok(res),
-            Err(e) => {
-                tracing::warn!("Failed to fetch track {} with quality {:?}: {:?}", track_id, selected_quality, e);
-            }
-        }
-
-        // If selected quality was Lossless, fall back to Normal (High)
-        if selected_quality == Quality::Lossless {
-            match self.fetch_track_url_custom(
-                track_id.clone(),
-                Quality::Normal,
-                yandex_music::model::info::file_info::Codec::all().to_vec()
-            ).await {
-                Ok(res) => return Ok(res),
-                Err(e) => {
-                    tracing::warn!("Failed to fetch track {} with quality Normal: {:?}", track_id, e);
-                }
-            }
-        }
-
-        // If we still haven't returned, or if selected quality was Normal, fall back to Low (lowest quality)
-        if selected_quality == Quality::Lossless || selected_quality == Quality::Normal {
-            match self.fetch_track_url_custom(
-                track_id.clone(),
-                Quality::Low,
-                yandex_music::model::info::file_info::Codec::all().to_vec()
-            ).await {
-                Ok(res) => return Ok(res),
-                Err(e) => {
-                    tracing::error!("Failed to fetch track {} with fallback quality Low: {:?}", track_id, e);
-                    return Err(e);
-                }
-            }
-        }
-
-        Err(Box::from("Failed to fetch track URL with any quality"))
+        self.fetch_track_url_with_codec(track_id, self.get_quality(), None).await
     }
 
     pub async fn fetch_track_url_for_download(&self, track_id: String) -> Result<(String, String)> {
-        use yandex_music::model::info::file_info::Codec;
-
         // Try the same fetch as playback first (favors FLAC for Lossless quality)
         let (url, codec) = self.fetch_track_url(track_id.clone()).await?;
 
@@ -577,8 +409,11 @@ impl ApiService {
         }
 
         // If it's AAC, we try to force MP3 instead because raw AAC doesn't support tags well.
-        let quality = self.map_quality(self.get_quality());
-        if let Ok(res) = self.fetch_track_url_custom(track_id, quality, vec![Codec::Mp3]).await {
+        let quality = self.get_quality();
+        if let Ok(res) = self
+            .fetch_track_url_with_codec(track_id, quality, Some("mp3"))
+            .await
+        {
             return Ok(res);
         }
 
@@ -589,26 +424,25 @@ impl ApiService {
         &self,
         track_ids: Vec<String>,
     ) -> Result<Vec<(String, String, String)>> {
-        let quality = self.map_quality(self.get_quality());
-        let mut mapped = Vec::new();
+        let quality = self.get_quality();
 
-        for track_id in track_ids {
-            // Sleep for 200ms between requests to avoid concurrent rate-limiting from Yandex
-            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        let infos = self
+            .fetch_file_info_batch(track_ids.clone(), Self::map_quality(quality))
+            .await?;
 
-            match self.fetch_track_url_custom(
-                track_id.clone(),
-                quality,
-                yandex_music::model::info::file_info::Codec::all().to_vec()
-            ).await {
-                Ok((url, codec)) => mapped.push((track_id, url, codec)),
-                Err(e) => {
-                    tracing::warn!("Batch prefetch failed for track {}: {:?}", track_id, e);
-                }
-            }
+        if infos.len() != track_ids.len() {
+            return Err(Box::from(format!(
+                "get-file-info/batch returned {} results for {} requested tracks",
+                infos.len(),
+                track_ids.len()
+            )));
         }
 
-        Ok(mapped)
+        Ok(track_ids
+            .into_iter()
+            .zip(infos)
+            .map(|(track_id, info)| (track_id, info.url, info.codec))
+            .collect())
     }
 
     pub async fn fetch_lyrics(

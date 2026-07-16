@@ -63,7 +63,15 @@ impl StreamingDataSource {
             .get(&url)
             .header("Range", range_header)
             .send()
-            .await?;
+            .await?
+            .error_for_status()
+            .map_err(|e| {
+                Box::<dyn std::error::Error + Send + Sync>::from(format!(
+                    "stream url rejected (status {}): {}",
+                    e.status().map(|s| s.as_u16()).unwrap_or(0),
+                    e
+                ))
+            })?;
 
         let total = if let Some(range) = resp.headers().get("content-range") {
             let s = range.to_str().map_err(|_| {
@@ -287,15 +295,36 @@ impl StreamingDataSource {
 
         loop {
             match client.get(url).header("Range", &hdr).send().await {
-                Ok(resp) => match resp.bytes().await {
-                    Ok(bytes) => return Ok(bytes),
-                    Err(e) => {
-                        attempts += 1;
-                        if attempts >= max_retries {
-                            return Err(e.into());
+                Ok(resp) => {
+                    // 4xx means the signed URL itself was rejected (expired
+                    // or invalid) — retrying the same URL won't help, so
+                    // bail immediately and let the caller refetch a fresh
+                    // one instead of burning through all retries.
+                    let status = resp.status();
+                    if status.is_client_error() {
+                        return Err(Box::from(format!(
+                            "stream url rejected (status {})",
+                            status.as_u16()
+                        )));
+                    }
+                    match resp.error_for_status() {
+                        Ok(resp) => match resp.bytes().await {
+                            Ok(bytes) => return Ok(bytes),
+                            Err(e) => {
+                                attempts += 1;
+                                if attempts >= max_retries {
+                                    return Err(e.into());
+                                }
+                            }
+                        },
+                        Err(e) => {
+                            attempts += 1;
+                            if attempts >= max_retries {
+                                return Err(e.into());
+                            }
                         }
                     }
-                },
+                }
                 Err(e) => {
                     attempts += 1;
                     if attempts >= max_retries {

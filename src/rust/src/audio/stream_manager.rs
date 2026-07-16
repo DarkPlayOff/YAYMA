@@ -105,9 +105,10 @@ impl StreamManager {
             return Ok((session, progress, codec));
         }
 
-        // 2. Fallback to streaming
-        let (url, codec) = if let Some((url, codec)) = self.url_cache.get(&track.id) {
-            (url, codec)
+        // 2. Fallback to streaming.
+        let duration_ms = track.duration.map(|d| d.as_millis() as u64);
+        let (url, codec) = if let Some(cached) = self.url_cache.get(&track.id) {
+            cached
         } else {
             let (url, codec) = self
                 .api
@@ -119,10 +120,7 @@ impl StreamManager {
             (url, codec)
         };
 
-        let codec_clone = codec.clone();
-
         let client = self.http_client.clone();
-        let duration_ms = track.duration.map(|d| d.as_millis() as u64);
         let data_source = stream::StreamingDataSource::new(
             client,
             url,
@@ -132,6 +130,7 @@ impl StreamManager {
         )
         .await
         .map_err(|e| Box::<dyn std::error::Error + Send + Sync>::from(e.to_string()))?;
+        let codec_clone = codec.clone();
 
         let total_bytes = data_source.total_bytes();
         let session = tokio::task::spawn_blocking(move || {
