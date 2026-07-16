@@ -167,6 +167,37 @@ jobs:
           channel: 'stable'
           cache: true
 
+      - name: Setup Android Signing
+        working-directory: ./src/android
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          present=0
+          missing=0
+          for v in KEYSTORE_B64 KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
+            if [ -n "${!v}" ]; then present=$((present + 1)); else missing=$((missing + 1)); fi
+          done
+
+          if [ "$present" -eq 4 ]; then
+            echo "$KEYSTORE_B64" | base64 -d > app/release.keystore
+            {
+              echo "storePassword=$KEYSTORE_PASSWORD"
+              echo "keyPassword=$KEY_PASSWORD"
+              echo "keyAlias=$KEY_ALIAS"
+              echo "storeFile=release.keystore"
+            } > key.properties
+            echo "SIGN_SUFFIX=" >> "$GITHUB_ENV"
+          elif [ "$missing" -eq 4 ]; then
+            echo "No release signing secrets found; falling back to debug signing"
+            echo "SIGN_SUFFIX=-dsign" >> "$GITHUB_ENV"
+          else
+            echo "::error::Incomplete Android signing secrets: need all of ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD set together, or none of them."
+            exit 1
+          fi
+
       - name: Build
         working-directory: ./src
         run: |
@@ -182,7 +213,7 @@ jobs:
           mkdir -p android_artifacts
           for apk in src/build/app/outputs/flutter-apk/app-*-release.apk; do
             abi=$(basename "$apk" | sed -E 's/app-(.*)-release\.apk/\1/')
-            cp "$apk" "android_artifacts/yayma-android-${abi}-${VERSION}.apk"
+            cp "$apk" "android_artifacts/yayma-android-${abi}-${VERSION}${SIGN_SUFFIX}.apk"
           done
 
       - name: Upload
