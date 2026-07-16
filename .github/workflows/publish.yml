@@ -51,3 +51,45 @@ jobs:
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  update-aur-pkgbuild:
+    needs: create-release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Regenerate PKGBUILD
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          REPO="${{ github.repository }}"
+          X64_URL="https://github.com/${REPO}/releases/download/v${VERSION}/yayma-linux-x64-${VERSION}.tar.gz"
+          ARM64_URL="https://github.com/${REPO}/releases/download/v${VERSION}/yayma-linux-arm64-${VERSION}.tar.gz"
+          LICENSE_URL="https://raw.githubusercontent.com/${REPO}/v${VERSION}/LICENSE"
+
+          TARBALL_SHA_X64=$(curl -sL --fail "$X64_URL" | sha256sum | cut -d' ' -f1)
+          TARBALL_SHA_ARM64=$(curl -sL --fail "$ARM64_URL" | sha256sum | cut -d' ' -f1)
+          LICENSE_SHA=$(curl -sL --fail "$LICENSE_URL" | sha256sum | cut -d' ' -f1)
+          DESKTOP_SHA=$(sha256sum packaging/linux/io.github.darkplayoff.yayma.desktop | cut -d' ' -f1)
+
+          if [ -z "$TARBALL_SHA_X64" ] || [ -z "$TARBALL_SHA_ARM64" ] || [ -z "$LICENSE_SHA" ] || [ -z "$DESKTOP_SHA" ]; then
+            echo "::error::Failed to download release asset(s) or LICENSE to compute checksums"
+            exit 1
+          fi
+
+          REPO_ESCAPED=$(printf '%s' "$REPO" | sed 's/[&/\]/\\&/g')
+          sed \
+            -e "s/@VERSION@/${VERSION}/g" \
+            -e "s/@REPO@/${REPO_ESCAPED}/g" \
+            -e "s/@TARBALL_SHA_X64@/${TARBALL_SHA_X64}/g" \
+            -e "s/@TARBALL_SHA_ARM64@/${TARBALL_SHA_ARM64}/g" \
+            -e "s/@LICENSE_SHA@/${LICENSE_SHA}/g" \
+            -e "s/@DESKTOP_SHA@/${DESKTOP_SHA}/g" \
+            packaging/aur/yayma-bin/PKGBUILD.template > PKGBUILD
+
+      - name: Upload PKGBUILD to release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${{ github.ref_name }}" PKGBUILD --clobber --repo "${{ github.repository }}"

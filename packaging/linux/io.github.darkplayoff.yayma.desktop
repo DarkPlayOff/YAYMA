@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=YAYMA
+GenericName=Music Player
+Comment=Yet Another Yandex Music Client
+Exec=yayma
+Icon=io.github.darkplayoff.yayma
+Terminal=false
+Type=Application
+Categories=Audio;Music;Player;
+StartupWMClass=io.github.darkplayoff.yayma

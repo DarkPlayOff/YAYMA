@@ -15,9 +15,11 @@ jobs:
           - arch: x64
             runner: ubuntu-22.04
             output_dir: x64
+            appimage_arch: x86_64
           - arch: arm64
             runner: ubuntu-22.04-arm
             output_dir: arm64
+            appimage_arch: aarch64
     env:
       RUSTFLAGS: -C link-arg=-fuse-ld=lld
       CC: clang
@@ -29,7 +31,7 @@ jobs:
       - name: System Init
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential cmake ninja-build pkg-config libgtk-3-dev libsecret-1-dev libsoup-3.0-dev libwebkit2gtk-4.1-dev libasound2-dev curl git unzip clang lld libclang-dev llvm-dev libayatana-appindicator3-dev libdbus-1-dev
+          sudo apt-get install -y build-essential cmake ninja-build pkg-config libgtk-3-dev libsecret-1-dev libsoup-3.0-dev libwebkit2gtk-4.1-dev libasound2-dev curl git unzip clang lld libclang-dev llvm-dev libayatana-appindicator3-dev libdbus-1-dev imagemagick
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -75,6 +77,40 @@ jobs:
         with:
           name: linux_${{ matrix.arch }}_release
           path: yayma-linux-*.tar.gz
+
+      - name: Build AppDir
+        run: |
+          mkdir -p AppDir
+          cp -r src/build/linux/${{ matrix.output_dir }}/release/bundle/. AppDir/
+
+          cat > AppDir/AppRun <<'EOF'
+          #!/bin/sh
+          HERE="$(dirname "$(readlink -f "${0}")")"
+          exec "$HERE/yayma" "$@"
+          EOF
+          chmod +x AppDir/AppRun
+
+          install -Dm644 packaging/linux/io.github.darkplayoff.yayma.desktop AppDir/io.github.darkplayoff.yayma.desktop
+          convert src/assets/icons/logo.webp -resize 256x256 AppDir/io.github.darkplayoff.yayma.png
+
+      - name: Download appimagetool
+        run: |
+          curl -Lo appimagetool "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-${{ matrix.appimage_arch }}.AppImage"
+          chmod +x appimagetool
+
+      - name: Build AppImage
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: "1"
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          if [ "$VERSION" == "$GITHUB_REF" ]; then VERSION="manual"; fi
+          ./appimagetool AppDir "yayma-${{ matrix.appimage_arch }}-${VERSION}.AppImage"
+
+      - name: Upload AppImage
+        uses: actions/upload-artifact@v4
+        with:
+          name: appimage_${{ matrix.arch }}_release
+          path: yayma-*.AppImage
 
   build-windows:
     runs-on: ${{ matrix.runner }}
