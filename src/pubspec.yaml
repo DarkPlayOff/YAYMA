@@ -16,16 +16,8 @@ dependencies:
     sdk: flutter
   flutter_localizations:
     sdk: flutter
-  flutter_rust_bridge:
-    git:
-      url: https://github.com/fzyzcjy/flutter_rust_bridge.git
-      ref: 6e00177713e85d9e34ffa4f19e3a67d4c93a1854
-      path: frb_dart
-  flutter_rust_bridge_hooks:
-    git:
-      url: https://github.com/fzyzcjy/flutter_rust_bridge.git
-      ref: 6e00177713e85d9e34ffa4f19e3a67d4c93a1854
-      path: frb_hooks
+  flutter_rust_bridge: 2.13.0-beta.5
+  flutter_rust_bridge_hooks: 2.13.0-beta.5
   freezed_annotation: ^3.1.0
   intl: ^0.20.2
   json_annotation: ^4.11.0

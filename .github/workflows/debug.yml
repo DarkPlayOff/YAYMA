@@ -28,7 +28,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: "src/rust -> src/target"
-          key: "6e00177713e85d9e34ffa4f19e3a67d4c93a1854"
+          key: "2.13.0-beta.5"
 
       - name: Install Tools
         run: |
@@ -37,7 +37,7 @@ jobs:
             curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
           fi
           # Install others via binstall
-          cargo install flutter_rust_bridge_codegen --git https://github.com/fzyzcjy/flutter_rust_bridge.git --rev 511b109273a29fb6b8e09e018d3c6e4e36309695
+          cargo install flutter_rust_bridge_codegen --version 2.13.0-beta.5 --locked
           cargo binstall -y cargo-expand
 
       - name: Setup Flutter
@@ -83,7 +83,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: "src/rust -> src/target"
-          key: "6e00177713e85d9e34ffa4f19e3a67d4c93a1854"
+          key: "2.13.0-beta.5"
 
       - name: Install Tools
         run: |
@@ -93,7 +93,7 @@ jobs:
             powershell -ExecutionPolicy RemoteSigned -File install-binstall.ps1 -Force
           }
           # Install others via binstall
-          cargo install flutter_rust_bridge_codegen --git https://github.com/fzyzcjy/flutter_rust_bridge.git --rev 511b109273a29fb6b8e09e018d3c6e4e36309695
+          cargo install flutter_rust_bridge_codegen --version 2.13.0-beta.5 --locked
           cargo binstall -y cargo-expand
         shell: powershell
 
