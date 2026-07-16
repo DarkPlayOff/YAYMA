@@ -6,7 +6,18 @@ on:
 
 jobs:
   build-linux:
-    runs-on: ubuntu-22.04
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        include:
+          - arch: x64
+            runner: ubuntu-22.04
+            output_dir: x64
+          - arch: arm64
+            runner: ubuntu-22.04-arm
+            output_dir: arm64
     env:
       RUSTFLAGS: -C link-arg=-fuse-ld=lld
       CC: clang
@@ -29,7 +40,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: "src/rust -> src/target"
-          key: "2.13.0-beta.5"
+          key: "2.13.0-beta.5-${{ matrix.arch }}"
 
       - name: Install Tools
         run: |
@@ -57,16 +68,30 @@ jobs:
         run: |
           VERSION=${GITHUB_REF#refs/tags/v}
           if [ "$VERSION" == "$GITHUB_REF" ]; then VERSION="manual"; fi
-          tar -czvf yayma-linux-${VERSION}.tar.gz -C src/build/linux/x64/release/bundle/ .
+          tar -czvf yayma-linux-${{ matrix.arch }}-${VERSION}.tar.gz -C src/build/linux/${{ matrix.output_dir }}/release/bundle/ .
 
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: linux_release
+          name: linux_${{ matrix.arch }}_release
           path: yayma-linux-*.tar.gz
 
   build-windows:
-    runs-on: windows-latest
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            runner: windows-latest
+            rust_target: ""
+            flutter_platform_flag: ""
+            output_dir: x64
+          - arch: arm64
+            runner: windows-11-arm
+            rust_target: aarch64-pc-windows-msvc
+            flutter_platform_flag: "--target-platform windows-arm64"
+            output_dir: arm64
     env:
       RUSTFLAGS: -C linker=lld-link.exe
       CC: clang
@@ -78,13 +103,14 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
+          targets: ${{ matrix.rust_target }}
           components: rust-src
 
       - name: Setup Rust Cache
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: "src/rust -> src/target"
-          key: "2.13.0-beta.5"
+          key: "2.13.0-beta.5-${{ matrix.arch }}"
 
       - name: Install Tools
         run: |
@@ -108,20 +134,20 @@ jobs:
           flutter config --no-analytics
           flutter pub get
           flutter_rust_bridge_codegen generate
-          flutter build windows --release
+          flutter build windows --release ${{ matrix.flutter_platform_flag }}
         shell: powershell
 
       - name: Archive
         run: |
           $VERSION = $env:GITHUB_REF -replace 'refs/tags/v', ''
           if ($VERSION -eq $env:GITHUB_REF) { $VERSION = "manual" }
-          Compress-Archive -Path "src\build\windows\x64\runner\Release\*" -DestinationPath "yayma-windows-$VERSION.zip"
+          Compress-Archive -Path "src\build\windows\${{ matrix.output_dir }}\runner\Release\*" -DestinationPath "yayma-windows-${{ matrix.arch }}-$VERSION.zip"
         shell: powershell
 
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: windows_release
+          name: windows_${{ matrix.arch }}_release
           path: yayma-windows-*.zip
 
   build-android:
