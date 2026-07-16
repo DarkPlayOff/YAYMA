@@ -36,6 +36,17 @@ fn get_any_cover(t: &Track) -> Option<String> {
         .cloned()
 }
 
+/// `cover.uri` is empty for playlists using an auto-generated "mosaic" cover
+/// (no custom art set), so fall back to `og_image`, which Yandex always
+/// populates with a rendered cover.
+#[flutter_rust_bridge::frb(ignore)]
+fn get_playlist_cover(playlist: &mut Playlist) -> Option<String> {
+    playlist.cover.uri.take().or_else(|| {
+        let og_image = std::mem::take(&mut playlist.og_image);
+        (!og_image.is_empty()).then_some(og_image)
+    })
+}
+
 #[flutter_rust_bridge::frb(unignore)]
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Default, PartialEq, Eq)]
 pub enum AudioQuality {
@@ -349,7 +360,7 @@ pub struct PlaylistDetailsDto {
 #[flutter_rust_bridge::frb(ignore)]
 impl PlaylistDetailsDto {
     pub fn from_yandex(mut playlist: Playlist) -> Self {
-        let cover_url = format_cover(playlist.cover.uri.take(), "600x600");
+        let cover_url = format_cover(get_playlist_cover(&mut playlist), "600x600");
         let title = std::mem::take(&mut playlist.title);
         let track_count = playlist.track_count;
         let is_public = format!("{:?}", playlist.visibility)
@@ -389,7 +400,7 @@ impl SimplePlaylistDto {
             kind: playlist.kind,
             uid: playlist.uid as i64,
             title: std::mem::take(&mut playlist.title),
-            cover_url: format_cover(playlist.cover.uri.take(), "600x600"),
+            cover_url: format_cover(get_playlist_cover(&mut playlist), "600x600"),
             track_count: playlist.track_count,
             is_public,
         }
