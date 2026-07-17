@@ -101,20 +101,35 @@ jobs:
           # Flutter plugins (e.g. tray_manager -> libayatana-appindicator3) can pull in
           # system shared libraries that CMake's plugin bundling doesn't follow
           # transitively, leaving the AppImage without them on systems that lack the
-          # package. Let linuxdeploy resolve and bundle those for every .so we already
-          # ship, but don't hand it the AppDir wholesale: Flutter looks up its own
-          # data/ directory relative to the executable's location, which linuxdeploy's
-          # usr/bin + usr/lib FHS layout would break, and we already have a working
-          # AppRun + RPATH ($ORIGIN/lib) for the rest of the bundle.
+          # package. Let linuxdeploy resolve and bundle those, but don't hand it the
+          # AppDir wholesale: Flutter looks up its own data/ directory relative to the
+          # executable's location, which linuxdeploy's usr/bin + usr/lib FHS layout
+          # would break, and we already have a working AppRun + RPATH ($ORIGIN/lib)
+          # for the rest of the bundle.
+          #
+          # Also skip webview_all_linux_plugin.so and anything webkit-related:
+          # webkit2gtk is treated as a system dependency (see README), and scanning
+          # that plugin drags in its entire transitive chain (webkit2gtk,
+          # javascriptcoregtk, its own icudata, gstreamer, ...) which alone adds
+          # ~150MB that's already provided by the host.
           library_args=()
           for lib in AppDir/lib/*.so*; do
+            case "$(basename "$lib")" in
+              libwebview_all_linux_plugin.so|libwebkit2gtk*|libjavascriptcoregtk*)
+                continue
+                ;;
+            esac
             [ -f "$lib" ] && library_args+=(--library "$lib")
           done
           ./linuxdeploy --appdir AppDir "${library_args[@]}"
 
           # linuxdeploy deposits resolved dependencies under AppDir/usr/lib; flatten
           # them into AppDir/lib (already on RPATH) and drop the FHS scaffolding.
-          find AppDir/usr/lib -maxdepth 1 -name '*.so*' -exec cp -n {} AppDir/lib/ \;
+          # Exclude webkit-related libs here too in case something else transitively
+          # pulled them in.
+          find AppDir/usr/lib -maxdepth 1 -name '*.so*' \
+            ! -name 'libwebkit2gtk*' ! -name 'libjavascriptcoregtk*' \
+            -exec cp -n {} AppDir/lib/ \;
           rm -rf AppDir/usr AppDir/apprun-hooks
 
       - name: Strip debug symbols
