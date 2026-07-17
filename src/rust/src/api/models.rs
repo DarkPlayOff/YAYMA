@@ -24,7 +24,7 @@ pub fn format_cover(uri: Option<String>, size: &str) -> Option<String> {
 }
 
 #[flutter_rust_bridge::frb(ignore)]
-fn get_any_cover(t: &Track) -> Option<String> {
+pub(crate) fn get_any_cover(t: &Track) -> Option<String> {
     t.og_image
         .as_ref()
         .or(t.cover_uri.as_ref())

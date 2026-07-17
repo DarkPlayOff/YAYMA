@@ -5,6 +5,29 @@ import 'package:flutter/material.dart';
 import 'package:yayma/src/features/auth/providers/auth_provider.dart';
 import 'package:yayma/src/rust/api/simple.dart';
 
+/// Cover size presets Yandex's avatar CDN actually serves, per the official
+/// web client (`createAvatarUrl` in its bundled JS) — matches must cover
+/// every size the Rust backend ever bakes into a `cover_url`
+/// (`COVER_SIZE_*` in `src/rust/src/api/models.rs`) so `resolveCoverUrl`
+/// can find and replace the existing token.
+const List<int> coverSizePicks = [30, 50, 80, 100, 200, 300, 400, 600, 800, 1000];
+
+/// Rewrites a Yandex cover URL to the smallest preset that is still large
+/// enough to cover [targetPx] device pixels, so covers are never upscaled
+/// from a too-small source (blurry) nor pulled at a needlessly large size
+/// for a small widget (wasted bandwidth/cache).
+String resolveCoverUrl(String url, int targetPx) {
+  final preset = coverSizePicks.firstWhere(
+    (p) => p >= targetPx,
+    orElse: () => coverSizePicks.last,
+  );
+  var result = url;
+  for (final p in coverSizePicks) {
+    result = result.replaceFirst('${p}x$p', '${preset}x$preset');
+  }
+  return result;
+}
+
 class RustCachedImage extends StatefulWidget {
   final String? imageUrl;
   final double? width;

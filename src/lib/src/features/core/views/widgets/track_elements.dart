@@ -198,13 +198,15 @@ class TrackCover extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final pixelRatio = MediaQuery.devicePixelRatioOf(context);
-    final image = url != null
+    final targetPx = (size * pixelRatio).round();
+    final resolvedUrl = url != null ? resolveCoverUrl(url!, targetPx) : null;
+    final image = resolvedUrl != null
         ? RustCachedImage(
-            imageUrl: url,
+            imageUrl: resolvedUrl,
             width: size,
             height: size,
-            cacheWidth: (size * pixelRatio).round(),
-            cacheHeight: (size * pixelRatio).round(),
+            cacheWidth: targetPx,
+            cacheHeight: targetPx,
             errorWidget: _CoverPlaceholder(isCircle: isCircle, size: size),
           )
         : _CoverPlaceholder(isCircle: isCircle, size: size);

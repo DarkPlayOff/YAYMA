@@ -64,7 +64,11 @@ pub async fn download_track(
         .next()
         .ok_or_else(|| AppError::NotFound(format!("Track {}", track_id)))?;
 
-    let dto = SimpleTrackDto::from_yandex_owned(track, &liked, &disliked);
+    // Downloaded files are kept forever, so embed the highest-quality cover
+    // available rather than whatever fixed preset display DTOs use.
+    let orig_cover_url = format_cover(crate::api::models::get_any_cover(&track), "orig");
+    let mut dto = SimpleTrackDto::from_yandex_owned(track, &liked, &disliked);
+    dto.cover_url = orig_cover_url;
 
     let (url, codec) = api.fetch_track_url_for_download(track_id.clone()).await?;
 

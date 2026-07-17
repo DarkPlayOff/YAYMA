@@ -16,10 +16,8 @@ class FullscreenCoverDialog extends StatelessWidget {
     String imageUrl, {
     String? heroTag,
   }) {
-    // Try to get high-quality version
-    final highResUrl = imageUrl
-        .replaceFirst('200x200', '1000x1000')
-        .replaceFirst('600x600', '1000x1000');
+    // Fullscreen always wants the largest preset the backend offers.
+    final highResUrl = resolveCoverUrl(imageUrl, coverSizePicks.last);
 
     return Navigator.of(context).push(
       PageRouteBuilder(
