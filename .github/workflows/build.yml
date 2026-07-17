@@ -4,6 +4,9 @@ on:
   workflow_dispatch:
   workflow_call:
 
+env:
+  FRB_VERSION: "2.13.0-beta.5"
+
 jobs:
   build-linux:
     runs-on: ubuntu-22.04
@@ -29,14 +32,14 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: "src/rust -> src/target"
-          key: "2.13.0-beta.5"
+          key: ${{ env.FRB_VERSION }}
 
       - name: Install Tools
         run: |
           if [ ! -f "$HOME/.cargo/bin/cargo-binstall" ]; then
             curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
           fi
-          cargo install flutter_rust_bridge_codegen --version 2.13.0-beta.5 --locked
+          cargo install flutter_rust_bridge_codegen --version "$FRB_VERSION" --locked
           cargo binstall -y cargo-expand
 
       - name: Setup Flutter
@@ -80,6 +83,34 @@ jobs:
           install -Dm644 packaging/linux/io.github.darkplayoff.yayma.desktop AppDir/io.github.darkplayoff.yayma.desktop
           convert src/assets/icons/logo.webp -resize 256x256 AppDir/io.github.darkplayoff.yayma.png
 
+      - name: Download linuxdeploy
+        run: |
+          curl -Lo linuxdeploy "https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage"
+          chmod +x linuxdeploy
+
+      - name: Bundle native library dependencies
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: "1"
+        run: |
+          # Flutter plugins (e.g. tray_manager -> libayatana-appindicator3) can pull in
+          # system shared libraries that CMake's plugin bundling doesn't follow
+          # transitively, leaving the AppImage without them on systems that lack the
+          # package. Let linuxdeploy resolve and bundle those for every .so we already
+          # ship, but don't hand it the AppDir wholesale: Flutter looks up its own
+          # data/ directory relative to the executable's location, which linuxdeploy's
+          # usr/bin + usr/lib FHS layout would break, and we already have a working
+          # AppRun + RPATH ($ORIGIN/lib) for the rest of the bundle.
+          library_args=()
+          for lib in AppDir/lib/*.so*; do
+            [ -f "$lib" ] && library_args+=(--library "$lib")
+          done
+          ./linuxdeploy --appdir AppDir "${library_args[@]}"
+
+          # linuxdeploy deposits resolved dependencies under AppDir/usr/lib; flatten
+          # them into AppDir/lib (already on RPATH) and drop the FHS scaffolding.
+          find AppDir/usr/lib -maxdepth 1 -name '*.so*' -exec cp -n {} AppDir/lib/ \;
+          rm -rf AppDir/usr AppDir/apprun-hooks
+
       - name: Download appimagetool
         run: |
           curl -Lo appimagetool "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage"
@@ -118,7 +149,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: "src/rust -> src/target"
-          key: "2.13.0-beta.5"
+          key: ${{ env.FRB_VERSION }}
 
       - name: Install Tools
         run: |
@@ -126,7 +157,7 @@ jobs:
             curl.exe -L --proto "=https" --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.ps1 -o install-binstall.ps1
             powershell -ExecutionPolicy RemoteSigned -File install-binstall.ps1 -Force
           }
-          cargo install flutter_rust_bridge_codegen --version 2.13.0-beta.5 --locked
+          cargo install flutter_rust_bridge_codegen --version "$env:FRB_VERSION" --locked
           cargo binstall -y cargo-expand
         shell: powershell
 
@@ -185,14 +216,14 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: "src/rust -> src/target"
-          key: "2.13.0-beta.5"
+          key: ${{ env.FRB_VERSION }}
 
       - name: Install Tools
         run: |
           if [ ! -f "$HOME/.cargo/bin/cargo-binstall" ]; then
             curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
           fi
-          cargo install flutter_rust_bridge_codegen --version 2.13.0-beta.5 --locked
+          cargo install flutter_rust_bridge_codegen --version "$FRB_VERSION" --locked
           cargo binstall -y cargo-expand
 
       - name: Setup Flutter

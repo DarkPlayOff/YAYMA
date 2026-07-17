@@ -3,6 +3,9 @@ name: Debug Build
 on:
   workflow_dispatch:
 
+env:
+  FRB_VERSION: "2.13.0-beta.5"
+
 jobs:
   build-linux-debug:
     runs-on: ubuntu-22.04
@@ -28,7 +31,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: "src/rust -> src/target"
-          key: "2.13.0-beta.5"
+          key: ${{ env.FRB_VERSION }}
 
       - name: Install Tools
         run: |
@@ -37,7 +40,7 @@ jobs:
             curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
           fi
           # Install others via binstall
-          cargo install flutter_rust_bridge_codegen --version 2.13.0-beta.5 --locked
+          cargo install flutter_rust_bridge_codegen --version "$FRB_VERSION" --locked
           cargo binstall -y cargo-expand
 
       - name: Setup Flutter
@@ -83,7 +86,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: "src/rust -> src/target"
-          key: "2.13.0-beta.5"
+          key: ${{ env.FRB_VERSION }}
 
       - name: Install Tools
         run: |
@@ -93,7 +96,7 @@ jobs:
             powershell -ExecutionPolicy RemoteSigned -File install-binstall.ps1 -Force
           }
           # Install others via binstall
-          cargo install flutter_rust_bridge_codegen --version 2.13.0-beta.5 --locked
+          cargo install flutter_rust_bridge_codegen --version "$env:FRB_VERSION" --locked
           cargo binstall -y cargo-expand
         shell: powershell
 

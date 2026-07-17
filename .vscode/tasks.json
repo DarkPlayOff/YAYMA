@@ -4,6 +4,21 @@
         {
             "label": "generate-code",
             "type": "shell",
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"${workspaceFolder}/.vscode/codegen-if-needed.ps1\"",
+            "options": {
+                "cwd": "${workspaceFolder}/src"
+            },
+            "group": "build",
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared",
+                "focus": false
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "generate-code (force)",
+            "type": "shell",
             "command": "flutter_rust_bridge_codegen generate; dart run build_runner build",
             "options": {
                 "cwd": "${workspaceFolder}/src"
