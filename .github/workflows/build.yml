@@ -76,6 +76,12 @@ jobs:
           cat > AppDir/AppRun <<'EOF'
           #!/bin/sh
           HERE="$(dirname "$(readlink -f "${0}")")"
+          # CMAKE_INSTALL_RPATH is $ORIGIN/lib, correct for the yayma binary at
+          # AppDir root but not for plugin .so files that already live in lib/
+          # themselves (their $ORIGIN/lib points at a nonexistent lib/lib).
+          # Export LD_LIBRARY_PATH so every loaded library searches lib/
+          # regardless of its own RPATH.
+          export LD_LIBRARY_PATH="$HERE/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
           exec "$HERE/yayma" "$@"
           EOF
           chmod +x AppDir/AppRun
@@ -111,6 +117,11 @@ jobs:
           find AppDir/usr/lib -maxdepth 1 -name '*.so*' -exec cp -n {} AppDir/lib/ \;
           rm -rf AppDir/usr AppDir/apprun-hooks
 
+      - name: Strip debug symbols
+        run: |
+          find AppDir -type f \( -name "*.so*" -o -name "yayma" \) -print0 |
+            xargs -0 -r strip --strip-unneeded || true
+
       - name: Download appimagetool
         run: |
           curl -Lo appimagetool "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage"
@@ -122,7 +133,7 @@ jobs:
         run: |
           VERSION=${GITHUB_REF#refs/tags/v}
           if [ "$VERSION" == "$GITHUB_REF" ]; then VERSION="manual"; fi
-          ./appimagetool AppDir "yayma-x86_64-${VERSION}.AppImage"
+          ./appimagetool --comp zstd AppDir "yayma-x86_64-${VERSION}.AppImage"
 
       - name: Upload AppImage
         uses: actions/upload-artifact@v4
