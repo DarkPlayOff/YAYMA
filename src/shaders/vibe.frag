@@ -23,6 +23,8 @@ out vec4 fragColor;
 #define INV_TWO_PI 0.15915494
 // Tames how far spark peaks push blob edges outward (see main()).
 #define SPARK_GAIN 0.4
+// Direct (noise-independent) contribution of audio boost to blob outer radius.
+#define AUDIO_PUMP_GAIN 0.008
 
 const float INV_289 = 1.0 / 289.0;
 
@@ -150,7 +152,12 @@ void main() {
 
       float sparkBoost = (1.0 - 0.3 * blobIndex) * spark;
       // 1.55 - 0.25*blobIndex == radius (1.1 - 0.15*blobIndex) + halfWidth (0.45 - 0.1*blobIndex)
-      float outer = 1.55 - 0.25 * blobIndex + baseNoise + sparkBoost * (1.0 + blobB.z * sparkBoost);
+      // blobB.z (audio boost) has two effects: a direct pump (AUDIO_PUMP_GAIN
+      // term) so a beat always visibly grows the blob regardless of where the
+      // ambient spark noise currently sits, plus the original noise-modulated
+      // term for organic sparkle texture layered on top of that pump.
+      float outer = 1.55 - 0.25 * blobIndex + baseNoise + sparkBoost * (1.0 + blobB.z * sparkBoost) +
+                    blobB.z * AUDIO_PUMP_GAIN;
 
       // Alpha is exactly 0 at mainLen >= outer — skip both snoise3 and shading.
       if (mainLen < outer) {

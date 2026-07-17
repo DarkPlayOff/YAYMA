@@ -16,6 +16,9 @@ pub struct VibeEngine {
     slow_env: [f32; 3],
     beat_cooldown: [f32; 3],
     beat_pulse: [f32; 3],
+    // Whether a band's pulse is still ramping up toward its onset peak
+    // (see ATTACK_RATE in tick()) rather than already decaying.
+    beat_rising: [bool; 3],
 
     react: [f32; 3],
     like_start_time: Option<Instant>,
@@ -49,6 +52,7 @@ impl VibeEngine {
             slow_env: [0.0; 3],
             beat_cooldown: [0.0; 3],
             beat_pulse: [0.0; 3],
+            beat_rising: [false; 3],
             react: [0.0; 3],
             like_start_time: None,
             is_liking: false,
@@ -81,6 +85,7 @@ impl VibeEngine {
         self.slow_env = [0.0; 3];
         self.beat_cooldown = [0.0; 3];
         self.beat_pulse = [0.0; 3];
+        self.beat_rising = [false; 3];
     }
 
     pub fn set_palette(&mut self, colors: Vec<f32>) {
@@ -101,7 +106,7 @@ impl VibeEngine {
         let energy_lerp = (dt * 6.0).min(1.0);
         self.smoothed_energy += (target - self.smoothed_energy) * energy_lerp;
 
-        const DECAY_RATES: [f32; 3] = [3.5, 2.0, 2.0];
+        const DECAY_RATES: [f32; 3] = [2.4, 1.5, 1.5];
         // How much of a band's ambient (non-beat) loudness still shows, so
         // sustained passages (pads, wide choruses) aren't fully dark between
         // beats — the beat pulse is layered on top of this.
@@ -116,6 +121,11 @@ impl VibeEngine {
         // Refractory period per band, so a single hit's decay tail can't
         // retrigger — also caps how fast each band can visually pulse.
         const BEAT_MIN_INTERVAL: [f32; 3] = [0.15, 0.12, 0.08];
+        // How fast a triggered pulse ramps up to its peak. Bass is
+        // deliberately the slowest so a heavy sub-kick (e.g. dubstep drops)
+        // reads as a punch rather than an instant, jarring flash; mid/high
+        // stay snappy since hi-hats/cymbals read better as sharp transients.
+        const ATTACK_RATE: [f32; 3] = [9.0, 15.0, 19.0];
 
         for i in 0..3 {
             self.max_observed[i] = (self.max_observed[i] * 0.995).max(0.01);
@@ -136,8 +146,16 @@ impl VibeEngine {
                 && self.fast_env[i] > self.slow_env[i] * BEAT_RATIO[i];
 
             if is_onset {
-                self.beat_pulse[i] = 1.0;
                 self.beat_cooldown[i] = BEAT_MIN_INTERVAL[i];
+                self.beat_rising[i] = true;
+            }
+
+            if self.beat_rising[i] {
+                let attack_lerp = (dt * ATTACK_RATE[i]).min(1.0);
+                self.beat_pulse[i] += (1.0 - self.beat_pulse[i]) * attack_lerp;
+                if self.beat_pulse[i] > 0.98 {
+                    self.beat_rising[i] = false;
+                }
             } else {
                 self.beat_pulse[i] = (self.beat_pulse[i] - DECAY_RATES[i] * dt).max(0.0);
             }

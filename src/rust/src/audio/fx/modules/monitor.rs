@@ -7,7 +7,8 @@ pub struct MonitorEffect {
 }
 
 impl MonitorEffect {
-    pub fn new(monitor: Arc<Monitor>) -> Self {
+    pub fn new(monitor: Arc<Monitor>, sample_rate: f32) -> Self {
+        monitor.configure(sample_rate);
         Self { inner: monitor }
     }
 }

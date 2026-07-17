@@ -211,7 +211,7 @@ impl AudioController {
                     source.add_effect(
                         "monitor",
                         "Audio Monitor",
-                        Box::new(MonitorEffect::new(monitor)),
+                        Box::new(MonitorEffect::new(monitor, source.sample_rate().get() as f32)),
                         monitor_params,
                     );
 

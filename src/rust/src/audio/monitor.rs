@@ -1,9 +1,78 @@
 use std::sync::{
-    Arc,
+    Arc, Mutex,
     atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering},
 };
 
+use crate::audio::fx::biquad::{FilterType, StereoBiquad};
 use crate::util::reactive::Signal;
+
+// Crossover points for the bass/mid/high split fed into the vibe visualizer.
+// Real band-limited energy (via biquad filters below), not a proxy derived
+// from the rectified signal's envelope dynamics.
+const LOW_CUTOFF_HZ: f32 = 150.0;
+const MID_CENTER_HZ: f32 = 1000.0;
+const HIGH_CUTOFF_HZ: f32 = 4000.0;
+
+/// Per-band biquad crossover filters used to derive real bass/mid/high
+/// energy from the audio signal (as opposed to filtering the rectified
+/// signal, which measures loudness-envelope dynamics rather than actual
+/// frequency content).
+struct BandFilters {
+    low: StereoBiquad,
+    mid: StereoBiquad,
+    high: StereoBiquad,
+    sample_rate: f32,
+    low_l: Vec<f32>,
+    low_r: Vec<f32>,
+    mid_l: Vec<f32>,
+    mid_r: Vec<f32>,
+    high_l: Vec<f32>,
+    high_r: Vec<f32>,
+}
+
+impl BandFilters {
+    fn new() -> Self {
+        Self {
+            low: StereoBiquad::new(),
+            mid: StereoBiquad::new(),
+            high: StereoBiquad::new(),
+            sample_rate: 0.0,
+            low_l: Vec::new(),
+            low_r: Vec::new(),
+            mid_l: Vec::new(),
+            mid_r: Vec::new(),
+            high_l: Vec::new(),
+            high_r: Vec::new(),
+        }
+    }
+
+    fn configure(&mut self, sample_rate: f32) {
+        if (self.sample_rate - sample_rate).abs() < 1.0 {
+            return;
+        }
+        self.sample_rate = sample_rate;
+        self.low
+            .update(FilterType::LowPass, LOW_CUTOFF_HZ, 0.707, 0.0, sample_rate);
+        self.mid
+            .update(FilterType::BandPass, MID_CENTER_HZ, 0.6, 0.0, sample_rate);
+        self.high
+            .update(FilterType::HighPass, HIGH_CUTOFF_HZ, 0.707, 0.0, sample_rate);
+        self.low.reset();
+        self.mid.reset();
+        self.high.reset();
+    }
+
+    fn ensure_capacity(&mut self, len: usize) {
+        if self.low_l.len() < len {
+            self.low_l.resize(len, 0.0);
+            self.low_r.resize(len, 0.0);
+            self.mid_l.resize(len, 0.0);
+            self.mid_r.resize(len, 0.0);
+            self.high_l.resize(len, 0.0);
+            self.high_r.resize(len, 0.0);
+        }
+    }
+}
 
 #[flutter_rust_bridge::frb(ignore)]
 pub struct AmplitudeTracker {
@@ -83,9 +152,7 @@ struct MonitorInternal {
     bass_amp: AtomicU32,
     mid_amp: AtomicU32,
     high_amp: AtomicU32,
-    low_filter: AtomicU32,
-    mid_filter: AtomicU32,
-    high_filter: AtomicU32,
+    bands: Mutex<BandFilters>,
     position: AtomicU64,
     enabled: AtomicBool,
     focused: AtomicBool,
@@ -114,13 +181,20 @@ impl Monitor {
                 bass_amp: AtomicU32::new(0),
                 mid_amp: AtomicU32::new(0),
                 high_amp: AtomicU32::new(0),
-                low_filter: AtomicU32::new(0),
-                mid_filter: AtomicU32::new(0),
-                high_filter: AtomicU32::new(0),
+                bands: Mutex::new(BandFilters::new()),
                 position: AtomicU64::new(0),
                 enabled: AtomicBool::new(true),
                 focused: AtomicBool::new(true),
             }),
+        }
+    }
+
+    /// (Re)configures the bass/mid/high crossover filters for the given
+    /// sample rate. Called once per track load (sample rate can vary
+    /// between tracks); cheap no-op if unchanged.
+    pub fn configure(&self, sample_rate: f32) {
+        if let Ok(mut bands) = self.internal.bands.lock() {
+            bands.configure(sample_rate);
         }
     }
 
@@ -140,71 +214,15 @@ impl Monitor {
             return;
         }
 
-        let mut local_bass_peak = 0.0f32;
-        let mut local_mid_peak = 0.0f32;
-        let mut local_high_peak = 0.0f32;
         let mut local_combined_amp_sum = 0.0f32;
-
-        let mut l_f = f32::from_bits(self.internal.low_filter.load(Ordering::Relaxed));
-        let mut m_f = f32::from_bits(self.internal.mid_filter.load(Ordering::Relaxed));
-        let mut h_f = f32::from_bits(self.internal.high_filter.load(Ordering::Relaxed));
-
         for i in 0..len {
             let l = left[i];
             let r = right[i];
-            let mono = (l + r) * 0.5;
-            let abs_mono = mono.abs();
-
-            // Filter cascade
-            let low = l_f + (abs_mono - l_f) * 0.05;
-            l_f = low;
-
-            let h_val = h_f + (abs_mono - h_f) * 0.4;
-            let high = (abs_mono - h_val).abs();
-            h_f = h_val;
-
-            let mid_val = (abs_mono - low - high).abs();
-            let mid = m_f + (mid_val - m_f) * 0.2;
-            m_f = mid;
-
-            local_bass_peak = local_bass_peak.max(low);
-            local_mid_peak = local_mid_peak.max(mid);
-            local_high_peak = local_high_peak.max(high);
-
             self.amplitude_left.process(l);
             self.amplitude_right.process(r);
             local_combined_amp_sum +=
                 (self.amplitude_left.amplitude() + self.amplitude_right.amplitude()) * 0.5;
         }
-
-        self.internal
-            .low_filter
-            .store(l_f.to_bits(), Ordering::Relaxed);
-        self.internal
-            .mid_filter
-            .store(m_f.to_bits(), Ordering::Relaxed);
-        self.internal
-            .high_filter
-            .store(h_f.to_bits(), Ordering::Relaxed);
-
-        let update_peak = |atomic: &AtomicU32, val: f32| {
-            let mut cur = atomic.load(Ordering::Relaxed);
-            while val > f32::from_bits(cur) {
-                match atomic.compare_exchange_weak(
-                    cur,
-                    val.to_bits(),
-                    Ordering::Relaxed,
-                    Ordering::Relaxed,
-                ) {
-                    Ok(_) => break,
-                    Err(a) => cur = a,
-                }
-            }
-        };
-
-        update_peak(&self.internal.bass_amp, local_bass_peak);
-        update_peak(&self.internal.mid_amp, local_mid_peak);
-        update_peak(&self.internal.high_amp, local_high_peak);
 
         let avg_combined = local_combined_amp_sum / len as f32;
         self.internal
@@ -213,6 +231,62 @@ impl Monitor {
         self.internal
             .position
             .fetch_add(len as u64, Ordering::Relaxed);
+
+        // Real frequency-selective bass/mid/high split, via biquad crossover
+        // filters run over the actual (non-rectified) signal.
+        if let Ok(mut bands) = self.internal.bands.lock() {
+            bands.ensure_capacity(len);
+            bands.low_l[..len].copy_from_slice(&left[..len]);
+            bands.low_r[..len].copy_from_slice(&right[..len]);
+            bands.mid_l[..len].copy_from_slice(&left[..len]);
+            bands.mid_r[..len].copy_from_slice(&right[..len]);
+            bands.high_l[..len].copy_from_slice(&left[..len]);
+            bands.high_r[..len].copy_from_slice(&right[..len]);
+
+            let BandFilters {
+                low,
+                mid,
+                high,
+                low_l,
+                low_r,
+                mid_l,
+                mid_r,
+                high_l,
+                high_r,
+                ..
+            } = &mut *bands;
+            low.process_block(&mut low_l[..len], &mut low_r[..len]);
+            mid.process_block(&mut mid_l[..len], &mut mid_r[..len]);
+            high.process_block(&mut high_l[..len], &mut high_r[..len]);
+
+            let mut local_bass_peak = 0.0f32;
+            let mut local_mid_peak = 0.0f32;
+            let mut local_high_peak = 0.0f32;
+            for i in 0..len {
+                local_bass_peak = local_bass_peak.max(((low_l[i] + low_r[i]) * 0.5).abs());
+                local_mid_peak = local_mid_peak.max(((mid_l[i] + mid_r[i]) * 0.5).abs());
+                local_high_peak = local_high_peak.max(((high_l[i] + high_r[i]) * 0.5).abs());
+            }
+
+            let update_peak = |atomic: &AtomicU32, val: f32| {
+                let mut cur = atomic.load(Ordering::Relaxed);
+                while val > f32::from_bits(cur) {
+                    match atomic.compare_exchange_weak(
+                        cur,
+                        val.to_bits(),
+                        Ordering::Relaxed,
+                        Ordering::Relaxed,
+                    ) {
+                        Ok(_) => break,
+                        Err(a) => cur = a,
+                    }
+                }
+            };
+
+            update_peak(&self.internal.bass_amp, local_bass_peak);
+            update_peak(&self.internal.mid_amp, local_mid_peak);
+            update_peak(&self.internal.high_amp, local_high_peak);
+        }
     }
 
     #[inline]
