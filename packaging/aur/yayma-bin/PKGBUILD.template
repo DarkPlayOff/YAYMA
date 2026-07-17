@@ -4,21 +4,19 @@ _pkgname=yayma
 pkgver=@VERSION@
 pkgrel=1
 pkgdesc="Yet Another Yandex Music Client"
-arch=('x86_64' 'aarch64')
+arch=('x86_64')
 url="https://github.com/@REPO@"
 license=('GPL-3.0-or-later')
 depends=('gtk3' 'libsecret' 'libsoup3' 'webkit2gtk-4.1' 'alsa-lib' 'libayatana-appindicator' 'dbus')
 makedepends=('imagemagick')
 provides=('yayma')
 conflicts=('yayma')
-source=("LICENSE::https://raw.githubusercontent.com/@REPO@/v${pkgver}/LICENSE"
+source=("${pkgname}-${pkgver}.tar.gz::https://github.com/@REPO@/releases/download/v${pkgver}/yayma-linux-x64-${pkgver}.tar.gz"
+        "LICENSE::https://raw.githubusercontent.com/@REPO@/v${pkgver}/LICENSE"
         "io.github.darkplayoff.yayma.desktop::https://raw.githubusercontent.com/@REPO@/v${pkgver}/packaging/linux/io.github.darkplayoff.yayma.desktop")
-sha256sums=('@LICENSE_SHA@'
+sha256sums=('@TARBALL_SHA_X64@'
+            '@LICENSE_SHA@'
             '@DESKTOP_SHA@')
-source_x86_64=("${pkgname}-${pkgver}-x86_64.tar.gz::https://github.com/@REPO@/releases/download/v${pkgver}/yayma-linux-x64-${pkgver}.tar.gz")
-sha256sums_x86_64=('@TARBALL_SHA_X64@')
-source_aarch64=("${pkgname}-${pkgver}-aarch64.tar.gz::https://github.com/@REPO@/releases/download/v${pkgver}/yayma-linux-arm64-${pkgver}.tar.gz")
-sha256sums_aarch64=('@TARBALL_SHA_ARM64@')
 
 package() {
   install -dm755 "${pkgdir}/opt/${_pkgname}"
