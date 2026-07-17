@@ -21,6 +21,11 @@ pub async fn trigger_vibe_like(ctx: &AppContext) {
 pub async fn set_vibe_palette(ctx: &AppContext, colors: Vec<f32>) {
     if let Ok(mut vibe) = ctx.audio.signals.monitor.vibe.try_lock() {
         vibe.set_palette(colors);
+        // The palette is re-pushed exactly when the current track's cover
+        // (and so its color scheme) changes, i.e. on every track change —
+        // piggyback on that to also reset the audio-reactive envelopes so
+        // the new track isn't judged against the previous one's loudness.
+        vibe.reset_audio_envelopes();
     }
 }
 

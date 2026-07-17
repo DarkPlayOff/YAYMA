@@ -9,6 +9,14 @@ pub struct VibeEngine {
     audio_values: [f32; 3],
     max_observed: [f32; 3],
 
+    // Onset ("beat") detection state per band: a fast envelope vs. a slow
+    // baseline, so a genuine percussive hit (fast >> slow) is told apart
+    // from just a loud sustained passage (fast ~= slow, both high).
+    fast_env: [f32; 3],
+    slow_env: [f32; 3],
+    beat_cooldown: [f32; 3],
+    beat_pulse: [f32; 3],
+
     react: [f32; 3],
     like_start_time: Option<Instant>,
     is_liking: bool,
@@ -37,6 +45,10 @@ impl VibeEngine {
             smoothed_energy: 0.4,
             audio_values: [0.0; 3],
             max_observed: [0.05, 0.02, 0.01],
+            fast_env: [0.0; 3],
+            slow_env: [0.0; 3],
+            beat_cooldown: [0.0; 3],
+            beat_pulse: [0.0; 3],
             react: [0.0; 3],
             like_start_time: None,
             is_liking: false,
@@ -57,6 +69,20 @@ impl VibeEngine {
         self.is_liking = true;
     }
 
+    /// Forgets the per-band loudness/onset history. Without this, switching
+    /// from a loud track to a quiet one leaves `max_observed` inflated for
+    /// several seconds (it only decays ~0.5%/tick), so the new track's
+    /// audio reacts as if it were much quieter than it actually is until
+    /// that stale peak fades out on its own.
+    pub fn reset_audio_envelopes(&mut self) {
+        self.audio_values = [0.0; 3];
+        self.max_observed = [0.05, 0.02, 0.01];
+        self.fast_env = [0.0; 3];
+        self.slow_env = [0.0; 3];
+        self.beat_cooldown = [0.0; 3];
+        self.beat_pulse = [0.0; 3];
+    }
+
     pub fn set_palette(&mut self, colors: Vec<f32>) {
         debug_assert_eq!(colors.len(), 18, "Expected exactly 18 color values");
         if colors.len() == 18 {
@@ -66,7 +92,9 @@ impl VibeEngine {
 
     pub fn tick(&mut self, bands: [f32; 3]) -> [f32; 26] {
         let now = Instant::now();
-        let dt = now.duration_since(self.last_tick).as_secs_f32();
+        // Clamp dt so a stall (e.g. window unfocused, debugger pause) can't
+        // cause a single tick to fast-forward every envelope.
+        let dt = now.duration_since(self.last_tick).as_secs_f32().min(0.1);
         self.last_tick = now;
 
         let target = f32::from_bits(self.energy_target.load(Ordering::Relaxed));
@@ -74,17 +102,47 @@ impl VibeEngine {
         self.smoothed_energy += (target - self.smoothed_energy) * energy_lerp;
 
         const DECAY_RATES: [f32; 3] = [3.5, 2.0, 2.0];
+        // How much of a band's ambient (non-beat) loudness still shows, so
+        // sustained passages (pads, wide choruses) aren't fully dark between
+        // beats — the beat pulse is layered on top of this.
+        const AMBIENT_WEIGHT: f32 = 0.45;
+        const FAST_RATE: f32 = 20.0;
+        const SLOW_RATE: f32 = 2.5;
+        // How far the fast envelope must clear the slow baseline to count
+        // as an onset. Bass needs a clearer jump (kicks are sparse and
+        // punchy); highs trigger more readily (hi-hats/cymbals are dense).
+        const BEAT_RATIO: [f32; 3] = [1.3, 1.25, 1.2];
+        const BEAT_MIN_LEVEL: [f32; 3] = [0.15, 0.12, 0.1];
+        // Refractory period per band, so a single hit's decay tail can't
+        // retrigger — also caps how fast each band can visually pulse.
+        const BEAT_MIN_INTERVAL: [f32; 3] = [0.15, 0.12, 0.08];
+
         for i in 0..3 {
             self.max_observed[i] = (self.max_observed[i] * 0.995).max(0.01);
             if bands[i] > self.max_observed[i] {
                 self.max_observed[i] = bands[i];
             }
             let normalized = (bands[i] / self.max_observed[i]).min(1.5);
-            if normalized > self.audio_values[i] {
-                self.audio_values[i] = normalized;
+
+            let fast_lerp = (dt * FAST_RATE).min(1.0);
+            let slow_lerp = (dt * SLOW_RATE).min(1.0);
+            self.fast_env[i] += (normalized - self.fast_env[i]) * fast_lerp;
+            self.slow_env[i] += (normalized - self.slow_env[i]) * slow_lerp;
+
+            self.beat_cooldown[i] = (self.beat_cooldown[i] - dt).max(0.0);
+
+            let is_onset = self.beat_cooldown[i] <= 0.0
+                && normalized > BEAT_MIN_LEVEL[i]
+                && self.fast_env[i] > self.slow_env[i] * BEAT_RATIO[i];
+
+            if is_onset {
+                self.beat_pulse[i] = 1.0;
+                self.beat_cooldown[i] = BEAT_MIN_INTERVAL[i];
             } else {
-                self.audio_values[i] = (self.audio_values[i] - DECAY_RATES[i] * dt).max(0.0);
+                self.beat_pulse[i] = (self.beat_pulse[i] - DECAY_RATES[i] * dt).max(0.0);
             }
+
+            self.audio_values[i] = (normalized * AMBIENT_WEIGHT + self.beat_pulse[i]).min(1.5);
         }
 
         if self.is_liking {

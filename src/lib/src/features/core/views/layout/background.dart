@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -61,7 +62,7 @@ class WaveBackground extends StatefulWidget {
 }
 
 class _WaveBackgroundState extends State<WaveBackground> {
-  ui.FragmentProgram? _shaderProgram;
+  ui.FragmentShader? _shader;
   late List<double>? _cachedThemePalette;
 
   @override
@@ -98,17 +99,20 @@ class _WaveBackgroundState extends State<WaveBackground> {
   Future<void> _loadShader() async {
     try {
       final program = await ui.FragmentProgram.fromAsset('shaders/vibe.frag');
-      if (mounted) setState(() => _shaderProgram = program);
-    } on Object catch (_) {}
+      if (mounted) setState(() => _shader = program.fragmentShader());
+    } on Object catch (e) {
+      debugPrint('vibe shader load failed: $e');
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_shaderProgram == null) return Container(color: Colors.black);
+    final shader = _shader;
+    if (shader == null) return Container(color: Colors.black);
     return RepaintBoundary(
       child: CustomPaint(
         painter: PixelPerfectVibePainter(
-          shader: _shaderProgram!.fragmentShader(),
+          shader: shader,
           signal: vibeTickSignal,
         ),
       ),
@@ -120,40 +124,98 @@ class PixelPerfectVibePainter extends CustomPainter {
   final ui.FragmentShader shader;
   final FlutterSignal<F32Array26> signal;
   static const _rotData = [-0.3, 0.3, 0.4, -0.3, -0.3, -0.4, -0.3, -0.3, 0.4];
+  static const _viewScale = 0.4;
+
+  // The shader is soft/blurry by construction (noise blobs, no sharp edges),
+  // so shading it at half resolution and upscaling with bilinear filtering
+  // is visually indistinguishable while cutting fragment invocations ~4x.
+  static const _renderScale = 0.5;
+
   PixelPerfectVibePainter({required this.shader, required this.signal})
     : super(repaint: signal);
+
+  final Paint _shaderPaint = Paint();
+  final Paint _upscalePaint = Paint()
+    ..filterQuality = FilterQuality.medium
+    ..blendMode = BlendMode.screen;
+
+  // Uniform indices must match the declaration order in shaders/vibe.frag.
+  // All per-frame constants (rotations, sin phases, reaction coefficients)
+  // are computed here once per tick instead of per fragment.
   @override
   void paint(Canvas canvas, Size size) {
     final u = signal.value;
     if (u.length < 26) return;
-    shader
-      ..setFloat(0, size.width)
-      ..setFloat(1, size.height)
-      ..setFloat(2, u[0])
-      ..setFloat(3, 0.4)
-      ..setFloat(4, 0)
-      ..setFloat(5, 0)
-      ..setFloat(6, 0);
-    for (var i = 0; i < 18; i++) {
-      shader.setFloat(7 + i, u[8 + i]);
-    }
-    for (var i = 0; i < 9; i++) {
-      shader.setFloat(25 + i, _rotData[i]);
-    }
-    shader
-      ..setFloat(34, u[2])
-      ..setFloat(35, u[3])
-      ..setFloat(36, u[4])
-      ..setFloat(37, u[5])
-      ..setFloat(38, u[6])
-      ..setFloat(39, u[7]);
+    final t = u[0];
 
-    canvas.drawRect(
+    final lowWidth = math.max(1, (size.width * _renderScale).round());
+    final lowHeight = math.max(1, (size.height * _renderScale).round());
+    final lowW = lowWidth.toDouble();
+    final lowH = lowHeight.toDouble();
+
+    final f = 1.0 / (math.min(lowW, lowH) * _viewScale);
+    shader
+      ..setFloat(0, lowW * f)
+      ..setFloat(1, lowH * f)
+      ..setFloat(2, 2.0 * f)
+      ..setFloat(3, t * 0.5)
+      ..setFloat(4, t * 0.01);
+    for (var i = 0; i < 18; i++) {
+      shader.setFloat(6 + i, u[8 + i]);
+    }
+
+    var maxOuter = 0.0;
+    for (var i = 0; i < 3; i++) {
+      final audio = u[2 + i];
+      final react = u[5 + i];
+      final phase = 1.57 * i;
+      final angle = t * _rotData[i * 3 + 2];
+      final ca = math.cos(angle);
+      final sa = math.sin(angle);
+      final rx = _rotData[i * 3];
+      final ry = _rotData[i * 3 + 1];
+      final boost = math.max(react, audio * 0.6) * 50.0;
+
+      final a = 24 + i * 4;
+      shader
+        ..setFloat(a, rx * ca - ry * sa)
+        ..setFloat(a + 1, rx * sa + ry * ca)
+        ..setFloat(a + 2, t * 0.5 + phase)
+        ..setFloat(a + 3, 1.0 - react * 0.5);
+
+      final b = 36 + i * 4;
+      shader
+        ..setFloat(b, 1.1 + math.sin(t + phase))
+        ..setFloat(
+          b + 1,
+          0.15 -
+              0.1125 * math.sin(t * 2.0 + phase * 0.5) +
+              0.3 * math.max(react, audio),
+        )
+        ..setFloat(b + 2, boost)
+        ..setFloat(b + 3, 0.6 * react);
+
+      // Conservative bound: spark <= 1.2, blob noise wobble <= 0.35.
+      final brMax = 1.2 * (1.0 - 0.3 * i);
+      final outer = 1.9 - 0.25 * i + brMax * (1.0 + boost * brMax);
+      if (outer > maxOuter) maxOuter = outer;
+    }
+    shader.setFloat(5, maxOuter);
+
+    _shaderPaint.shader = shader;
+    final recorder = ui.PictureRecorder();
+    Canvas(recorder).drawRect(Rect.fromLTWH(0, 0, lowW, lowH), _shaderPaint);
+    final picture = recorder.endRecording();
+    final image = picture.toImageSync(lowWidth, lowHeight);
+    picture.dispose();
+
+    canvas.drawImageRect(
+      image,
+      Rect.fromLTWH(0, 0, lowW, lowH),
       Offset.zero & size,
-      Paint()
-        ..shader = shader
-        ..blendMode = BlendMode.screen,
+      _upscalePaint,
     );
+    image.dispose();
   }
 
   @override

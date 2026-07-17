@@ -112,8 +112,11 @@ pub fn spawn_bridge_worker(ctx: Arc<AppContext>, mut shutdown_rx: watch::Receive
                 }
                 _ = vibe_interval.tick() => {
                     let is_playing = audio_signals.is_playing.get();
-                    let bands = audio_signals.monitor.vibe_bands();
                     if let Ok(mut vibe) = audio_signals.monitor.vibe.try_lock() {
+                        // Fetch bands only once the lock is held: vibe_bands()
+                        // swaps the peaks to zero, so reading it before a failed
+                        // try_lock would silently discard them.
+                        let bands = audio_signals.monitor.vibe_bands();
                         vibe.set_playing(is_playing);
                         let uniforms = vibe.tick(bands);
                         ctx.send_event(AppEvent::VibeTick(uniforms));

@@ -4,27 +4,25 @@ precision highp float;
 
 #include <flutter/runtime_effect.glsl>
 
-uniform vec2 vScreenSize;
-uniform float vTime;
-uniform float vScale;
-uniform vec3 vColorBackground;
-uniform vec3 vColor[6];
-uniform vec3 vRotation[3];
-uniform float vAudio[3];
-uniform float vReact[3];
+// Uniform indices are assigned manually in PixelPerfectVibePainter
+// (lib/src/features/core/views/layout/background.dart). All per-frame
+// constants (blob rotation offsets, sin() phases, audio/like reactions)
+// are precomputed there — keep both files in sync.
+uniform vec2 vScreenOffset; // 0-1: screenSize / (min(w,h) * scale)
+uniform float vUvScale;     // 2:   2 / (min(w,h) * scale)
+uniform float vNoiseTime;   // 3:   time * 0.5
+uniform float vTriTime;     // 4:   time * 0.01
+uniform float vMaxOuter;    // 5:   upper bound of any blob outer radius
+uniform vec3 vColor[6];     // 6-23
+uniform vec4 vBlobA[3];     // 24-35: xy noise offset, z noise time+phase, w uv scale
+uniform vec4 vBlobB[3];     // 36-47: x edge widen, y light intensity, z audio boost, w like glow
 
 out vec4 fragColor;
 
-#define CIRCLE_WIDTH_BASE 0.9
-#define CIRCLE_WIDTH_STEP 0.2
-#define SPARK_STRENGTH_BASE 1.0
-#define SPARK_STRENGTH_STEP 0.3
-#define CIRCLE_RADIUS_BASE 1.1
-#define CIRCLE_RADIUS_STEP 0.15
-#define CIRCLE_OFFSET_BASE 0.0
-#define CIRCLE_OFFSET_STEP 1.57
 #define PI 3.14159265
 #define INV_TWO_PI 0.15915494
+// Tames how far spark peaks push blob edges outward (see main()).
+#define SPARK_GAIN 0.4
 
 const float INV_289 = 1.0 / 289.0;
 
@@ -83,108 +81,92 @@ float snoise3(vec3 v) {
 
 float tri(float x) { return abs(fract(x) - 0.5); }
 
-float triNoise3D(vec3 p, float spd) {
+// triNoise3D specialized for input (x, 0, 0): bp.yz stay zero, so
+// dg = (0, t, t) and p.y == p.z on every iteration — scalar math only.
+float triNoiseAngle(float x) {
   float rz = 0.1;
-  vec3 bp = p;
-  float timeOffset = vTime * 0.1 * spd;
-  float z_inv = 2.7777778;
+  float bx = x * 0.01;
+  float px = x;
+  float pyz = 0.0;
+  float w = 2.7777778;
 
   for (int i = 0; i < 5; i++) {
-    vec3 bp_01 = bp * 0.01;
-    vec3 dg = vec3(tri(bp_01.z + 0.5), tri(bp_01.z + tri(bp_01.x)), tri(tri(bp_01.x)));
-    p += (dg + timeOffset);
-    bp *= 4.0;
-    p *= 1.6;
-    rz += tri(p.z + tri(0.6 * p.x + 0.1 * tri(p.y))) * z_inv;
-    z_inv *= 1.1111111;
+    float t = tri(tri(bx));
+    px = (px + vTriTime) * 1.6;
+    pyz = (pyz + t + vTriTime) * 1.6;
+    bx *= 4.0;
+    rz += tri(pyz + tri(0.6 * px + 0.1 * tri(pyz))) * w;
+    w *= 1.1111111;
   }
   return smoothstep(0.0, 8.0, rz + sin(rz + 0.655213) * 2.2);
 }
 
-vec2 rotate(vec2 p, float a) {
-  float s = sin(a);
-  float c = cos(a);
-  return vec2(p.x * c - p.y * s, p.x * s + p.y * c);
-}
+// triNoise3D specialized for input (x, 0, x): bp.x == bp.z on every iteration.
+float triNoiseSeam(float x) {
+  float rz = 0.1;
+  float b = x * 0.01;
+  vec3 p = vec3(x, 0.0, x);
+  float w = 2.7777778;
 
-float light(float intensity, float dist) {
-  return intensity / (1.0 + dist * 11.0);
-}
-
-vec4 makeNoiseBlob2(vec2 uv, vec3 color1, vec3 color2, float strength,
-                    float offset) {
-  float len = length(uv);
-  float n0 = snoise3(vec3(uv * 1.2 + offset, vTime * 0.5 + offset)) * 0.5 + 0.5;
-
-  float d0 = abs(len - n0);
-  float v0 = smoothstep(n0 + 0.1 + (sin(vTime + offset) + 1.0), n0, len);
-  float v1 = light(
-      0.15 - 0.1125 * sin(vTime * 2.0 + offset * 0.5) + 0.3 * strength, d0);
-
-  vec3 col = mix(color1, color2, clamp(uv.y * 2.0, 0.0, 1.0));
-  return vec4(clamp(col + v1, 0.0, 1.0), v0);
-}
-
-vec4 makeBlob(vec2 uv, float len, float blob, vec3 color1, vec3 color2, float width,
-              float baseReaction, float likeReaction, float audioStrength,
-              float offset, vec2 noiseOffset) {
-  float outerRadius =
-      blob + width * 0.5 +
-      baseReaction *
-          (1.0 + max(likeReaction, audioStrength * 0.6) * 50.0 * baseReaction);
-
-  float strength = max(likeReaction, audioStrength);
-  vec4 noise = makeNoiseBlob2(uv * (1.0 - likeReaction * 0.5) + noiseOffset,
-                              color1, color2, strength, offset);
-
-  noise.a *= smoothstep(outerRadius, 0.5, len);
-  noise.rgb +=
-      0.6 * likeReaction * (1.0 - smoothstep(0.2, outerRadius * 0.8, len));
-
-  return noise;
+  for (int i = 0; i < 5; i++) {
+    float tb = tri(b);
+    p = (p + vec3(tri(b + 0.5), tri(b + tb), tri(tb)) + vTriTime) * 1.6;
+    b *= 4.0;
+    rz += tri(p.z + tri(0.6 * p.x + 0.1 * tri(p.y))) * w;
+    w *= 1.1111111;
+  }
+  return smoothstep(0.0, 8.0, rz + sin(rz + 0.655213) * 2.2);
 }
 
 void main() {
-  vec2 fragCoord = FlutterFragCoord().xy;
-  vec2 uv = (fragCoord * 2.0 - vScreenSize) / (min(vScreenSize.x, vScreenSize.y) * vScale);
-
-  float pa = atan(uv.y, uv.x);
-  float idx = pa * INV_TWO_PI;
-
-  float pa1 = pa > 0.0 ? pa - PI : pa + PI;
-  float idx1 = pa1 * INV_TWO_PI;
-  float idx21 = pa1 * 0.5 + PI * 0.5;
-  float spark = triNoise3D(vec3(idx, 0.0, 0.0), 0.1);
-
-  float sinIdx21 = sin(idx21);
-  if (sinIdx21 > 0.9) {
-    float blend = smoothstep(0.9, 1.0, sinIdx21);
-    spark = mix(spark, triNoise3D(vec3(idx1, 0.0, idx1), 0.1), blend);
-  }
-
-  float s2 = spark * spark;
-  float s4 = s2 * s2;
-  float s8 = s4 * s4;
-  float s10 = s8 * s2;
-  spark = spark * 0.2 + s10;
-  spark = smoothstep(0.0, spark, 0.3) * spark;
-
-  vec3 color = vColorBackground;
-  float n0 = snoise3(vec3(uv * 1.2, vTime * 0.5));
-  float n0_03 = n0 * 0.3;
+  vec2 uv = FlutterFragCoord().xy * vUvScale - vScreenOffset;
   float mainLen = length(uv);
 
-  for (int i = 0; i < 3; i++) {
-    float fi = float(i);
-    float radius = CIRCLE_RADIUS_BASE - CIRCLE_RADIUS_STEP * fi;
-    vec4 blobColor = makeBlob(
-        uv, mainLen, radius + n0_03, vColor[i], vColor[i + 3],
-        CIRCLE_WIDTH_BASE - CIRCLE_WIDTH_STEP * fi,
-        (SPARK_STRENGTH_BASE - SPARK_STRENGTH_STEP * fi) * spark, vReact[i],
-        vAudio[i], CIRCLE_OFFSET_BASE + CIRCLE_OFFSET_STEP * fi,
-        rotate(vRotation[i].xy, vTime * vRotation[i].z));
-    color = mix(color, blobColor.rgb, blobColor.a);
-  }
+  if (mainLen >= vMaxOuter) {
+    fragColor = vec4(0.0, 0.0, 0.0, 1.0);
+  } else {
+    float angle = atan(uv.y, uv.x);
+    float spark = triNoiseAngle(angle * INV_TWO_PI);
 
-  fragColor = vec4(color, 1.0);
+    // Blend in a second noise field across the atan() seam at angle == +-PI.
+    float seam = abs(sin(angle * 0.5));
+    if (seam > 0.9) {
+      float wrappedAngle = angle > 0.0 ? angle - PI : angle + PI;
+      spark = mix(spark, triNoiseSeam(wrappedAngle * INV_TWO_PI), smoothstep(0.9, 1.0, seam));
+    }
+
+    float sparkSq = spark * spark;
+    float sparkQuad = sparkSq * sparkSq;
+    spark = spark * 0.2 + sparkQuad * sparkQuad * sparkSq;
+    spark = smoothstep(0.0, 0.3, spark) * spark * SPARK_GAIN;
+
+    vec3 color = vec3(0.0);
+    float baseNoise = snoise3(vec3(uv * 1.2, vNoiseTime)) * 0.3;
+
+    for (int i = 0; i < 3; i++) {
+      float blobIndex = float(i);
+      vec4 blobA = vBlobA[i];
+      vec4 blobB = vBlobB[i];
+
+      float sparkBoost = (1.0 - 0.3 * blobIndex) * spark;
+      // 1.55 - 0.25*blobIndex == radius (1.1 - 0.15*blobIndex) + halfWidth (0.45 - 0.1*blobIndex)
+      float outer = 1.55 - 0.25 * blobIndex + baseNoise + sparkBoost * (1.0 + blobB.z * sparkBoost);
+
+      // Alpha is exactly 0 at mainLen >= outer — skip both snoise3 and shading.
+      if (mainLen < outer) {
+        vec2 blobUv = uv * blobA.w + blobA.xy;
+        float blobLen = length(blobUv);
+        float blobNoise = snoise3(vec3(blobUv * 1.2 + 1.57 * blobIndex, blobA.z)) * 0.5 + 0.5;
+        float edgeMask = smoothstep(blobNoise + blobB.x, blobNoise, blobLen);
+        float coreGlow = blobB.y / (1.0 + abs(blobLen - blobNoise) * 11.0);
+
+        vec3 blobColor = clamp(mix(vColor[i], vColor[i + 3], clamp(blobUv.y * 2.0, 0.0, 1.0)) + coreGlow,
+                         0.0, 1.0) +
+                   blobB.w * (1.0 - smoothstep(0.2, outer * 0.8, mainLen));
+        color = mix(color, blobColor, edgeMask * smoothstep(outer, 0.5, mainLen));
+      }
+    }
+
+    fragColor = vec4(color, 1.0);
+  }
 }
