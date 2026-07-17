@@ -1,8 +1,3 @@
-mod file_info;
-pub use file_info::{
-    FileInfoCodec, FileInfoQuality, GetFileInfoBatchOptions, GetFileInfoOptions, TrackFileInfo,
-};
-
 use crate::api::models::AudioQuality;
 use chrono::Utc;
 use parking_lot::RwLock;
@@ -46,6 +41,7 @@ use yandex_music::{
         search::get_search::SearchOptions,
         track::{
             add_disliked_tracks::AddDislikedTracksOptions, add_liked_tracks::AddLikedTracksOptions,
+            get_file_info::GetFileInfoOptions, get_file_info_batch::GetFileInfoBatchOptions,
             get_lyrics::GetLyricsOptions,
             get_similar_tracks::GetSimilarTracksOptions, get_tracks::GetTracksOptions,
             remove_disliked_tracks::RemoveDislikedTracksOptions,
@@ -56,7 +52,11 @@ use yandex_music::{
         album::Album,
         artist::Artist,
         collection::Collection,
-        info::{lyrics::LyricsFormat, pager::Pager},
+        info::{
+            file_info::{Codec, Quality, TrackFileInfo},
+            lyrics::LyricsFormat,
+            pager::Pager,
+        },
         playlist::{
             Playlist,
             modify::{Diff, DiffOp},
@@ -105,6 +105,12 @@ pub struct UgcUploadInfo {
 
 pub struct ApiService {
     pub client: Arc<YandexMusicClient>,
+    /// Separate client for `get-file-info`/`get-file-info/batch`: the crate's
+    /// bundled sign key is only valid for its own default client identity
+    /// (`DEFAULT_CLIENT_ID`), which doesn't match the desktop identity `client`
+    /// above uses for everything else — signing with one and identifying as
+    /// the other gets the request rejected with 403.
+    file_info_client: Arc<YandexMusicClient>,
     pub http_client: reqwest::Client,
     user_id: u64,
     pub quality: RwLock<AudioQuality>,
@@ -128,8 +134,7 @@ impl ApiService {
         // Deliberately NOT setting X-Yandex-Music-Without-Invocation-Info here:
         // it strips `invocationInfo`/`exec-duration-millis` from every
         // response, which breaks the crate's strict typed deserialization
-        // for account/playlists/etc. get-file-info is parsed manually below
-        // and already tolerates responses with or without that wrapper.
+        // for account/playlists/etc.
         headers.insert(
             "Origin",
             HeaderValue::from_str("music-application://desktop")?,
@@ -141,14 +146,8 @@ impl ApiService {
             .brotli(true)
             .build()?;
 
-        // Always build our own client rather than accepting a pre-built one:
-        // the `get-file-info` sign key is tied to the `X-Yandex-Music-Client`
-        // identity above, and a client built via the crate's own
-        // `YandexMusicClient::builder` defaults to a different client id
-        // (`DEFAULT_CLIENT_ID`), which Yandex rejects as a signature/identity
-        // mismatch (403 `track-download-info-error`/`not-allowed`) even
-        // though the token itself is perfectly valid.
         let client = Arc::new(YandexMusicClient::from_client(http_client.clone()));
+        let file_info_client = Arc::new(YandexMusicClient::builder(token).build()?);
 
         let user_id = if let Some(uid) = user_id {
             uid
@@ -165,6 +164,7 @@ impl ApiService {
 
         Ok(Self {
             client,
+            file_info_client,
             http_client,
             user_id,
             quality,
@@ -355,29 +355,25 @@ impl ApiService {
         Ok(self.client.get_similar_tracks(&opts).await?.similar_tracks)
     }
 
-    /// Batch counterpart of `get-file-info`; ported from
-    /// `yandex_music::api::track::get_file_info_batch`.
     pub async fn fetch_file_info_batch(
         &self,
         track_ids: Vec<String>,
-        quality: FileInfoQuality,
+        quality: Quality,
     ) -> Result<Vec<TrackFileInfo>> {
         let opts = GetFileInfoBatchOptions::new(track_ids).quality(quality);
-        Ok(file_info::get_file_info_batch(&self.client, &opts).await?)
+        Ok(self.file_info_client.get_file_info_batch(&opts).await?)
     }
 
-    fn map_quality(quality: AudioQuality) -> FileInfoQuality {
+    fn map_quality(quality: AudioQuality) -> Quality {
         match quality {
-            AudioQuality::High => FileInfoQuality::Lossless,
-            AudioQuality::Normal => FileInfoQuality::Normal,
-            AudioQuality::Low => FileInfoQuality::Low,
+            AudioQuality::High => Quality::Lossless,
+            AudioQuality::Normal => Quality::Normal,
+            AudioQuality::Low => Quality::Low,
         }
     }
 
-    fn codec_by_name(name: &str) -> Option<FileInfoCodec> {
-        FileInfoCodec::all()
-            .into_iter()
-            .find(|c| c.to_string() == name)
+    fn codec_by_name(name: &str) -> Option<Codec> {
+        Codec::all().into_iter().find(|c| c.to_string() == name)
     }
 
     async fn fetch_track_url_with_codec(
@@ -391,7 +387,7 @@ impl ApiService {
             opts = opts.codecs([codec]);
         }
 
-        let info = file_info::get_file_info(&self.client, &opts).await?;
+        let info = self.file_info_client.get_file_info(&opts).await?;
         Ok((info.url, info.codec))
     }
 
