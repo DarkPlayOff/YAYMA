@@ -1,7 +1,9 @@
 use std::sync::{
-    Arc, Mutex,
+    Arc,
     atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering},
 };
+
+use parking_lot::Mutex;
 
 use crate::audio::fx::biquad::{FilterType, StereoBiquad};
 use crate::util::reactive::Signal;
@@ -97,7 +99,7 @@ impl AmplitudeTracker {
         }
     }
     #[inline]
-    pub fn process(&self, sample: f32) {
+    pub fn process(&self, sample: f32) -> f32 {
         let abs_sample = sample.abs();
         let current = f32::from_bits(self.current.load(Ordering::Relaxed));
         let new_value = if abs_sample > current {
@@ -117,6 +119,7 @@ impl AmplitudeTracker {
                 self.peak.store(new_peak.to_bits(), Ordering::Relaxed);
             }
         }
+        new_value
     }
     #[inline]
     pub fn amplitude(&self) -> f32 {
@@ -193,9 +196,7 @@ impl Monitor {
     /// sample rate. Called once per track load (sample rate can vary
     /// between tracks); cheap no-op if unchanged.
     pub fn configure(&self, sample_rate: f32) {
-        if let Ok(mut bands) = self.internal.bands.lock() {
-            bands.configure(sample_rate);
-        }
+        self.internal.bands.lock().configure(sample_rate);
     }
 
     #[inline]
@@ -218,10 +219,9 @@ impl Monitor {
         for i in 0..len {
             let l = left[i];
             let r = right[i];
-            self.amplitude_left.process(l);
-            self.amplitude_right.process(r);
-            local_combined_amp_sum +=
-                (self.amplitude_left.amplitude() + self.amplitude_right.amplitude()) * 0.5;
+            let al = self.amplitude_left.process(l);
+            let ar = self.amplitude_right.process(r);
+            local_combined_amp_sum += (al + ar) * 0.5;
         }
 
         let avg_combined = local_combined_amp_sum / len as f32;
@@ -234,7 +234,8 @@ impl Monitor {
 
         // Real frequency-selective bass/mid/high split, via biquad crossover
         // filters run over the actual (non-rectified) signal.
-        if let Ok(mut bands) = self.internal.bands.lock() {
+        {
+            let mut bands = self.internal.bands.lock();
             bands.ensure_capacity(len);
             bands.low_l[..len].copy_from_slice(&left[..len]);
             bands.low_r[..len].copy_from_slice(&right[..len]);
