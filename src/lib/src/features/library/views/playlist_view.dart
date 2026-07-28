@@ -252,7 +252,6 @@ class _PlaylistContentState extends State<_PlaylistContent> {
               tooltip: 'Опции плейлиста',
             ),
           ),
-          const Spacer(),
           ElevatedButton.icon(
             onPressed: () => _handleUpload(context),
             icon: const Icon(Icons.upload_rounded),
