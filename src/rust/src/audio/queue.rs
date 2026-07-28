@@ -577,13 +577,17 @@ impl QueueManager {
     }
 
     fn build_wave_history_seeds(&self) -> Vec<String> {
-        self.history
-            .entries
+        let played = self.history.entries.iter().rev().take(20).map(as_wave_seed);
+
+        let queue = self.signals.queue();
+        let not_yet_played = queue
             .iter()
-            .rev()
-            .take(20)
-            .map(as_wave_seed)
-            .collect()
+            .skip(self.signals.index() + 1)
+            .map(as_wave_seed);
+
+        let buffered = self.wave_buffer.iter().map(as_wave_seed);
+
+        played.chain(not_yet_played).chain(buffered).collect()
     }
 
     pub async fn poll_fetch(&mut self) {
@@ -607,7 +611,14 @@ impl QueueManager {
 
     fn wave_append(&mut self, tracks: Vec<Track>) {
         if self.in_wave() {
+            let mut known_ids: std::collections::HashSet<String> =
+                self.signals.queue().iter().map(|t| t.id.clone()).collect();
+            known_ids.extend(self.wave_buffer.iter().map(|t| t.id.clone()));
+
             for track in tracks {
+                if !known_ids.insert(track.id.clone()) {
+                    continue;
+                }
                 let current_index = self.signals.index();
                 let queue_len = self.signals.queue().len();
                 let visible_ahead = queue_len.saturating_sub(current_index + 1);
