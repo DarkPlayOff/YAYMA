@@ -99,7 +99,17 @@ void _activateTaskbarEffect() => _taskbarEffect;
 void _activateLyricsOverlayReset() => _lyricsOverlayResetEffect;
 void _activateWifiLock() => _wifiLockEffect;
 
-const _wifiLockChannel = MethodChannel('io.github.darkplayoff/yayma/wifilock');
+const _wifiLockChannel = MethodChannel('io.github.darkplayoff.yayma/wifilock');
+
+/// Prompts the user (once, via the system dialog) to exempt the app from
+/// battery optimizations, so Android doesn't throttle/kill the background
+/// audio engine independently of the wake lock held during playback.
+Future<void> requestIgnoreBatteryOptimizations() async {
+  if (!Platform.isAndroid) return;
+  await _wifiLockChannel
+      .invokeMethod('requestIgnoreBatteryOptimizations')
+      .catchError((_) {});
+}
 
 final EffectCleanup _wifiLockEffect = effect(() {
   if (!Platform.isAndroid) return;

@@ -73,6 +73,8 @@ class AppInit {
         androidNotificationIcon: 'drawable/ic_notification',
       ),
     );
+
+    unawaited(requestIgnoreBatteryOptimizations());
   }
 
   static Future<void> _initializeAuthAndServices() async {

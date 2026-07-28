@@ -4,9 +4,12 @@ import android.os.Bundle
 import com.ryanheise.audioservice.AudioServiceActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import android.net.Uri
 import android.net.wifi.WifiManager
 import android.os.PowerManager
 import android.content.Context
+import android.content.Intent
+import android.provider.Settings
 
 class MainActivity : AudioServiceActivity() {
     private val CHANNEL = "io.github.darkplayoff.yayma/wifilock"
@@ -30,10 +33,27 @@ class MainActivity : AudioServiceActivity() {
                     releaseLock()
                     result.success(null)
                 }
+                "requestIgnoreBatteryOptimizations" -> {
+                    requestIgnoreBatteryOptimizations()
+                    result.success(null)
+                }
                 else -> {
                     result.notImplemented()
                 }
             }
+        }
+    }
+
+    private fun requestIgnoreBatteryOptimizations() {
+        val powerManager = applicationContext.getSystemService(Context.POWER_SERVICE) as PowerManager
+        if (powerManager.isIgnoringBatteryOptimizations(packageName)) return
+        try {
+            val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                data = Uri.parse("package:$packageName")
+            }
+            startActivity(intent)
+        } catch (e: Exception) {
+            // Some OEM ROMs (or devices without this system UI) reject the intent; ignore.
         }
     }
 
