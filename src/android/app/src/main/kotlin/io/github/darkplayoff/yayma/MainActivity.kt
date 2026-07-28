@@ -90,11 +90,6 @@ class MainActivity : AudioServiceActivity() {
         }
     }
 
-    override fun onDestroy() {
-        releaseLock()
-        super.onDestroy()
-    }
-
     private external fun initRustls(context: android.content.Context)
 
     companion object {
