@@ -182,7 +182,14 @@ class _LibraryViewState extends State<LibraryView>
           isScrollable: true,
           tabAlignment: TabAlignment.start,
           padding: EdgeInsets.symmetric(horizontal: isNarrow ? 20 : 40),
-          indicatorColor: Theme.of(context).colorScheme.primary,
+          indicator: UnderlineTabIndicator(
+            borderRadius: BorderRadius.circular(4),
+            borderSide: BorderSide(
+              width: 3,
+              color: Theme.of(context).colorScheme.primary,
+            ),
+          ),
+          splashBorderRadius: BorderRadius.circular(12),
           labelColor: Colors.white,
           unselectedLabelColor: Colors.white38,
           dividerColor: Colors.transparent,

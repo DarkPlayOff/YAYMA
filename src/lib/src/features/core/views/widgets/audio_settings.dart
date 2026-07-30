@@ -52,7 +52,14 @@ class _AudioSettingsDialogState extends State<AudioSettingsDialog> {
                       padding: const EdgeInsets.symmetric(horizontal: 12),
                       child: TabBar(
                         onTap: (i) => setState(() => _activeTab = i),
-                        indicatorColor: accentColorSignal.value,
+                        indicator: UnderlineTabIndicator(
+                          borderRadius: BorderRadius.circular(4),
+                          borderSide: BorderSide(
+                            width: 3,
+                            color: accentColorSignal.value,
+                          ),
+                        ),
+                        splashBorderRadius: BorderRadius.circular(12),
                         labelColor: Colors.white,
                         unselectedLabelColor: Colors.white38,
                         tabs: tabs,
@@ -115,7 +122,14 @@ class _AudioSettingsDialogState extends State<AudioSettingsDialog> {
                 ),
                 TabBar(
                   onTap: (i) => setState(() => _activeTab = i),
-                  indicatorColor: accentColorSignal.value,
+                  indicator: UnderlineTabIndicator(
+                    borderRadius: BorderRadius.circular(4),
+                    borderSide: BorderSide(
+                      width: 3,
+                      color: accentColorSignal.value,
+                    ),
+                  ),
+                  splashBorderRadius: BorderRadius.circular(12),
                   labelColor: Colors.white,
                   unselectedLabelColor: Colors.white38,
                   tabs: tabs,

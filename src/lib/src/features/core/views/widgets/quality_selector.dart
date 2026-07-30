@@ -119,6 +119,7 @@ class CommonQualitySelector extends SignalWidget {
             }
           },
           items: items,
+          borderRadius: BorderRadius.circular(8),
           child: Container(
             padding: EdgeInsets.symmetric(
               horizontal: isSmall ? 8 : 10,

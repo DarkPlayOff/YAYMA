@@ -26,6 +26,7 @@ class AppContextMenu<T> extends StatelessWidget {
   final Widget child;
   final VoidCallback? onOpen;
   final VoidCallback? onClose;
+  final BorderRadius borderRadius;
 
   const AppContextMenu({
     required this.items,
@@ -33,6 +34,7 @@ class AppContextMenu<T> extends StatelessWidget {
     required this.child,
     this.onOpen,
     this.onClose,
+    this.borderRadius = const BorderRadius.all(Radius.circular(100)),
     super.key,
   });
 
@@ -65,6 +67,7 @@ class AppContextMenu<T> extends StatelessWidget {
               controller.open();
             }
           },
+          borderRadius: borderRadius,
           child: this.child,
         );
       },
