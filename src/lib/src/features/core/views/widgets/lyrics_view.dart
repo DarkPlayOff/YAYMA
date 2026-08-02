@@ -88,10 +88,17 @@ class _LyricsWidgetState extends State<LyricsWidget> {
 
   EffectCleanup _setupLoadingTracking() {
     return effect(() {
+      if (!_visibleSignal.value) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) lyricsSuppressDimSignal.value = false;
+        });
+        return;
+      }
+
       final lyricsState = lyricsSignal(_trackIdSignal.value).value;
       final isLoading = lyricsState.isLoading;
       final isEmpty = lyricsState.value?.items.isEmpty ?? false;
-      final suppressDim = _visibleSignal.value && (isLoading || isEmpty);
+      final suppressDim = isLoading || isEmpty;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) lyricsSuppressDimSignal.value = suppressDim;
       });
