@@ -61,12 +61,18 @@ class _AppLayoutState extends State<AppLayout> {
                   const Positioned.fill(child: BlurredCoverBackground()),
                   const Positioned.fill(child: WaveBackground()),
 
-                  // 2. Dimming when leaving home or showing lyrics
+                  // 2. Dimming when leaving home or showing lyrics — held
+                  // off while lyrics are still loading or came back empty,
+                  // so nothing is shown over a darkened background in
+                  // either case.
                   SignalBuilder(
                     builder: (context) {
                       final showLyrics = showLyricsSignal.value;
                       final hideOverlay = hideLyricsOverlaySignal.value;
-                      final isDimmed = !isHome || (showLyrics && !hideOverlay);
+                      final suppressDim = lyricsSuppressDimSignal.value;
+                      final isDimmed =
+                          !isHome ||
+                          (showLyrics && !hideOverlay && !suppressDim);
 
                       return Positioned.fill(
                         child: AnimatedContainer(

@@ -431,6 +431,37 @@ pub struct StationItemDto {
 
 #[flutter_rust_bridge::frb(unignore)]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct LyricsProviderSettingDto {
+    pub id: String,
+    pub name: String,
+    pub enabled: bool,
+}
+
+#[flutter_rust_bridge::frb(unignore)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct LyricsWordDto {
+    pub text: String,
+    pub start_ms: i64,
+    pub end_ms: i64,
+}
+
+#[flutter_rust_bridge::frb(unignore)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct LyricsLineDto {
+    pub start_ms: i64,
+    pub text: String,
+    pub words: Vec<LyricsWordDto>,
+}
+
+#[flutter_rust_bridge::frb(unignore)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct LyricsResultDto {
+    pub lines: Vec<LyricsLineDto>,
+    pub provider_name: String,
+}
+
+#[flutter_rust_bridge::frb(unignore)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct UserAccountDto {
     pub uid: i64,
     pub login: String,

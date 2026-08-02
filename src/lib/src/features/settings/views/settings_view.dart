@@ -8,6 +8,7 @@ import 'package:yayma/src/features/core/providers/navigation_provider.dart';
 import 'package:yayma/src/features/core/providers/notification_provider.dart';
 import 'package:yayma/src/features/core/views/widgets/responsive.dart';
 import 'package:yayma/src/features/library/providers/library_provider.dart';
+import 'package:yayma/src/features/settings/views/lyrics_providers_dialog.dart';
 import 'package:yayma/src/rust/api/content.dart' as rust;
 import 'package:yayma/src/rust/api/simple.dart' as simple;
 
@@ -295,6 +296,16 @@ class _SettingsViewState extends State<SettingsView> {
                     ),
                     const SizedBox(height: 48),
                   ],
+                  const _SectionTitle(title: 'Тексты песен'),
+                  const SizedBox(height: 24),
+                  _SettingItem(
+                    title: 'Источники текста песен',
+                    subtitle:
+                        'Включённые источники для поиска синхронного текста, если у ',
+                    icon: Icons.lyrics_rounded,
+                    onTap: () => LyricsProvidersDialog.show(context),
+                  ),
+                  const SizedBox(height: 48),
                   const _SectionTitle(title: 'Кэш'),
                   const SizedBox(height: 24),
                   SignalBuilder(
@@ -371,7 +382,8 @@ class _SettingsViewState extends State<SettingsView> {
                       final enabled = _updateCheckSignal.value;
                       return _SettingItem(
                         title: 'Проверка обновлений при запуске',
-                        subtitle: 'Проверять наличие новых версий на GitHub при запуске',
+                        subtitle:
+                            'Проверять наличие новых версий на GitHub при запуске',
                         icon: Icons.system_update_rounded,
                         onTap: () => unawaited(
                           _toggleUpdateCheck(!(enabled.value ?? true)),

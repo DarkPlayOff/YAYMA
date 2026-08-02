@@ -51,6 +51,8 @@ Future<void> initPlayback() async {
         likedTracksSignal.value = tracks;
       case rust.AppEvent_AccountUpdated(field0: final account):
         accountSignal.value = account;
+      case rust.AppEvent_Notification(field1: final message):
+        showAppWarning(message);
       case rust.AppEvent_Error(field0: final message):
         showAppError(message);
         if (message.contains('Unauthorized') ||
@@ -484,10 +486,17 @@ final FlutterComputed<double> playerPositionMsSignal = computed(
 final FlutterSignal<bool> showLyricsSignal = signal<bool>(false);
 final FlutterSignal<bool> hideLyricsOverlaySignal = signal<bool>(false);
 
+/// True while the lyrics text for the currently displayed track is still
+/// being fetched, or once fetched turns out empty. Used to keep the
+/// background scrim off in both cases — dimming only comes back once
+/// actual lyrics lines have loaded.
+final FlutterSignal<bool> lyricsSuppressDimSignal = signal<bool>(false);
+
 // Reset overlay visibility on track change
 final EffectCleanup _lyricsOverlayResetEffect = effect(() {
   currentTrackIdSignal(); // Just call to track dependency
   hideLyricsOverlaySignal.value = false;
+  lyricsSuppressDimSignal.value = false;
 });
 
 final FlutterSignal<EqualizerDto?> equalizerSignal = signal<EqualizerDto?>(

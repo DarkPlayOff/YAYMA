@@ -422,15 +422,3 @@ pub async fn fetch_wave_stations(ctx: &AppContext) -> Vec<StationCategoryDto> {
     });
     cats
 }
-
-pub async fn get_lyrics(ctx: &AppContext, track_id: String) -> Option<String> {
-    ctx.core
-        .api
-        .fetch_lyrics(
-            track_id,
-            yandex_music::model::info::lyrics::LyricsFormat::LRC,
-        )
-        .await
-        .ok()
-        .flatten()
-}

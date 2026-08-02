@@ -1,9 +1,10 @@
 use crate::api::models::{
-    AlbumDetailsDto, AppError, ArtistDetailsDto, PlaylistDetailsDto, SearchResultsDto,
-    StationCategoryDto, TrackDetailsDto,
+    AlbumDetailsDto, AppError, ArtistDetailsDto, LyricsProviderSettingDto, LyricsResultDto,
+    PlaylistDetailsDto, SearchResultsDto, StationCategoryDto, TrackDetailsDto,
 };
 use crate::app::AppContext;
 use crate::app::logic::content as logic;
+use crate::app::logic::lyrics as lyrics_logic;
 
 pub async fn search(ctx: &AppContext, query: String) -> Option<SearchResultsDto> {
     logic::search(ctx, query).await
@@ -77,6 +78,18 @@ pub async fn fetch_wave_stations(ctx: &AppContext) -> Vec<StationCategoryDto> {
     logic::fetch_wave_stations(ctx).await
 }
 
-pub async fn get_lyrics(ctx: &AppContext, track_id: String) -> Option<String> {
-    logic::get_lyrics(ctx, track_id).await
+pub async fn get_lyrics(ctx: &AppContext, track_id: String) -> Option<LyricsResultDto> {
+    lyrics_logic::get_lyrics(ctx, track_id).await
+}
+
+pub async fn get_lyrics_provider_settings(ctx: &AppContext) -> Vec<LyricsProviderSettingDto> {
+    lyrics_logic::get_lyrics_provider_settings(ctx).await
+}
+
+pub async fn set_lyrics_provider_enabled(
+    ctx: &AppContext,
+    id: String,
+    enabled: bool,
+) -> Result<(), AppError> {
+    lyrics_logic::set_lyrics_provider_enabled(ctx, id, enabled).await
 }

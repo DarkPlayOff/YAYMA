@@ -3,13 +3,19 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 
+enum AppNotificationLevel { error, warning, success }
+
 class AppNotification {
   final String message;
-  final bool isError;
+  final AppNotificationLevel level;
   final DateTime timestamp;
 
-  AppNotification({required this.message, this.isError = true})
-    : timestamp = DateTime.now();
+  AppNotification({
+    required this.message,
+    this.level = AppNotificationLevel.error,
+  }) : timestamp = DateTime.now();
+
+  bool get isError => level == AppNotificationLevel.error;
 }
 
 final FlutterSignal<AppNotification?> appNotificationSignal =
@@ -28,10 +34,17 @@ void showAppError(String message) {
   appNotificationSignal.value = AppNotification(message: msg);
 }
 
+void showAppWarning(String message) {
+  appNotificationSignal.value = AppNotification(
+    message: message,
+    level: AppNotificationLevel.warning,
+  );
+}
+
 void showAppSuccess(String message) {
   appNotificationSignal.value = AppNotification(
     message: message,
-    isError: false,
+    level: AppNotificationLevel.success,
   );
 }
 
@@ -128,9 +141,14 @@ class _GlobalNotificationListenerState extends State<GlobalNotificationListener>
                       vertical: 12,
                     ),
                     decoration: BoxDecoration(
-                      color: _currentNotification!.isError
-                          ? Colors.redAccent.withValues(alpha: 0.9)
-                          : Colors.white.withValues(alpha: 0.1),
+                      color: switch (_currentNotification!.level) {
+                        AppNotificationLevel.error => Colors.redAccent
+                            .withValues(alpha: 0.9),
+                        AppNotificationLevel.warning => Colors.orangeAccent
+                            .withValues(alpha: 0.9),
+                        AppNotificationLevel.success => Colors.white
+                            .withValues(alpha: 0.1),
+                      },
                       borderRadius: BorderRadius.circular(100),
                       border: Border.all(color: Colors.white10),
                       boxShadow: const [
@@ -145,9 +163,14 @@ class _GlobalNotificationListenerState extends State<GlobalNotificationListener>
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(
-                          _currentNotification!.isError
-                              ? Icons.error_outline_rounded
-                              : Icons.check_circle_outline_rounded,
+                          switch (_currentNotification!.level) {
+                            AppNotificationLevel.error =>
+                              Icons.error_outline_rounded,
+                            AppNotificationLevel.warning =>
+                              Icons.warning_amber_rounded,
+                            AppNotificationLevel.success =>
+                              Icons.check_circle_outline_rounded,
+                          },
                           color: Colors.white,
                           size: 20,
                         ),

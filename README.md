@@ -30,3 +30,5 @@
 
 ## Благодарности❤️
 - [Vyfor](https://github.com/vyfor) - за исходный tui [клиент](https://github.com/yamusic/yamusic) и [библиотеку](https://github.com/vyfor/yandex-music-rs) для работы с API
+- [LrcLib](https://lrclib.net), [BetterLyrics](https://github.com/better-lyrics/better-lyrics), [YouLyPlus](https://github.com/ibratabian17/YouLyPlus) - за базу текстов песен
+
