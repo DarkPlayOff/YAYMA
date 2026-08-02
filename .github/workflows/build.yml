@@ -206,6 +206,7 @@ jobs:
         run: |
           $VERSION = $env:GITHUB_REF -replace 'refs/tags/v', ''
           if ($VERSION -eq $env:GITHUB_REF) { $VERSION = "manual" }
+          "VERSION=$VERSION" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           Compress-Archive -Path "src\build\windows\x64\runner\Release\*" -DestinationPath "yayma-windows-x64-$VERSION.zip"
         shell: powershell
 
@@ -214,6 +215,18 @@ jobs:
         with:
           name: windows_x64_release
           path: yayma-windows-*.zip
+
+      - name: Build Installer
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "packaging\windows\yayma.iss"
+        shell: powershell
+
+      - name: Upload Installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows_x64_installer
+          path: dist\yayma-windows-setup-*.exe
 
   build-android:
     runs-on: ubuntu-latest
