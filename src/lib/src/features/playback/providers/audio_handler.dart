@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:audio_service/audio_service.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/features/playback/providers/playback_provider.dart';
@@ -7,6 +9,14 @@ class YaymaAudioHandler extends BaseAudioHandler {
   YaymaAudioHandler() {
     _initSignals();
   }
+
+  // audio_service's native setState() rebuilds its action list and reads
+  // androidCompactActionIndices without synchronization, so back-to-back
+  // calls (e.g. buffering -> ready right at track start) can race and hit
+  // an index that's momentarily out of bounds, crashing the app on some
+  // Android versions (observed on 11). Debounce to collapse rapid
+  // transitions into a single native call.
+  Timer? _playbackStateDebounce;
 
   void _initSignals() {
     // Sync metadata
@@ -69,33 +79,41 @@ class YaymaAudioHandler extends BaseAudioHandler {
       // which causes the notification to disappear or crash the system.
       final currentPosition = playerPositionMsSignal.peek();
 
-      playbackState.add(
-        PlaybackState(
-          controls: [
-            dislikeControl,
-            MediaControl.skipToPrevious,
-            if (isPlaying) MediaControl.pause else MediaControl.play,
-            MediaControl.skipToNext,
-            likeControl,
-          ],
-          systemActions: const {
-            MediaAction.seek,
-            MediaAction.seekForward,
-            MediaAction.seekBackward,
-          },
-          playing: isPlaying,
-          androidCompactActionIndices: const [
-            0,
-            2,
-            4,
-          ], // Show Like, Play, Dislike in compact
-          processingState: processingState,
-          repeatMode: _mapRepeatMode(repeatMode),
-          shuffleMode: isShuffled
-              ? AudioServiceShuffleMode.all
-              : AudioServiceShuffleMode.none,
-          updatePosition: Duration(milliseconds: currentPosition.toInt()),
-        ),
+      final newState = PlaybackState(
+        controls: [
+          MediaControl.skipToPrevious,
+          if (isPlaying) MediaControl.pause else MediaControl.play,
+          MediaControl.skipToNext,
+          dislikeControl,
+          likeControl,
+        ],
+        systemActions: const {
+          MediaAction.seek,
+          MediaAction.seekForward,
+          MediaAction.seekBackward,
+        },
+        playing: isPlaying,
+        // Only reference the built-in transport controls here. If a custom
+        // action (like/dislike, which rely on app-supplied icon resources)
+        // ever fails to resolve on the native side, the notification's
+        // action list shrinks and a compact index pointing past the end
+        // crashes the app (IndexOutOfBoundsException in
+        // Notification$MediaStyle.makeMediaContentView, seen on Android 11).
+        // Keeping compact indices within the guaranteed-present prefix
+        // avoids that regardless of how many trailing custom actions land.
+        androidCompactActionIndices: const [0, 1, 2],
+        processingState: processingState,
+        repeatMode: _mapRepeatMode(repeatMode),
+        shuffleMode: isShuffled
+            ? AudioServiceShuffleMode.all
+            : AudioServiceShuffleMode.none,
+        updatePosition: Duration(milliseconds: currentPosition.toInt()),
+      );
+
+      _playbackStateDebounce?.cancel();
+      _playbackStateDebounce = Timer(
+        const Duration(milliseconds: 120),
+        () => playbackState.add(newState),
       );
     });
   }
