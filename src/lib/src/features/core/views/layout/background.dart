@@ -64,6 +64,7 @@ class WaveBackground extends StatefulWidget {
 class _WaveBackgroundState extends State<WaveBackground> {
   ui.FragmentShader? _shader;
   late List<double>? _cachedThemePalette;
+  double _devicePixelRatio = 1;
 
   @override
   void initState() {
@@ -74,6 +75,7 @@ class _WaveBackgroundState extends State<WaveBackground> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    _devicePixelRatio = MediaQuery.of(context).devicePixelRatio;
     final scheme = Theme.of(context).colorScheme;
     List<double> c(ui.Color col) => [
       (col.r * 255.0).round().clamp(0, 255) / 255.0,
@@ -114,6 +116,7 @@ class _WaveBackgroundState extends State<WaveBackground> {
         painter: PixelPerfectVibePainter(
           shader: shader,
           signal: vibeTickSignal,
+          devicePixelRatio: _devicePixelRatio,
         ),
       ),
     );
@@ -123,16 +126,21 @@ class _WaveBackgroundState extends State<WaveBackground> {
 class PixelPerfectVibePainter extends CustomPainter {
   final ui.FragmentShader shader;
   final FlutterSignal<F32Array26> signal;
+  final double devicePixelRatio;
   static const _rotData = [-0.3, 0.3, 0.4, -0.3, -0.3, -0.4, -0.3, -0.3, 0.4];
   static const _viewScale = 0.4;
 
-  // The shader is soft/blurry by construction (noise blobs, no sharp edges),
-  // so shading it at half resolution and upscaling with bilinear filtering
-  // is visually indistinguishable while cutting fragment invocations ~4x.
+  // Fraction of *physical* pixels to shade before upscaling. Applied against
+  // size * devicePixelRatio (not raw logical size) so screens with a high
+  // DPR (phones) get the same effective sharpness as ~1x desktop displays
+  // instead of a much blurrier result for the same nominal scale.
   static const _renderScale = 0.5;
 
-  PixelPerfectVibePainter({required this.shader, required this.signal})
-    : super(repaint: signal);
+  PixelPerfectVibePainter({
+    required this.shader,
+    required this.signal,
+    required this.devicePixelRatio,
+  }) : super(repaint: signal);
 
   final Paint _shaderPaint = Paint();
   final Paint _upscalePaint = Paint()
@@ -148,8 +156,9 @@ class PixelPerfectVibePainter extends CustomPainter {
     if (u.length < 26) return;
     final t = u[0];
 
-    final lowWidth = math.max(1, (size.width * _renderScale).round());
-    final lowHeight = math.max(1, (size.height * _renderScale).round());
+    final physicalScale = devicePixelRatio * _renderScale;
+    final lowWidth = math.max(1, (size.width * physicalScale).round());
+    final lowHeight = math.max(1, (size.height * physicalScale).round());
     final lowW = lowWidth.toDouble();
     final lowH = lowHeight.toDouble();
 
