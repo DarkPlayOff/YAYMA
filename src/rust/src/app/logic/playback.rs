@@ -127,11 +127,8 @@ pub async fn restore_and_play(
         let _ = ctx
             .audio
             .tx
-            .send(AudioMessage::PlayTrackPaused(track, pos))
+            .send(AudioMessage::RestoreTrack(track, pos, is_playing))
             .await;
-        if is_playing {
-            let _ = ctx.audio.tx.send(AudioMessage::Resume).await;
-        }
     }
 }
 

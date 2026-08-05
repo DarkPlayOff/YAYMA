@@ -1,5 +1,4 @@
 use crate::audio::progress::TrackProgress;
-use crate::util::reactive::Signal;
 use flume::{Receiver, Sender};
 use parking_lot::Mutex;
 use reqwest::Client;
@@ -11,6 +10,7 @@ use std::sync::{
 use std::time::Duration;
 
 use super::buffer::BufferState;
+use super::buffering::BufferingGate;
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
@@ -43,7 +43,7 @@ pub struct StreamingDataSource {
     fetch_tx: Sender<FetchCommand>,
     fetch_rx: Receiver<()>,
     task_handle: Option<tokio::task::JoinHandle<()>>,
-    buffering_signal: Option<Signal<bool>>,
+    buffering: Arc<BufferingGate>,
     prefetch_size: usize,
 }
 
@@ -52,7 +52,7 @@ impl StreamingDataSource {
         client: Client,
         url: String,
         progress: Arc<TrackProgress>,
-        buffering_signal: Option<Signal<bool>>,
+        buffering: Arc<BufferingGate>,
         duration_ms: Option<u64>,
     ) -> Result<Self> {
         let progress_generation = progress.get_generation();
@@ -173,7 +173,7 @@ impl StreamingDataSource {
             fetch_tx: tx_cmd,
             fetch_rx: rx_res,
             task_handle: Some(task_handle),
-            buffering_signal,
+            buffering,
             prefetch_size,
         };
 
@@ -350,18 +350,24 @@ impl StreamingDataSource {
     }
 
     fn wait_for(&self, pos: u64, min: usize) -> Result<()> {
+        // Near the tail the file simply has fewer than `min` bytes left, so waiting
+        // for `min` there would never be satisfied. `buf.eof` used to stand in for
+        // that, but it only means "the last byte of the file was fetched at some
+        // point" — with a hole at `pos` it reported success on an empty buffer, the
+        // caller then read 0 bytes, and symphonia took that for a clean end of
+        // stream and cut the track short.
+        let needed = min.min(self.total_bytes.saturating_sub(pos) as usize);
+
         let mut last_available = {
             let buf = self.buffer.lock();
             let available = buf.available_from(pos);
-            if available >= min || buf.eof {
+            if available >= needed {
                 return Ok(());
             }
             available
         };
 
-        if let Some(sig) = &self.buffering_signal {
-            sig.set(true);
-        }
+        self.buffering.set(true);
 
         let mut attempts = 0usize;
         let mut result = Ok(());
@@ -372,7 +378,7 @@ impl StreamingDataSource {
                 Ok(_) => {
                     let buf = self.buffer.lock();
                     let available = buf.available_from(pos);
-                    if available >= min || buf.eof {
+                    if available >= needed {
                         break;
                     }
                     // Only reset the retry budget if this notification actually made
@@ -401,9 +407,7 @@ impl StreamingDataSource {
             result = Err("wait_for_data timed out".into());
         }
 
-        if let Some(sig) = &self.buffering_signal {
-            sig.set(false);
-        }
+        self.buffering.set(false);
 
         result
     }
@@ -428,9 +432,12 @@ impl StreamingDataSource {
             let needed_bytes = (pending_end - pos) as usize;
             self.wait_for(pos, MIN_INITIAL_DATA.min(needed_bytes))?;
 
+            // Only `contains` proves the byte at `pos` is readable: after a backwards
+            // seek into a hole, `eof` is still set from the already-fetched tail while
+            // `pos` itself holds nothing.
             let has_data = {
                 let buf = self.buffer.lock();
-                buf.contains(pos) || buf.eof
+                buf.contains(pos)
             };
             if has_data {
                 return Ok(());
@@ -523,6 +530,14 @@ impl Read for StreamingDataSource {
         if bytes > 0 {
             self.position.fetch_add(bytes as u64, Ordering::Relaxed);
             self.trigger_prefetch();
+        } else if !buf.is_empty() {
+            // `ensure` reported success, so `pos` had to be readable. Returning Ok(0)
+            // from the middle of the file would be read as a clean end of stream and
+            // would silently truncate the track instead of surfacing the fault.
+            return Err(std::io::Error::other(format!(
+                "no buffered data at position {} of {}",
+                pos, self.total_bytes
+            )));
         }
 
         Ok(bytes)

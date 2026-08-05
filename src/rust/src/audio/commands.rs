@@ -18,7 +18,11 @@ pub enum AudioMessage {
 
     // Queue & Context
     PlayTrack(Track),
-    PlayTrackPaused(Track, Duration),
+    /// Restores a persisted session: the track, where it left off, and whether it
+    /// was playing. The play state has to ride along with the track — resuming with
+    /// a separate `Resume` message races the spawned playback task, which applies
+    /// its own start-paused state afterwards and would pause it right back.
+    RestoreTrack(Track, Duration, bool),
     LoadContext(PlaybackContext, Vector<Track>, usize),
     LoadTracks(Vec<Track>),
     QueueTrack(Track),

@@ -22,6 +22,7 @@ use yandex_music::model::track::Track;
 pub type EffectHandles =
     Arc<parking_lot::RwLock<foldhash::HashMap<String, crate::audio::fx::EffectHandle>>>;
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
+type BoxFuture<'a, T> = std::pin::Pin<Box<dyn std::future::Future<Output = T> + Send + 'a>>;
 
 pub struct AudioSystem {
     controller: AudioController,
@@ -222,6 +223,17 @@ impl AudioSystem {
         self.controller.get_effect_handles()
     }
 
+    /// Handles a follow-up message that a handler wants to queue behind itself.
+    ///
+    /// The main loop is the sole consumer of `self.tx`, so awaiting `tx.send()`
+    /// from inside `handle_message` wedges the audio system permanently once the
+    /// bounded channel fills up: nothing can drain it while we are blocked on it.
+    /// Running the follow-up directly preserves the ordering the channel gave us
+    /// without ever touching it. The boxing is what lets `handle_message` recurse.
+    fn dispatch(&mut self, msg: AudioMessage) -> BoxFuture<'_, Result<()>> {
+        Box::pin(self.handle_message(msg))
+    }
+
     async fn handle_message(&mut self, msg: AudioMessage) -> Result<()> {
         match msg {
             AudioMessage::PlayPause => {
@@ -273,7 +285,7 @@ impl AudioSystem {
                         .await;
                 }
             }
-            AudioMessage::PlayTrackPaused(track, pos) => {
+            AudioMessage::RestoreTrack(track, pos, was_playing) => {
                 if let Some(playing_track) = self
                     .queue
                     .load(
@@ -284,7 +296,7 @@ impl AudioSystem {
                     .await
                 {
                     self.controller
-                        .handle_message(AudioMessage::PlayTrackPaused(playing_track, pos))
+                        .handle_message(AudioMessage::RestoreTrack(playing_track, pos, was_playing))
                         .await;
                 }
             }
@@ -350,14 +362,12 @@ impl AudioSystem {
                 };
 
                 if let Some((tracks, index)) = local_ctx {
-                    let _ = self
-                        .tx
-                        .send(AudioMessage::LoadContext(
-                            crate::audio::queue::PlaybackContext::Standalone,
-                            tracks,
-                            index,
-                        ))
-                        .await;
+                    self.dispatch(AudioMessage::LoadContext(
+                        crate::audio::queue::PlaybackContext::Standalone,
+                        tracks,
+                        index,
+                    ))
+                    .await?;
                 } else {
                     let yandex = self.yandex.clone();
                     self.spawn_fetch_context(move || async move {
@@ -376,14 +386,12 @@ impl AudioSystem {
                 };
 
                 if let Some((tracks, index)) = local_ctx {
-                    let _ = self
-                        .tx
-                        .send(AudioMessage::LoadContext(
-                            crate::audio::queue::PlaybackContext::Standalone,
-                            tracks,
-                            index,
-                        ))
-                        .await;
+                    self.dispatch(AudioMessage::LoadContext(
+                        crate::audio::queue::PlaybackContext::Standalone,
+                        tracks,
+                        index,
+                    ))
+                    .await?;
                 } else {
                     let yandex = self.yandex.clone();
                     self.spawn_fetch_context(move || async move {
@@ -402,14 +410,12 @@ impl AudioSystem {
                 };
 
                 if let Some((tracks, index)) = local_ctx {
-                    let _ = self
-                        .tx
-                        .send(AudioMessage::LoadContext(
-                            crate::audio::queue::PlaybackContext::Standalone,
-                            tracks,
-                            index,
-                        ))
-                        .await;
+                    self.dispatch(AudioMessage::LoadContext(
+                        crate::audio::queue::PlaybackContext::Standalone,
+                        tracks,
+                        index,
+                    ))
+                    .await?;
                 } else {
                     let yandex = self.yandex.clone();
                     self.spawn_fetch_context(move || async move {
@@ -483,7 +489,7 @@ impl AudioSystem {
                     } else {
                         self.send_wave_feedback("dislike", Some(track_id), None, true);
                         self.queue.refresh_wave_queue();
-                        let _ = self.tx.send(AudioMessage::Next).await;
+                        self.play_next().await;
                     }
                 }
             }
@@ -506,14 +512,14 @@ impl AudioSystem {
                     let mut db = self.db.lock().await;
                     let _ = db.save_setting("audio_device", &device_name).await;
                 }
-                let _ = self.tx.send(AudioMessage::RecreateStream).await;
+                self.dispatch(AudioMessage::RecreateStream).await?;
             }
             AudioMessage::RecreateStream => {
                 let device = self.signals.selected_device.get();
                 if let Err(e) = self.controller.recreate_engine(device.as_deref()) {
                     tracing::error!("Failed to recreate stream: {}", e);
                 } else {
-                    let _ = self.tx.send(AudioMessage::ReloadCurrentTrack).await;
+                    self.dispatch(AudioMessage::ReloadCurrentTrack).await?;
                 }
             }
             AudioMessage::ReloadCurrentTrack => {

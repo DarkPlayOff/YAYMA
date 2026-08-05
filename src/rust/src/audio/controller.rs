@@ -152,8 +152,8 @@ impl AudioController {
                 self.play_track(track, false, std::time::Duration::ZERO, false)
                     .await
             }
-            AudioMessage::PlayTrackPaused(track, start_pos) => {
-                self.play_track(track, true, start_pos, false).await
+            AudioMessage::RestoreTrack(track, start_pos, was_playing) => {
+                self.play_track(track, !was_playing, start_pos, false).await
             }
             AudioMessage::Pause => self.pause().await,
             AudioMessage::Resume => self.resume().await,
@@ -207,20 +207,23 @@ impl AudioController {
 
         self.apply_volume();
 
-        let buffering_signal = self.signals.is_buffering.clone();
         let generation = self.playback_generation.clone();
         let task = tokio::spawn(async move {
-            match stream_manager
-                .create_stream_session(&track_clone, Some(buffering_signal))
-                .await
-            {
-                Ok((session, new_progress, _codec)) => {
+            match stream_manager.create_stream_session(&track_clone).await {
+                Ok(prepared) => {
                     // A newer play_track()/stop() call landed while we were awaiting the
                     // stream session. task.abort() can no longer cancel us at this point, so
                     // check explicitly and abandon before touching the engine or any signal.
                     if generation.load(Ordering::SeqCst) != my_generation {
                         return;
                     }
+
+                    let crate::audio::stream_manager::PreparedStream {
+                        session,
+                        progress: new_progress,
+                        buffering,
+                        ..
+                    } = prepared;
 
                     let mut source = FxSource::new(session.source);
 
@@ -285,6 +288,22 @@ impl AudioController {
                     {
                         let mut store = effect_handles_store.write();
                         *store = handles;
+                    }
+
+                    // From here on this session is the one being played, so let it drive
+                    // the buffering signal — prewarmed sessions are built disarmed and
+                    // would otherwise stay mute, hiding every mid-track stall (and with
+                    // it the 15s watchdog above) on auto-advanced tracks.
+                    {
+                        let signals = signals.clone();
+                        let generation = generation.clone();
+                        buffering.arm(Box::new(move |is_buffering| {
+                            // The data source of a superseded session can outlive it by a
+                            // moment; its stalls must not leak onto the track that replaced it.
+                            if generation.load(Ordering::SeqCst) == my_generation {
+                                signals.set_buffering(is_buffering);
+                            }
+                        }));
                     }
 
                     engine.play_source(source);

@@ -66,7 +66,9 @@ fn parse_device_spec(name: &str) -> (&str, usize) {
     (name, 1)
 }
 
-pub fn setup_device_config(device_name: Option<&str>) -> (Device, StreamConfig, SampleFormat) {
+pub fn setup_device_config(
+    device_name: Option<&str>,
+) -> Result<(Device, StreamConfig, SampleFormat), Box<dyn std::error::Error + Send + Sync>> {
     let host = default_host();
     let device = if let Some(name) = device_name {
         let (base_name, index) = parse_device_spec(name);
@@ -112,7 +114,12 @@ pub fn setup_device_config(device_name: Option<&str>) -> (Device, StreamConfig, 
     } else {
         host.default_output_device()
     };
-    let device = device.unwrap();
+    // Reached from the cpal stream-error callback via PlaybackEngine::recreate, i.e.
+    // exactly when the device just disappeared — panicking here took the app down on
+    // an unplugged DAC or a disconnected BT headset.
+    let device = device.ok_or_else(|| {
+        Box::<dyn std::error::Error + Send + Sync>::from("no audio output device available")
+    })?;
 
     let config: StreamConfig;
     let sample_format: SampleFormat;
@@ -129,7 +136,7 @@ pub fn setup_device_config(device_name: Option<&str>) -> (Device, StreamConfig, 
         sample_format = SampleFormat::F32;
     }
 
-    (device, config, sample_format)
+    Ok((device, config, sample_format))
 }
 
 pub fn construct_sink<F>(

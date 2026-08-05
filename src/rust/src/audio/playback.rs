@@ -31,9 +31,13 @@ impl PlaybackEngine {
         &self,
         device_name: Option<&str>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let (device, stream_config, sample_format) = setup_device_config(device_name);
-        let sample_rate = NonZero::new(stream_config.sample_rate).unwrap();
-        let channels = NonZero::new(stream_config.channels).unwrap();
+        let (device, stream_config, sample_format) = setup_device_config(device_name)?;
+        let sample_rate = NonZero::new(stream_config.sample_rate).ok_or_else(|| {
+            Box::<dyn std::error::Error + Send + Sync>::from("device reported a sample rate of 0")
+        })?;
+        let channels = NonZero::new(stream_config.channels).ok_or_else(|| {
+            Box::<dyn std::error::Error + Send + Sync>::from("device reported 0 channels")
+        })?;
 
         let tx_clone = self.tx.clone();
         let error_callback = move |err: rodio::cpal::StreamError| {

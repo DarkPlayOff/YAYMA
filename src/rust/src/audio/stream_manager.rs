@@ -12,7 +12,14 @@ use yandex_music::model::track::Track;
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
-pub type PrewarmResult = (stream::StreamingSession, Arc<TrackProgress>, String);
+pub struct PreparedStream {
+    pub session: stream::StreamingSession,
+    pub progress: Arc<TrackProgress>,
+    pub codec: String,
+    /// Starts disarmed; `AudioController` arms it once this session is the one
+    /// actually feeding the engine. See `BufferingGate`.
+    pub buffering: Arc<stream::BufferingGate>,
+}
 
 // A rapid chain of skips (each landing on a not-yet-cached track) used to call
 // `cache.clear()` on every single one of them, discarding in-flight prewarm work for
@@ -22,7 +29,7 @@ const MAX_PREWARM_ENTRIES: usize = 3;
 
 #[derive(Default)]
 struct PrewarmCache {
-    entries: HashMap<String, PrewarmResult>,
+    entries: HashMap<String, PreparedStream>,
     // Insertion order, oldest first, for FIFO eviction once `entries` is full.
     order: VecDeque<String>,
 }
@@ -32,7 +39,7 @@ impl PrewarmCache {
         self.entries.contains_key(id)
     }
 
-    fn remove(&mut self, id: &str) -> Option<PrewarmResult> {
+    fn remove(&mut self, id: &str) -> Option<PreparedStream> {
         let result = self.entries.remove(id);
         if result.is_some() {
             self.order.retain(|existing| existing != id);
@@ -40,7 +47,7 @@ impl PrewarmCache {
         result
     }
 
-    fn insert(&mut self, id: String, result: PrewarmResult) {
+    fn insert(&mut self, id: String, result: PreparedStream) {
         if self.entries.contains_key(&id) {
             return;
         }
@@ -93,7 +100,7 @@ impl StreamManager {
 
         let this = self.clone();
         tokio::spawn(async move {
-            if let Ok(result) = this.create_stream_session(&track, None).await {
+            if let Ok(result) = this.create_stream_session(&track).await {
                 this.prewarm_cache.lock().insert(track.id, result);
             }
         });
@@ -108,11 +115,7 @@ impl StreamManager {
         self.track_cache.get_track_file(track_id).await.is_some()
     }
 
-    pub async fn create_stream_session(
-        &self,
-        track: &Track,
-        buffering_signal: Option<crate::util::reactive::Signal<bool>>,
-    ) -> Result<PrewarmResult> {
+    pub async fn create_stream_session(&self, track: &Track) -> Result<PreparedStream> {
         {
             let mut cache = self.prewarm_cache.lock();
             if let Some(res) = cache.remove(&track.id) {
@@ -143,7 +146,13 @@ impl StreamManager {
             .await
             .map_err(|e| Box::<dyn std::error::Error + Send + Sync>::from(e.to_string()))??;
 
-            return Ok((session, progress, codec));
+            return Ok(PreparedStream {
+                session,
+                progress,
+                codec,
+                // A local file never waits on the network, so this gate stays silent.
+                buffering: stream::BufferingGate::new(),
+            });
         }
 
         // 2. Fallback to streaming.
@@ -162,11 +171,12 @@ impl StreamManager {
         };
 
         let client = self.http_client.clone();
+        let buffering = stream::BufferingGate::new();
         let data_source = stream::StreamingDataSource::new(
             client,
             url,
             Arc::clone(&progress),
-            buffering_signal,
+            Arc::clone(&buffering),
             duration_ms,
         )
         .await
@@ -180,6 +190,11 @@ impl StreamManager {
         .await
         .map_err(|e| Box::<dyn std::error::Error + Send + Sync>::from(e.to_string()))??;
 
-        Ok((session, progress, codec))
+        Ok(PreparedStream {
+            session,
+            progress,
+            codec,
+            buffering,
+        })
     }
 }
