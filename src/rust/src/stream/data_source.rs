@@ -350,12 +350,14 @@ impl StreamingDataSource {
     }
 
     fn wait_for(&self, pos: u64, min: usize) -> Result<()> {
-        {
+        let mut last_available = {
             let buf = self.buffer.lock();
-            if buf.available_from(pos) >= min || buf.eof {
+            let available = buf.available_from(pos);
+            if available >= min || buf.eof {
                 return Ok(());
             }
-        }
+            available
+        };
 
         if let Some(sig) = &self.buffering_signal {
             sig.set(true);
@@ -369,11 +371,21 @@ impl StreamingDataSource {
             match self.fetch_rx.recv_timeout(Duration::from_millis(500)) {
                 Ok(_) => {
                     let buf = self.buffer.lock();
-                    if buf.available_from(pos) >= min || buf.eof {
+                    let available = buf.available_from(pos);
+                    if available >= min || buf.eof {
                         break;
                     }
-                    // Reset attempts because we received a notification, even if it didn't satisfy our range
-                    attempts = 0;
+                    // Only reset the retry budget if this notification actually made
+                    // progress. fetch_loop_async also notifies on a failed/empty fetch
+                    // (after buf.clear_pending()), so a bare "we got *a* notification"
+                    // check let a single transient failure reset the clock right before
+                    // timeout and silently double the wait for one hiccup.
+                    if available > last_available {
+                        attempts = 0;
+                    } else {
+                        attempts += 1;
+                    }
+                    last_available = available;
                 }
                 Err(flume::RecvTimeoutError::Timeout) => {
                     attempts += 1;

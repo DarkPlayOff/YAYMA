@@ -3,6 +3,7 @@ use foldhash::HashMap;
 use parking_lot::RwLock;
 use rodio::Source;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 use tokio::sync::Mutex;
 use yandex_music::model::track::Track;
@@ -28,6 +29,10 @@ pub struct AudioController {
     event_tx: Sender<Event>,
     pub track_progress: Arc<RwLock<Arc<TrackProgress>>>,
     current_playback_task: Arc<Mutex<Option<tokio::task::JoinHandle<()>>>>,
+    // Bumped on every stop()/play_track() call so an in-flight playback task that has
+    // already passed its last `.await` (and so can no longer be cancelled by `task.abort()`)
+    // can still detect it's been superseded and skip touching the engine/signals.
+    playback_generation: Arc<AtomicU64>,
     signals: AudioSignals,
     effect_handles: Arc<RwLock<HashMap<String, EffectHandle>>>,
 }
@@ -47,6 +52,7 @@ impl AudioController {
             event_tx,
             track_progress,
             current_playback_task: Arc::new(Mutex::new(None)),
+            playback_generation: Arc::new(AtomicU64::new(0)),
             signals,
             effect_handles: Arc::new(RwLock::new(effect_handles)),
         };
@@ -79,6 +85,9 @@ impl AudioController {
                 if is_playing && is_buffering {
                     buffering_duration += check_interval;
                     if buffering_duration >= std::time::Duration::from_secs(15) {
+                        let _ = event_tx.send(Event::Error(
+                            "Buffering timed out after 15s, playback paused".to_string(),
+                        ));
                         controller.pause().await;
                         buffering_duration = std::time::Duration::ZERO;
                     }
@@ -171,8 +180,14 @@ impl AudioController {
             if let Some(task) = task_guard.take() {
                 task.abort();
             }
+            self.playback_generation.fetch_add(1, Ordering::SeqCst);
             self.engine.stop();
         }
+
+        // Claim this play_track call as the sole authority over the engine going forward.
+        // Any previously spawned task (even one that already ran past its last .await and
+        // so ignored task.abort()) will see a mismatch and bail out before touching the engine.
+        let my_generation = self.playback_generation.fetch_add(1, Ordering::SeqCst) + 1;
 
         self.signals.set_buffering(true);
 
@@ -193,15 +208,18 @@ impl AudioController {
         self.apply_volume();
 
         let buffering_signal = self.signals.is_buffering.clone();
+        let generation = self.playback_generation.clone();
         let task = tokio::spawn(async move {
             match stream_manager
                 .create_stream_session(&track_clone, Some(buffering_signal))
                 .await
             {
                 Ok((session, new_progress, _codec)) => {
-                    {
-                        let mut guard = progress.write();
-                        *guard = new_progress;
+                    // A newer play_track()/stop() call landed while we were awaiting the
+                    // stream session. task.abort() can no longer cancel us at this point, so
+                    // check explicitly and abandon before touching the engine or any signal.
+                    if generation.load(Ordering::SeqCst) != my_generation {
+                        return;
                     }
 
                     let mut source = FxSource::new(session.source);
@@ -249,6 +267,21 @@ impl AudioController {
                     }
 
                     let handles = source.get_effect_handles();
+
+                    // Re-check right before the first engine mutation: building the source
+                    // above takes long enough for a concurrent play_track()/stop() to have
+                    // superseded us since the check above. Everything before this point is
+                    // local to this task, so a superseded task bails without having written
+                    // any shared state (progress/effect_handles_store) that a newer task may
+                    // have already installed.
+                    if generation.load(Ordering::SeqCst) != my_generation {
+                        return;
+                    }
+
+                    {
+                        let mut guard = progress.write();
+                        *guard = new_progress;
+                    }
                     {
                         let mut store = effect_handles_store.write();
                         *store = handles;
@@ -291,6 +324,7 @@ impl AudioController {
         if let Some(task) = task_guard.take() {
             task.abort();
         }
+        self.playback_generation.fetch_add(1, Ordering::SeqCst);
         self.engine.stop();
         self.track_progress.read().reset();
 

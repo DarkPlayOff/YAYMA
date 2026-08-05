@@ -4,8 +4,8 @@ use crate::http::ApiService;
 use crate::storage::cache::TrackCache;
 use crate::stream;
 use foldhash::HashMap;
-use foldhash::HashMapExt;
 use parking_lot::Mutex;
+use std::collections::VecDeque;
 use std::sync::Arc;
 
 use yandex_music::model::track::Track;
@@ -14,12 +14,54 @@ type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>
 
 pub type PrewarmResult = (stream::StreamingSession, Arc<TrackProgress>, String);
 
+// A rapid chain of skips (each landing on a not-yet-cached track) used to call
+// `cache.clear()` on every single one of them, discarding in-flight prewarm work for
+// whichever track the user actually lands on. Keeping a small ring of slots instead lets
+// a couple of concurrent prewarms survive a quick skip-skip-skip.
+const MAX_PREWARM_ENTRIES: usize = 3;
+
+#[derive(Default)]
+struct PrewarmCache {
+    entries: HashMap<String, PrewarmResult>,
+    // Insertion order, oldest first, for FIFO eviction once `entries` is full.
+    order: VecDeque<String>,
+}
+
+impl PrewarmCache {
+    fn contains(&self, id: &str) -> bool {
+        self.entries.contains_key(id)
+    }
+
+    fn remove(&mut self, id: &str) -> Option<PrewarmResult> {
+        let result = self.entries.remove(id);
+        if result.is_some() {
+            self.order.retain(|existing| existing != id);
+        }
+        result
+    }
+
+    fn insert(&mut self, id: String, result: PrewarmResult) {
+        if self.entries.contains_key(&id) {
+            return;
+        }
+        while self.entries.len() >= MAX_PREWARM_ENTRIES {
+            if let Some(oldest) = self.order.pop_front() {
+                self.entries.remove(&oldest);
+            } else {
+                break;
+            }
+        }
+        self.order.push_back(id.clone());
+        self.entries.insert(id, result);
+    }
+}
+
 #[derive(Clone)]
 pub struct StreamManager {
     api: Arc<ApiService>,
     url_cache: UrlCache,
     track_cache: Arc<TrackCache>,
-    prewarm_cache: Arc<Mutex<HashMap<String, PrewarmResult>>>,
+    prewarm_cache: Arc<Mutex<PrewarmCache>>,
     http_client: reqwest::Client,
 }
 
@@ -35,7 +77,7 @@ impl StreamManager {
             api,
             url_cache,
             track_cache,
-            prewarm_cache: Arc::new(Mutex::new(HashMap::new())),
+            prewarm_cache: Arc::new(Mutex::new(PrewarmCache::default())),
             http_client,
         }
     }
@@ -43,11 +85,10 @@ impl StreamManager {
     pub fn prewarm(&self, track: Track) {
         let id = track.id.clone();
         {
-            let mut cache = self.prewarm_cache.lock();
-            if cache.contains_key(&id) {
+            let cache = self.prewarm_cache.lock();
+            if cache.contains(&id) {
                 return;
             }
-            cache.clear();
         }
 
         let this = self.clone();

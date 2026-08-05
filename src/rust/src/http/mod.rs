@@ -9,7 +9,7 @@ type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>
 
 use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue};
 use yandex_music::{
-    YandexMusicClient,
+    DEFAULT_CLIENT_ID, YandexMusicClient,
     // ... (rest of imports remains similar, but I need to provide full block)
     api::{
         album::{
@@ -71,6 +71,13 @@ use yandex_music::{
         track::{Track, TrackShort},
     },
 };
+
+// `get-file-info`/`get-file-info/batch` sit directly on the playback critical path (called from
+// StreamManager::create_stream_session before any audio can start), and the 15s buffering
+// watchdog in AudioController silently pauses playback if that path stalls. Without its own
+// timeout this request could otherwise hang far longer than 15s, so it errors out well before
+// the watchdog would kick in, giving a real `Event::Error` instead of an unexplained pause.
+const FILE_INFO_REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
 
 pub trait SessionExt {
     fn station_id(&self) -> &str;
@@ -147,7 +154,28 @@ impl ApiService {
             .build()?;
 
         let client = Arc::new(YandexMusicClient::from_client(http_client.clone()));
-        let file_info_client = Arc::new(YandexMusicClient::builder(token).build()?);
+
+        // Built via `custom_client` (with headers replicated by hand) instead of the plain
+        // `YandexMusicClient::builder(token).build()`, purely to attach a request timeout —
+        // `ClientBuilder` has no `.timeout()` of its own.
+        let mut file_info_headers = HeaderMap::with_capacity(2);
+        file_info_headers.insert(
+            AUTHORIZATION,
+            HeaderValue::from_str(&format!("OAuth {}", token))?,
+        );
+        file_info_headers.insert(
+            "X-Yandex-Music-Client",
+            HeaderValue::from_str(DEFAULT_CLIENT_ID)?,
+        );
+        let file_info_http_client = reqwest::Client::builder()
+            .default_headers(file_info_headers)
+            .timeout(FILE_INFO_REQUEST_TIMEOUT)
+            .build()?;
+        let file_info_client = Arc::new(
+            YandexMusicClient::builder(token)
+                .custom_client(file_info_http_client)
+                .build()?,
+        );
 
         let user_id = if let Some(uid) = user_id {
             uid

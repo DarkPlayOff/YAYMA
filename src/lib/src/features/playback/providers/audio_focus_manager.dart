@@ -100,14 +100,15 @@ class AudioFocusManager {
             }
           }
         case AudioInterruptionType.pause:
+        case AudioInterruptionType.unknown:
           // Only resume what we paused ourselves - not if the user paused
           // manually during the interruption, or nothing was playing to
-          // begin with.
+          // begin with. `unknown` is paused the same as `pause` on begin
+          // (see above), so it must be resumed the same way on end -
+          // otherwise playback is left stuck paused with no user action.
           if (_wasPlayingBeforeInterruption ?? false) {
             await PlaybackController.play();
           }
-          _wasPlayingBeforeInterruption = null;
-        case AudioInterruptionType.unknown:
           _wasPlayingBeforeInterruption = null;
       }
     }
