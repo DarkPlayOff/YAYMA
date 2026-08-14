@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:yayma/src/features/auth/providers/auth_provider.dart';
 import 'package:yayma/src/rust/api/simple.dart';
 
@@ -298,7 +298,7 @@ class _ShimmerLoaderState extends State<_ShimmerLoader>
       duration: const Duration(milliseconds: 1500),
       vsync: this,
     );
-    unawaited(_controller.repeat());
+    _controller.repeat();
     _animation = Tween<double>(begin: -2, end: 2).animate(
       CurvedAnimation(
         parent: _controller,

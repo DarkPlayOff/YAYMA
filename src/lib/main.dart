@@ -1,8 +1,6 @@
 import 'dart:io';
 
-import 'package:flutter/material.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:m3e_core/m3e_core.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:yayma/src/app/init.dart';
@@ -53,17 +51,26 @@ class MyApp extends StatelessWidget {
     return SignalBuilder(
       builder: (context) {
         final trackScheme = colorSchemeSignal();
+        final base = ColorScheme.fromSeed(
+          seedColor: trackScheme?.primary ?? Colors.deepOrange,
+          brightness: Brightness.dark,
+          dynamicSchemeVariant: DynamicSchemeVariant.expressive,
+        );
         final scheme2026 = trackScheme == null
-            ? M3EColorScheme.generate(
-                seedColor: Colors.deepOrange,
-                brightness: Brightness.dark,
-                variant: M3EColorVariant.expressive,
-              )
-            : M3EColorScheme.generate(
-                seedColor: trackScheme.primary,
-                brightness: Brightness.dark,
-                variant: M3EColorVariant.expressive,
-                systemColorScheme: trackScheme,
+            ? base
+            : trackScheme.copyWith(
+                surface: base.surface,
+                surfaceContainerLowest: base.surfaceContainerLowest,
+                surfaceContainerLow: base.surfaceContainerLow,
+                surfaceContainer: base.surfaceContainer,
+                surfaceContainerHigh: base.surfaceContainerHigh,
+                surfaceContainerHighest: base.surfaceContainerHighest,
+                surfaceBright: base.surfaceBright,
+                surfaceDim: base.surfaceDim,
+                onPrimaryContainer: base.onPrimaryContainer,
+                onSecondaryContainer: base.onSecondaryContainer,
+                onTertiaryContainer: base.onTertiaryContainer,
+                onErrorContainer: base.onErrorContainer,
               );
 
         return MaterialApp(

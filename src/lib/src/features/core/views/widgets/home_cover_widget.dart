@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/features/core/providers/navigation_provider.dart';
 import 'package:yayma/src/features/core/theme/app_tokens.dart';
@@ -225,12 +225,10 @@ class _AndroidCarouselState extends State<_AndroidCarousel>
   }
 
   void _animateToPage(double page) {
-    unawaited(
-      _pageController.animateTo(
-        page,
-        duration: const Duration(milliseconds: 400),
-        curve: Curves.easeInOutCubic,
-      ),
+    _pageController.animateTo(
+      page,
+      duration: const Duration(milliseconds: 400),
+      curve: Curves.easeInOutCubic,
     );
   }
 

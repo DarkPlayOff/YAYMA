@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'dart:ui' as ui;
 
-import 'package:flutter/material.dart';
 import 'package:m3e_core/m3e_core.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/features/core/theme/app_tokens.dart';
 import 'package:yayma/src/features/core/views/widgets/app_context_menu.dart';
@@ -660,7 +660,7 @@ class _AnimatedLikeButtonState extends State<AnimatedLikeButton>
   void didUpdateWidget(covariant AnimatedLikeButton oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (!oldWidget.isLiked && widget.isLiked) {
-      unawaited(_burst.forward(from: 0));
+      _burst.forward(from: 0);
     }
   }
 

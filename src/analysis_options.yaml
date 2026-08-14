@@ -9,6 +9,12 @@ analyzer:
     - "lib/src/rust/**" # Игнорируем автосгенерированный код Rust bridge
     - "test/**"
     - "build/**"
+    - android/**
+    - ios/**
+    - web/**
+    - windows/**
+    - macos/**
+    - linux/**
 
 linter:
   rules:

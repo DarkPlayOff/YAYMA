@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/features/auth/providers/auth_provider.dart';
 import 'package:yayma/src/features/auth/views/yandex_id_view.dart';
@@ -453,13 +453,11 @@ class _AccountMenuDialog extends StatelessWidget {
               onTap: () {
                 Navigator.pop(context);
                 if (Platform.isAndroid) {
-                  unawaited(
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        fullscreenDialog: true,
-                        builder: (_) => const YandexIdView(fullscreen: true),
-                      ),
+                  Navigator.push<YandexIdView>(
+                    context,
+                    MaterialPageRoute<YandexIdView>(
+                      fullscreenDialog: true,
+                      builder: (_) => const YandexIdView(fullscreen: true),
                     ),
                   );
                 } else {
@@ -559,7 +557,7 @@ class _WaveOverlayState extends State<_WaveOverlay>
       vsync: this,
       duration: const Duration(milliseconds: 250),
     );
-    unawaited(_anim.forward());
+    _anim.forward();
   }
 
   @override

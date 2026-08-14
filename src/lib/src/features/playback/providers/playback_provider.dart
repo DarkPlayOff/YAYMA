@@ -2,8 +2,8 @@ import 'dart:async';
 import 'dart:io' show File, Platform;
 import 'dart:typed_data';
 
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:windows_taskbar/windows_taskbar.dart';
 import 'package:yayma/src/features/auth/providers/auth_provider.dart';

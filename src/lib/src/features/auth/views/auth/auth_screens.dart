@@ -2,9 +2,9 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:m3e_core/m3e_core.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_all/webview_all.dart';
@@ -49,7 +49,7 @@ class _RootScreenState extends State<RootScreen> {
                           ctx: ctx,
                           trackId: state.trackId,
                           positionMs: state.positionMs,
-                          isPlaying: state.isPlaying,
+                          isPlaying: false,
                         );
                       }
 
@@ -99,13 +99,11 @@ class _LoginScreenState extends State<LoginScreen> {
 
   void _showWebView() {
     if (Platform.isAndroid) {
-      unawaited(
-        Navigator.push<void>(
-          context,
-          MaterialPageRoute<void>(
-            fullscreenDialog: true,
-            builder: (_) => const YandexLoginDialog(fullscreen: true),
-          ),
+      Navigator.push<void>(
+        context,
+        MaterialPageRoute<void>(
+          fullscreenDialog: true,
+          builder: (_) => const YandexLoginDialog(fullscreen: true),
         ),
       );
     } else {
@@ -120,13 +118,11 @@ class _LoginScreenState extends State<LoginScreen> {
 
   void _showDeviceLogin() {
     if (Platform.isAndroid) {
-      unawaited(
-        Navigator.push<void>(
-          context,
-          MaterialPageRoute<void>(
-            fullscreenDialog: true,
-            builder: (_) => const YandexDeviceLoginDialog(fullscreen: true),
-          ),
+      Navigator.push<void>(
+        context,
+        MaterialPageRoute<void>(
+          fullscreenDialog: true,
+          builder: (_) => const YandexDeviceLoginDialog(fullscreen: true),
         ),
       );
     } else {

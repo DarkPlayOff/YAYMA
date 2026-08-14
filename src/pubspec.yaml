@@ -31,6 +31,7 @@ dependencies:
   window_manager: ^0.5.2
   windows_taskbar: ^1.1.2
 
+  material_ui: any
 dev_dependencies:
   build_runner: ^2.15.1
   flutter_launcher_icons: ^0.14.3

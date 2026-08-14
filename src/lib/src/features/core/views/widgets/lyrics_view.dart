@@ -2,8 +2,8 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
 
-import 'package:flutter/material.dart';
 import 'package:m3e_core/m3e_core.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/features/core/theme/app_tokens.dart';
 import 'package:yayma/src/features/core/views/widgets/common_ui.dart';
@@ -195,12 +195,10 @@ class _LyricsWidgetState extends State<LyricsWidget> {
         // purpose: lines can follow each other faster than the animation
         // lasts, and a new `animateTo` restarts from zero velocity — with an
         // ease-in the scroll would visibly stall at every such hand-off.
-        unawaited(
-          _scrollController.animateTo(
-            targetScroll,
-            duration: _lyricTransitionDuration,
-            curve: _lyricTransitionCurve,
-          ),
+        _scrollController.animateTo(
+          targetScroll,
+          duration: _lyricTransitionDuration,
+          curve: _lyricTransitionCurve,
         );
       }
     }
@@ -685,7 +683,7 @@ class _LyricTimerWidgetState extends State<_LyricTimerWidget>
       vsync: this,
       duration: const Duration(milliseconds: 1000),
     );
-    unawaited(_pulseController.repeat(reverse: true));
+    _pulseController.repeat(reverse: true);
   }
 
   @override
