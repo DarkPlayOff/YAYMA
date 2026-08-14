@@ -6,6 +6,7 @@ import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/features/auth/providers/auth_provider.dart';
 import 'package:yayma/src/features/core/providers/navigation_provider.dart';
 import 'package:yayma/src/features/core/providers/notification_provider.dart';
+import 'package:yayma/src/features/core/theme/app_tokens.dart';
 import 'package:yayma/src/features/core/views/widgets/responsive.dart';
 import 'package:yayma/src/features/library/providers/library_provider.dart';
 import 'package:yayma/src/features/settings/views/lyrics_providers_dialog.dart';
@@ -162,6 +163,7 @@ class _SettingsViewState extends State<SettingsView> {
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.sizeOf(context).width;
     final isNarrow = screenWidth < 600;
+    final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -177,10 +179,10 @@ class _SettingsViewState extends State<SettingsView> {
               ),
               child: Text(
                 'Настройки',
-                style: TextStyle(
+                style: Theme.of(context).textTheme.displayMedium?.copyWith(
                   fontSize: isNarrow ? 28 : 48,
                   fontWeight: FontWeight.w900,
-                  color: Colors.white,
+                  color: cs.onSurface,
                   letterSpacing: -1,
                 ),
               ),
@@ -345,9 +347,11 @@ class _SettingsViewState extends State<SettingsView> {
                   Container(
                     padding: EdgeInsets.all(isNarrow ? 18 : 24),
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.05),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: Colors.white10),
+                      color: cs.onSurface.withValues(alpha: 0.05),
+                      borderRadius: BorderRadius.circular(AppRadius.lg),
+                      border: Border.all(
+                        color: cs.onSurface.withValues(alpha: 0.1),
+                      ),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -355,7 +359,7 @@ class _SettingsViewState extends State<SettingsView> {
                         Text(
                           'YAYMA',
                           style: TextStyle(
-                            color: Colors.white,
+                            color: cs.onSurface,
                             fontSize: isNarrow ? 18 : 20,
                             fontWeight: FontWeight.bold,
                           ),
@@ -367,7 +371,7 @@ class _SettingsViewState extends State<SettingsView> {
                             return Text(
                               'Альтернативный клиент для Яндекс Музыки.\nВерсия ${version.value ?? '...'}',
                               style: TextStyle(
-                                color: Colors.white54,
+                                color: cs.onSurfaceVariant,
                                 fontSize: isNarrow ? 14 : 16,
                               ),
                             );
@@ -443,16 +447,18 @@ class _SettingItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final primaryColor = Theme.of(context).colorScheme.primary;
+    final onSurfaceVariant = Theme.of(context).colorScheme.onSurfaceVariant;
+    final onSurface = Theme.of(context).colorScheme.onSurface;
     final isNarrow = context.isNarrow;
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(20),
+      borderRadius: BorderRadius.circular(AppRadius.lg),
       child: Container(
         padding: EdgeInsets.all(isNarrow ? 16 : 24),
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.05),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: Colors.white10),
+          color: onSurface.withValues(alpha: 0.05),
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+          border: Border.all(color: onSurface.withValues(alpha: 0.1)),
         ),
         child: Row(
           children: [
@@ -460,7 +466,7 @@ class _SettingItem extends StatelessWidget {
               padding: EdgeInsets.all(isNarrow ? 10 : 12),
               decoration: BoxDecoration(
                 color: primaryColor.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(AppRadius.sm),
               ),
               child: Icon(icon, color: primaryColor, size: isNarrow ? 22 : 28),
             ),
@@ -472,7 +478,7 @@ class _SettingItem extends StatelessWidget {
                   Text(
                     title,
                     style: TextStyle(
-                      color: Colors.white,
+                      color: onSurface,
                       fontSize: isNarrow ? 15 : 18,
                       fontWeight: FontWeight.w600,
                     ),
@@ -481,7 +487,7 @@ class _SettingItem extends StatelessWidget {
                   Text(
                     subtitle,
                     style: TextStyle(
-                      color: Colors.white38,
+                      color: onSurfaceVariant,
                       fontSize: isNarrow ? 12 : 15,
                     ),
                     maxLines: 2,
@@ -494,7 +500,7 @@ class _SettingItem extends StatelessWidget {
             trailing ??
                 Icon(
                   Icons.chevron_right_rounded,
-                  color: Colors.white24,
+                  color: onSurfaceVariant,
                   size: isNarrow ? 26 : 32,
                 ),
           ],

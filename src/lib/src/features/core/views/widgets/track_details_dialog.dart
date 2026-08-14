@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/features/auth/providers/auth_provider.dart';
+import 'package:yayma/src/features/core/theme/app_tokens.dart';
 import 'package:yayma/src/features/core/views/widgets/common_ui.dart';
 import 'package:yayma/src/rust/api/content.dart' as rust;
 import 'package:yayma/src/rust/api/models.dart';
@@ -23,6 +24,7 @@ class TrackDetailsDialog extends SignalWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     final detailsAsync = futureSignal(() async {
       final ctx = appContextSignal.value;
       if (ctx == null) return null;
@@ -30,11 +32,9 @@ class TrackDetailsDialog extends SignalWidget {
     });
 
     return AlertDialog(
-      backgroundColor: const Color(0xFF1E1E1E),
-      surfaceTintColor: Colors.transparent,
-      title: const Text(
+      title: Text(
         'О треке',
-        style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        style: TextStyle(color: cs.onSurface, fontWeight: FontWeight.bold),
       ),
       content: SizedBox(
         width: 500,
@@ -46,7 +46,7 @@ class TrackDetailsDialog extends SignalWidget {
                 if (details == null) {
                   return const Center(child: Text('Загрузка...'));
                 }
-                return _buildDetails(details);
+                return _buildDetails(context, details);
               },
               loading: () => const CommonLoadingWidget(),
               error: (Object e, _) => CommonErrorWidget(error: e.toString()),
@@ -71,7 +71,7 @@ class TrackDetailsDialog extends SignalWidget {
     return true;
   }
 
-  Widget _buildDetails(TrackDetailsDto details) {
+  Widget _buildDetails(BuildContext context, TrackDetailsDto details) {
     final music = details.musicAuthors.where((a) => a != '-').toList();
     final lyrics = details.lyricsAuthors.where((a) => a != '-').toList();
     final platforms = details.sourcePlatforms.where((a) => a != '-').toList();
@@ -80,31 +80,42 @@ class TrackDetailsDialog extends SignalWidget {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (_isValid(details.title)) _buildInfoRow('Название', details.title),
+        if (_isValid(details.title))
+          _buildInfoRow(context, 'Название', details.title),
         _buildInfoRow(
+          context,
           'Исполнитель',
           details.artists.map((a) => a.name).join(', '),
         ),
-        if (_isValid(details.album)) _buildInfoRow('Альбом', details.album!),
-        if (_isValid(details.label)) _buildInfoRow('Лейбл', details.label!),
-        if (music.isNotEmpty) _buildInfoRow('Автор музыки', music.join(', ')),
-        if (lyrics.isNotEmpty) _buildInfoRow('Автор текста', lyrics.join(', ')),
+        if (_isValid(details.album))
+          _buildInfoRow(context, 'Альбом', details.album!),
+        if (_isValid(details.label))
+          _buildInfoRow(context, 'Лейбл', details.label!),
+        if (music.isNotEmpty)
+          _buildInfoRow(context, 'Автор музыки', music.join(', ')),
+        if (lyrics.isNotEmpty)
+          _buildInfoRow(context, 'Автор текста', lyrics.join(', ')),
         if (platforms.isNotEmpty)
-          _buildInfoRow('Источник фонограммы', platforms.join(', ')),
+          _buildInfoRow(
+            context,
+            'Источник фонограммы',
+            platforms.join(', '),
+          ),
       ],
     );
   }
 
-  Widget _buildInfoRow(String label, String value) {
+  Widget _buildInfoRow(BuildContext context, String label, String value) {
+    final cs = Theme.of(context).colorScheme;
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             label.toUpperCase(),
-            style: const TextStyle(
-              color: Colors.white38,
+            style: TextStyle(
+              color: cs.onSurfaceVariant,
               fontSize: 10,
               fontWeight: FontWeight.bold,
               letterSpacing: 1.2,
@@ -113,7 +124,7 @@ class TrackDetailsDialog extends SignalWidget {
           const SizedBox(height: 4),
           Text(
             value,
-            style: const TextStyle(color: Colors.white, fontSize: 16),
+            style: TextStyle(color: cs.onSurface, fontSize: 16),
           ),
         ],
       ),

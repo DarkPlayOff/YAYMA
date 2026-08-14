@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/features/core/providers/navigation_provider.dart';
+import 'package:yayma/src/features/core/theme/app_tokens.dart';
 import 'package:yayma/src/features/core/views/widgets/rust_cached_image.dart';
 import 'package:yayma/src/features/playback/providers/playback_provider.dart';
 import 'package:yayma/src/rust/api/models.dart';
@@ -13,9 +14,14 @@ class CoverErrorPlaceholder extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const ColoredBox(
-      color: Colors.white10,
-      child: Icon(Icons.music_note, size: 120, color: Colors.white24),
+    final onSurface = Theme.of(context).colorScheme.onSurface;
+    return ColoredBox(
+      color: onSurface.withValues(alpha: 0.1),
+      child: Icon(
+        Icons.music_note,
+        size: 120,
+        color: onSurface.withValues(alpha: 0.24),
+      ),
     );
   }
 }
@@ -28,6 +34,14 @@ class HomeCoverWidget extends StatefulWidget {
 }
 
 class _HomeCoverWidgetState extends State<HomeCoverWidget> {
+  final ValueNotifier<bool> _isHovered = ValueNotifier(false);
+
+  @override
+  void dispose() {
+    _isHovered.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     return SignalBuilder(
@@ -44,8 +58,6 @@ class _HomeCoverWidgetState extends State<HomeCoverWidget> {
         if (height < 650) size = showLyrics ? 180.0 : 220.0;
         if (isNarrow && !showLyrics) size = width * 0.75;
 
-        final scale = isPlaying ? 1.0 : 0.92;
-
         if (Platform.isAndroid) {
           return _AndroidCarousel(size: size);
         }
@@ -54,52 +66,61 @@ class _HomeCoverWidgetState extends State<HomeCoverWidget> {
           cursor: meta.albumId != null
               ? SystemMouseCursors.click
               : SystemMouseCursors.basic,
+          onEnter: (_) => _isHovered.value = true,
+          onExit: (_) => _isHovered.value = false,
           child: GestureDetector(
             onTap: () {
               if (meta.albumId != null) {
                 navigateTo(AppSection.album, meta.albumId);
               }
             },
-            child: AnimatedScale(
-              scale: scale,
-              duration: const Duration(milliseconds: 350),
-              curve: Curves.easeInOutCubic,
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 350),
-                curve: Curves.easeInOutCubic,
-                width: size,
-                height: size,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(32),
-                ),
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 500),
-                  transitionBuilder: (child, animation) {
-                    return FadeTransition(
-                      opacity: animation,
-                      child: ScaleTransition(
-                        scale: Tween<double>(
-                          begin: 0.9,
-                          end: 1,
-                        ).animate(animation),
-                        child: child,
+            child: ValueListenableBuilder<bool>(
+              valueListenable: _isHovered,
+              builder: (context, hovered, _) {
+                final springScale =
+                    (isPlaying ? 1.0 : 0.92) * (hovered ? 1.035 : 1.0);
+                return AnimatedScale(
+                  scale: springScale,
+                  duration: const Duration(milliseconds: 400),
+                  curve: Curves.easeOutBack,
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 350),
+                    curve: Curves.easeInOutCubic,
+                    width: size,
+                    height: size,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(AppRadius.xxxl),
+                    ),
+                    child: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 500),
+                      transitionBuilder: (child, animation) {
+                        return FadeTransition(
+                          opacity: animation,
+                          child: ScaleTransition(
+                            scale: Tween<double>(
+                              begin: 0.9,
+                              end: 1,
+                            ).animate(animation),
+                            child: child,
+                          ),
+                        );
+                      },
+                      child: ClipRRect(
+                        key: ValueKey(meta.coverUrl),
+                        borderRadius: BorderRadius.circular(AppRadius.xxxl),
+                        child: meta.coverUrl != null
+                            ? RustCachedImage(
+                                imageUrl: meta.coverUrl,
+                                width: size,
+                                height: size,
+                                errorWidget: const CoverErrorPlaceholder(),
+                              )
+                            : const CoverErrorPlaceholder(),
                       ),
-                    );
-                  },
-                  child: ClipRRect(
-                    key: ValueKey(meta.coverUrl),
-                    borderRadius: BorderRadius.circular(32),
-                    child: meta.coverUrl != null
-                        ? RustCachedImage(
-                            imageUrl: meta.coverUrl,
-                            width: size,
-                            height: size,
-                            errorWidget: const CoverErrorPlaceholder(),
-                          )
-                        : const CoverErrorPlaceholder(),
+                    ),
                   ),
-                ),
-              ),
+                );
+              },
             ),
           ),
         );

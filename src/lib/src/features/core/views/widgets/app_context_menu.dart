@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'package:yayma/src/features/core/theme/app_tokens.dart';
+
 class AppContextMenuItem<T> {
   final T? value;
   final String label;
@@ -44,14 +46,20 @@ class AppContextMenu<T> extends StatelessWidget {
       onOpen: onOpen,
       onClose: onClose,
       style: MenuStyle(
-        backgroundColor: WidgetStateProperty.all(const Color(0xFF2A2A2E)),
+        backgroundColor: WidgetStateProperty.all(
+          Theme.of(context).colorScheme.surfaceContainerHighest,
+        ),
         surfaceTintColor: WidgetStateProperty.all(Colors.transparent),
         padding: WidgetStateProperty.all(EdgeInsets.zero),
         elevation: WidgetStateProperty.all(12),
         shape: WidgetStateProperty.all(
           RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-            side: const BorderSide(color: Colors.white10),
+            borderRadius: BorderRadius.circular(AppRadius.sm),
+            side: BorderSide(
+              color: Theme.of(
+                context,
+              ).colorScheme.onSurface.withValues(alpha: 0.1),
+            ),
           ),
         ),
       ),
@@ -116,7 +124,9 @@ class AppContextMenu<T> extends StatelessWidget {
         (item.icon != null
             ? Icon(
                 item.icon,
-                color: item.color ?? Colors.white70,
+                color:
+                    item.color ??
+                    Theme.of(context).colorScheme.onSurfaceVariant,
                 size: 18,
               )
             : null);
@@ -124,13 +134,19 @@ class AppContextMenu<T> extends StatelessWidget {
     if (item.subItems != null && item.subItems!.isNotEmpty) {
       return SubmenuButton(
         menuStyle: MenuStyle(
-          backgroundColor: WidgetStateProperty.all(const Color(0xFF2A2A2E)),
+          backgroundColor: WidgetStateProperty.all(
+            Theme.of(context).colorScheme.surfaceContainerHighest,
+          ),
           surfaceTintColor: WidgetStateProperty.all(Colors.transparent),
           padding: WidgetStateProperty.all(EdgeInsets.zero),
           shape: WidgetStateProperty.all(
             RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-              side: const BorderSide(color: Colors.white10),
+              borderRadius: BorderRadius.circular(AppRadius.sm),
+              side: BorderSide(
+                color: Theme.of(
+                  context,
+                ).colorScheme.onSurface.withValues(alpha: 0.1),
+              ),
             ),
           ),
         ),
@@ -142,7 +158,10 @@ class AppContextMenu<T> extends StatelessWidget {
         leadingIcon: leading,
         child: Text(
           item.label,
-          style: TextStyle(color: item.color ?? Colors.white, fontSize: 14),
+          style: TextStyle(
+            color: item.color ?? Theme.of(context).colorScheme.onSurface,
+            fontSize: 14,
+          ),
         ),
       );
     }
@@ -163,7 +182,10 @@ class AppContextMenu<T> extends StatelessWidget {
           : null,
       child: Text(
         item.label,
-        style: TextStyle(color: item.color ?? Colors.white, fontSize: 14),
+        style: TextStyle(
+          color: item.color ?? Theme.of(context).colorScheme.onSurface,
+          fontSize: 14,
+        ),
       ),
     );
   }

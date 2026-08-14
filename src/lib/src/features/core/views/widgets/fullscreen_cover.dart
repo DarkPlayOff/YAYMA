@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+
+import 'package:yayma/src/features/core/theme/app_tokens.dart';
 import 'package:yayma/src/features/core/views/widgets/rust_cached_image.dart';
 
 class FullscreenCoverDialog extends StatelessWidget {
@@ -60,7 +62,7 @@ class FullscreenCoverDialog extends StatelessWidget {
                     child: AspectRatio(
                       aspectRatio: 1,
                       child: ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(AppRadius.sm),
                         child: RustCachedImage(
                           imageUrl: imageUrl,
                           placeholder: placeholder,
@@ -76,10 +78,10 @@ class FullscreenCoverDialog extends StatelessWidget {
               top: 24,
               right: 24,
               child: IconButton(
-                icon: const Icon(
+                icon: Icon(
                   Icons.close_rounded,
                   size: 32,
-                  color: Colors.white70,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
                 onPressed: () => Navigator.of(context).pop(),
               ),

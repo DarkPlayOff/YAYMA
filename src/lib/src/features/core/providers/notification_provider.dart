@@ -122,77 +122,100 @@ class _GlobalNotificationListenerState extends State<GlobalNotificationListener>
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        widget.child,
-        if (_currentNotification != null)
-          Positioned(
-            top: 40,
-            left: 0,
-            right: 0,
-            child: SlideTransition(
-              position: _offsetAnimation,
-              child: Center(
-                child: Material(
-                  color: Colors.transparent,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 24,
-                      vertical: 12,
-                    ),
-                    decoration: BoxDecoration(
-                      color: switch (_currentNotification!.level) {
-                        AppNotificationLevel.error => Colors.redAccent
-                            .withValues(alpha: 0.9),
-                        AppNotificationLevel.warning => Colors.orangeAccent
-                            .withValues(alpha: 0.9),
-                        AppNotificationLevel.success => Colors.white
-                            .withValues(alpha: 0.1),
-                      },
-                      borderRadius: BorderRadius.circular(100),
-                      border: Border.all(color: Colors.white10),
-                      boxShadow: const [
-                        BoxShadow(
-                          color: Colors.black26,
-                          blurRadius: 20,
-                          offset: Offset(0, 10),
-                        ),
-                      ],
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          switch (_currentNotification!.level) {
-                            AppNotificationLevel.error =>
-                              Icons.error_outline_rounded,
-                            AppNotificationLevel.warning =>
-                              Icons.warning_amber_rounded,
-                            AppNotificationLevel.success =>
-                              Icons.check_circle_outline_rounded,
-                          },
-                          color: Colors.white,
-                          size: 20,
-                        ),
-                        const SizedBox(width: 12),
-                        Flexible(
-                          child: Text(
-                            _currentNotification!.message,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w600,
-                              fontSize: 14,
+    return AnimatedBuilder(
+      animation: _offsetAnimation,
+      builder: (context, child) {
+        return Stack(
+          alignment: Alignment.topCenter,
+          children: [
+            widget.child,
+            if (_currentNotification != null)
+              Positioned(
+                top: 40,
+                left: 0,
+                right: 0,
+                child: SlideTransition(
+                  position: _offsetAnimation,
+                  child: Center(
+                    child: Material(
+                      color: Colors.transparent,
+                      child: Builder(
+                        builder: (context) {
+                          final cs = Theme.of(context).colorScheme;
+                          final (
+                            bgColor,
+                            fgColor,
+                          ) = switch (_currentNotification!.level) {
+                            AppNotificationLevel.error => (
+                              cs.error,
+                              cs.onError,
                             ),
-                          ),
-                        ),
-                      ],
+                            AppNotificationLevel.warning => (
+                              cs.tertiary,
+                              cs.onTertiary,
+                            ),
+                            AppNotificationLevel.success => (
+                              cs.primary,
+                              cs.onPrimary,
+                            ),
+                          };
+                          return Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 24,
+                              vertical: 12,
+                            ),
+                            decoration: BoxDecoration(
+                              color: bgColor,
+                              borderRadius: BorderRadius.circular(100),
+                              border: Border.all(
+                                color: cs.onSurface.withValues(alpha: 0.1),
+                              ),
+                              boxShadow: const [
+                                BoxShadow(
+                                  color: Colors.black26,
+                                  blurRadius: 20,
+                                  offset: Offset(0, 10),
+                                ),
+                              ],
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  switch (_currentNotification!.level) {
+                                    AppNotificationLevel.error =>
+                                      Icons.error_outline_rounded,
+                                    AppNotificationLevel.warning =>
+                                      Icons.warning_amber_rounded,
+                                    AppNotificationLevel.success =>
+                                      Icons.check_circle_outline_rounded,
+                                  },
+                                  color: fgColor,
+                                  size: 20,
+                                ),
+                                const SizedBox(width: 12),
+                                Flexible(
+                                  child: Text(
+                                    _currentNotification!.message,
+                                    style: TextStyle(
+                                      color: fgColor,
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
-          ),
-      ],
+          ],
+        );
+      },
     );
   }
 }

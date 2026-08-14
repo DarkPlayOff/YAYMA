@@ -1,9 +1,11 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:m3e_core/m3e_core.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/features/core/providers/navigation_provider.dart';
 import 'package:yayma/src/features/core/providers/notification_provider.dart';
+import 'package:yayma/src/features/core/theme/app_tokens.dart';
 import 'package:yayma/src/features/core/views/widgets/common_ui.dart';
 import 'package:yayma/src/features/core/views/widgets/media_card.dart';
 import 'package:yayma/src/features/core/views/widgets/track_elements.dart';
@@ -66,66 +68,72 @@ class _LibraryViewState extends State<LibraryView>
       showDialog<void>(
         context: context,
         builder: (context) => StatefulBuilder(
-          builder: (context, setState) => AlertDialog(
-            backgroundColor: const Color(0xFF1E1E1E),
-            title: const Text(
-              'Новый плейлист',
-              style: TextStyle(color: Colors.white),
-            ),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: controller,
-                  autofocus: true,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: InputDecoration(
-                    hintText: 'Название',
-                    hintStyle: const TextStyle(color: Colors.white24),
-                    filled: true,
-                    fillColor: Colors.white.withValues(alpha: 0.05),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide.none,
+          builder: (context, setState) {
+            final cs = Theme.of(context).colorScheme;
+            return AlertDialog(
+              title: Text(
+                'Новый плейлист',
+                style: TextStyle(color: cs.onSurface),
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: controller,
+                    autofocus: true,
+                    style: TextStyle(color: cs.onSurface),
+                    decoration: InputDecoration(
+                      hintText: 'Название',
+                      hintStyle: TextStyle(
+                        color: cs.onSurface.withValues(alpha: 0.24),
+                      ),
+                      filled: true,
+                      fillColor: cs.onSurface.withValues(alpha: 0.05),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(AppRadius.sm),
+                        borderSide: BorderSide.none,
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 16),
-                SwitchListTile(
-                  title: const Text(
-                    'Публичный',
-                    style: TextStyle(color: Colors.white70),
+                  const SizedBox(height: 16),
+                  SwitchListTile(
+                    title: Text(
+                      'Публичный',
+                      style: TextStyle(color: cs.onSurfaceVariant),
+                    ),
+                    value: isPublic,
+                    onChanged: (val) => setState(() => isPublic = val),
                   ),
-                  value: isPublic,
-                  onChanged: (val) => setState(() => isPublic = val),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Отмена'),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    if (controller.text.isNotEmpty) {
+                      final success = await createPlaylistAction(
+                        controller.text,
+                        isPublic: isPublic,
+                      );
+                      if (!context.mounted) return;
+                      Navigator.pop(context);
+                      if (!success) {
+                        showAppError('Ошибка при создании плейлиста');
+                      } else {
+                        showAppSuccess(
+                          'Плейлист "${controller.text}" создан',
+                        );
+                      }
+                    }
+                  },
+                  child: const Text('Создать'),
                 ),
               ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Отмена'),
-              ),
-              ElevatedButton(
-                onPressed: () async {
-                  if (controller.text.isNotEmpty) {
-                    final success = await createPlaylistAction(
-                      controller.text,
-                      isPublic: isPublic,
-                    );
-                    if (!context.mounted) return;
-                    Navigator.pop(context);
-                    if (!success) {
-                      showAppError('Ошибка при создании плейлиста');
-                    } else {
-                      showAppSuccess('Плейлист "${controller.text}" создан');
-                    }
-                  }
-                },
-                child: const Text('Создать'),
-              ),
-            ],
-          ),
+            );
+          },
         ),
       ),
     );
@@ -151,27 +159,29 @@ class _LibraryViewState extends State<LibraryView>
               Expanded(
                 child: Text(
                   'Библиотека',
-                  style: TextStyle(
-                    fontSize: isNarrow ? 24 : 48,
-                    fontWeight: FontWeight.w900,
-                    color: Colors.white,
-                    letterSpacing: -1,
-                  ),
+                  style:
+                      Theme.of(
+                        context,
+                      ).textTheme.displayMedium?.copyWith(
+                        fontSize: isNarrow ? 24 : 48,
+                        fontWeight: FontWeight.w900,
+                        color: Theme.of(context).colorScheme.onSurface,
+                        letterSpacing: -1.5,
+                        height: 1.05,
+                      ),
                 ),
               ),
               const SizedBox(width: 16),
-              TextButton.icon(
+              M3EButton.icon(
                 onPressed: () => _showCreatePlaylistDialog(context),
                 icon: const Icon(Icons.add_rounded),
                 label: isNarrow
                     ? const SizedBox.shrink()
                     : const Text('Создать плейлист'),
-                style: TextButton.styleFrom(
+                style: M3EButtonStyle.outlined,
+                size: isNarrow ? M3EButtonSize.sm : M3EButtonSize.md,
+                decoration: M3EButtonDecoration.styleFrom(
                   foregroundColor: Theme.of(context).colorScheme.primary,
-                  padding: EdgeInsets.symmetric(
-                    horizontal: isNarrow ? 12 : 16,
-                    vertical: 12,
-                  ),
                 ),
               ),
             ],
@@ -190,8 +200,8 @@ class _LibraryViewState extends State<LibraryView>
             ),
           ),
           splashBorderRadius: BorderRadius.circular(12),
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.white38,
+          labelColor: Theme.of(context).colorScheme.onSurface,
+          unselectedLabelColor: Theme.of(context).colorScheme.onSurfaceVariant,
           dividerColor: Colors.transparent,
           tabs: const [
             Tab(text: 'Любимые треки'),
@@ -254,34 +264,36 @@ class _LikedTracksTabState extends State<_LikedTracksTab> {
   ) {
     showDialog<void>(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1E1E1E),
-        title: const Text(
-          'Удалить всё?',
-          style: TextStyle(color: Colors.white),
-        ),
-        content: const Text(
-          'Вы действительно хотите удалить все скачанные любимые треки?',
-          style: TextStyle(color: Colors.white70),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Отмена'),
+      builder: (context) {
+        final cs = Theme.of(context).colorScheme;
+        return AlertDialog(
+          title: Text(
+            'Удалить всё?',
+            style: TextStyle(color: cs.onSurface),
           ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red.shade900,
-              foregroundColor: Colors.white,
+          content: Text(
+            'Вы действительно хотите удалить все скачанные любимые треки?',
+            style: TextStyle(color: cs.onSurfaceVariant),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Отмена'),
             ),
-            onPressed: () {
-              Navigator.pop(context);
-              unawaited(_deleteAllLikedTracks(tracks));
-            },
-            child: const Text('Удалить'),
-          ),
-        ],
-      ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: cs.error,
+                foregroundColor: cs.onError,
+              ),
+              onPressed: () {
+                Navigator.pop(context);
+                unawaited(_deleteAllLikedTracks(tracks));
+              },
+              child: const Text('Удалить'),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -292,6 +304,7 @@ class _LikedTracksTabState extends State<_LikedTracksTab> {
 
     return SignalBuilder(
       builder: (context) {
+        final cs = Theme.of(context).colorScheme;
         final tracks = likedTracksSignal.value;
         final query = librarySearchQuerySignal.value;
 
@@ -311,20 +324,25 @@ class _LikedTracksTabState extends State<_LikedTracksTab> {
                     child: TextField(
                       controller: widget.searchController,
                       onChanged: setLibrarySearchQuery,
-                      style: const TextStyle(color: Colors.white, fontSize: 14),
+                      style: TextStyle(
+                        color: cs.onSurface,
+                        fontSize: 14,
+                      ),
                       decoration: InputDecoration(
                         hintText: 'Поиск в любимых треках...',
-                        hintStyle: const TextStyle(color: Colors.white24),
-                        prefixIcon: const Icon(
+                        hintStyle: TextStyle(
+                          color: cs.onSurface.withValues(alpha: 0.24),
+                        ),
+                        prefixIcon: Icon(
                           Icons.search,
-                          color: Colors.white38,
+                          color: cs.onSurface.withValues(alpha: 0.38),
                           size: 20,
                         ),
                         suffixIcon: widget.searchController.text.isNotEmpty
                             ? IconButton(
-                                icon: const Icon(
+                                icon: Icon(
                                   Icons.clear,
-                                  color: Colors.white38,
+                                  color: cs.onSurface.withValues(alpha: 0.38),
                                   size: 18,
                                 ),
                                 onPressed: () {
@@ -334,10 +352,10 @@ class _LikedTracksTabState extends State<_LikedTracksTab> {
                               )
                             : null,
                         filled: true,
-                        fillColor: Colors.white.withValues(alpha: 0.05),
+                        fillColor: cs.onSurface.withValues(alpha: 0.05),
                         isDense: true,
                         border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(AppRadius.sm),
                           borderSide: BorderSide.none,
                         ),
                         contentPadding: const EdgeInsets.symmetric(
@@ -364,10 +382,10 @@ class _LikedTracksTabState extends State<_LikedTracksTab> {
                           icon: const Icon(Icons.delete_sweep_rounded),
                           tooltip: 'Удалить всё из кэша',
                           style: IconButton.styleFrom(
-                            backgroundColor: Colors.white.withValues(
+                            backgroundColor: cs.onSurface.withValues(
                               alpha: 0.05,
                             ),
-                            foregroundColor: Colors.red.shade400,
+                            foregroundColor: cs.error,
                           ),
                         );
                       }
@@ -377,17 +395,14 @@ class _LikedTracksTabState extends State<_LikedTracksTab> {
                             ? null
                             : () => unawaited(_downloadAllLikedTracks(tracks)),
                         icon: isDownloading
-                            ? const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
+                            ? const M3ECircularWavyProgressIndicator(
+                                strokeWidth: 2,
+                                size: 20,
                               )
                             : const Icon(Icons.download_rounded),
                         tooltip: 'Скачать всё',
                         style: IconButton.styleFrom(
-                          backgroundColor: Colors.white.withValues(alpha: 0.05),
+                          backgroundColor: cs.onSurface.withValues(alpha: 0.05),
                           foregroundColor: Theme.of(
                             context,
                           ).colorScheme.primary,
@@ -405,12 +420,23 @@ class _LikedTracksTabState extends State<_LikedTracksTab> {
                         query.isEmpty
                             ? 'Нет любимых треков'
                             : 'Ничего не найдено',
-                        style: const TextStyle(color: Colors.white38),
+                        style: TextStyle(
+                          color: cs.onSurface.withValues(alpha: 0.38),
+                        ),
                       ),
                     )
-                  : ListView.builder(
-                      padding: const EdgeInsets.only(bottom: 140),
+                  : M3ECardList.builder(
+                      haptic: M3EHapticFeedback.light,
                       itemCount: tracks.length,
+                      listPadding: const EdgeInsets.only(bottom: 140),
+                      margin: EdgeInsets.symmetric(
+                        horizontal: isNarrow ? 20 : 40,
+                      ),
+                      color: cs.onSurface.withValues(alpha: 0.04),
+                      padding: EdgeInsets.symmetric(
+                        horizontal: isNarrow ? 20 : 40,
+                        vertical: 8,
+                      ),
                       itemBuilder: (context, index) {
                         final track = tracks[index];
                         return CommonTrackTile(
@@ -420,13 +446,11 @@ class _LikedTracksTabState extends State<_LikedTracksTab> {
                           artists: track.artists,
                           albumId: track.albumId,
                           leading: TrackCover(url: track.coverUrl),
-                          contentPadding: EdgeInsets.symmetric(
-                            horizontal: isNarrow ? 20 : 40,
-                            vertical: 8,
-                          ),
                           trailing: Text(
                             formatDuration(track.durationMs),
-                            style: const TextStyle(color: Colors.white38),
+                            style: TextStyle(
+                              color: cs.onSurface.withValues(alpha: 0.38),
+                            ),
                           ),
                           hoverActions: [
                             IconButton(
@@ -473,10 +497,14 @@ class _PlaylistsTab extends StatelessWidget {
         final playlists = playlistsSignal.value;
 
         if (playlists.isEmpty) {
-          return const Center(
+          return Center(
             child: Text(
               'Нет плейлистов',
-              style: TextStyle(color: Colors.white38),
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurface.withValues(
+                  alpha: 0.38,
+                ),
+              ),
             ),
           );
         }
@@ -518,10 +546,14 @@ class _LikedAlbumsTab extends StatelessWidget {
         final albums = likedAlbumsSignal.value;
 
         if (albums.isEmpty) {
-          return const Center(
+          return Center(
             child: Text(
               'Нет любимых альбомов',
-              style: TextStyle(color: Colors.white38),
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurface.withValues(
+                  alpha: 0.38,
+                ),
+              ),
             ),
           );
         }
@@ -568,10 +600,14 @@ class _LikedArtistsTab extends StatelessWidget {
         final artists = likedArtistsSignal.value;
 
         if (artists.isEmpty) {
-          return const Center(
+          return Center(
             child: Text(
               'Нет любимых исполнителей',
-              style: TextStyle(color: Colors.white38),
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurface.withValues(
+                  alpha: 0.38,
+                ),
+              ),
             ),
           );
         }
@@ -647,7 +683,7 @@ class _PlaylistCardState extends State<_PlaylistCard> {
                     children: [
                       Container(
                         decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(16),
+                          borderRadius: BorderRadius.circular(AppRadius.md),
                           boxShadow: [
                             BoxShadow(
                               color: Colors.black.withValues(alpha: 0.4),
@@ -657,11 +693,11 @@ class _PlaylistCardState extends State<_PlaylistCard> {
                           ],
                         ),
                         child: ClipRRect(
-                          borderRadius: BorderRadius.circular(16),
+                          borderRadius: BorderRadius.circular(AppRadius.md),
                           child: TrackCover(
                             url: playlist.coverUrl,
                             size: 200,
-                            borderRadius: 16,
+                            borderRadius: AppRadius.md,
                           ),
                         ),
                       ),
@@ -670,7 +706,7 @@ class _PlaylistCardState extends State<_PlaylistCard> {
                           child: Container(
                             decoration: BoxDecoration(
                               color: Colors.black45,
-                              borderRadius: BorderRadius.circular(16),
+                              borderRadius: BorderRadius.circular(AppRadius.md),
                             ),
                             child: Center(
                               child: IconButton(
@@ -695,8 +731,8 @@ class _PlaylistCardState extends State<_PlaylistCard> {
                 const SizedBox(height: 12),
                 Text(
                   playlist.title,
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurface,
                     fontWeight: FontWeight.bold,
                     fontSize: 16,
                   ),
@@ -706,7 +742,12 @@ class _PlaylistCardState extends State<_PlaylistCard> {
                 const SizedBox(height: 4),
                 Text(
                   '${playlist.trackCount} треков',
-                  style: const TextStyle(color: Colors.white38, fontSize: 13),
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurface.withValues(
+                      alpha: 0.38,
+                    ),
+                    fontSize: 13,
+                  ),
                 ),
               ],
             ),

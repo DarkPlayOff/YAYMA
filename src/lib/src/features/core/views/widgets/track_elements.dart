@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:m3e_core/m3e_core.dart';
 import 'package:yayma/src/features/core/providers/navigation_provider.dart';
 import 'package:yayma/src/features/core/views/widgets/fullscreen_cover.dart';
 import 'package:yayma/src/features/core/views/widgets/rust_cached_image.dart';
@@ -10,14 +11,14 @@ import 'package:yayma/src/rust/api/models.dart';
 class TrackVersionWidget extends StatelessWidget {
   final String? version;
   final double fontSize;
-  final Color color;
+  final Color? color;
   final EdgeInsets padding;
 
   const TrackVersionWidget({
     required this.version,
     super.key,
     this.fontSize = 14,
-    this.color = Colors.white38,
+    this.color,
     this.padding = const EdgeInsets.only(left: 8),
   });
 
@@ -29,7 +30,8 @@ class TrackVersionWidget extends StatelessWidget {
       child: Text(
         version!,
         style: TextStyle(
-          color: color,
+          color: color ??
+              Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.38),
           fontSize: fontSize,
           fontWeight: FontWeight.w400,
         ),
@@ -41,8 +43,8 @@ class TrackVersionWidget extends StatelessWidget {
 class ArtistNamesWidget extends StatelessWidget {
   final List<TrackArtistDto> artists;
   final double fontSize;
-  final Color color;
-  final Color hoverColor;
+  final Color? color;
+  final Color? hoverColor;
   final WrapAlignment alignment;
   final int? maxLines;
 
@@ -50,8 +52,8 @@ class ArtistNamesWidget extends StatelessWidget {
     required this.artists,
     super.key,
     this.fontSize = 14,
-    this.color = Colors.white54,
-    this.hoverColor = Colors.white,
+    this.color,
+    this.hoverColor,
     this.alignment = WrapAlignment.start,
     this.maxLines,
   });
@@ -59,6 +61,11 @@ class ArtistNamesWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (artists.isEmpty) return const SizedBox.shrink();
+
+    final scheme = Theme.of(context).colorScheme;
+    final resolvedColor =
+        color ?? scheme.onSurface.withValues(alpha: 0.55);
+    final resolvedHoverColor = hoverColor ?? scheme.onSurface;
 
     if (maxLines == 1) {
       return Text.rich(
@@ -73,14 +80,14 @@ class ArtistNamesWidget extends StatelessWidget {
                   artist: artists[i],
                   onTap: () => navigateTo(AppSection.artist, artists[i].id),
                   fontSize: fontSize,
-                  color: color,
-                  hoverColor: hoverColor,
+                  color: resolvedColor,
+                  hoverColor: resolvedHoverColor,
                 ),
               ),
               if (i < artists.length - 1)
                 TextSpan(
                   text: ', ',
-                  style: TextStyle(color: color, fontSize: fontSize),
+                  style: TextStyle(color: resolvedColor, fontSize: fontSize),
                 ),
             ],
           ],
@@ -102,15 +109,15 @@ class ArtistNamesWidget extends StatelessWidget {
           artist: artist,
           onTap: () => navigateTo(AppSection.artist, artist.id),
           fontSize: fontSize,
-          color: color,
-          hoverColor: hoverColor,
+          color: resolvedColor,
+          hoverColor: resolvedHoverColor,
         ),
       );
       if (i < artists.length - 1) {
         children.add(
           Text(
             ', ',
-            style: TextStyle(color: color, fontSize: fontSize),
+            style: TextStyle(color: resolvedColor, fontSize: fontSize),
           ),
         );
       }
@@ -184,6 +191,7 @@ class TrackCover extends StatelessWidget {
   final bool isCircle;
   final bool canExpand;
   final String? heroTag;
+  final Shapes? shape;
 
   const TrackCover({
     required this.url,
@@ -193,6 +201,7 @@ class TrackCover extends StatelessWidget {
     this.isCircle = false,
     this.canExpand = false,
     this.heroTag,
+    this.shape,
   });
 
   @override
@@ -211,29 +220,44 @@ class TrackCover extends StatelessWidget {
           )
         : _CoverPlaceholder(isCircle: isCircle, size: size);
 
-    Widget content = Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        color: Colors.white10,
-        borderRadius: isCircle ? null : BorderRadius.circular(borderRadius),
-        shape: isCircle ? BoxShape.circle : BoxShape.rectangle,
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(isCircle ? size / 2 : borderRadius),
+    final Widget content;
+    final placeholderColor =
+        Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.1);
+    if (shape != null && !isCircle) {
+      content = M3EContainer(
+        shape!,
+        width: size,
+        height: size,
+        color: placeholderColor,
         child: image,
-      ),
-    );
+      );
+    } else {
+      content = Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          color: placeholderColor,
+          borderRadius: isCircle ? null : BorderRadius.circular(borderRadius),
+          shape: isCircle ? BoxShape.circle : BoxShape.rectangle,
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(isCircle ? size / 2 : borderRadius),
+          child: image,
+        ),
+      );
+    }
+
+    var cover = content;
 
     if (heroTag != null && url != null) {
-      content = Hero(
+      cover = Hero(
         tag: heroTag!,
-        child: content,
+        child: cover,
       );
     }
 
     if (canExpand && url != null) {
-      content = MouseRegion(
+      cover = MouseRegion(
         cursor: SystemMouseCursors.click,
         child: GestureDetector(
           onTap: () => unawaited(
@@ -243,12 +267,12 @@ class TrackCover extends StatelessWidget {
               heroTag: heroTag ?? url!,
             ),
           ),
-          child: content,
+          child: cover,
         ),
       );
     }
 
-    return content;
+    return cover;
   }
 }
 
@@ -262,7 +286,7 @@ class _CoverPlaceholder extends StatelessWidget {
   Widget build(BuildContext context) {
     return Icon(
       isCircle ? Icons.person : Icons.music_note,
-      color: Colors.white24,
+      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.24),
       size: size * 0.5,
     );
   }

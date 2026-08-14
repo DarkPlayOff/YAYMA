@@ -1,7 +1,9 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:m3e_core/m3e_core.dart';
 import 'package:yayma/src/features/auth/providers/auth_provider.dart';
+import 'package:yayma/src/features/core/theme/app_tokens.dart';
 import 'package:yayma/src/features/playback/providers/lyrics_provider.dart';
 import 'package:yayma/src/rust/api/content.dart' as rust;
 import 'package:yayma/src/rust/api/models.dart';
@@ -74,24 +76,23 @@ class _LyricsProvidersDialogState extends State<LyricsProvidersDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final primaryColor = Theme.of(context).colorScheme.primary;
+    final cs = Theme.of(context).colorScheme;
+    final primaryColor = cs.primary;
 
     return AlertDialog(
-      backgroundColor: const Color(0xFF1E1E1E),
-      surfaceTintColor: Colors.transparent,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(24),
-        side: const BorderSide(color: Colors.white10),
+        borderRadius: BorderRadius.circular(AppRadius.xxl),
+        side: BorderSide(color: cs.onSurface.withValues(alpha: 0.1)),
       ),
-      title: const Row(
+      title: Row(
         children: [
-          Icon(Icons.lyrics_rounded, color: Colors.white),
-          SizedBox(width: 12),
+          Icon(Icons.lyrics_rounded, color: cs.onSurface),
+          const SizedBox(width: 12),
           Expanded(
             child: Text(
               'Источники текста песен',
               style: TextStyle(
-                color: Colors.white,
+                color: cs.onSurface,
                 fontWeight: FontWeight.bold,
                 fontSize: 18,
               ),
@@ -104,17 +105,17 @@ class _LyricsProvidersDialogState extends State<LyricsProvidersDialog> {
         child: _loading
             ? const SizedBox(
                 height: 150,
-                child: Center(child: CircularProgressIndicator()),
+                child: Center(child: M3ELoadingIndicator()),
               )
             : Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
+                  Text(
                     'Отключённые источники не используются при поиске '
                     'текста. Порядок поиска фиксированный: сначала — '
                     'источники с синхронизацией по словам.',
-                    style: TextStyle(color: Colors.white54, fontSize: 13),
+                    style: TextStyle(color: cs.onSurfaceVariant, fontSize: 13),
                   ),
                   const SizedBox(height: 16),
                   ConstrainedBox(
@@ -129,13 +130,15 @@ class _LyricsProvidersDialogState extends State<LyricsProvidersDialog> {
 
                         return Container(
                           padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
+                            horizontal: AppSpacing.md,
                             vertical: 4,
                           ),
                           decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.05),
+                            color: cs.onSurface.withValues(alpha: 0.05),
                             borderRadius: BorderRadius.circular(14),
-                            border: Border.all(color: Colors.white10),
+                            border: Border.all(
+                              color: cs.onSurface.withValues(alpha: 0.1),
+                            ),
                           ),
                           child: Row(
                             children: [
@@ -144,8 +147,8 @@ class _LyricsProvidersDialogState extends State<LyricsProvidersDialog> {
                                   provider.name,
                                   style: TextStyle(
                                     color: provider.enabled
-                                        ? Colors.white
-                                        : Colors.white38,
+                                        ? cs.onSurface
+                                        : cs.onSurfaceVariant,
                                     fontWeight: FontWeight.w600,
                                     fontSize: 15,
                                   ),
@@ -169,7 +172,10 @@ class _LyricsProvidersDialogState extends State<LyricsProvidersDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Закрыть', style: TextStyle(color: Colors.white54)),
+          child: Text(
+            'Закрыть',
+            style: TextStyle(color: cs.onSurfaceVariant),
+          ),
         ),
       ],
     );

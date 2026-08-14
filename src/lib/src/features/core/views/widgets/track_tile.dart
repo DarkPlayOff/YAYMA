@@ -3,11 +3,14 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:m3e_core/m3e_core.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/features/auth/providers/auth_provider.dart';
 import 'package:yayma/src/features/core/providers/navigation_provider.dart';
 import 'package:yayma/src/features/core/providers/notification_provider.dart';
+import 'package:yayma/src/features/core/theme/app_tokens.dart';
 import 'package:yayma/src/features/core/views/widgets/app_context_menu.dart';
+import 'package:yayma/src/features/core/views/widgets/common_ui.dart';
 import 'package:yayma/src/features/core/views/widgets/lyrics_view.dart';
 import 'package:yayma/src/features/core/views/widgets/responsive.dart';
 import 'package:yayma/src/features/core/views/widgets/track_details_dialog.dart';
@@ -51,15 +54,31 @@ class CommonTrackTile extends StatefulWidget {
 
 class _CommonTrackTileState extends State<CommonTrackTile> {
   final ValueNotifier<bool> _isHovered = ValueNotifier(false);
+  final ValueNotifier<bool> _isPressed = ValueNotifier(false);
   final ValueNotifier<bool> _isTitleHovered = ValueNotifier(false);
   final ValueNotifier<bool> _isMenuOpen = ValueNotifier(false);
+  final GlobalKey _coverKey = GlobalKey();
 
   @override
   void dispose() {
     _isHovered.dispose();
+    _isPressed.dispose();
     _isTitleHovered.dispose();
     _isMenuOpen.dispose();
     super.dispose();
+  }
+
+  void _handleTap() {
+    if (widget.leading is TrackCover) {
+      final cover = widget.leading! as TrackCover;
+      flyCoverToPlayer(
+        context,
+        coverKey: _coverKey,
+        coverUrl: cover.url,
+        borderRadius: cover.isCircle ? cover.size / 2 : cover.borderRadius,
+      );
+    }
+    widget.onTap?.call();
   }
 
   Widget _adjustLeading(Widget leading, bool isNarrow) {
@@ -181,7 +200,7 @@ class _CommonTrackTileState extends State<CommonTrackTile> {
                           showAppError('Ошибка: $e');
                         } finally {
                           final newSet = {...downloadingTracksSignal.value}
-                          ..remove(widget.trackId);
+                            ..remove(widget.trackId);
                           downloadingTracksSignal.value = newSet;
                         }
                       }
@@ -218,7 +237,7 @@ class _CommonTrackTileState extends State<CommonTrackTile> {
                           showAppError('Ошибка: $e');
                         } finally {
                           final newSet = {...downloadingTracksSignal.value}
-                          ..remove(widget.trackId);
+                            ..remove(widget.trackId);
                           downloadingTracksSignal.value = newSet;
                         }
                       }
@@ -282,10 +301,10 @@ class _CommonTrackTileState extends State<CommonTrackTile> {
                     icon: Icons.file_download_rounded,
                   ),
                 ],
-                child: const IconButton(
+                child: IconButton(
                   icon: Icon(
                     Icons.more_horiz_rounded,
-                    color: Colors.white70,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
                   onPressed: null,
                   tooltip: 'Действия',
@@ -298,13 +317,18 @@ class _CommonTrackTileState extends State<CommonTrackTile> {
         return Material(
           color: Colors.transparent,
           child: InkWell(
-            onTap: widget.onTap,
+            onTap: _handleTap,
             onHover: (value) => _isHovered.value = value,
-            hoverColor: Colors.transparent,
+            onHighlightChanged: (value) => _isPressed.value = value,
+            hoverColor: Theme.of(
+              context,
+            ).colorScheme.onSurface.withValues(alpha: 0.06),
             focusColor: Colors.transparent,
             highlightColor: Colors.transparent,
-            splashColor: Colors.transparent,
-            borderRadius: BorderRadius.circular(12),
+            splashColor: Theme.of(
+              context,
+            ).colorScheme.primary.withValues(alpha: 0.06),
+            borderRadius: BorderRadius.circular(AppRadius.sm),
             child: ValueListenableBuilder<bool>(
               valueListenable: _isHovered,
               builder: (context, isHovered, child) {
@@ -312,165 +336,197 @@ class _CommonTrackTileState extends State<CommonTrackTile> {
                   valueListenable: _isMenuOpen,
                   builder: (context, isMenuOpen, child) {
                     final showHighlighted = isHovered || isMenuOpen;
-                    return AnimatedContainer(
-                      duration: const Duration(milliseconds: 150),
-                      padding: effectivePadding,
-                      decoration: BoxDecoration(
-                        color: showHighlighted
-                            ? Colors.white.withValues(alpha: 0.05)
-                            : Colors.transparent,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Row(
-                        children: [
-                          if (widget.leading != null) ...[
-                            _adjustLeading(widget.leading!, isNarrow),
-                            SizedBox(width: isNarrow ? 12 : 16),
-                          ],
-                          Expanded(
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                    return ValueListenableBuilder<bool>(
+                      valueListenable: _isPressed,
+                      builder: (context, isPressed, child) {
+                        return AnimatedScale(
+                          scale: isPressed ? 0.98 : 1.0,
+                          duration: Duration(
+                            milliseconds: isPressed ? 80 : 180,
+                          ),
+                          curve: isPressed
+                              ? Curves.easeOutCubic
+                              : Curves.easeOutBack,
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 150),
+                            padding: effectivePadding,
+                            decoration: BoxDecoration(
+                              color: isMenuOpen
+                                  ? Theme.of(
+                                      context,
+                                    ).colorScheme.onSurface.withValues(
+                                      alpha: 0.08,
+                                    )
+                                  : Colors.transparent,
+                              borderRadius: BorderRadius.circular(
+                                AppRadius.sm,
+                              ),
+                            ),
+                            child: Row(
                               children: [
-                                Row(
-                                  children: [
-                                    Flexible(
-                                      child: MouseRegion(
-                                        onEnter: (_) =>
-                                            _isTitleHovered.value = true,
-                                        onExit: (_) =>
-                                            _isTitleHovered.value = false,
-                                        cursor: widget.onTitleTap != null
-                                            ? SystemMouseCursors.click
-                                            : SystemMouseCursors.basic,
-                                        child: GestureDetector(
-                                          behavior: HitTestBehavior.opaque,
-                                          onTap: widget.onTitleTap,
-                                          child: SignalBuilder(
-                                            builder: (context) {
-                                              final currentTrackId =
-                                                  currentTrackIdSignal.value;
-                                              final isPlaying =
-                                                  currentTrackId ==
-                                                  widget.trackId;
-
-                                              return ValueListenableBuilder<
-                                                bool
-                                              >(
-                                                valueListenable:
-                                                    _isTitleHovered,
-                                                builder:
-                                                    (
-                                                      context,
-                                                      isTitleHovered,
-                                                      child,
-                                                    ) {
-                                                      return Text(
-                                                        widget.title,
-                                                        style: TextStyle(
-                                                          color: isPlaying
-                                                              ? Theme.of(
-                                                                      context,
-                                                                    )
-                                                                    .colorScheme
-                                                                    .primary
-                                                              : Colors.white,
-                                                          fontWeight:
-                                                              FontWeight.bold,
-                                                          fontSize: isNarrow
-                                                              ? 14
-                                                              : 16,
-                                                          decoration:
-                                                              isTitleHovered &&
-                                                                  widget.onTitleTap !=
-                                                                      null
-                                                              ? TextDecoration
-                                                                    .underline
-                                                              : null,
-                                                        ),
-                                                        maxLines: 1,
-                                                        overflow: TextOverflow
-                                                            .ellipsis,
-                                                      );
-                                                    },
-                                              );
-                                            },
-                                          ),
-                                        ),
-                                      ),
+                                if (widget.leading != null) ...[
+                                  KeyedSubtree(
+                                    key: _coverKey,
+                                    child: _adjustLeading(
+                                      widget.leading!,
+                                      isNarrow,
                                     ),
-                                    SignalBuilder(
-                                      builder: (context) {
-                                        final isDownloading =
-                                            downloadingTracksSignal.value
-                                                .contains(widget.trackId);
-                                        final isDownloaded =
-                                            downloadedTracksSignal.value
-                                                .contains(widget.trackId);
+                                  ),
+                                  SizedBox(width: isNarrow ? 12 : 16),
+                                ],
+                                Expanded(
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Flexible(
+                                            child: MouseRegion(
+                                              onEnter: (_) =>
+                                                  _isTitleHovered.value = true,
+                                              onExit: (_) =>
+                                                  _isTitleHovered.value = false,
+                                              cursor: widget.onTitleTap != null
+                                                  ? SystemMouseCursors.click
+                                                  : SystemMouseCursors.basic,
+                                              child: GestureDetector(
+                                                behavior:
+                                                    HitTestBehavior.opaque,
+                                                onTap: widget.onTitleTap,
+                                                child: SignalBuilder(
+                                                  builder: (context) {
+                                                    final currentTrackId =
+                                                        currentTrackIdSignal
+                                                            .value;
+                                                    final isPlaying =
+                                                        currentTrackId ==
+                                                        widget.trackId;
 
-                                        if (!isDownloading && !isDownloaded) {
-                                          return const SizedBox.shrink();
-                                        }
-
-                                        return Padding(
-                                          padding: const EdgeInsets.only(
-                                            left: 6,
+                                                    return ValueListenableBuilder<
+                                                      bool
+                                                    >(
+                                                      valueListenable:
+                                                          _isTitleHovered,
+                                                      builder:
+                                                          (
+                                                            context,
+                                                            isTitleHovered,
+                                                            child,
+                                                          ) {
+                                                            return Text(
+                                                              widget.title,
+                                                              style: TextStyle(
+                                                                color: isPlaying
+                                                                    ? Theme.of(
+                                                                        context,
+                                                                      ).colorScheme.primary
+                                                                    : Theme.of(
+                                                                        context,
+                                                                      ).colorScheme.onSurface,
+                                                                fontWeight:
+                                                                    FontWeight
+                                                                        .bold,
+                                                                fontSize:
+                                                                    isNarrow
+                                                                    ? 14
+                                                                    : 16,
+                                                                decoration:
+                                                                    isTitleHovered &&
+                                                                        widget.onTitleTap !=
+                                                                            null
+                                                                    ? TextDecoration
+                                                                          .underline
+                                                                    : null,
+                                                              ),
+                                                              maxLines: 1,
+                                                              overflow:
+                                                                  TextOverflow
+                                                                      .ellipsis,
+                                                            );
+                                                          },
+                                                    );
+                                                  },
+                                                ),
+                                              ),
+                                            ),
                                           ),
-                                          child: isDownloading
-                                              ? SizedBox(
-                                                  width: isNarrow ? 12 : 14,
-                                                  height: isNarrow ? 12 : 14,
-                                                  child:
-                                                      CircularProgressIndicator(
+                                          SignalBuilder(
+                                            builder: (context) {
+                                              final isDownloading =
+                                                  downloadingTracksSignal.value
+                                                      .contains(widget.trackId);
+                                              final isDownloaded =
+                                                  downloadedTracksSignal.value
+                                                      .contains(widget.trackId);
+
+                                              if (!isDownloading &&
+                                                  !isDownloaded) {
+                                                return const SizedBox.shrink();
+                                              }
+
+                                              return Padding(
+                                                padding: const EdgeInsets.only(
+                                                  left: 6,
+                                                ),
+                                                child: isDownloading
+                                                    ? M3ECircularWavyProgressIndicator(
                                                         strokeWidth: 2,
+                                                        size: isNarrow
+                                                            ? 12
+                                                            : 14,
+                                                      )
+                                                    : Icon(
+                                                        Icons
+                                                            .download_done_rounded,
+                                                        size: isNarrow
+                                                            ? 14
+                                                            : 16,
                                                         color: Theme.of(
                                                           context,
                                                         ).colorScheme.primary,
                                                       ),
-                                                )
-                                              : Icon(
-                                                  Icons.download_done_rounded,
-                                                  size: isNarrow ? 14 : 16,
-                                                  color: Theme.of(
-                                                    context,
-                                                  ).colorScheme.primary,
-                                                ),
-                                        );
-                                      },
-                                    ),
-                                    TrackVersionWidget(
-                                      version: widget.version,
-                                      fontSize: isNarrow ? 12 : 14,
-                                    ),
-                                  ],
+                                              );
+                                            },
+                                          ),
+                                          TrackVersionWidget(
+                                            version: widget.version,
+                                            fontSize: isNarrow ? 12 : 14,
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 2),
+                                      ArtistNamesWidget(
+                                        artists: widget.artists,
+                                        fontSize: isNarrow ? 13 : 15,
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                                const SizedBox(height: 2),
-                                ArtistNamesWidget(
-                                  artists: widget.artists,
-                                  fontSize: isNarrow ? 13 : 15,
+                                SizedBox(width: isNarrow ? 12 : 16),
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    if (Platform.isAndroid)
+                                      buildContextMenu()
+                                    else ...[
+                                      if (!showHighlighted &&
+                                          widget.trailing != null)
+                                        widget.trailing!,
+                                      if (showHighlighted) ...[
+                                        if (widget.hoverActions != null)
+                                          ...widget.hoverActions!,
+                                        buildContextMenu(),
+                                      ],
+                                    ],
+                                  ],
                                 ),
                               ],
                             ),
                           ),
-                          SizedBox(width: isNarrow ? 12 : 16),
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              if (Platform.isAndroid)
-                                buildContextMenu()
-                              else ...[
-                                if (!showHighlighted && widget.trailing != null)
-                                  widget.trailing!,
-                                if (showHighlighted) ...[
-                                  if (widget.hoverActions != null)
-                                    ...widget.hoverActions!,
-                                  buildContextMenu(),
-                                ],
-                              ],
-                            ],
-                          ),
-                        ],
-                      ),
+                        );
+                      },
                     );
                   },
                 );

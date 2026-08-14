@@ -1,9 +1,12 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:m3e_core/m3e_core.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/features/core/providers/navigation_provider.dart';
+import 'package:yayma/src/features/core/theme/app_tokens.dart';
 import 'package:yayma/src/features/core/views/widgets/common_ui.dart';
 import 'package:yayma/src/features/core/views/widgets/rust_cached_image.dart';
 import 'package:yayma/src/features/core/views/widgets/track_elements.dart';
@@ -167,13 +170,13 @@ class _MobileMiniPlayerState extends State<MobileMiniPlayer> {
                     child: Container(
                       decoration: BoxDecoration(
                         color: barColor.withValues(alpha: alpha),
-                        borderRadius: BorderRadius.circular(24),
+                        borderRadius: BorderRadius.circular(AppRadius.xl),
                         border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.08),
+                          color: colorScheme.onSurface.withValues(alpha: 0.08),
                         ),
                       ),
                       child: ClipRRect(
-                        borderRadius: BorderRadius.circular(24),
+                        borderRadius: BorderRadius.circular(AppRadius.xl),
                         child: BackdropFilter(
                           filter: ui.ImageFilter.blur(
                             sigmaX: blur,
@@ -281,6 +284,7 @@ class _MobileCover extends StatelessWidget {
   Widget build(BuildContext context) {
     return SignalBuilder(
       builder: (context) {
+        final cs = Theme.of(context).colorScheme;
         final meta = trackMetadataSignal();
         final isPlaying = isPlayingSignal();
         if (meta.id == null) return const SizedBox();
@@ -297,24 +301,26 @@ class _MobileCover extends StatelessWidget {
             scale: isPlaying ? 1.0 : 0.96,
             duration: const Duration(milliseconds: 350),
             curve: Curves.easeInOutCubic,
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: meta.coverUrl != null
-                  ? RustCachedImage(
-                      imageUrl: meta.coverUrl,
-                      width: coverSize,
-                      height: coverSize,
-                      errorWidget: Container(
+            child: PlayerCoverRectReporter(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(AppRadius.sm),
+                child: meta.coverUrl != null
+                    ? RustCachedImage(
+                        imageUrl: meta.coverUrl,
                         width: coverSize,
                         height: coverSize,
-                        color: Colors.white10,
+                        errorWidget: Container(
+                          width: coverSize,
+                          height: coverSize,
+                          color: cs.onSurface.withValues(alpha: 0.1),
+                        ),
+                      )
+                    : Container(
+                        width: coverSize,
+                        height: coverSize,
+                        color: cs.onSurface.withValues(alpha: 0.1),
                       ),
-                    )
-                  : Container(
-                      width: coverSize,
-                      height: coverSize,
-                      color: Colors.white10,
-                    ),
+              ),
             ),
           ),
         );
@@ -383,10 +389,22 @@ class _PlayPauseButton extends StatelessWidget {
         final isPlaying = isPlayingSignal();
         return IconButton(
           iconSize: 48,
-          icon: Icon(
-            isPlaying
-                ? Icons.pause_circle_filled_rounded
-                : Icons.play_circle_filled_rounded,
+          icon: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 250),
+            switchInCurve: Curves.easeOutBack,
+            switchOutCurve: Curves.easeIn,
+            transitionBuilder: (child, animation) {
+              return FadeTransition(
+                opacity: animation,
+                child: ScaleTransition(scale: animation, child: child),
+              );
+            },
+            child: Icon(
+              isPlaying
+                  ? Icons.pause_circle_filled_rounded
+                  : Icons.play_circle_filled_rounded,
+              key: ValueKey<bool>(isPlaying),
+            ),
           ),
           onPressed: PlaybackController.togglePlay,
         );
@@ -405,28 +423,12 @@ class _MiniProgressBar extends StatefulWidget {
 
 class _MiniProgressBarState extends State<_MiniProgressBar> {
   double? _dragValueMs;
-  double? _dragProgressBarX;
+  Timer? _dragEndTimer;
 
-  void _handleSeek(double localX, double totalWidth, double durationMs) {
-    final ratio = (localX / totalWidth).clamp(0.0, 1.0);
-    setState(() {
-      _dragValueMs = ratio * durationMs;
-      _dragProgressBarX = localX;
-    });
-  }
-
-  Future<void> _finalizeSeek(double durationMs) async {
-    if (_dragValueMs != null) {
-      await PlaybackController.seekTo(
-        Duration(milliseconds: _dragValueMs!.toInt()),
-      );
-      if (mounted) {
-        setState(() {
-          _dragValueMs = null;
-          _dragProgressBarX = null;
-        });
-      }
-    }
+  @override
+  void dispose() {
+    _dragEndTimer?.cancel();
+    super.dispose();
   }
 
   @override
@@ -438,9 +440,8 @@ class _MiniProgressBarState extends State<_MiniProgressBar> {
         final position = progress.positionMs;
 
         final currentPosition = _dragValueMs ?? position;
-        final ratio = duration > 0
-            ? (currentPosition / duration).clamp(0.0, 1.0)
-            : 0.0;
+        final max = duration > 0 ? duration : 1.0;
+        final ratio = (currentPosition / max).clamp(0.0, 1.0);
 
         final theme = Theme.of(context);
         final colorScheme = theme.colorScheme;
@@ -462,52 +463,55 @@ class _MiniProgressBarState extends State<_MiniProgressBar> {
             ) ??
             colorScheme.surface;
 
-        return GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onHorizontalDragStart: (details) {
-            _handleSeek(details.localPosition.dx, widget.width, duration);
-          },
-          onHorizontalDragUpdate: (details) {
-            _handleSeek(details.localPosition.dx, widget.width, duration);
-          },
-          onHorizontalDragEnd: (details) async {
-            await _finalizeSeek(duration);
-          },
-          onTapDown: (details) async {
-            _handleSeek(details.localPosition.dx, widget.width, duration);
-            await _finalizeSeek(duration);
-          },
+        return SizedBox(
+          height: 16,
+          width: widget.width,
           child: Stack(
             clipBehavior: Clip.none,
+            alignment: Alignment.bottomCenter,
             children: [
-              Opacity(
-                opacity: 0.8,
-                child: Container(
-                  height: 16,
-                  alignment: Alignment.bottomCenter,
-                  child: Container(
-                    height: 3,
-                    color: Colors.white.withValues(alpha: 0.08),
-                    alignment: Alignment.centerLeft,
-                    child: FractionallySizedBox(
-                      widthFactor: ratio,
-                      child: Container(
-                        height: 3,
-                        color: accentColor,
-                      ),
-                    ),
+              M3ESlider(
+                value: currentPosition.clamp(0.0, max),
+                max: max,
+                decoration: expressSliderDecoration(
+                  activeColor: accentColor,
+                  inactiveColor: colorScheme.onSurface.withValues(
+                    alpha: 0.08,
                   ),
+                  trackHeight: 3,
+                  thumbWidth: 3,
+                  thumbHeight: 10,
                 ),
+                onChangeStart: (val) {
+                  setState(() => _dragValueMs = val);
+                },
+                onChanged: (val) {
+                  setState(() => _dragValueMs = val);
+                },
+                onChangeEnd: (val) {
+                  setState(() => _dragValueMs = val);
+                  _dragEndTimer?.cancel();
+                  _dragEndTimer = Timer(const Duration(milliseconds: 500), () {
+                    if (mounted) {
+                      setState(() => _dragValueMs = null);
+                    }
+                  });
+                  unawaited(
+                    PlaybackController.seekTo(
+                      Duration(milliseconds: val.toInt()),
+                    ),
+                  );
+                },
               ),
-              if (_dragValueMs != null && _dragProgressBarX != null)
+              if (_dragValueMs != null)
                 Positioned(
-                  top: -44,
-                  left: (_dragProgressBarX! - 25).clamp(
+                  bottom: 24,
+                  left: (ratio * widget.width - 25).clamp(
                     8.0,
                     widget.width - 58.0,
                   ),
                   child: ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(AppRadius.xs),
                     child: BackdropFilter(
                       filter: ui.ImageFilter.blur(sigmaX: blur, sigmaY: blur),
                       child: Container(
@@ -517,9 +521,11 @@ class _MiniProgressBarState extends State<_MiniProgressBar> {
                         ),
                         decoration: BoxDecoration(
                           color: barColor.withValues(alpha: alpha),
-                          borderRadius: BorderRadius.circular(8),
+                          borderRadius: BorderRadius.circular(AppRadius.xs),
                           border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.08),
+                            color: colorScheme.onSurface.withValues(
+                              alpha: 0.08,
+                            ),
                           ),
                           boxShadow: [
                             BoxShadow(
@@ -531,8 +537,8 @@ class _MiniProgressBarState extends State<_MiniProgressBar> {
                         ),
                         child: Text(
                           formatDuration(_dragValueMs!.toInt()),
-                          style: const TextStyle(
-                            color: Colors.white,
+                          style: TextStyle(
+                            color: colorScheme.onSurface,
                             fontSize: 11,
                             fontWeight: FontWeight.bold,
                           ),

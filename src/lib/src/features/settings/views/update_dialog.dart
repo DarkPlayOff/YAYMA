@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:m3e_core/m3e_core.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:yayma/src/features/core/theme/app_tokens.dart';
 import 'package:yayma/src/features/settings/services/update_service.dart';
 
 class UpdateDialog extends StatefulWidget {
@@ -15,10 +17,11 @@ class UpdateDialog extends StatefulWidget {
       unawaited(
         showModalBottomSheet<void>(
           context: context,
-          backgroundColor: const Color(0xFF1E1E1E),
           isScrollControlled: true,
           shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+            borderRadius: BorderRadius.vertical(
+              top: Radius.circular(AppRadius.xxl),
+            ),
           ),
           builder: (context) => UpdateDialog(
             initialInfo: initialInfo,
@@ -90,7 +93,8 @@ class _UpdateDialogState extends State<UpdateDialog> {
     );
   }
 
-  Widget _buildChangelog(String changelog) {
+  Widget _buildChangelog(BuildContext context, String changelog) {
+    final cs = Theme.of(context).colorScheme;
     final lines = changelog.split('\n');
     final children = <Widget>[];
 
@@ -116,7 +120,7 @@ class _UpdateDialogState extends State<UpdateDialog> {
           child: Text(
             titleText,
             style: TextStyle(
-              color: Colors.white,
+              color: cs.onSurface,
               fontSize: fontSize,
               fontWeight: FontWeight.bold,
             ),
@@ -130,14 +134,14 @@ class _UpdateDialogState extends State<UpdateDialog> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
+              Text(
                 '  •  ',
-                style: TextStyle(color: Colors.white54, fontSize: 14),
+                style: TextStyle(color: cs.onSurfaceVariant, fontSize: 14),
               ),
               Expanded(
                 child: Text(
                   itemText,
-                  style: const TextStyle(color: Colors.white70, fontSize: 14),
+                  style: TextStyle(color: cs.onSurfaceVariant, fontSize: 14),
                 ),
               ),
             ],
@@ -149,7 +153,7 @@ class _UpdateDialogState extends State<UpdateDialog> {
           padding: const EdgeInsets.symmetric(vertical: 4),
           child: Text(
             trimmed,
-            style: const TextStyle(color: Colors.white70, fontSize: 14),
+            style: TextStyle(color: cs.onSurfaceVariant, fontSize: 14),
           ),
         );
       }
@@ -167,7 +171,8 @@ class _UpdateDialogState extends State<UpdateDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final primaryColor = Theme.of(context).colorScheme.primary;
+    final cs = Theme.of(context).colorScheme;
+    final primaryColor = cs.primary;
 
     Widget content;
     var actions = <Widget>[];
@@ -176,25 +181,25 @@ class _UpdateDialogState extends State<UpdateDialog> {
       content = const SizedBox(
         height: 150,
         child: Center(
-          child: CircularProgressIndicator(),
+          child: M3ELoadingIndicator(),
         ),
       );
     } else if (_error != null) {
       content = Padding(
-        padding: const EdgeInsets.symmetric(vertical: 24),
+        padding: const EdgeInsets.symmetric(vertical: AppSpacing.xl),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(
+            Icon(
               Icons.error_outline_rounded,
-              color: Colors.redAccent,
+              color: cs.error,
               size: 48,
             ),
             const SizedBox(height: 16),
             Text(
               _error!,
               textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.white70, fontSize: 16),
+              style: TextStyle(color: cs.onSurfaceVariant, fontSize: 16),
             ),
           ],
         ),
@@ -207,9 +212,9 @@ class _UpdateDialogState extends State<UpdateDialog> {
         if (!widget.bottomSheet)
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text(
+            child: Text(
               'Закрыть',
-              style: TextStyle(color: Colors.white54),
+              style: TextStyle(color: cs.onSurfaceVariant),
             ),
           ),
       ];
@@ -222,10 +227,10 @@ class _UpdateDialogState extends State<UpdateDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
+              Text(
                 'Список изменений в этой версии:',
                 style: TextStyle(
-                  color: Colors.white54,
+                  color: cs.onSurfaceVariant,
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
                 ),
@@ -234,14 +239,16 @@ class _UpdateDialogState extends State<UpdateDialog> {
               Expanded(
                 child: Container(
                   width: double.maxFinite,
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.all(AppSpacing.md),
                   decoration: BoxDecoration(
-                    color: Colors.black26,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.white10),
+                    color: cs.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(AppRadius.sm),
+                    border: Border.all(
+                      color: cs.onSurface.withValues(alpha: 0.1),
+                    ),
                   ),
                   child: SingleChildScrollView(
-                    child: _buildChangelog(info.changelog),
+                    child: _buildChangelog(context, info.changelog),
                   ),
                 ),
               ),
@@ -254,9 +261,6 @@ class _UpdateDialogState extends State<UpdateDialog> {
             style: ElevatedButton.styleFrom(
               backgroundColor: primaryColor,
               foregroundColor: Colors.black,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
             ),
             child: const Text(
               'Скачать обновление',
@@ -266,29 +270,29 @@ class _UpdateDialogState extends State<UpdateDialog> {
           if (!widget.bottomSheet)
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text(
+              child: Text(
                 'Закрыть',
-                style: TextStyle(color: Colors.white54),
+                style: TextStyle(color: cs.onSurfaceVariant),
               ),
             ),
         ];
       } else {
         content = Padding(
-          padding: const EdgeInsets.symmetric(vertical: 24),
+          padding: const EdgeInsets.symmetric(vertical: AppSpacing.xl),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(
+              Icon(
                 Icons.check_circle_outline_rounded,
-                color: Colors.greenAccent,
+                color: cs.tertiary,
                 size: 48,
               ),
               const SizedBox(height: 16),
-              const Text(
+              Text(
                 'У вас установлена последняя версия',
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  color: Colors.white,
+                  color: cs.onSurface,
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
                 ),
@@ -296,7 +300,7 @@ class _UpdateDialogState extends State<UpdateDialog> {
               const SizedBox(height: 8),
               Text(
                 'Текущая версия: ${info.latestVersion}',
-                style: const TextStyle(color: Colors.white54, fontSize: 14),
+                style: TextStyle(color: cs.onSurfaceVariant, fontSize: 14),
               ),
             ],
           ),
@@ -305,9 +309,9 @@ class _UpdateDialogState extends State<UpdateDialog> {
           if (!widget.bottomSheet)
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text(
+              child: Text(
                 'Отлично',
-                style: TextStyle(color: Colors.white54),
+                style: TextStyle(color: cs.onSurfaceVariant),
               ),
             ),
         ];
@@ -336,23 +340,25 @@ class _UpdateDialogState extends State<UpdateDialog> {
                   width: 32,
                   height: 4,
                   decoration: BoxDecoration(
-                    color: Colors.white24,
+                    color: cs.onSurface.withValues(alpha: 0.24),
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
               ),
               const SizedBox(height: 16),
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.lg,
+                ),
                 child: Row(
                   children: [
-                    const Icon(Icons.system_update_rounded, color: Colors.white),
+                    Icon(Icons.system_update_rounded, color: cs.onSurface),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(
                         titleText,
-                        style: const TextStyle(
-                          color: Colors.white,
+                        style: TextStyle(
+                          color: cs.onSurface,
                           fontWeight: FontWeight.bold,
                           fontSize: 18,
                         ),
@@ -364,13 +370,20 @@ class _UpdateDialogState extends State<UpdateDialog> {
               const SizedBox(height: 16),
               Flexible(
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.lg,
+                  ),
                   child: content,
                 ),
               ),
               if (actions.isNotEmpty)
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.lg,
+                    8,
+                    AppSpacing.lg,
+                    AppSpacing.lg,
+                  ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: actions,
@@ -383,20 +396,22 @@ class _UpdateDialogState extends State<UpdateDialog> {
     }
 
     return AlertDialog(
-      backgroundColor: const Color(0xFF1E1E1E),
-      surfaceTintColor: Colors.transparent,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(24),
-        side: const BorderSide(color: Colors.white10),
+        borderRadius: BorderRadius.circular(AppRadius.xxl),
+        side: BorderSide(color: cs.onSurface.withValues(alpha: 0.1)),
       ),
       title: Row(
         children: [
-          const Icon(Icons.system_update_rounded, color: Colors.white),
+          Icon(Icons.system_update_rounded, color: cs.onSurface),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
               titleText,
-              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
+              style: TextStyle(
+                color: cs.onSurface,
+                fontWeight: FontWeight.bold,
+                fontSize: 18,
+              ),
             ),
           ),
         ],

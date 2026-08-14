@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:m3e_core/m3e_core.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/features/playback/providers/playback_provider.dart';
 import 'package:yayma/src/rust/api/models.dart';
@@ -21,6 +22,7 @@ class _AudioSettingsDialogState extends State<AudioSettingsDialog> {
   Widget build(BuildContext context) {
     return SignalBuilder(
       builder: (context) {
+        final cs = Theme.of(context).colorScheme;
         final tabs = [
           const Tab(text: 'Эквалайзер'),
           const Tab(text: 'Эффекты (DSP)'),
@@ -43,7 +45,7 @@ class _AudioSettingsDialogState extends State<AudioSettingsDialog> {
                       width: 32,
                       height: 4,
                       decoration: BoxDecoration(
-                        color: Colors.white24,
+                        color: cs.onSurface.withValues(alpha: 0.24),
                         borderRadius: BorderRadius.circular(2),
                       ),
                     ),
@@ -60,12 +62,18 @@ class _AudioSettingsDialogState extends State<AudioSettingsDialog> {
                           ),
                         ),
                         splashBorderRadius: BorderRadius.circular(12),
-                        labelColor: Colors.white,
-                        unselectedLabelColor: Colors.white38,
+                        labelColor: cs.onSurface,
+                        unselectedLabelColor: cs.onSurface.withValues(
+                          alpha: 0.38,
+                        ),
                         tabs: tabs,
                       ),
                     ),
-                    const Divider(height: 1, color: Colors.white10),
+                    const SizedBox(height: 1),
+                    Divider(
+                      height: 1,
+                      color: cs.onSurface.withValues(alpha: 0.1),
+                    ),
                     const Expanded(
                       child: Padding(
                         padding: EdgeInsets.symmetric(horizontal: 20),
@@ -82,9 +90,9 @@ class _AudioSettingsDialogState extends State<AudioSettingsDialog> {
                       TextButton(
                         onPressed: () =>
                             unawaited(PlaybackController.resetEqualizer()),
-                        child: const Text(
+                        child: Text(
                           'Сбросить',
-                          style: TextStyle(color: Colors.redAccent),
+                          style: TextStyle(color: cs.error),
                         ),
                       ),
                   ],
@@ -97,7 +105,6 @@ class _AudioSettingsDialogState extends State<AudioSettingsDialog> {
         return DefaultTabController(
           length: 2,
           child: AlertDialog(
-            backgroundColor: const Color(0xFF181818),
             titlePadding: EdgeInsets.zero,
             title: Column(
               children: [
@@ -105,16 +112,19 @@ class _AudioSettingsDialogState extends State<AudioSettingsDialog> {
                   padding: const EdgeInsets.fromLTRB(24, 20, 24, 8),
                   child: Row(
                     children: [
-                      const Text(
+                      Text(
                         'Настройки звука',
                         style: TextStyle(
-                          color: Colors.white,
+                          color: cs.onSurface,
                           fontWeight: FontWeight.w900,
                         ),
                       ),
                       const Spacer(),
                       IconButton(
-                        icon: const Icon(Icons.close, color: Colors.white54),
+                        icon: Icon(
+                          Icons.close,
+                          color: cs.onSurfaceVariant,
+                        ),
                         onPressed: () => Navigator.pop(context),
                       ),
                     ],
@@ -130,8 +140,8 @@ class _AudioSettingsDialogState extends State<AudioSettingsDialog> {
                     ),
                   ),
                   splashBorderRadius: BorderRadius.circular(12),
-                  labelColor: Colors.white,
-                  unselectedLabelColor: Colors.white38,
+                  labelColor: cs.onSurface,
+                  unselectedLabelColor: cs.onSurface.withValues(alpha: 0.38),
                   tabs: tabs,
                 ),
               ],
@@ -152,9 +162,9 @@ class _AudioSettingsDialogState extends State<AudioSettingsDialog> {
                 TextButton(
                   onPressed: () =>
                       unawaited(PlaybackController.resetEqualizer()),
-                  child: const Text(
+                  child: Text(
                     'Сбросить',
-                    style: TextStyle(color: Colors.redAccent),
+                    style: TextStyle(color: cs.error),
                   ),
                 ),
               TextButton(
@@ -182,9 +192,10 @@ class _EqualizerView extends StatelessWidget {
   Widget build(BuildContext context) {
     return SignalBuilder(
       builder: (context) {
+        final cs = Theme.of(context).colorScheme;
         final eq = equalizerSignal.value;
         if (eq == null) {
-          return const Center(child: CircularProgressIndicator());
+          return const Center(child: M3ELoadingIndicator());
         }
 
         final accent = accentColorSignal.value;
@@ -193,7 +204,7 @@ class _EqualizerView extends StatelessWidget {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _buildHeader(accent, enabled),
+            _buildHeader(context, accent, enabled),
             Expanded(
               child: AnimatedOpacity(
                 opacity: enabled ? 1 : 0.45,
@@ -201,16 +212,16 @@ class _EqualizerView extends StatelessWidget {
                 child: Container(
                   padding: const EdgeInsets.fromLTRB(10, 18, 12, 8),
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.03),
+                    color: cs.onSurface.withValues(alpha: 0.03),
                     borderRadius: BorderRadius.circular(18),
                     border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.05),
+                      color: cs.onSurface.withValues(alpha: 0.05),
                     ),
                   ),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      _buildGainRuler(),
+                      _buildGainRuler(context),
                       const SizedBox(width: 8),
                       Expanded(
                         child: LayoutBuilder(
@@ -229,14 +240,19 @@ class _EqualizerView extends StatelessWidget {
                                   enabled,
                                 );
                                 return needsScroll
-                                    ? SizedBox(width: minBandWidth, child: child)
+                                    ? SizedBox(
+                                        width: minBandWidth,
+                                        child: child,
+                                      )
                                     : Expanded(child: child);
                               }).toList(),
                             );
 
                             final content = Stack(
                               children: [
-                                Positioned.fill(child: _buildGrid(accent)),
+                                Positioned.fill(
+                                  child: _buildGrid(context, accent),
+                                ),
                                 bandsRow,
                               ],
                             );
@@ -265,31 +281,36 @@ class _EqualizerView extends StatelessWidget {
     );
   }
 
-  Widget _buildHeader(Color accent, bool enabled) {
+  Widget _buildHeader(
+    BuildContext context,
+    Color accent,
+    bool enabled,
+  ) {
+    final cs = Theme.of(context).colorScheme;
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 16),
       padding: const EdgeInsets.fromLTRB(16, 8, 10, 8),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.04),
+        color: cs.onSurface.withValues(alpha: 0.04),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+        border: Border.all(color: cs.onSurface.withValues(alpha: 0.06)),
       ),
       child: Row(
         children: [
           Icon(
             Icons.graphic_eq_rounded,
             size: 22,
-            color: enabled ? accent : Colors.white30,
+            color: enabled ? accent : cs.onSurface.withValues(alpha: 0.3),
           ),
           const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   'Эквалайзер',
                   style: TextStyle(
-                    color: Colors.white,
+                    color: cs.onSurface,
                     fontWeight: FontWeight.w600,
                     fontSize: 15,
                   ),
@@ -298,7 +319,9 @@ class _EqualizerView extends StatelessWidget {
                 Text(
                   enabled ? 'Активен' : 'Выключен',
                   style: TextStyle(
-                    color: enabled ? accent : Colors.white38,
+                    color: enabled
+                        ? accent
+                        : cs.onSurface.withValues(alpha: 0.38),
                     fontSize: 11,
                   ),
                 ),
@@ -317,7 +340,8 @@ class _EqualizerView extends StatelessWidget {
     );
   }
 
-  Widget _buildGainRuler() {
+  Widget _buildGainRuler(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     const labels = ['+12', '+6', '0', '-6', '-12'];
     return SizedBox(
       width: 30,
@@ -332,10 +356,10 @@ class _EqualizerView extends StatelessWidget {
                   .map(
                     (t) => Text(
                       t,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 9,
-                        color: Colors.white30,
-                        fontFeatures: [FontFeature.tabularFigures()],
+                        color: cs.onSurface.withValues(alpha: 0.3),
+                        fontFeatures: const [FontFeature.tabularFigures()],
                       ),
                     ),
                   )
@@ -348,7 +372,8 @@ class _EqualizerView extends StatelessWidget {
     );
   }
 
-  Widget _buildGrid(Color accent) {
+  Widget _buildGrid(BuildContext context, Color accent) {
+    final cs = Theme.of(context).colorScheme;
     return Column(
       children: [
         const SizedBox(height: _gainBlockHeight),
@@ -361,7 +386,7 @@ class _EqualizerView extends StatelessWidget {
                 height: 1,
                 color: isZero
                     ? accent.withValues(alpha: 0.28)
-                    : Colors.white.withValues(alpha: 0.05),
+                    : cs.onSurface.withValues(alpha: 0.05),
               );
             }),
           ),
@@ -377,6 +402,7 @@ class _EqualizerView extends StatelessWidget {
     Color accent,
     bool enabled,
   ) {
+    final cs = Theme.of(context).colorScheme;
     final gain = band.gainDb.clamp(-12.0, 12.0);
     final isNeutral = gain.abs() < 0.05;
 
@@ -390,7 +416,9 @@ class _EqualizerView extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(
                 color: isNeutral
-                    ? Colors.white.withValues(alpha: 0.05)
+                    ? Theme.of(
+                        context,
+                      ).colorScheme.onSurface.withValues(alpha: 0.05)
                     : accent.withValues(alpha: 0.18),
                 borderRadius: BorderRadius.circular(6),
               ),
@@ -398,7 +426,11 @@ class _EqualizerView extends StatelessWidget {
                 '${gain > 0 ? '+' : ''}${gain.toStringAsFixed(1)}',
                 style: TextStyle(
                   fontSize: 9,
-                  color: isNeutral ? Colors.white38 : accent,
+                  color: isNeutral
+                      ? Theme.of(
+                          context,
+                        ).colorScheme.onSurfaceVariant.withValues(alpha: 0.7)
+                      : accent,
                   fontWeight: FontWeight.w600,
                   fontFeatures: const [FontFeature.tabularFigures()],
                 ),
@@ -407,29 +439,44 @@ class _EqualizerView extends StatelessWidget {
           ),
         ),
         Expanded(
-          child: RotatedBox(
-            quarterTurns: 3,
-            child: SliderTheme(
-              data: SliderTheme.of(context).copyWith(
-                trackHeight: 4,
+          child: M3ESlider(
+            orientation: Axis.vertical,
+            value: gain,
+            min: -12,
+            max: 12,
+            enabled: enabled,
+            decoration: M3ESliderDecoration(
+              colors: M3ESliderColors(
+                thumbColor: enabled
+                    ? accent
+                    : cs.onSurface.withValues(alpha: 0.38),
+                disabledThumbColor: cs.onSurface.withValues(alpha: 0.38),
                 activeTrackColor: accent.withValues(alpha: enabled ? 0.7 : 0.3),
-                inactiveTrackColor: Colors.white.withValues(alpha: 0.08),
-                thumbColor: enabled ? accent : Colors.white38,
-                overlayColor: accent.withValues(alpha: 0.15),
-                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
-                overlayShape: const RoundSliderOverlayShape(overlayRadius: 16),
+                inactiveTrackColor: Theme.of(
+                  context,
+                ).colorScheme.onSurface.withValues(alpha: 0.12),
+                disabledActiveTrackColor: accent.withValues(alpha: 0.3),
+                disabledInactiveTrackColor: Theme.of(
+                  context,
+                ).colorScheme.onSurface.withValues(alpha: 0.12),
+                activeTickColor: accent.withValues(alpha: 0.7),
+                inactiveTickColor: Theme.of(
+                  context,
+                ).colorScheme.onSurface.withValues(alpha: 0.12),
+                disabledActiveTickColor: cs.onSurface.withValues(alpha: 0.38),
+                disabledInactiveTickColor: Theme.of(
+                  context,
+                ).colorScheme.onSurface.withValues(alpha: 0.12),
               ),
-              child: Slider(
-                value: gain,
-                min: -12,
-                max: 12,
-                onChanged: enabled
-                    ? (val) => unawaited(
-                        PlaybackController.setEqualizerBand(band.index, val),
-                      )
-                    : null,
-              ),
+              trackHeight: 4,
+              thumbWidth: 8,
+              thumbHeight: 14,
             ),
+            onChanged: enabled
+                ? (val) => unawaited(
+                    PlaybackController.setEqualizerBand(band.index, val),
+                  )
+                : null,
           ),
         ),
         SizedBox(
@@ -438,9 +485,9 @@ class _EqualizerView extends StatelessWidget {
             fit: BoxFit.scaleDown,
             child: Text(
               _formatFreq(band.frequency),
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 10,
-                color: Colors.white54,
+                color: cs.onSurface.withValues(alpha: 0.54),
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -483,7 +530,7 @@ class _EffectsView extends StatelessWidget {
       builder: (context) {
         final effects = audioEffectsSignal.value;
         if (effects.isEmpty) {
-          return const Center(child: CircularProgressIndicator());
+          return const Center(child: M3ELoadingIndicator());
         }
 
         final accent = accentColorSignal.value;
@@ -526,6 +573,7 @@ class _EffectCardState extends State<_EffectCard> {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     final effect = widget.effect;
     final accent = widget.accent;
     final enabled = effect.enabled;
@@ -534,12 +582,12 @@ class _EffectCardState extends State<_EffectCard> {
       duration: const Duration(milliseconds: 180),
       curve: Curves.easeOut,
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: _expanded ? 0.05 : 0.03),
+        color: cs.onSurface.withValues(alpha: _expanded ? 0.05 : 0.03),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: enabled
               ? accent.withValues(alpha: 0.25)
-              : Colors.white.withValues(alpha: 0.06),
+              : cs.onSurface.withValues(alpha: 0.06),
         ),
       ),
       child: Column(
@@ -557,13 +605,15 @@ class _EffectCardState extends State<_EffectCard> {
                     decoration: BoxDecoration(
                       color: enabled
                           ? accent.withValues(alpha: 0.16)
-                          : Colors.white.withValues(alpha: 0.05),
+                          : cs.onSurface.withValues(alpha: 0.05),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Icon(
                       widget.icon,
                       size: 18,
-                      color: enabled ? accent : Colors.white30,
+                      color: enabled
+                          ? accent
+                          : cs.onSurface.withValues(alpha: 0.3),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -573,8 +623,8 @@ class _EffectCardState extends State<_EffectCard> {
                       children: [
                         Text(
                           effect.name,
-                          style: const TextStyle(
-                            color: Colors.white,
+                          style: TextStyle(
+                            color: cs.onSurface,
                             fontWeight: FontWeight.w600,
                             fontSize: 13,
                           ),
@@ -583,7 +633,9 @@ class _EffectCardState extends State<_EffectCard> {
                         Text(
                           enabled ? 'Включён' : 'Выключен',
                           style: TextStyle(
-                            color: enabled ? accent : Colors.white38,
+                            color: enabled
+                                ? accent
+                                : cs.onSurface.withValues(alpha: 0.38),
                             fontSize: 11,
                           ),
                         ),
@@ -603,9 +655,9 @@ class _EffectCardState extends State<_EffectCard> {
                   AnimatedRotation(
                     duration: const Duration(milliseconds: 180),
                     turns: _expanded ? 0.5 : 0,
-                    child: const Icon(
+                    child: Icon(
                       Icons.expand_more_rounded,
-                      color: Colors.white38,
+                      color: cs.onSurface.withValues(alpha: 0.38),
                     ),
                   ),
                 ],
@@ -621,7 +673,10 @@ class _EffectCardState extends State<_EffectCard> {
               padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
               child: Column(
                 children: [
-                  const Divider(height: 1, color: Colors.white10),
+                  Divider(
+                    height: 1,
+                    color: cs.onSurface.withValues(alpha: 0.1),
+                  ),
                   const SizedBox(height: 10),
                   ...effect.params.map(
                     (param) => _EffectParamRow(
@@ -648,9 +703,7 @@ class _EffectCardState extends State<_EffectCard> {
                         style: TextStyle(fontSize: 11),
                       ),
                       style: TextButton.styleFrom(
-                        foregroundColor: Colors.redAccent.withValues(
-                          alpha: 0.7,
-                        ),
+                        foregroundColor: cs.error.withValues(alpha: 0.7),
                         padding: const EdgeInsets.symmetric(horizontal: 12),
                       ),
                     ),
@@ -681,6 +734,7 @@ class _EffectParamRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     final isDefault = (param.value - param.defaultValue).abs() < 0.001;
 
     return Padding(
@@ -691,30 +745,52 @@ class _EffectParamRow extends StatelessWidget {
             width: 88,
             child: Text(
               param.name,
-              style: const TextStyle(fontSize: 12, color: Colors.white54),
+              style: TextStyle(
+                fontSize: 12,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
               overflow: TextOverflow.ellipsis,
             ),
           ),
           Expanded(
-            child: SliderTheme(
-              data: SliderTheme.of(context).copyWith(
-                trackHeight: 3,
-                activeTrackColor: accent.withValues(alpha: enabled ? 0.7 : 0.3),
-                inactiveTrackColor: Colors.white.withValues(alpha: 0.08),
-                thumbColor: enabled ? accent : Colors.white38,
-                overlayColor: accent.withValues(alpha: 0.15),
-                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-                overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
+            child: M3ESlider(
+              value: param.value.clamp(param.min, param.max),
+              min: param.min,
+              max: param.max,
+              divisions: param.step > 0
+                  ? ((param.max - param.min) / param.step).toInt()
+                  : null,
+              enabled: enabled,
+              decoration: M3ESliderDecoration(
+                colors: M3ESliderColors(
+                  thumbColor: enabled
+                      ? accent
+                      : cs.onSurface.withValues(alpha: 0.38),
+                  disabledThumbColor: cs.onSurface.withValues(alpha: 0.38),
+                  activeTrackColor: accent.withValues(
+                    alpha: enabled ? 0.7 : 0.3,
+                  ),
+                  inactiveTrackColor: Theme.of(
+                    context,
+                  ).colorScheme.onSurface.withValues(alpha: 0.12),
+                  disabledActiveTrackColor: accent.withValues(alpha: 0.3),
+                  disabledInactiveTrackColor: Theme.of(
+                    context,
+                  ).colorScheme.onSurface.withValues(alpha: 0.12),
+                  activeTickColor: accent.withValues(alpha: 0.7),
+                  inactiveTickColor: Theme.of(
+                    context,
+                  ).colorScheme.onSurface.withValues(alpha: 0.12),
+                  disabledActiveTickColor: cs.onSurface.withValues(alpha: 0.38),
+                  disabledInactiveTickColor: Theme.of(
+                    context,
+                  ).colorScheme.onSurface.withValues(alpha: 0.12),
+                ),
+                trackHeight: 4,
+                thumbWidth: 8,
+                thumbHeight: 16,
               ),
-              child: Slider(
-                value: param.value.clamp(param.min, param.max),
-                min: param.min,
-                max: param.max,
-                divisions: param.step > 0
-                    ? ((param.max - param.min) / param.step).toInt()
-                    : null,
-                onChanged: enabled ? onChanged : null,
-              ),
+              onChanged: enabled ? onChanged : null,
             ),
           ),
           SizedBox(
@@ -724,7 +800,7 @@ class _EffectParamRow extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(
                 color: isDefault
-                    ? Colors.white.withValues(alpha: 0.05)
+                    ? cs.onSurface.withValues(alpha: 0.05)
                     : accent.withValues(alpha: 0.16),
                 borderRadius: BorderRadius.circular(6),
               ),
@@ -732,7 +808,9 @@ class _EffectParamRow extends StatelessWidget {
                 '${param.value.toStringAsFixed(1)}${param.unit}',
                 style: TextStyle(
                   fontSize: 10,
-                  color: isDefault ? Colors.white38 : accent,
+                  color: isDefault
+                      ? cs.onSurface.withValues(alpha: 0.38)
+                      : accent,
                   fontWeight: FontWeight.w600,
                   fontFeatures: const [FontFeature.tabularFigures()],
                 ),

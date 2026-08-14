@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:signals_flutter/signals_flutter.dart';
+import 'package:yayma/src/features/core/theme/app_tokens.dart';
 import 'package:yayma/src/features/core/views/widgets/app_context_menu.dart';
 import 'package:yayma/src/features/core/views/widgets/audio_settings.dart';
 import 'package:yayma/src/features/playback/providers/playback_provider.dart';
@@ -97,11 +98,10 @@ class CommonQualitySelector extends SignalWidget {
                 unawaited(
                   showModalBottomSheet<void>(
                     context: context,
-                    backgroundColor: const Color(0xFF181818),
                     isScrollControlled: true,
                     shape: const RoundedRectangleBorder(
                       borderRadius: BorderRadius.vertical(
-                        top: Radius.circular(24),
+                        top: Radius.circular(AppRadius.xl),
                       ),
                     ),
                     builder: (_) =>
@@ -119,23 +119,29 @@ class CommonQualitySelector extends SignalWidget {
             }
           },
           items: items,
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(AppRadius.xs),
           child: Container(
             padding: EdgeInsets.symmetric(
               horizontal: isSmall ? 8 : 10,
               vertical: isSmall ? 4 : 5,
             ),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.white10),
-              color: Colors.white.withValues(alpha: 0.05),
+              borderRadius: BorderRadius.circular(AppRadius.xs),
+              border: Border.all(
+                color: Theme.of(
+                  context,
+                ).colorScheme.onSurface.withValues(alpha: 0.1),
+              ),
+              color: Theme.of(
+                context,
+              ).colorScheme.onSurface.withValues(alpha: 0.05),
             ),
             child: Text(
               label,
               style: TextStyle(
                 color: quality == AudioQuality.high
                     ? accentColor
-                    : Colors.white,
+                    : Theme.of(context).colorScheme.onSurface,
                 fontSize: isSmall ? 11 : 12,
                 fontWeight: FontWeight.bold,
               ),
@@ -162,7 +168,7 @@ class _QualityIcon extends StatelessWidget {
         style: TextStyle(
           fontSize: 11,
           fontWeight: FontWeight.w900,
-          color: color ?? Colors.white70,
+          color: color ?? Theme.of(context).colorScheme.onSurfaceVariant,
         ),
       ),
     );

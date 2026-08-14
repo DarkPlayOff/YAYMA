@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:m3e_core/m3e_core.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/features/auth/providers/auth_provider.dart';
 import 'package:yayma/src/features/core/providers/navigation_provider.dart';
@@ -124,6 +125,7 @@ class _ArtistViewState extends State<ArtistView> {
 
     return SignalBuilder(
       builder: (context) {
+        final cs = Theme.of(context).colorScheme;
         if (_isError.value != null) {
           return CommonErrorWidget(error: _isError.value!);
         }
@@ -185,8 +187,12 @@ class _ArtistViewState extends State<ArtistView> {
                 padding: const EdgeInsets.fromLTRB(40, 24, 40, 16),
               ),
             ),
-            SliverList(
-              delegate: SliverChildBuilderDelegate((context, index) {
+            SliverM3ECardList(
+              haptic: M3EHapticFeedback.light,
+              itemCount: tracks.length,
+              color: cs.onSurface.withValues(alpha: 0.04),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              itemBuilder: (context, index) {
                 final track = tracks[index];
                 return CommonTrackTile(
                   trackId: track.id,
@@ -201,13 +207,15 @@ class _ArtistViewState extends State<ArtistView> {
                   ),
                   trailing: Text(
                     formatDuration(track.durationMs),
-                    style: const TextStyle(color: Colors.white38),
+                    style: TextStyle(
+                      color: cs.onSurface.withValues(alpha: 0.38),
+                    ),
                   ),
                   hoverActions: [
                     IconButton(
-                      icon: const Icon(
+                      icon: Icon(
                         Icons.play_arrow_rounded,
-                        color: Colors.white54,
+                        color: cs.onSurfaceVariant,
                       ),
                       onPressed: () => PlaybackController.playTrack(track.id),
                     ),
@@ -219,13 +227,13 @@ class _ArtistViewState extends State<ArtistView> {
                     }
                   },
                 );
-              }, childCount: tracks.length),
+              },
             ),
             if (_isLoading.value)
               const SliverToBoxAdapter(
                 child: Padding(
                   padding: EdgeInsets.all(20),
-                  child: Center(child: CircularProgressIndicator()),
+                  child: Center(child: M3ELoadingIndicator()),
                 ),
               ),
           ],

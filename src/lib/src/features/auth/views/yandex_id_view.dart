@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:m3e_core/m3e_core.dart';
 import 'package:webview_all/webview_all.dart';
 
 class YandexIdView extends StatefulWidget {
@@ -45,7 +46,7 @@ class _YandexIdViewState extends State<YandexIdView> {
   Widget build(BuildContext context) {
     if (!_isReady) {
       return const Center(
-        child: CircularProgressIndicator(),
+        child: M3ELoadingIndicator(),
       );
     }
 

@@ -5,6 +5,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:m3e_core/m3e_core.dart';
 import 'package:signals_flutter/signals_flutter.dart';
+import 'package:yayma/src/features/core/theme/app_tokens.dart';
 import 'package:yayma/src/features/core/views/widgets/common_ui.dart';
 import 'package:yayma/src/features/playback/providers/lyrics_provider.dart';
 import 'package:yayma/src/features/playback/providers/playback_provider.dart';
@@ -357,8 +358,8 @@ class _LyricsSourceLabelState extends State<_LyricsSourceLabel> {
         opacity: _visible ? 1.0 : 0.0,
         child: Text(
           widget.providerName,
-          style: const TextStyle(
-            color: Colors.white54,
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
             fontSize: 20,
             fontWeight: FontWeight.w600,
             letterSpacing: 0.2,
@@ -415,6 +416,7 @@ class _LyricRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final onSurface = Theme.of(context).colorScheme.onSurface;
     if (item is LyricTimer) {
       return _LyricTimerWidget(
         item: item as LyricTimer,
@@ -481,15 +483,13 @@ class _LyricRow extends StatelessWidget {
                           line.text,
                           textAlign: TextAlign.center,
                           style: _lyricTextStyle(
-                            color: Colors.white,
+                            color: onSurface,
                             fontWeight: isActive
                                 ? FontWeight.w900
                                 : FontWeight.w800,
                             glow: isActive
                                 ? Shadow(
-                                    color: Colors.white.withValues(
-                                      alpha: 0.3,
-                                    ),
+                                    color: onSurface.withValues(alpha: 0.3),
                                     blurRadius: 20,
                                   )
                                 : null,
@@ -552,8 +552,7 @@ class _KaraokeLineText extends StatelessWidget {
     final word = words[i];
     if (currentMs >= word.end.inMilliseconds) {
       sungCount++;
-    } else if (singingIndex == -1 &&
-        currentMs >= word.start.inMilliseconds) {
+    } else if (singingIndex == -1 && currentMs >= word.start.inMilliseconds) {
       singingIndex = i;
     }
   }
@@ -633,6 +632,7 @@ class _KaraokeWordText extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final onSurface = Theme.of(context).colorScheme.onSurface;
     final sung = lineActive && currentMs >= word.end.inMilliseconds;
     final singing =
         lineActive &&
@@ -650,10 +650,13 @@ class _KaraokeWordText extends StatelessWidget {
       duration: pending ? _lyricTransitionDuration : _karaokeWordDuration,
       curve: pending ? _lyricTransitionCurve : Curves.linear,
       style: _lyricTextStyle(
-        color: pending ? Colors.white30 : Colors.white,
+        color: pending ? onSurface.withValues(alpha: 0.3) : onSurface,
         fontWeight: FontWeight.w900,
         glow: singing
-            ? Shadow(color: Colors.white.withValues(alpha: 0.5), blurRadius: 24)
+            ? Shadow(
+                color: onSurface.withValues(alpha: 0.5),
+                blurRadius: 24,
+              )
             : null,
       ),
       child: Text(word.text),
@@ -695,6 +698,7 @@ class _LyricTimerWidgetState extends State<_LyricTimerWidget>
   Widget build(BuildContext context) {
     return SignalBuilder(
       builder: (context) {
+        final cs = Theme.of(context).colorScheme;
         final progress = trackProgressSignal.value;
         final currentMs = progress.positionMs.toInt();
         final remainingMs =
@@ -732,12 +736,12 @@ class _LyricTimerWidgetState extends State<_LyricTimerWidget>
                   width: 14,
                   height: 14,
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: active ? 0.9 : 0.1),
+                    color: cs.onSurface.withValues(alpha: active ? 0.9 : 0.1),
                     shape: BoxShape.circle,
                     boxShadow: active
                         ? [
                             BoxShadow(
-                              color: Colors.white.withValues(alpha: 0.2),
+                              color: cs.onSurface.withValues(alpha: 0.2),
                               blurRadius: 8,
                             ),
                           ]
@@ -782,20 +786,20 @@ class _LyricsReaderDialogState extends State<LyricsReaderDialog> {
   Widget build(BuildContext context) {
     return SignalBuilder(
       builder: (context) {
+        final cs = Theme.of(context).colorScheme;
         final lyricsAsync = lyricsSignal(widget.trackId).value;
         return AlertDialog(
-          backgroundColor: const Color(0xFF0F0F0F),
           surfaceTintColor: Colors.transparent,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(28),
+            borderRadius: BorderRadius.circular(AppRadius.xxl),
           ),
           title: Row(
             children: [
               Expanded(
                 child: Text(
                   widget.title,
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: cs.onSurface,
                     fontSize: 26,
                     fontWeight: FontWeight.w900,
                     letterSpacing: -1,
@@ -805,7 +809,7 @@ class _LyricsReaderDialogState extends State<LyricsReaderDialog> {
                 ),
               ),
               IconButton(
-                icon: const Icon(Icons.close, color: Colors.white38),
+                icon: Icon(Icons.close, color: cs.onSurfaceVariant),
                 onPressed: () => Navigator.pop(context),
               ),
             ],
@@ -818,10 +822,13 @@ class _LyricsReaderDialogState extends State<LyricsReaderDialog> {
               data: (result) {
                 final lines = result.items.whereType<LyricLine>().toList();
                 if (lines.isEmpty) {
-                  return const Center(
+                  return Center(
                     child: Text(
                       'Текст отсутствует',
-                      style: TextStyle(color: Colors.white24, fontSize: 18),
+                      style: TextStyle(
+                        color: cs.onSurface.withValues(alpha: 0.24),
+                        fontSize: 18,
+                      ),
                     ),
                   );
                 }
@@ -831,8 +838,8 @@ class _LyricsReaderDialogState extends State<LyricsReaderDialog> {
                     padding: const EdgeInsets.symmetric(vertical: 18),
                     child: Text(
                       lines[index].text,
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: cs.onSurface,
                         fontSize: 26,
                         fontWeight: FontWeight.w800,
                         height: 1.3,

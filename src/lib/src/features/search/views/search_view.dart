@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:m3e_core/m3e_core.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/features/core/providers/navigation_provider.dart';
 import 'package:yayma/src/features/core/views/widgets/common_ui.dart';
@@ -53,12 +54,16 @@ class _SearchViewState extends State<SearchView> {
                 children: [
                   Text(
                     'Поиск',
-                    style: TextStyle(
-                      fontSize: isNarrow ? 24 : 48,
-                      fontWeight: FontWeight.w900,
-                      color: Colors.white,
-                      letterSpacing: -1,
-                    ),
+                    style:
+                        Theme.of(
+                          context,
+                        ).textTheme.displayMedium?.copyWith(
+                          fontSize: isNarrow ? 24 : 48,
+                          fontWeight: FontWeight.w900,
+                          color: Theme.of(context).colorScheme.onSurface,
+                          letterSpacing: -1.5,
+                          height: 1.05,
+                        ),
                   ),
                   if (!isNarrow) const SizedBox(height: 24),
                   if (isNarrow) const SizedBox(height: 8),
@@ -67,23 +72,29 @@ class _SearchViewState extends State<SearchView> {
                     onChanged: setSearchQuery,
                     style: TextStyle(
                       fontSize: isNarrow ? 18 : 24,
-                      color: Colors.white,
+                      color: Theme.of(context).colorScheme.onSurface,
                     ),
                     decoration: InputDecoration(
                       hintText: 'Треки, альбомы, артисты...',
-                      hintStyle: const TextStyle(color: Colors.white38),
+                      hintStyle: TextStyle(
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
+                      ),
                       prefixIcon: Padding(
                         padding: EdgeInsets.symmetric(
                           horizontal: isNarrow ? 12 : 16,
                         ),
                         child: Icon(
                           Icons.search,
-                          color: Colors.white54,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
                           size: isNarrow ? 24 : 32,
                         ),
                       ),
                       filled: true,
-                      fillColor: Colors.white.withValues(alpha: 0.05),
+                      fillColor: Theme.of(
+                        context,
+                      ).colorScheme.onSurface.withValues(alpha: 0.05),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(isNarrow ? 16 : 24),
                         borderSide: BorderSide.none,
@@ -104,10 +115,13 @@ class _SearchViewState extends State<SearchView> {
                   if (results.tracks.isEmpty &&
                       results.albums.isEmpty &&
                       results.artists.isEmpty) {
-                    return const Center(
+                    return Center(
                       child: Text(
                         'Ничего не найдено',
-                        style: TextStyle(color: Colors.white38, fontSize: 18),
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          fontSize: 18,
+                        ),
                       ),
                     );
                   }
@@ -130,15 +144,23 @@ class _EmptySearchState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Center(
+    final onSurface = Theme.of(context).colorScheme.onSurface;
+    return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.manage_search_rounded, size: 80, color: Colors.white10),
-          SizedBox(height: 16),
+          Icon(
+            Icons.manage_search_rounded,
+            size: 80,
+            color: onSurface.withValues(alpha: 0.1),
+          ),
+          const SizedBox(height: 16),
           Text(
             'Начните вводить текст',
-            style: TextStyle(color: Colors.white24, fontSize: 18),
+            style: TextStyle(
+              color: onSurface.withValues(alpha: 0.38),
+              fontSize: 18,
+            ),
           ),
         ],
       ),
@@ -191,11 +213,15 @@ class _SearchResults extends StatelessWidget {
         ],
         if (results.tracks.isNotEmpty) ...[
           const SliverToBoxAdapter(child: CommonSectionTitle(title: 'Треки')),
-          SliverList(
-            delegate: SliverChildBuilderDelegate(
-              (context, i) => _TrackSearchTile(track: results.tracks[i]),
-              childCount: results.tracks.length,
-            ),
+          SliverM3ECardList(
+            haptic: M3EHapticFeedback.light,
+            itemCount: results.tracks.length,
+            color: Theme.of(
+              context,
+            ).colorScheme.onSurface.withValues(alpha: 0.04),
+            padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 4),
+            itemBuilder: (context, i) =>
+                _TrackSearchTile(track: results.tracks[i]),
           ),
           const SliverToBoxAdapter(child: SizedBox(height: 40)),
         ],
@@ -221,11 +247,16 @@ class _TrackSearchTile extends StatelessWidget {
       leading: TrackCover(url: track.coverUrl),
       trailing: Text(
         formatDuration(track.durationMs),
-        style: const TextStyle(color: Colors.white38),
+        style: TextStyle(
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+        ),
       ),
       hoverActions: [
         IconButton(
-          icon: const Icon(Icons.add_rounded, color: Colors.white38),
+          icon: Icon(
+            Icons.add_rounded,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
           tooltip: 'Добавить в плейлист',
           onPressed: () => AddToPlaylistDialog.show(context, track),
         ),

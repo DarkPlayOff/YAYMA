@@ -2,10 +2,12 @@ import 'dart:async';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:m3e_core/m3e_core.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/features/auth/providers/auth_provider.dart';
 import 'package:yayma/src/features/core/providers/navigation_provider.dart';
 import 'package:yayma/src/features/core/providers/notification_provider.dart';
+import 'package:yayma/src/features/core/theme/app_tokens.dart';
 import 'package:yayma/src/features/core/views/widgets/app_context_menu.dart';
 import 'package:yayma/src/features/core/views/widgets/common_ui.dart';
 import 'package:yayma/src/features/core/views/widgets/track_elements.dart';
@@ -183,6 +185,7 @@ class _PlaylistContentState extends State<_PlaylistContent> {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     final searchActive = widget.searchController.text.isNotEmpty;
 
     return CommonDetailSliverLayout(
@@ -191,18 +194,14 @@ class _PlaylistContentState extends State<_PlaylistContent> {
         title: widget.playlist.title,
         coverUrl: widget.playlist.coverUrl,
         actions: [
-          ElevatedButton.icon(
+          M3EButton.icon(
             onPressed: () => PlaybackController.playPlaylist(
               widget.playlist.uid.toString(),
               widget.playlist.kind,
             ),
             icon: const Icon(Icons.play_arrow_rounded),
             label: const Text('Слушать'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Theme.of(context).colorScheme.primary,
-              foregroundColor: Colors.black,
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-            ),
+            size: M3EButtonSize.md,
           ),
           const SizedBox(width: 12),
           AppContextMenu<String>(
@@ -235,31 +234,32 @@ class _PlaylistContentState extends State<_PlaylistContent> {
                     ? Icons.lock_outline_rounded
                     : Icons.public_rounded,
               ),
-              const AppContextMenuItem(
+              AppContextMenuItem(
                 value: 'delete',
                 label: 'Удалить плейлист',
                 icon: Icons.delete_forever_rounded,
-                color: Colors.redAccent,
+                color: cs.error,
               ),
             ],
-            child: const IconButton(
+            child: IconButton(
               icon: Icon(
                 Icons.more_horiz_rounded,
-                color: Colors.white54,
+                color: cs.onSurfaceVariant,
                 size: 32,
               ),
               onPressed: null,
               tooltip: 'Опции плейлиста',
             ),
           ),
-          ElevatedButton.icon(
+          M3EButton.icon(
             onPressed: () => _handleUpload(context),
             icon: const Icon(Icons.upload_rounded),
             label: const Text('Загрузить трек'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.white.withValues(alpha: 0.1),
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+            style: M3EButtonStyle.outlined,
+            size: M3EButtonSize.md,
+            decoration: M3EButtonDecoration.styleFrom(
+              backgroundColor: cs.onSurface.withValues(alpha: 0.1),
+              foregroundColor: cs.onSurface,
             ),
           ),
         ],
@@ -270,23 +270,31 @@ class _PlaylistContentState extends State<_PlaylistContent> {
             padding: const EdgeInsets.fromLTRB(40, 0, 40, 16),
             child: TextField(
               controller: widget.searchController,
-              style: const TextStyle(color: Colors.white),
+              style: TextStyle(color: cs.onSurface),
               decoration: InputDecoration(
                 hintText: 'Поиск в плейлисте...',
-                hintStyle: const TextStyle(color: Colors.white24),
-                prefixIcon: const Icon(Icons.search, color: Colors.white38),
+                hintStyle: TextStyle(
+                  color: cs.onSurface.withValues(alpha: 0.24),
+                ),
+                prefixIcon: Icon(
+                  Icons.search,
+                  color: cs.onSurface.withValues(alpha: 0.38),
+                ),
                 suffixIcon: widget.searchController.text.isNotEmpty
                     ? IconButton(
-                        icon: const Icon(Icons.clear, color: Colors.white38),
+                        icon: Icon(
+                          Icons.clear,
+                          color: cs.onSurface.withValues(alpha: 0.38),
+                        ),
                         onPressed: () {
                           widget.searchController.clear();
                         },
                       )
                     : null,
                 filled: true,
-                fillColor: Colors.white.withValues(alpha: 0.05),
+                fillColor: cs.onSurface.withValues(alpha: 0.05),
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(AppRadius.lg),
                   borderSide: BorderSide.none,
                 ),
                 contentPadding: const EdgeInsets.symmetric(
@@ -303,36 +311,39 @@ class _PlaylistContentState extends State<_PlaylistContent> {
             child: Center(child: CommonLoadingWidget()),
           )
         else if (_localTracks.isEmpty)
-          const SliverFillRemaining(
+          SliverFillRemaining(
             hasScrollBody: false,
             child: Center(
               child: Text(
                 'Ничего не найдено',
-                style: TextStyle(color: Colors.white38),
+                style: TextStyle(
+                  color: cs.onSurface.withValues(alpha: 0.38),
+                ),
               ),
             ),
           )
         else if (searchActive)
-          SliverList(
-            delegate: SliverChildBuilderDelegate(
-              (context, index) {
-                final track = _localTracks[index];
-                return _TrackTile(
-                  track: track,
-                  index: index,
-                  playlist: widget.playlist,
-                  onRemove: () async {
-                    final success = await removeTrackFromPlaylistAction(
-                      widget.playlist.kind,
-                      track.id,
-                      track.albumId,
-                    );
-                    if (success) widget.refresh();
-                  },
-                );
-              },
-              childCount: _localTracks.length,
-            ),
+          SliverM3ECardList(
+            haptic: M3EHapticFeedback.light,
+            itemCount: _localTracks.length,
+            color: cs.onSurface.withValues(alpha: 0.04),
+            padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 4),
+            itemBuilder: (context, index) {
+              final track = _localTracks[index];
+              return _TrackTile(
+                track: track,
+                index: index,
+                playlist: widget.playlist,
+                onRemove: () async {
+                  final success = await removeTrackFromPlaylistAction(
+                    widget.playlist.kind,
+                    track.id,
+                    track.albumId,
+                  );
+                  if (success) widget.refresh();
+                },
+              );
+            },
           )
         else
           SliverReorderableList(
@@ -390,42 +401,44 @@ class _PlaylistContentState extends State<_PlaylistContent> {
     final controller = TextEditingController(text: playlist.title);
     await showDialog<void>(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1E1E1E),
-        title: const Text(
-          'Переименовать плейлист',
-          style: TextStyle(color: Colors.white),
-        ),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          style: const TextStyle(color: Colors.white),
-          decoration: InputDecoration(
-            filled: true,
-            fillColor: Colors.white.withValues(alpha: 0.05),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide.none,
+      builder: (context) {
+        final cs = Theme.of(context).colorScheme;
+        return AlertDialog(
+          title: Text(
+            'Переименовать плейлист',
+            style: TextStyle(color: cs.onSurface),
+          ),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            style: TextStyle(color: cs.onSurface),
+            decoration: InputDecoration(
+              filled: true,
+              fillColor: cs.onSurface.withValues(alpha: 0.05),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(AppRadius.sm),
+                borderSide: BorderSide.none,
+              ),
             ),
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Отмена'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              if (controller.text.isNotEmpty) {
-                await renamePlaylistAction(playlist.kind, controller.text);
-                widget.refresh();
-                if (context.mounted) Navigator.pop(context);
-              }
-            },
-            child: const Text('Сохранить'),
-          ),
-        ],
-      ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Отмена'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                if (controller.text.isNotEmpty) {
+                  await renamePlaylistAction(playlist.kind, controller.text);
+                  widget.refresh();
+                  if (context.mounted) Navigator.pop(context);
+                }
+              },
+              child: const Text('Сохранить'),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -435,34 +448,36 @@ class _PlaylistContentState extends State<_PlaylistContent> {
   ) async {
     await showDialog<void>(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1E1E1E),
-        title: const Text(
-          'Удалить плейлист?',
-          style: TextStyle(color: Colors.white),
-        ),
-        content: Text(
-          "Вы уверены, что хотите удалить '${playlist.title}'? Это действие нельзя отменить.",
-          style: const TextStyle(color: Colors.white54),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Отмена'),
+      builder: (context) {
+        final cs = Theme.of(context).colorScheme;
+        return AlertDialog(
+          title: Text(
+            'Удалить плейлист?',
+            style: TextStyle(color: cs.onSurface),
           ),
-          ElevatedButton(
-            onPressed: () async {
-              await deletePlaylistAction(playlist.kind);
-              if (context.mounted) {
-                Navigator.pop(context);
-                setSection(AppSection.liked);
-              }
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Удалить'),
+          content: Text(
+            "Вы уверены, что хотите удалить '${playlist.title}'? Это действие нельзя отменить.",
+            style: TextStyle(color: cs.onSurfaceVariant),
           ),
-        ],
-      ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Отмена'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                await deletePlaylistAction(playlist.kind);
+                if (context.mounted) {
+                  Navigator.pop(context);
+                  setSection(AppSection.liked);
+                }
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: cs.error),
+              child: const Text('Удалить'),
+            ),
+          ],
+        );
+      },
     );
   }
 }
@@ -482,6 +497,7 @@ class _TrackTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return CommonTrackTile(
       trackId: track.id,
       title: track.title,
@@ -492,15 +508,18 @@ class _TrackTile extends StatelessWidget {
         width: 100,
         child: Row(
           children: [
-            const Icon(
+            Icon(
               Icons.drag_indicator_rounded,
-              color: Colors.white38,
+              color: cs.onSurface.withValues(alpha: 0.38),
               size: 20,
             ),
             const SizedBox(width: 8),
             Text(
               '${index + 1}',
-              style: const TextStyle(color: Colors.white38, fontSize: 14),
+              style: TextStyle(
+                color: cs.onSurface.withValues(alpha: 0.38),
+                fontSize: 14,
+              ),
             ),
             const Spacer(),
             TrackCover(url: track.coverUrl, size: 48, borderRadius: 4),
@@ -509,11 +528,14 @@ class _TrackTile extends StatelessWidget {
       ),
       trailing: Text(
         formatDuration(track.durationMs),
-        style: const TextStyle(color: Colors.white38),
+        style: TextStyle(color: cs.onSurface.withValues(alpha: 0.38)),
       ),
       hoverActions: [
         IconButton(
-          icon: const Icon(Icons.play_arrow_rounded, color: Colors.white54),
+          icon: Icon(
+            Icons.play_arrow_rounded,
+            color: cs.onSurfaceVariant,
+          ),
           onPressed: () => PlaybackController.playPlaylistTrack(
             playlist.uid.toString(),
             playlist.kind,
@@ -521,9 +543,9 @@ class _TrackTile extends StatelessWidget {
           ),
         ),
         IconButton(
-          icon: const Icon(
+          icon: Icon(
             Icons.playlist_remove_rounded,
-            color: Colors.redAccent,
+            color: cs.error,
           ),
           onPressed: onRemove,
           tooltip: 'Удалить из плейлиста',

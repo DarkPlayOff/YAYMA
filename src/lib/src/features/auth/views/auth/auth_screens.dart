@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:m3e_core/m3e_core.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_all/webview_all.dart';
@@ -51,14 +52,17 @@ class _RootScreenState extends State<RootScreen> {
                           isPlaying: state.isPlaying,
                         );
                       }
-                      
+
                       // Auto check for updates on launch if enabled
                       unawaited(() async {
                         try {
-                          final isUpdateCheckEnabled = await simple.isUpdateCheckEnabled(ctx: ctx);
+                          final isUpdateCheckEnabled = await simple
+                              .isUpdateCheckEnabled(ctx: ctx);
                           if (isUpdateCheckEnabled) {
                             final info = await UpdateService.checkForUpdates();
-                            if (info != null && info.hasUpdate && context.mounted) {
+                            if (info != null &&
+                                info.hasUpdate &&
+                                context.mounted) {
                               UpdateDialog.show(context, initialInfo: info);
                             }
                           }
@@ -77,7 +81,7 @@ class _RootScreenState extends State<RootScreen> {
           error: (dynamic e, dynamic _) =>
               Scaffold(body: Center(child: Text('Ошибка: $e'))),
           loading: () =>
-              const Scaffold(body: Center(child: CircularProgressIndicator())),
+              const Scaffold(body: Center(child: M3ELoadingIndicator())),
         );
       },
     );
@@ -259,9 +263,11 @@ class _LoginScreenState extends State<LoginScreen> {
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
-                            const Text(
+                            Text(
                               'Вход через Яндекс',
-                              style: TextStyle(color: Colors.white54),
+                              style: TextStyle(
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
                             ),
                             const SizedBox(height: 32),
                             if (showBrowserFirst) ...[
@@ -273,24 +279,27 @@ class _LoginScreenState extends State<LoginScreen> {
                               const SizedBox(height: 12),
                               browserButton,
                             ],
-                            const Padding(
-                              padding: EdgeInsets.symmetric(vertical: 24),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                vertical: 24,
+                              ),
                               child: Row(
                                 children: [
-                                  Expanded(child: Divider()),
+                                  const Expanded(child: Divider()),
                                   Padding(
-                                    padding: EdgeInsets.symmetric(
+                                    padding: const EdgeInsets.symmetric(
                                       horizontal: 16,
                                     ),
                                     child: Text(
                                       'Или введите токен',
                                       style: TextStyle(
-                                        color: Colors.white24,
+                                        color: theme.colorScheme.onSurface
+                                            .withValues(alpha: 0.24),
                                         fontSize: 12,
                                       ),
                                     ),
                                   ),
-                                  Expanded(child: Divider()),
+                                  const Expanded(child: Divider()),
                                 ],
                               ),
                             ),
@@ -649,7 +658,7 @@ class _YandexDeviceLoginDialogState extends State<YandexDeviceLoginDialog> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            CircularProgressIndicator(),
+            M3ELoadingIndicator(),
             SizedBox(height: 16),
             Text('Получение кода авторизации...'),
           ],
@@ -748,18 +757,20 @@ class _YandexDeviceLoginDialogState extends State<YandexDeviceLoginDialog> {
             ],
           ),
           const SizedBox(height: 24),
-          const Row(
+          Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              SizedBox(
-                width: 16,
-                height: 16,
-                child: CircularProgressIndicator(strokeWidth: 2),
+              const M3ECircularWavyProgressIndicator(
+                strokeWidth: 2,
+                size: 16,
               ),
-              SizedBox(width: 12),
+              const SizedBox(width: 12),
               Text(
                 'Ожидание ввода кода на сайте',
-                style: TextStyle(color: Colors.white54, fontSize: 13),
+                style: TextStyle(
+                  color: theme.colorScheme.onSurfaceVariant,
+                  fontSize: 13,
+                ),
               ),
             ],
           ),

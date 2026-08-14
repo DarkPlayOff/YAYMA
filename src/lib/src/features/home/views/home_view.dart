@@ -146,11 +146,13 @@ class HomeView extends StatelessWidget {
                                   builder: (context) {
                                     final trackId = trackMetadataSignal().id;
                                     if (trackId == null) {
-                                      return const Center(
+                                      return Center(
                                         child: Text(
                                           'Выберите трек',
                                           style: TextStyle(
-                                            color: Colors.white38,
+                                            color: Theme.of(
+                                              context,
+                                            ).colorScheme.onSurfaceVariant,
                                           ),
                                         ),
                                       );
@@ -168,9 +170,11 @@ class HomeView extends StatelessWidget {
                                   left: 0,
                                   child: SafeArea(
                                     child: IconButton(
-                                      icon: const Icon(
+                                      icon: Icon(
                                         Icons.arrow_back_ios_new_rounded,
-                                        color: Colors.white70,
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.onSurfaceVariant,
                                         size: 24,
                                       ),
                                       onPressed: () {
@@ -248,24 +252,44 @@ class _HomeTrackHeaderState extends State<_HomeTrackHeader> {
                               navigateTo(AppSection.album, meta.albumId);
                             }
                           },
-                          child: Text(
-                            meta.title,
-                            style: TextStyle(
-                              fontSize: widget.small
-                                  ? (widget.isNarrow ? 18 : 32)
-                                  : (widget.isNarrow ? 22 : 42),
-                              fontWeight: FontWeight.w900,
-                              color: Colors.white,
-                              letterSpacing: -1,
-                              decoration: hovered && meta.albumId != null
-                                  ? TextDecoration.underline
-                                  : null,
-                              shadows: widget.isNarrow
-                                  ? null
-                                  : const [Shadow(blurRadius: 20)],
+                          child: AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 300),
+                            switchInCurve: Curves.easeOutCubic,
+                            switchOutCurve: Curves.easeInCubic,
+                            transitionBuilder: (child, animation) {
+                              final offset = Tween<Offset>(
+                                begin: const Offset(0, 0.06),
+                                end: Offset.zero,
+                              ).animate(animation);
+                              return FadeTransition(
+                                opacity: animation,
+                                child: SlideTransition(
+                                  position: offset,
+                                  child: child,
+                                ),
+                              );
+                            },
+                            child: Text(
+                              meta.title,
+                              key: ValueKey('home-title-${meta.id}'),
+                              style: TextStyle(
+                                fontSize: widget.small
+                                    ? (widget.isNarrow ? 18 : 32)
+                                    : (widget.isNarrow ? 22 : 42),
+                                fontWeight: FontWeight.w900,
+                                color: Theme.of(context).colorScheme.onSurface,
+                                letterSpacing: -1,
+                                height: 1.05,
+                                decoration: hovered && meta.albumId != null
+                                    ? TextDecoration.underline
+                                    : null,
+                                shadows: widget.isNarrow
+                                    ? null
+                                    : const [Shadow(blurRadius: 20)],
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
                           ),
                         );
                       },
@@ -277,7 +301,9 @@ class _HomeTrackHeaderState extends State<_HomeTrackHeader> {
                   fontSize: widget.small
                       ? (widget.isNarrow ? 12 : 16)
                       : (widget.isNarrow ? 14 : 20),
-                  color: Colors.white.withValues(alpha: 0.3),
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onSurface.withValues(alpha: 0.3),
                   padding: const EdgeInsets.only(left: 12),
                 ),
               ],
@@ -288,7 +314,9 @@ class _HomeTrackHeaderState extends State<_HomeTrackHeader> {
               fontSize: widget.small
                   ? (widget.isNarrow ? 12 : 16)
                   : (widget.isNarrow ? 14 : 22),
-              color: Colors.white.withValues(alpha: 0.6),
+              color: Theme.of(
+                context,
+              ).colorScheme.onSurface.withValues(alpha: 0.6),
             ),
           ],
         );
@@ -319,9 +347,12 @@ class _HomeMainControls extends StatelessWidget {
         final isShuffled = isShuffledSignal();
         final repeatMode = repeatModeSignal();
         final accentColor = accentColorSignal.value;
+        final scheme = Theme.of(context).colorScheme;
+        final onSurface = scheme.onSurface;
+        final onSurfaceVariant = scheme.onSurfaceVariant;
 
         var repeatIcon = Icons.repeat;
-        var repeatColor = Colors.white38;
+        var repeatColor = onSurfaceVariant;
         if (repeatMode == RepeatModeDto.all) {
           repeatColor = accentColor;
         } else if (repeatMode == RepeatModeDto.single) {
@@ -341,7 +372,7 @@ class _HomeMainControls extends StatelessWidget {
                           ? Icons.heart_broken
                           : Icons.heart_broken_outlined,
                       size: 24,
-                      color: isDisliked ? Colors.blueGrey : Colors.white38,
+                      color: isDisliked ? Colors.blueGrey : onSurfaceVariant,
                     ),
                     onPressed: () => trackId != null
                         ? unawaited(
@@ -350,10 +381,10 @@ class _HomeMainControls extends StatelessWidget {
                         : null,
                   ),
                   IconButton(
-                    icon: const Icon(
+                    icon: Icon(
                       Icons.skip_previous_rounded,
                       size: 42,
-                      color: Colors.white,
+                      color: onSurface,
                     ),
                     onPressed: () => unawaited(PlaybackController.prev()),
                   ),
@@ -364,25 +395,22 @@ class _HomeMainControls extends StatelessWidget {
                           ? Icons.pause_circle_filled_rounded
                           : Icons.play_circle_filled_rounded,
                     ),
-                    color: Colors.white,
+                    color: onSurface,
                     onPressed: () => unawaited(PlaybackController.togglePlay()),
                   ),
                   IconButton(
-                    icon: const Icon(
+                    icon: Icon(
                       Icons.skip_next_rounded,
                       size: 42,
-                      color: Colors.white,
+                      color: onSurface,
                     ),
                     onPressed: () => unawaited(PlaybackController.next()),
                   ),
-                  IconButton(
-                    icon: Icon(
-                      isLiked ? Icons.favorite : Icons.favorite_border,
-                      size: 24,
-                      color: isLiked ? Colors.red : Colors.white38,
-                    ),
-                    onPressed: () => trackId != null
-                        ? unawaited(
+                  AnimatedLikeButton(
+                    isLiked: isLiked,
+                    size: 26,
+                    onTap: trackId != null
+                        ? () => unawaited(
                             PlaybackController.toggleLike(trackId: trackId),
                           )
                         : null,
@@ -399,7 +427,7 @@ class _HomeMainControls extends StatelessWidget {
                         icon: Icon(
                           Icons.lyrics_rounded,
                           size: 24,
-                          color: showLyrics ? accentColor : Colors.white38,
+                          color: showLyrics ? accentColor : onSurfaceVariant,
                         ),
                         onPressed: () =>
                             showLyricsSignal.value = !showLyricsSignal.value,
@@ -408,7 +436,7 @@ class _HomeMainControls extends StatelessWidget {
                         icon: Icon(
                           Icons.shuffle,
                           size: 24,
-                          color: isShuffled ? accentColor : Colors.white38,
+                          color: isShuffled ? accentColor : onSurfaceVariant,
                         ),
                         onPressed: () =>
                             unawaited(PlaybackController.toggleShuffle()),
@@ -447,7 +475,7 @@ class _HomeMainControls extends StatelessWidget {
                   icon: Icon(
                     Icons.lyrics_rounded,
                     size: small ? 20 : 24,
-                    color: showLyrics ? accentColor : Colors.white38,
+                    color: showLyrics ? accentColor : onSurfaceVariant,
                   ),
                   onPressed: () =>
                       showLyricsSignal.value = !showLyricsSignal.value,
@@ -457,7 +485,7 @@ class _HomeMainControls extends StatelessWidget {
                   icon: Icon(
                     Icons.shuffle,
                     size: small ? 20 : 24,
-                    color: isShuffled ? accentColor : Colors.white38,
+                    color: isShuffled ? accentColor : onSurfaceVariant,
                   ),
                   onPressed: () =>
                       unawaited(PlaybackController.toggleShuffle()),
@@ -469,7 +497,7 @@ class _HomeMainControls extends StatelessWidget {
                         ? Icons.heart_broken
                         : Icons.heart_broken_outlined,
                     size: small ? 20 : 24,
-                    color: isDisliked ? Colors.blueGrey : Colors.white38,
+                    color: isDisliked ? Colors.blueGrey : onSurfaceVariant,
                   ),
                   onPressed: () => trackId != null
                       ? unawaited(
@@ -482,7 +510,7 @@ class _HomeMainControls extends StatelessWidget {
                   icon: Icon(
                     Icons.skip_previous_rounded,
                     size: small ? 32 : 42,
-                    color: Colors.white,
+                    color: onSurface,
                   ),
                   onPressed: () => unawaited(PlaybackController.prev()),
                 ),
@@ -494,7 +522,7 @@ class _HomeMainControls extends StatelessWidget {
                         ? Icons.pause_circle_filled_rounded
                         : Icons.play_circle_filled_rounded,
                   ),
-                  color: Colors.white,
+                  color: onSurface,
                   onPressed: () => unawaited(PlaybackController.togglePlay()),
                 ),
                 SizedBox(width: small ? 16 : 24),
@@ -502,19 +530,16 @@ class _HomeMainControls extends StatelessWidget {
                   icon: Icon(
                     Icons.skip_next_rounded,
                     size: small ? 32 : 42,
-                    color: Colors.white,
+                    color: onSurface,
                   ),
                   onPressed: () => unawaited(PlaybackController.next()),
                 ),
                 SizedBox(width: small ? 12 : 20),
-                IconButton(
-                  icon: Icon(
-                    isLiked ? Icons.favorite : Icons.favorite_border,
-                    size: small ? 20 : 24,
-                    color: isLiked ? Colors.red : Colors.white38,
-                  ),
-                  onPressed: () => trackId != null
-                      ? unawaited(
+                AnimatedLikeButton(
+                  isLiked: isLiked,
+                  size: small ? 22 : 26,
+                  onTap: trackId != null
+                      ? () => unawaited(
                           PlaybackController.toggleLike(trackId: trackId),
                         )
                       : null,
@@ -537,9 +562,9 @@ class _HomeMainControls extends StatelessWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(
+                  Icon(
                     Icons.volume_down,
-                    color: Colors.white38,
+                    color: onSurfaceVariant,
                     size: 18,
                   ),
                   const SizedBox(width: 12),
@@ -548,7 +573,7 @@ class _HomeMainControls extends StatelessWidget {
                     activeColor: accentColor,
                   ),
                   const SizedBox(width: 12),
-                  const Icon(Icons.volume_up, color: Colors.white38, size: 18),
+                  Icon(Icons.volume_up, color: onSurfaceVariant, size: 18),
                   const SizedBox(width: 8),
                   const AudioDeviceButton(),
                 ],
@@ -573,11 +598,10 @@ class _WaveSettingsButton extends StatelessWidget {
           unawaited(
             showModalBottomSheet<void>(
               context: context,
-              backgroundColor: const Color(0xFF1A1A1E),
               isScrollControlled: true,
               showDragHandle: true,
               shape: const RoundedRectangleBorder(
-                borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
               ),
               builder: (context) => DraggableScrollableSheet(
                 initialChildSize: 0.6,
@@ -593,18 +617,29 @@ class _WaveSettingsButton extends StatelessWidget {
             ),
           );
         },
-        borderRadius: BorderRadius.circular(20),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: Colors.white10),
-          ),
-          child: const Icon(
-            Icons.tune_rounded,
-            color: Colors.white70,
-            size: 16,
+        borderRadius: BorderRadius.circular(24),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+          child: Center(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+              decoration: BoxDecoration(
+                color: Theme.of(
+                  context,
+                ).colorScheme.onSurface.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onSurface.withValues(alpha: 0.1),
+                ),
+              ),
+              child: Icon(
+                Icons.tune_rounded,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                size: 16,
+              ),
+            ),
           ),
         ),
       ),

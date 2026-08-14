@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/features/core/providers/notification_provider.dart';
+import 'package:yayma/src/features/core/theme/app_tokens.dart';
 import 'package:yayma/src/features/core/views/widgets/rust_cached_image.dart';
 import 'package:yayma/src/features/library/providers/library_provider.dart';
 import 'package:yayma/src/rust/api/models.dart';
@@ -19,14 +20,14 @@ class AddToPlaylistDialog extends SignalWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     final playlists = playlistsSignal.value;
 
     return AlertDialog(
-      backgroundColor: const Color(0xFF1E1E1E),
-      title: const Text(
+      title: Text(
         'Добавить в плейлист',
         style: TextStyle(
-          color: Colors.white,
+          color: cs.onSurface,
           fontWeight: FontWeight.bold,
         ),
       ),
@@ -34,10 +35,10 @@ class AddToPlaylistDialog extends SignalWidget {
         width: 400,
         height: 500,
         child: playlists.isEmpty
-            ? const Center(
+            ? Center(
                 child: Text(
                   'У вас пока нет плейлистов',
-                  style: TextStyle(color: Colors.white54),
+                  style: TextStyle(color: cs.onSurfaceVariant),
                 ),
               )
             : ListView.builder(
@@ -46,7 +47,7 @@ class AddToPlaylistDialog extends SignalWidget {
                   final playlist = playlists[index];
                   return ListTile(
                     leading: ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: BorderRadius.circular(AppRadius.xs),
                       child: playlist.coverUrl != null
                           ? RustCachedImage(
                               imageUrl: playlist.coverUrl,
@@ -55,26 +56,26 @@ class AddToPlaylistDialog extends SignalWidget {
                               errorWidget: Container(
                                 width: 48,
                                 height: 48,
-                                color: Colors.white10,
-                                child: const Icon(
+                                color: cs.onSurface.withValues(alpha: 0.1),
+                                child: Icon(
                                   Icons.library_music_rounded,
-                                  color: Colors.white24,
+                                  color: cs.onSurface.withValues(alpha: 0.24),
                                 ),
                               ),
                             )
                           : Container(
                               width: 48,
                               height: 48,
-                              color: Colors.white10,
-                              child: const Icon(
+                              color: cs.onSurface.withValues(alpha: 0.1),
+                              child: Icon(
                                 Icons.library_music_rounded,
-                                color: Colors.white24,
+                                color: cs.onSurface.withValues(alpha: 0.24),
                               ),
                             ),
                     ),
                     title: Text(
                       playlist.title,
-                      style: const TextStyle(color: Colors.white),
+                      style: TextStyle(color: cs.onSurface),
                     ),
                     onTap: () async {
                       final success = await addTrackToPlaylistAction(
@@ -99,7 +100,10 @@ class AddToPlaylistDialog extends SignalWidget {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Отмена', style: TextStyle(color: Colors.white54)),
+          child: Text(
+            'Отмена',
+            style: TextStyle(color: cs.onSurfaceVariant),
+          ),
         ),
       ],
     );

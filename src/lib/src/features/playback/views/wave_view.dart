@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:m3e_core/m3e_core.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/features/core/views/widgets/responsive.dart';
 import 'package:yayma/src/features/home/providers/home_provider.dart';
@@ -41,13 +42,13 @@ class WaveSettingsPanel extends StatelessWidget {
                   children: [
                     Row(
                       children: [
-                        const Expanded(
+                        Expanded(
                           child: Text(
                             'Настроить Мою волну',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
-                              color: Colors.white,
+                              color: Theme.of(context).colorScheme.onSurface,
                               fontSize: 22,
                               fontWeight: FontWeight.w900,
                               letterSpacing: -0.5,
@@ -68,9 +69,11 @@ class WaveSettingsPanel extends StatelessWidget {
                                       unawaited(WaveController.resetStations());
                                     },
                                     behavior: HitTestBehavior.opaque,
-                                    child: const Icon(
+                                    child: Icon(
                                       Icons.refresh,
-                                      color: Colors.white54,
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.onSurfaceVariant,
                                       size: 20,
                                     ),
                                   ),
@@ -93,9 +96,11 @@ class WaveSettingsPanel extends StatelessWidget {
                                 );
                               },
                               behavior: HitTestBehavior.opaque,
-                              child: const Icon(
+                              child: Icon(
                                 Icons.explore,
-                                color: Colors.white54,
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
                                 size: 20,
                               ),
                             ),
@@ -104,7 +109,7 @@ class WaveSettingsPanel extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 24),
-                    _buildSectionTitle('Под занятие'),
+                    _buildSectionTitle(context, 'Под занятие'),
 
                     _buildChips(context, [
                       _VibeItem('Просыпаюсь', 'activity:wake-up'),
@@ -114,7 +119,7 @@ class WaveSettingsPanel extends StatelessWidget {
                       _VibeItem('Засыпаю', 'activity:fall-asleep'),
                     ], currentSeeds),
                     const SizedBox(height: 24),
-                    _buildSectionTitle('По характеру'),
+                    _buildSectionTitle(context, 'По характеру'),
                     Row(
                       children: [
                         _CharacterCard(
@@ -142,7 +147,7 @@ class WaveSettingsPanel extends StatelessWidget {
                         _CharacterCard(
                           label: 'Популярное',
                           icon: Icons.bolt,
-                          color: Colors.white,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
                           seed: 'personal:hits',
                           onSelected: onSelected,
                           isSelected: currentSeeds.contains('personal:hits'),
@@ -150,7 +155,7 @@ class WaveSettingsPanel extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 24),
-                    _buildSectionTitle('Под настроение'),
+                    _buildSectionTitle(context, 'Под настроение'),
                     _buildMoods([
                       _MoodItem('Бодрое', [
                         Colors.orange,
@@ -170,7 +175,7 @@ class WaveSettingsPanel extends StatelessWidget {
                       ], 'mood:sad'),
                     ], currentSeeds),
                     const SizedBox(height: 24),
-                    _buildSectionTitle('По языку'),
+                    _buildSectionTitle(context, 'По языку'),
                     _buildChips(context, [
                       _VibeItem('Русский', 'local-language:russian'),
                       _VibeItem('Иностранный', 'local-language:english'),
@@ -180,7 +185,7 @@ class WaveSettingsPanel extends StatelessWidget {
                     if (currentSeeds.isNotEmpty &&
                         !currentSeeds.contains('user:onyourwave') &&
                         !_isMainSeed(currentSeeds.first))
-                      _buildActiveExtraStation(currentSeeds.first),
+                      _buildActiveExtraStation(context, currentSeeds.first),
                   ],
                 ),
               ),
@@ -227,11 +232,11 @@ class WaveSettingsPanel extends StatelessWidget {
     return mainSeeds.contains(seed);
   }
 
-  Widget _buildActiveExtraStation(String seed) {
+  Widget _buildActiveExtraStation(BuildContext context, String seed) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildSectionTitle('Активный режим'),
+        _buildSectionTitle(context, 'Активный режим'),
         SignalBuilder(
           builder: (context) {
             final catsFuture = waveStationsSignal.value;
@@ -268,13 +273,15 @@ class WaveSettingsPanel extends StatelessWidget {
     );
   }
 
-  Widget _buildSectionTitle(String title) {
+  Widget _buildSectionTitle(BuildContext context, String title) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Text(
         title,
-        style: const TextStyle(
-          color: Colors.white38,
+        style: TextStyle(
+          color: Theme.of(
+            context,
+          ).colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
           fontSize: 13,
           fontWeight: FontWeight.w800,
           letterSpacing: 1.2,
@@ -386,15 +393,25 @@ class _RoundedChip extends StatelessWidget {
       onSelected: (_) {
         unawaited(WaveController.toggleStation(item.seed));
       },
-      backgroundColor: Colors.white.withValues(alpha: 0.05),
-      selectedColor: Colors.white.withValues(alpha: 0.2),
+      backgroundColor: Theme.of(
+        context,
+      ).colorScheme.onSurface.withValues(alpha: 0.05),
+      selectedColor: Theme.of(
+        context,
+      ).colorScheme.onSurface.withValues(alpha: 0.2),
       labelStyle: TextStyle(
-        color: isSelected ? Colors.white : Colors.white70,
+        color: isSelected
+            ? Theme.of(context).colorScheme.onSurface
+            : Theme.of(context).colorScheme.onSurfaceVariant,
         fontWeight: isSelected ? FontWeight.w900 : FontWeight.w600,
       ),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       side: isSelected
-          ? const BorderSide(color: Colors.white24)
+          ? BorderSide(
+              color: Theme.of(context).colorScheme.onSurface.withValues(
+                alpha: 0.24,
+              ),
+            )
           : BorderSide.none,
       showCheckmark: false,
     );
@@ -429,11 +446,21 @@ class _CharacterCard extends StatelessWidget {
           height: 90,
           decoration: BoxDecoration(
             color: isSelected
-                ? Colors.white.withValues(alpha: 0.1)
-                : Colors.white.withValues(alpha: 0.05),
+                ? Theme.of(
+                    context,
+                  ).colorScheme.onSurface.withValues(alpha: 0.1)
+                : Theme.of(
+                    context,
+                  ).colorScheme.onSurface.withValues(alpha: 0.05),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
-              color: isSelected ? Colors.white30 : Colors.white10,
+              color: isSelected
+                  ? Theme.of(
+                      context,
+                    ).colorScheme.onSurface.withValues(alpha: 0.3)
+                  : Theme.of(
+                      context,
+                    ).colorScheme.onSurface.withValues(alpha: 0.1),
             ),
           ),
           child: Column(
@@ -447,7 +474,9 @@ class _CharacterCard extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  color: isSelected ? Colors.white : Colors.white70,
+                  color: isSelected
+                      ? Theme.of(context).colorScheme.onSurface
+                      : Theme.of(context).colorScheme.onSurfaceVariant,
                   fontWeight: isSelected ? FontWeight.w900 : FontWeight.bold,
                   fontSize: 12,
                 ),
@@ -486,7 +515,10 @@ class _MoodCircle extends StatelessWidget {
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               border: isSelected
-                  ? Border.all(color: Colors.white, width: 2)
+                  ? Border.all(
+                      color: Theme.of(context).colorScheme.onSurface,
+                      width: 2,
+                    )
                   : null,
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
@@ -511,7 +543,9 @@ class _MoodCircle extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             textAlign: TextAlign.center,
             style: TextStyle(
-              color: isSelected ? Colors.white : Colors.white70,
+              color: isSelected
+                  ? Theme.of(context).colorScheme.onSurface
+                  : Theme.of(context).colorScheme.onSurfaceVariant,
               fontWeight: isSelected ? FontWeight.w900 : FontWeight.w600,
               fontSize: 11,
             ),
@@ -547,7 +581,7 @@ class _AllStationsSheetState extends State<_AllStationsSheet> {
       builder: (context) {
         final stationsFuture = waveStationsSignal.value;
         if (stationsFuture.isLoading) {
-          return const Center(child: CircularProgressIndicator());
+          return const Center(child: M3ELoadingIndicator());
         }
 
         final currentSeeds = currentWaveSeedsSignal();
@@ -570,9 +604,11 @@ class _AllStationsSheetState extends State<_AllStationsSheet> {
 
         return Container(
           height: MediaQuery.of(context).size.height * 0.8,
-          decoration: const BoxDecoration(
-            color: Color(0xFF181818),
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surfaceContainerHighest,
+            borderRadius: const BorderRadius.vertical(
+              top: Radius.circular(24),
+            ),
           ),
           child: SafeArea(
             child: Column(
@@ -581,17 +617,20 @@ class _AllStationsSheetState extends State<_AllStationsSheet> {
                   padding: const EdgeInsets.fromLTRB(24, 24, 24, 8),
                   child: Row(
                     children: [
-                      const Text(
+                      Text(
                         'Каталог станций',
                         style: TextStyle(
-                          color: Colors.white,
+                          color: Theme.of(context).colorScheme.onSurface,
                           fontSize: 20,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
                       const Spacer(),
                       IconButton(
-                        icon: const Icon(Icons.close, color: Colors.white54),
+                        icon: Icon(
+                          Icons.close,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
                         onPressed: () => Navigator.pop(context),
                       ),
                     ],
@@ -605,16 +644,26 @@ class _AllStationsSheetState extends State<_AllStationsSheet> {
                   child: TextField(
                     controller: _controller,
                     onChanged: (v) => _searchQuery.value = v,
-                    style: const TextStyle(color: Colors.white),
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurface,
+                    ),
                     decoration: InputDecoration(
                       hintText: 'Поиск по жанрам, настроениям...',
-                      hintStyle: const TextStyle(color: Colors.white24),
-                      prefixIcon: const Icon(
+                      hintStyle: TextStyle(
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
+                      ),
+                      prefixIcon: Icon(
                         Icons.search,
-                        color: Colors.white24,
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
                       ),
                       filled: true,
-                      fillColor: Colors.white.withValues(alpha: 0.05),
+                      fillColor: Theme.of(
+                        context,
+                      ).colorScheme.onSurface.withValues(alpha: 0.05),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                         borderSide: BorderSide.none,
@@ -625,10 +674,14 @@ class _AllStationsSheetState extends State<_AllStationsSheet> {
                 ),
                 Expanded(
                   child: cats.isEmpty && query.isNotEmpty
-                      ? const Center(
+                      ? Center(
                           child: Text(
                             'Ничего не найдено',
-                            style: TextStyle(color: Colors.white38),
+                            style: TextStyle(
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onSurfaceVariant,
+                            ),
                           ),
                         )
                       : Scrollbar(
@@ -650,8 +703,12 @@ class _AllStationsSheetState extends State<_AllStationsSheet> {
                                   sliver: SliverToBoxAdapter(
                                     child: Text(
                                       cat.title.toUpperCase(),
-                                      style: const TextStyle(
-                                        color: Colors.white38,
+                                      style: TextStyle(
+                                        color:
+                                            Theme.of(
+                                                  context,
+                                                ).colorScheme.onSurfaceVariant
+                                                .withValues(alpha: 0.6),
                                         fontWeight: FontWeight.bold,
                                         letterSpacing: 1.2,
                                         fontSize: 12,
@@ -698,16 +755,30 @@ class _AllStationsSheetState extends State<_AllStationsSheet> {
                                             );
                                             Navigator.pop(context);
                                           },
-                                          backgroundColor: Colors.white
-                                              .withValues(alpha: 0.05),
-                                          selectedColor: Colors.white
-                                              .withValues(
-                                                alpha: 0.2,
-                                              ),
+                                          backgroundColor:
+                                              Theme.of(
+                                                    context,
+                                                  ).colorScheme.onSurface
+                                                  .withValues(
+                                                    alpha: 0.05,
+                                                  ),
+                                          selectedColor:
+                                              Theme.of(
+                                                    context,
+                                                  ).colorScheme.onSurface
+                                                  .withValues(
+                                                    alpha: 0.2,
+                                                  ),
                                           labelStyle: TextStyle(
                                             color: isSelected
-                                                ? Colors.white
-                                                : Colors.white70,
+                                                ? Theme.of(
+                                                    context,
+                                                  ).colorScheme.onSurface
+                                                : Theme.of(
+                                                        context,
+                                                      )
+                                                      .colorScheme
+                                                      .onSurfaceVariant,
                                             fontWeight: isSelected
                                                 ? FontWeight.w900
                                                 : FontWeight.w600,
@@ -719,8 +790,16 @@ class _AllStationsSheetState extends State<_AllStationsSheet> {
                                             ),
                                           ),
                                           side: isSelected
-                                              ? const BorderSide(
-                                                  color: Colors.white24,
+                                              ? BorderSide(
+                                                  color:
+                                                      Theme.of(
+                                                            context,
+                                                          )
+                                                          .colorScheme
+                                                          .onSurface
+                                                          .withValues(
+                                                            alpha: 0.24,
+                                                          ),
                                                 )
                                               : BorderSide.none,
                                           showCheckmark: false,

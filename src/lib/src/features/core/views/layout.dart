@@ -227,11 +227,16 @@ class _RootBucket extends StatelessWidget {
               duration: const Duration(milliseconds: 500),
               offset: isLast
                   ? Offset.zero
-                  : (isHome ? const Offset(0, -0.05) : Offset.zero),
+                  : (isHome ? const Offset(0, -0.05) : const Offset(0.03, 0)),
               curve: Curves.easeOutCubic,
-              child: IgnorePointer(
-                ignoring: !isLast,
-                child: _WindowContent(state: state, index: index),
+              child: AnimatedScale(
+                duration: const Duration(milliseconds: 500),
+                scale: isLast ? 1.0 : 0.98,
+                curve: Curves.easeOutCubic,
+                child: IgnorePointer(
+                  ignoring: !isLast,
+                  child: _WindowContent(state: state, index: index),
+                ),
               ),
             ),
           ),
@@ -315,7 +320,7 @@ class _WindowContent extends StatelessWidget {
 
         final child = KeyedSubtree(
           key: key,
-          child: _mapSectionToWidget(state),
+          child: _mapSectionToWidget(context, state),
         );
 
         return Padding(
@@ -329,7 +334,7 @@ class _WindowContent extends StatelessWidget {
     );
   }
 
-  Widget _mapSectionToWidget(NavState state) {
+  Widget _mapSectionToWidget(BuildContext context, NavState state) {
     switch (state.section) {
       case AppSection.home:
         return const HomeView();
@@ -349,8 +354,13 @@ class _WindowContent extends StatelessWidget {
           kind: parts.length > 1 ? parts[1] : null,
         );
       case AppSection.wave:
-        return const Center(
-          child: Text('Волна', style: TextStyle(color: Colors.white24)),
+        return Center(
+          child: Text(
+            'Волна',
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
         );
       case AppSection.account:
         return const SettingsView();
@@ -373,14 +383,24 @@ class _FloatingBackButton extends StatelessWidget {
           child: IconButton(
             onPressed: goBack,
             style: IconButton.styleFrom(
-              backgroundColor: const Color(0xFF1E1E1E),
-              hoverColor: Colors.white10,
+              backgroundColor: Color.lerp(
+                Theme.of(context).colorScheme.surfaceContainerHighest,
+                Colors.black,
+                0.4,
+              ),
+              hoverColor: Theme.of(
+                context,
+              ).colorScheme.onSurface.withValues(alpha: 0.1),
               padding: const EdgeInsets.all(12),
-              side: const BorderSide(color: Colors.white10),
+              side: BorderSide(
+                color: Theme.of(
+                  context,
+                ).colorScheme.onSurface.withValues(alpha: 0.1),
+              ),
             ),
-            icon: const Icon(
+            icon: Icon(
               Icons.arrow_back_ios_new_rounded,
-              color: Colors.white70,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
               size: 24,
             ),
           ),

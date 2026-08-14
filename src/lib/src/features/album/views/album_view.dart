@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:m3e_core/m3e_core.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/features/auth/providers/auth_provider.dart';
 import 'package:yayma/src/features/core/providers/navigation_provider.dart';
@@ -126,6 +127,7 @@ class _AlbumViewState extends State<AlbumView> {
             final albumData = album!;
             return SignalBuilder(
               builder: (context) {
+                final cs = Theme.of(context).colorScheme;
                 final isLiked = likedAlbumsSignal.value.any(
                   (likedAlbum) => likedAlbum.id == albumData.id,
                 );
@@ -139,7 +141,7 @@ class _AlbumViewState extends State<AlbumView> {
                     secondarySubtitle: albumData.year?.toString(),
                     coverUrl: albumData.coverUrl,
                     actions: [
-                      ElevatedButton.icon(
+                      M3EButton.icon(
                         onPressed: () => unawaited(
                           _toggleAlbumLike(albumData, isLiked),
                         ),
@@ -149,61 +151,60 @@ class _AlbumViewState extends State<AlbumView> {
                               : Icons.favorite_border_rounded,
                         ),
                         label: Text(isLiked ? 'В любимых' : 'В любимые'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: isLiked
-                              ? Theme.of(context).colorScheme.primary
-                              : Colors.white.withValues(alpha: 0.1),
-                          foregroundColor: isLiked
-                              ? Colors.black
-                              : Colors.white,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 20,
-                            vertical: 14,
-                          ),
-                        ),
+                        style: isLiked
+                            ? M3EButtonStyle.filled
+                            : M3EButtonStyle.outlined,
+                        size: M3EButtonSize.md,
+                        decoration: isLiked
+                            ? null
+                            : M3EButtonDecoration.styleFrom(
+                                backgroundColor: cs.onSurface.withValues(
+                                  alpha: 0.1,
+                                ),
+                                foregroundColor: cs.onSurface,
+                              ),
                       ),
-                      ElevatedButton.icon(
+                      M3EButton.icon(
                         onPressed: () => unawaited(_copyAlbumLink(albumData)),
                         icon: const Icon(Icons.link_rounded),
                         label: const Text('Ссылка'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.white.withValues(alpha: 0.1),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 20,
-                            vertical: 14,
-                          ),
+                        style: M3EButtonStyle.outlined,
+                        size: M3EButtonSize.md,
+                        decoration: M3EButtonDecoration.styleFrom(
+                          backgroundColor: cs.onSurface.withValues(alpha: 0.1),
+                          foregroundColor: cs.onSurface,
                         ),
                       ),
-                      ElevatedButton.icon(
+                      M3EButton.icon(
                         onPressed: isDownloading
                             ? null
                             : () => unawaited(_downloadAlbum(albumData)),
                         icon: isDownloading
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
+                            ? const M3ECircularWavyProgressIndicator(
+                                strokeWidth: 2,
+                                size: 18,
                               )
                             : const Icon(Icons.download_rounded),
                         label: const Text('Скачать альбом'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.white.withValues(alpha: 0.1),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 20,
-                            vertical: 14,
-                          ),
+                        style: M3EButtonStyle.outlined,
+                        size: M3EButtonSize.md,
+                        decoration: M3EButtonDecoration.styleFrom(
+                          backgroundColor: cs.onSurface.withValues(alpha: 0.1),
+                          foregroundColor: cs.onSurface,
                         ),
                       ),
                     ],
                   ),
                   slivers: [
-                    SliverFixedExtentList(
-                      itemExtent: 84,
-                      delegate: SliverChildBuilderDelegate((context, index) {
+                    SliverM3ECardList(
+                      haptic: M3EHapticFeedback.light,
+                      itemCount: albumData.tracks.length,
+                      color: cs.onSurface.withValues(alpha: 0.04),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 4,
+                      ),
+                      itemBuilder: (context, index) {
                         final track = albumData.tracks[index];
                         return CommonTrackTile(
                           trackId: track.id,
@@ -216,8 +217,8 @@ class _AlbumViewState extends State<AlbumView> {
                             child: Center(
                               child: Text(
                                 '${index + 1}',
-                                style: const TextStyle(
-                                  color: Colors.white38,
+                                style: TextStyle(
+                                  color: cs.onSurface.withValues(alpha: 0.38),
                                   fontSize: 16,
                                 ),
                               ),
@@ -225,7 +226,9 @@ class _AlbumViewState extends State<AlbumView> {
                           ),
                           trailing: Text(
                             formatDuration(track.durationMs),
-                            style: const TextStyle(color: Colors.white38),
+                            style: TextStyle(
+                              color: cs.onSurface.withValues(alpha: 0.38),
+                            ),
                           ),
                           hoverActions: [
                             IconButton(
@@ -247,7 +250,7 @@ class _AlbumViewState extends State<AlbumView> {
                           onTitleTap: () =>
                               navigateTo(AppSection.album, albumData.id),
                         );
-                      }, childCount: albumData.tracks.length),
+                      },
                     ),
                   ],
                 );

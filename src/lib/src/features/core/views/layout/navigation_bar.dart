@@ -7,6 +7,7 @@ import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/features/auth/providers/auth_provider.dart';
 import 'package:yayma/src/features/auth/views/yandex_id_view.dart';
 import 'package:yayma/src/features/core/providers/navigation_provider.dart';
+import 'package:yayma/src/features/core/theme/app_tokens.dart';
 import 'package:yayma/src/features/core/views/widgets/rust_cached_image.dart';
 import 'package:yayma/src/features/home/providers/home_provider.dart';
 import 'package:yayma/src/features/playback/providers/playback_provider.dart';
@@ -71,6 +72,7 @@ class _FloatingNavBarState extends State<FloatingNavBar>
   Widget build(BuildContext context) {
     return SignalBuilder(
       builder: (context) {
+        final colorScheme = Theme.of(context).colorScheme;
         final currentState = currentNavStateSignal.value;
         final currentSection = currentState.section;
         final isHome = currentSection == AppSection.home;
@@ -195,7 +197,7 @@ class _FloatingNavBarState extends State<FloatingNavBar>
                   link: _layerLink,
                   child: Container(
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(32),
+                      borderRadius: BorderRadius.circular(AppRadius.xxxl),
                       boxShadow: [
                         BoxShadow(
                           color: Colors.black.withValues(
@@ -207,7 +209,7 @@ class _FloatingNavBarState extends State<FloatingNavBar>
                       ],
                     ),
                     child: ClipRRect(
-                      borderRadius: BorderRadius.circular(32),
+                      borderRadius: BorderRadius.circular(AppRadius.xxxl),
                       child: BackdropFilter(
                         filter: ui.ImageFilter.blur(
                           sigmaX: isHome ? 0 : 3,
@@ -222,9 +224,11 @@ class _FloatingNavBarState extends State<FloatingNavBar>
                           ),
                           decoration: BoxDecoration(
                             color: barColor.withValues(alpha: alpha),
-                            borderRadius: BorderRadius.circular(32),
+                            borderRadius: BorderRadius.circular(AppRadius.xxxl),
                             border: Border.all(
-                              color: Colors.white.withValues(alpha: 0.1),
+                              color: colorScheme.onSurface.withValues(
+                                alpha: 0.1,
+                              ),
                             ),
                           ),
                           child: isNarrow
@@ -266,6 +270,7 @@ class _AccountButton extends SignalWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     final account = accountSignal.value;
     if (account == null) return const SizedBox();
 
@@ -279,7 +284,7 @@ class _AccountButton extends SignalWidget {
         );
         onClosed();
       },
-      borderRadius: BorderRadius.circular(20),
+      borderRadius: BorderRadius.circular(AppRadius.lg),
       child: Container(
         padding: const EdgeInsets.all(2),
         decoration: BoxDecoration(
@@ -295,7 +300,9 @@ class _AccountButton extends SignalWidget {
                   end: Alignment.bottomRight,
                 )
               : null,
-          border: account.hasPlus ? null : Border.all(color: Colors.white10),
+          border: account.hasPlus
+              ? null
+              : Border.all(color: cs.onSurface.withValues(alpha: 0.1)),
         ),
         child: Container(
           padding: const EdgeInsets.all(2),
@@ -309,16 +316,16 @@ class _AccountButton extends SignalWidget {
                     imageUrl: account.avatarUrl,
                     width: 36,
                     height: 36,
-                    errorWidget: const Icon(
+                    errorWidget: Icon(
                       Icons.person_rounded,
                       size: 20,
-                      color: Colors.white70,
+                      color: cs.onSurfaceVariant,
                     ),
                   )
-                : const Icon(
+                : Icon(
                     Icons.person_rounded,
                     size: 20,
-                    color: Colors.white70,
+                    color: cs.onSurfaceVariant,
                   ),
           ),
         ),
@@ -334,6 +341,7 @@ class _AccountMenuDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     final isNarrow = MediaQuery.sizeOf(context).width < 600;
 
     return Dialog(
@@ -341,8 +349,9 @@ class _AccountMenuDialog extends StatelessWidget {
       insetPadding: isNarrow
           ? const EdgeInsets.symmetric(horizontal: 16, vertical: 24)
           : const EdgeInsets.only(left: 96),
-      backgroundColor: const Color(0xFF18181B),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadius.xxl),
+      ),
       child: Container(
         width: isNarrow ? double.infinity : 320,
         padding: const EdgeInsets.all(24),
@@ -369,7 +378,9 @@ class _AccountMenuDialog extends StatelessWidget {
                         : null,
                     border: account.hasPlus
                         ? null
-                        : Border.all(color: Colors.white10),
+                        : Border.all(
+                            color: cs.onSurface.withValues(alpha: 0.1),
+                          ),
                   ),
                   child: Container(
                     padding: const EdgeInsets.all(2),
@@ -383,16 +394,16 @@ class _AccountMenuDialog extends StatelessWidget {
                               imageUrl: account.avatarUrl,
                               width: 64,
                               height: 64,
-                              errorWidget: const Icon(
+                              errorWidget: Icon(
                                 Icons.person_rounded,
                                 size: 32,
-                                color: Colors.white70,
+                                color: cs.onSurfaceVariant,
                               ),
                             )
-                          : const Icon(
+                          : Icon(
                               Icons.person_rounded,
                               size: 32,
-                              color: Colors.white70,
+                              color: cs.onSurfaceVariant,
                             ),
                     ),
                   ),
@@ -407,17 +418,17 @@ class _AccountMenuDialog extends StatelessWidget {
                         account.displayName ??
                             account.fullName ??
                             account.login,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 20,
                           fontWeight: FontWeight.bold,
-                          color: Colors.white,
+                          color: cs.onSurface,
                         ),
                         overflow: TextOverflow.ellipsis,
                       ),
                       Text(
                         account.login,
-                        style: const TextStyle(
-                          color: Colors.white38,
+                        style: TextStyle(
+                          color: cs.onSurfaceVariant,
                           fontSize: 13,
                         ),
                         overflow: TextOverflow.ellipsis,
@@ -427,9 +438,9 @@ class _AccountMenuDialog extends StatelessWidget {
                 ),
                 IconButton(
                   onPressed: () => Navigator.pop(context),
-                  icon: const Icon(
+                  icon: Icon(
                     Icons.close,
-                    color: Colors.white54,
+                    color: cs.onSurfaceVariant,
                     size: 20,
                   ),
                 ),
@@ -465,7 +476,10 @@ class _AccountMenuDialog extends StatelessWidget {
               },
             ),
 
-            const Divider(color: Colors.white10, height: 40),
+            Divider(
+              color: cs.onSurface.withValues(alpha: 0.1),
+              height: 40,
+            ),
 
             _MenuTile(
               icon: Icons.logout_rounded,
@@ -495,23 +509,24 @@ class _MenuTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return InkWell(
       onTap: onTap ?? () {},
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(AppRadius.sm),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
           color: Colors.transparent,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(AppRadius.sm),
         ),
         child: Row(
           children: [
-            Icon(icon, color: Colors.white, size: 24),
+            Icon(icon, color: cs.onSurface, size: 24),
             const SizedBox(width: 16),
             Expanded(
               child: Text(
                 title,
-                style: const TextStyle(fontSize: 15, color: Colors.white),
+                style: TextStyle(fontSize: 15, color: cs.onSurface),
               ),
             ),
           ],
@@ -579,8 +594,12 @@ class _WaveOverlayState extends State<_WaveOverlay>
                 elevation: 24,
                 color: const Color(0xFF1A1A1E),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(28),
-                  side: const BorderSide(color: Colors.white10),
+                  borderRadius: BorderRadius.circular(AppRadius.xxl),
+                  side: BorderSide(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.onSurface.withValues(alpha: 0.1),
+                  ),
                 ),
                 child: WaveSettingsPanel(onSelected: widget.onSelected),
               ),
@@ -607,19 +626,42 @@ class _NavIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Padding(
       padding: EdgeInsets.symmetric(
         vertical: isNarrow ? 0 : 4,
         horizontal: isNarrow ? 4 : 0,
       ),
-      child: IconButton(
-        onPressed: onTap,
-        icon: Icon(
-          icon,
-          color: isSelected
-              ? Theme.of(context).colorScheme.primary
-              : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.38),
-          size: 28,
+      child: AnimatedScale(
+        scale: isSelected ? 1.12 : 1.0,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOutBack,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOutCubic,
+          width: 48,
+          height: 48,
+          decoration: BoxDecoration(
+            color: isSelected
+                ? scheme.primary.withValues(alpha: 0.18)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(isSelected ? 16 : 14),
+            border: isSelected
+                ? Border.all(
+                    color: scheme.primary.withValues(alpha: 0.35),
+                  )
+                : null,
+          ),
+          child: IconButton(
+            onPressed: onTap,
+            icon: Icon(
+              icon,
+              color: isSelected
+                  ? scheme.primary
+                  : scheme.onSurface.withValues(alpha: 0.38),
+              size: 28,
+            ),
+          ),
         ),
       ),
     );
