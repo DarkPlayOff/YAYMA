@@ -8,12 +8,12 @@ import Foundation
 import audio_service
 import audio_session
 import dynamic_color
-import file_picker
+import file_picker_darwin
 import screen_retriever_macos
 import sqflite_darwin
 import tray_manager
 import url_launcher_macos
-import webview_flutter_wkwebview
+import webview_all_wkwebview
 import window_manager
 
 func RegisterGeneratedPlugins(registry: FlutterPluginRegistry) {

@@ -157,14 +157,14 @@ class _PlaylistContentState extends State<_PlaylistContent> {
   }
 
   Future<void> _handleUpload(BuildContext context) async {
-    final result = await FilePicker.pickFiles(
+    final files = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['mp3', 'flac'],
     );
 
-    if (result == null || result.files.single.path == null) return;
+    if (files.isEmpty || files.single.path == null) return;
 
-    final filePath = result.files.single.path!;
+    final filePath = files.single.path!;
     if (context.mounted) {
       showAppSuccess('Загрузка трека началась...');
     }
