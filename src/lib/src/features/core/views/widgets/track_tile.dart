@@ -104,7 +104,7 @@ class _CommonTrackTileState extends State<CommonTrackTile> {
         final effectivePadding =
             widget.contentPadding ??
             EdgeInsets.symmetric(
-              horizontal: context.horizontalPadding,
+              horizontal: isNarrow ? 8 : 12,
               vertical: isNarrow ? 4 : 8,
             );
 

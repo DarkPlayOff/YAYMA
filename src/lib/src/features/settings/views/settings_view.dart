@@ -197,7 +197,7 @@ class _SettingsViewState extends State<SettingsView> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const _SectionTitle(title: 'Загрузки'),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 20),
                   SignalBuilder(
                     builder: (context) {
                       final path = _pathSignal.value;
@@ -210,9 +210,9 @@ class _SettingsViewState extends State<SettingsView> {
                     },
                   ),
                   if (context.isDesktop) ...[
-                    const SizedBox(height: 48),
+                    const SizedBox(height: 32),
                     const _SectionTitle(title: 'Внешний вид'),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 20),
                     SignalBuilder(
                       builder: (context) {
                         final enabled = _customTitlebarSignal.value;
@@ -231,7 +231,7 @@ class _SettingsViewState extends State<SettingsView> {
                         );
                       },
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 8),
                     SignalBuilder(
                       builder: (context) {
                         final enabled = _autoHideNavbarSignal.value;
@@ -251,11 +251,11 @@ class _SettingsViewState extends State<SettingsView> {
                         );
                       },
                     ),
-                    const SizedBox(height: 48),
+                    const SizedBox(height: 32),
                   ],
                   if (context.isDesktop) ...[
                     const _SectionTitle(title: 'Интеграции'),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 20),
                     SignalBuilder(
                       builder: (context) {
                         final enabled = _discordRpcSignal.value;
@@ -273,11 +273,11 @@ class _SettingsViewState extends State<SettingsView> {
                         );
                       },
                     ),
-                    const SizedBox(height: 48),
+                    const SizedBox(height: 32),
                   ],
                   if (context.isDesktop) ...[
                     const _SectionTitle(title: 'Система'),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 20),
                     SignalBuilder(
                       builder: (context) {
                         final enabled = _closeToTraySignal.value;
@@ -296,10 +296,10 @@ class _SettingsViewState extends State<SettingsView> {
                         );
                       },
                     ),
-                    const SizedBox(height: 48),
+                    const SizedBox(height: 32),
                   ],
                   const _SectionTitle(title: 'Тексты песен'),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 20),
                   _SettingItem(
                     title: 'Источники текста песен',
                     subtitle:
@@ -307,9 +307,9 @@ class _SettingsViewState extends State<SettingsView> {
                     icon: Icons.lyrics_rounded,
                     onTap: () => LyricsProvidersDialog.show(context),
                   ),
-                  const SizedBox(height: 48),
+                  const SizedBox(height: 32),
                   const _SectionTitle(title: 'Кэш'),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 20),
                   SignalBuilder(
                     builder: (context) {
                       final size = _cacheSizeSignal.value;
@@ -325,7 +325,7 @@ class _SettingsViewState extends State<SettingsView> {
                       );
                     },
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 8),
                   SignalBuilder(
                     builder: (context) {
                       final size = _trackCacheSizeSignal.value;
@@ -341,9 +341,9 @@ class _SettingsViewState extends State<SettingsView> {
                       );
                     },
                   ),
-                  const SizedBox(height: 48),
+                  const SizedBox(height: 32),
                   const _SectionTitle(title: 'О приложении'),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 20),
                   Container(
                     padding: EdgeInsets.all(isNarrow ? 18 : 24),
                     decoration: BoxDecoration(
@@ -380,7 +380,7 @@ class _SettingsViewState extends State<SettingsView> {
                       ],
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 8),
                   SignalBuilder(
                     builder: (context) {
                       final enabled = _updateCheckSignal.value;
@@ -403,7 +403,7 @@ class _SettingsViewState extends State<SettingsView> {
               ),
             ),
           ),
-          const SliverToBoxAdapter(child: SizedBox(height: 100)),
+          const SliverToBoxAdapter(child: SizedBox(height: 60)),
         ],
       ),
     );
@@ -452,25 +452,25 @@ class _SettingItem extends StatelessWidget {
     final isNarrow = context.isNarrow;
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(AppRadius.lg),
-      child: Container(
-        padding: EdgeInsets.all(isNarrow ? 16 : 24),
-        decoration: BoxDecoration(
-          color: onSurface.withValues(alpha: 0.05),
-          borderRadius: BorderRadius.circular(AppRadius.lg),
-          border: Border.all(color: onSurface.withValues(alpha: 0.1)),
+      onHover: (_) {},
+      hoverColor: onSurface.withValues(alpha: 0.06),
+      borderRadius: BorderRadius.circular(AppRadius.sm),
+      child: Padding(
+        padding: EdgeInsets.symmetric(
+          horizontal: isNarrow ? 8 : 12,
+          vertical: isNarrow ? 8 : 10,
         ),
         child: Row(
           children: [
             Container(
-              padding: EdgeInsets.all(isNarrow ? 10 : 12),
+              padding: EdgeInsets.all(isNarrow ? 8 : 10),
               decoration: BoxDecoration(
                 color: primaryColor.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(AppRadius.sm),
               ),
-              child: Icon(icon, color: primaryColor, size: isNarrow ? 22 : 28),
+              child: Icon(icon, color: primaryColor, size: isNarrow ? 20 : 22),
             ),
-            SizedBox(width: isNarrow ? 14 : 20),
+            SizedBox(width: isNarrow ? 12 : 16),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -479,16 +479,16 @@ class _SettingItem extends StatelessWidget {
                     title,
                     style: TextStyle(
                       color: onSurface,
-                      fontSize: isNarrow ? 15 : 18,
+                      fontSize: isNarrow ? 15 : 16,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 3),
                   Text(
                     subtitle,
                     style: TextStyle(
                       color: onSurfaceVariant,
-                      fontSize: isNarrow ? 12 : 15,
+                      fontSize: isNarrow ? 12 : 14,
                     ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
@@ -501,7 +501,7 @@ class _SettingItem extends StatelessWidget {
                 Icon(
                   Icons.chevron_right_rounded,
                   color: onSurfaceVariant,
-                  size: isNarrow ? 26 : 32,
+                  size: isNarrow ? 22 : 24,
                 ),
           ],
         ),

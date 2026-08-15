@@ -216,10 +216,11 @@ class _SearchResults extends StatelessWidget {
           SliverM3ECardList(
             haptic: M3EHapticFeedback.light,
             itemCount: results.tracks.length,
-            color: Theme.of(
-              context,
-            ).colorScheme.onSurface.withValues(alpha: 0.04),
-            padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 4),
+            color: Colors.transparent,
+            padding: EdgeInsets.symmetric(
+              horizontal: context.isNarrow ? 0 : 32,
+              vertical: 4,
+            ),
             itemBuilder: (context, i) =>
                 _TrackSearchTile(track: results.tracks[i]),
           ),
@@ -259,13 +260,6 @@ class _TrackSearchTile extends StatelessWidget {
           ),
           tooltip: 'Добавить в плейлист',
           onPressed: () => AddToPlaylistDialog.show(context, track),
-        ),
-        IconButton(
-          icon: Icon(
-            Icons.play_arrow_rounded,
-            color: Theme.of(context).colorScheme.primary,
-          ),
-          onPressed: () => PlaybackController.playTrack(track.id),
         ),
       ],
       onTap: () => PlaybackController.playTrack(track.id),

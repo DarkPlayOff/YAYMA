@@ -406,14 +406,22 @@ class _HomeMainControls extends StatelessWidget {
                     ),
                     onPressed: () => unawaited(PlaybackController.next()),
                   ),
-                  AnimatedLikeButton(
-                    isLiked: isLiked,
-                    size: 26,
-                    onTap: trackId != null
-                        ? () => unawaited(
-                            PlaybackController.toggleLike(trackId: trackId),
-                          )
-                        : null,
+                  SizedBox(
+                    width: 48,
+                    height: 48,
+                    child: Center(
+                      child: AnimatedLikeButton(
+                        isLiked: isLiked,
+                        size: 26,
+                        onTap: trackId != null
+                            ? () => unawaited(
+                                PlaybackController.toggleLike(
+                                  trackId: trackId,
+                                ),
+                              )
+                            : null,
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -455,8 +463,11 @@ class _HomeMainControls extends StatelessWidget {
                         onPressed: () =>
                             unawaited(PlaybackController.toggleRepeat()),
                       ),
-                      const CommonQualitySelector(
-                        isSmall: true,
+                      const SizedBox(
+                        width: 48,
+                        child: Center(
+                          child: CommonQualitySelector(iconSize: 24),
+                        ),
                       ),
                     ],
                   ),
@@ -554,7 +565,7 @@ class _HomeMainControls extends StatelessWidget {
                   onPressed: () => unawaited(PlaybackController.toggleRepeat()),
                 ),
                 SizedBox(width: small ? 8 : 12),
-                const CommonQualitySelector(isSmall: true),
+                CommonQualitySelector(iconSize: small ? 20 : 24),
               ],
             ),
             if (!Platform.isAndroid) ...[

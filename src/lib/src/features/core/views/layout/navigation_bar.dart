@@ -87,7 +87,7 @@ class _FloatingNavBarState extends State<FloatingNavBar>
             _isAccountMenuOpen;
         final isNarrow = MediaQuery.sizeOf(context).width < 600;
 
-        final alpha = isHome ? 0.5 : 0.7;
+        const alpha = 0.5;
 
         final children = [
           if (!isNarrow)
@@ -198,15 +198,6 @@ class _FloatingNavBarState extends State<FloatingNavBar>
                   child: Container(
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(AppRadius.xxxl),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(
-                            alpha: isHome ? 0.8 : 0.4,
-                          ),
-                          blurRadius: 30,
-                          spreadRadius: 2,
-                        ),
-                      ],
                     ),
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(AppRadius.xxxl),

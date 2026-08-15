@@ -88,6 +88,7 @@ Future<void> initPlayback() async {
 
   _activatePersistentColorScheme();
   _activateVibePalette();
+  _activateBufferingDelay();
   _activateLyricsOverlayReset();
   _activateWifiLock();
   if (Platform.isWindows) {
@@ -97,6 +98,7 @@ Future<void> initPlayback() async {
 
 void _activatePersistentColorScheme() => _persistentColorSchemeEffect;
 void _activateVibePalette() => _vibePaletteEffect;
+void _activateBufferingDelay() => _bufferingDelayEffect;
 void _activateTaskbarEffect() => _taskbarEffect;
 void _activateLyricsOverlayReset() => _lyricsOverlayResetEffect;
 void _activateWifiLock() => _wifiLockEffect;
@@ -361,6 +363,27 @@ final EffectCleanup _vibePaletteEffect = effect(() {
       ),
     );
   }
+});
+
+// Buffering indicator that only shows once the track has been stalled > 3s,
+// to avoid flickering on short buffering hiccups.
+Timer? _bufferingDelayTimer;
+final FlutterSignal<bool> showBufferingIndicatorSignal = signal(false);
+final EffectCleanup _bufferingDelayEffect = effect(() {
+  final state = playerStateSignal();
+  final stalled = state != null && !state.isPlaying && state.isBuffering;
+
+  if (!stalled) {
+    _bufferingDelayTimer?.cancel();
+    _bufferingDelayTimer = null;
+    showBufferingIndicatorSignal.value = false;
+    return;
+  }
+
+  _bufferingDelayTimer ??= Timer(const Duration(seconds: 3), () {
+    _bufferingDelayTimer = null;
+    showBufferingIndicatorSignal.value = true;
+  });
 });
 
 // Cache last state to avoid redundant system calls

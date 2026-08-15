@@ -8,6 +8,7 @@ import 'package:yayma/src/features/auth/providers/auth_provider.dart';
 import 'package:yayma/src/features/core/providers/navigation_provider.dart';
 import 'package:yayma/src/features/core/providers/notification_provider.dart';
 import 'package:yayma/src/features/core/views/widgets/common_ui.dart';
+import 'package:yayma/src/features/core/views/widgets/responsive.dart';
 import 'package:yayma/src/features/core/views/widgets/track_tile.dart';
 import 'package:yayma/src/features/library/providers/library_provider.dart';
 import 'package:yayma/src/features/playback/providers/playback_provider.dart';
@@ -199,9 +200,9 @@ class _AlbumViewState extends State<AlbumView> {
                     SliverM3ECardList(
                       haptic: M3EHapticFeedback.light,
                       itemCount: albumData.tracks.length,
-                      color: cs.onSurface.withValues(alpha: 0.04),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
+                      color: Colors.transparent,
+                      padding: EdgeInsets.symmetric(
+                        horizontal: context.isNarrow ? 0 : 16,
                         vertical: 4,
                       ),
                       itemBuilder: (context, index) {
@@ -230,19 +231,6 @@ class _AlbumViewState extends State<AlbumView> {
                               color: cs.onSurface.withValues(alpha: 0.38),
                             ),
                           ),
-                          hoverActions: [
-                            IconButton(
-                              icon: Icon(
-                                Icons.play_arrow_rounded,
-                                color: Theme.of(context).colorScheme.primary,
-                              ),
-                              onPressed: () =>
-                                  PlaybackController.playAlbumTrack(
-                                    int.parse(albumData.id),
-                                    track.id,
-                                  ),
-                            ),
-                          ],
                           onTap: () => PlaybackController.playAlbumTrack(
                             int.parse(albumData.id),
                             track.id,

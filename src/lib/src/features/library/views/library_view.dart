@@ -430,11 +430,11 @@ class _LikedTracksTabState extends State<_LikedTracksTab> {
                       itemCount: tracks.length,
                       listPadding: const EdgeInsets.only(bottom: 140),
                       margin: EdgeInsets.symmetric(
-                        horizontal: isNarrow ? 20 : 40,
+                        horizontal: isNarrow ? 0 : 40,
                       ),
-                      color: cs.onSurface.withValues(alpha: 0.04),
+                      color: Colors.transparent,
                       padding: EdgeInsets.symmetric(
-                        horizontal: isNarrow ? 20 : 40,
+                        horizontal: isNarrow ? 0 : 40,
                         vertical: 8,
                       ),
                       itemBuilder: (context, index) {
@@ -452,19 +452,6 @@ class _LikedTracksTabState extends State<_LikedTracksTab> {
                               color: cs.onSurface.withValues(alpha: 0.38),
                             ),
                           ),
-                          hoverActions: [
-                            IconButton(
-                              icon: Icon(
-                                Icons.play_arrow_rounded,
-                                color: Theme.of(
-                                  context,
-                                ).colorScheme.primary,
-                              ),
-                              onPressed: () => unawaited(
-                                PlaybackController.playLikedTrack(track.id),
-                              ),
-                            ),
-                          ],
                           onTap: () => unawaited(
                             PlaybackController.playLikedTrack(track.id),
                           ),

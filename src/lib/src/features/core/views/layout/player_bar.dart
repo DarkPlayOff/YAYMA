@@ -291,7 +291,8 @@ class _PlayerControls extends StatelessWidget {
         final isDisliked = isDislikedSignal();
         final isShuffled = isShuffledSignal();
         final repeatMode = repeatModeSignal();
-        final isBuffering = playerStateSignal.value?.isBuffering ?? false;
+        final showBuffering =
+            showBufferingIndicatorSignal.value;
         final onSurfaceVariant = Theme.of(context).colorScheme.onSurfaceVariant;
 
         var repeatIcon = Icons.repeat;
@@ -302,101 +303,116 @@ class _PlayerControls extends StatelessWidget {
         return Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  IconButton(
-                    icon: Icon(
-                      Icons.lyrics_rounded,
-                      size: 20,
-                      color: showLyricsSignal.value
-                          ? accentColor
-                          : onSurfaceVariant,
-                    ),
-                    onPressed: () =>
-                        showLyricsSignal.value = !showLyricsSignal.value,
-                  ),
-                  IconButton(
-                    icon: Icon(
-                      Icons.shuffle,
-                      size: 20,
-                      color: isShuffled ? accentColor : onSurfaceVariant,
-                    ),
-                    onPressed: PlaybackController.toggleShuffle,
-                  ),
-                  IconButton(
-                    icon: Icon(
-                      isDisliked
-                          ? Icons.heart_broken
-                          : Icons.heart_broken_outlined,
-                      size: 20,
-                      color: isDisliked ? Colors.blueGrey : onSurfaceVariant,
-                    ),
-                    onPressed: () => trackId != null
-                        ? PlaybackController.toggleDislike(trackId: trackId)
-                        : null,
-                  ),
-                  const IconButton(
-                    icon: Icon(Icons.skip_previous_rounded, size: 28),
-                    onPressed: PlaybackController.prev,
-                  ),
-                  IconButton(
-                    iconSize: 54,
-                    icon: isBuffering
-                        ? const M3ECircularWavyProgressIndicator(
-                            strokeWidth: 3,
-                            size: 40,
-                          )
-                        : AnimatedSwitcher(
-                            duration: const Duration(milliseconds: 250),
-                            switchInCurve: Curves.easeOutBack,
-                            switchOutCurve: Curves.easeIn,
-                            transitionBuilder: (child, animation) {
-                              return FadeTransition(
-                                opacity: animation,
-                                child: ScaleTransition(
-                                  scale: animation,
-                                  child: child,
+            Expanded(
+              child: Center(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: Icon(
+                          Icons.lyrics_rounded,
+                          size: 20,
+                          color: showLyricsSignal.value
+                              ? accentColor
+                              : onSurfaceVariant,
+                        ),
+                        onPressed: () =>
+                            showLyricsSignal.value = !showLyricsSignal.value,
+                      ),
+                      IconButton(
+                        icon: Icon(
+                          Icons.shuffle,
+                          size: 20,
+                          color: isShuffled ? accentColor : onSurfaceVariant,
+                        ),
+                        onPressed: PlaybackController.toggleShuffle,
+                      ),
+                      IconButton(
+                        icon: Icon(
+                          isDisliked
+                              ? Icons.heart_broken
+                              : Icons.heart_broken_outlined,
+                          size: 20,
+                          color: isDisliked
+                              ? Colors.blueGrey
+                              : onSurfaceVariant,
+                        ),
+                        onPressed: () => trackId != null
+                            ? PlaybackController.toggleDislike(trackId: trackId)
+                            : null,
+                      ),
+                      const IconButton(
+                        icon: Icon(Icons.skip_previous_rounded, size: 28),
+                        onPressed: PlaybackController.prev,
+                      ),
+                      IconButton(
+                        iconSize: 48,
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(
+                          minWidth: 48,
+                          minHeight: 48,
+                        ),
+                        icon: showBuffering
+                            ? M3ECircularWavyProgressIndicator(
+                                strokeWidth: 3,
+                                size: 40,
+                                color: accentColorSignal.value,
+                              )
+                            : AnimatedSwitcher(
+                                duration: const Duration(milliseconds: 250),
+                                switchInCurve: Curves.easeOutBack,
+                                switchOutCurve: Curves.easeIn,
+                                transitionBuilder: (child, animation) {
+                                  return FadeTransition(
+                                    opacity: animation,
+                                    child: ScaleTransition(
+                                      scale: animation,
+                                      child: child,
+                                    ),
+                                  );
+                                },
+                                child: Icon(
+                                  isPlaying
+                                      ? Icons.pause_circle_filled_rounded
+                                      : Icons.play_circle_filled_rounded,
+                                  key: ValueKey<bool>(isPlaying),
                                 ),
-                              );
-                            },
-                            child: Icon(
-                              isPlaying
-                                  ? Icons.pause_circle_filled_rounded
-                                  : Icons.play_circle_filled_rounded,
-                              key: ValueKey<bool>(isPlaying),
-                            ),
-                          ),
-                    onPressed: PlaybackController.togglePlay,
+                              ),
+                        onPressed: PlaybackController.togglePlay,
+                      ),
+                      const IconButton(
+                        icon: Icon(Icons.skip_next_rounded, size: 28),
+                        onPressed: PlaybackController.next,
+                      ),
+                      AnimatedLikeButton(
+                        isLiked: isLiked,
+                        size: 20,
+                        onTap: trackId != null
+                            ? () => PlaybackController.toggleLike(
+                                trackId: trackId,
+                              )
+                            : null,
+                      ),
+                      IconButton(
+                        icon: Icon(
+                          repeatIcon,
+                          size: 20,
+                          color: repeatMode != RepeatModeDto.none
+                              ? accentColor
+                              : onSurfaceVariant,
+                        ),
+                        onPressed: PlaybackController.toggleRepeat,
+                      ),
+                      CommonQualitySelector(accentColor: accentColor),
+                    ],
                   ),
-                  const IconButton(
-                    icon: Icon(Icons.skip_next_rounded, size: 28),
-                    onPressed: PlaybackController.next,
-                  ),
-                  AnimatedLikeButton(
-                    isLiked: isLiked,
-                    size: 20,
-                    onTap: trackId != null
-                        ? () => PlaybackController.toggleLike(trackId: trackId)
-                        : null,
-                  ),
-                  IconButton(
-                    icon: Icon(
-                      repeatIcon,
-                      size: 20,
-                      color: repeatMode != RepeatModeDto.none
-                          ? accentColor
-                          : onSurfaceVariant,
-                    ),
-                    onPressed: PlaybackController.toggleRepeat,
-                  ),
-                ],
+                ),
               ),
             ),
-            const SizedBox(height: 4),
             CommonProgressSlider(accentColor: accentColor, compact: true),
+            const SizedBox(height: 6),
           ],
         );
       },
@@ -423,9 +439,7 @@ class _VolumeAndQuality extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
-          CommonQualitySelector(accentColor: accentColor),
           if (showVolume) ...[
-            const SizedBox(width: 16),
             Icon(
               Icons.volume_up_rounded,
               size: 18,

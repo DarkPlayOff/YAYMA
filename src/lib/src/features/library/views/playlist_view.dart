@@ -10,6 +10,7 @@ import 'package:yayma/src/features/core/providers/notification_provider.dart';
 import 'package:yayma/src/features/core/theme/app_tokens.dart';
 import 'package:yayma/src/features/core/views/widgets/app_context_menu.dart';
 import 'package:yayma/src/features/core/views/widgets/common_ui.dart';
+import 'package:yayma/src/features/core/views/widgets/responsive.dart';
 import 'package:yayma/src/features/core/views/widgets/track_elements.dart';
 import 'package:yayma/src/features/core/views/widgets/track_tile.dart';
 import 'package:yayma/src/features/library/providers/library_provider.dart';
@@ -193,6 +194,53 @@ class _PlaylistContentState extends State<_PlaylistContent> {
         type: 'Плейлист',
         title: widget.playlist.title,
         coverUrl: widget.playlist.coverUrl,
+        titleTrailing: AppContextMenu<String>(
+          onSelected: (value) async {
+            switch (value) {
+              case 'rename':
+                await _showRenameDialog(context, widget.playlist);
+              case 'visibility':
+                await setPlaylistVisibilityAction(
+                  widget.playlist.kind,
+                  isPublic: !widget.playlist.isPublic,
+                );
+                widget.refresh();
+              case 'delete':
+                await _showDeleteConfirm(context, widget.playlist);
+            }
+          },
+          items: [
+            const AppContextMenuItem(
+              value: 'rename',
+              label: 'Переименовать',
+              icon: Icons.edit_rounded,
+            ),
+            AppContextMenuItem(
+              value: 'visibility',
+              label: widget.playlist.isPublic
+                  ? 'Сделать приватным'
+                  : 'Сделать публичным',
+              icon: widget.playlist.isPublic
+                  ? Icons.lock_outline_rounded
+                  : Icons.public_rounded,
+            ),
+            AppContextMenuItem(
+              value: 'delete',
+              label: 'Удалить плейлист',
+              icon: Icons.delete_forever_rounded,
+              color: cs.error,
+            ),
+          ],
+          child: IconButton(
+            icon: Icon(
+              Icons.more_vert_rounded,
+              color: cs.onSurfaceVariant,
+              size: 32,
+            ),
+            onPressed: null,
+            tooltip: 'Опции плейлиста',
+          ),
+        ),
         actions: [
           M3EButton.icon(
             onPressed: () => PlaybackController.playPlaylist(
@@ -204,53 +252,6 @@ class _PlaylistContentState extends State<_PlaylistContent> {
             size: M3EButtonSize.md,
           ),
           const SizedBox(width: 12),
-          AppContextMenu<String>(
-            onSelected: (value) async {
-              switch (value) {
-                case 'rename':
-                  await _showRenameDialog(context, widget.playlist);
-                case 'visibility':
-                  await setPlaylistVisibilityAction(
-                    widget.playlist.kind,
-                    isPublic: !widget.playlist.isPublic,
-                  );
-                  widget.refresh();
-                case 'delete':
-                  await _showDeleteConfirm(context, widget.playlist);
-              }
-            },
-            items: [
-              const AppContextMenuItem(
-                value: 'rename',
-                label: 'Переименовать',
-                icon: Icons.edit_rounded,
-              ),
-              AppContextMenuItem(
-                value: 'visibility',
-                label: widget.playlist.isPublic
-                    ? 'Сделать приватным'
-                    : 'Сделать публичным',
-                icon: widget.playlist.isPublic
-                    ? Icons.lock_outline_rounded
-                    : Icons.public_rounded,
-              ),
-              AppContextMenuItem(
-                value: 'delete',
-                label: 'Удалить плейлист',
-                icon: Icons.delete_forever_rounded,
-                color: cs.error,
-              ),
-            ],
-            child: IconButton(
-              icon: Icon(
-                Icons.more_horiz_rounded,
-                color: cs.onSurfaceVariant,
-                size: 32,
-              ),
-              onPressed: null,
-              tooltip: 'Опции плейлиста',
-            ),
-          ),
           M3EButton.icon(
             onPressed: () => _handleUpload(context),
             icon: const Icon(Icons.upload_rounded),
@@ -326,8 +327,11 @@ class _PlaylistContentState extends State<_PlaylistContent> {
           SliverM3ECardList(
             haptic: M3EHapticFeedback.light,
             itemCount: _localTracks.length,
-            color: cs.onSurface.withValues(alpha: 0.04),
-            padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 4),
+            color: Colors.transparent,
+            padding: EdgeInsets.symmetric(
+              horizontal: context.isNarrow ? 0 : 40,
+              vertical: 4,
+            ),
             itemBuilder: (context, index) {
               final track = _localTracks[index];
               return _TrackTile(
@@ -349,13 +353,13 @@ class _PlaylistContentState extends State<_PlaylistContent> {
           SliverReorderableList(
             itemBuilder: (context, index) {
               final track = _localTracks[index];
-              return ReorderableDragStartListener(
+              return KeyedSubtree(
                 key: ValueKey('${track.id}_$index'),
-                index: index,
                 child: _TrackTile(
                   track: track,
                   index: index,
                   playlist: widget.playlist,
+                  dragEnabled: true,
                   onRemove: () async {
                     final success = await removeTrackFromPlaylistAction(
                       widget.playlist.kind,
@@ -487,17 +491,33 @@ class _TrackTile extends StatelessWidget {
   final int index;
   final PlaylistDetailsDto playlist;
   final VoidCallback onRemove;
+  final bool dragEnabled;
 
   const _TrackTile({
     required this.track,
     required this.index,
     required this.playlist,
     required this.onRemove,
+    this.dragEnabled = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final dragIndicator = Icon(
+      Icons.drag_indicator_rounded,
+      color: cs.onSurface.withValues(alpha: 0.38),
+      size: 20,
+    );
+    final dragHandle = dragEnabled
+        ? ReorderableDragStartListener(
+            index: index,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: dragIndicator,
+            ),
+          )
+        : dragIndicator;
     return CommonTrackTile(
       trackId: track.id,
       title: track.title,
@@ -505,14 +525,10 @@ class _TrackTile extends StatelessWidget {
       artists: track.artists,
       albumId: track.albumId,
       leading: SizedBox(
-        width: 100,
+        width: 128,
         child: Row(
           children: [
-            Icon(
-              Icons.drag_indicator_rounded,
-              color: cs.onSurface.withValues(alpha: 0.38),
-              size: 20,
-            ),
+            dragHandle,
             const SizedBox(width: 8),
             Text(
               '${index + 1}',
@@ -522,7 +538,7 @@ class _TrackTile extends StatelessWidget {
               ),
             ),
             const Spacer(),
-            TrackCover(url: track.coverUrl, size: 48, borderRadius: 4),
+            TrackCover(url: track.coverUrl),
           ],
         ),
       ),
@@ -531,17 +547,6 @@ class _TrackTile extends StatelessWidget {
         style: TextStyle(color: cs.onSurface.withValues(alpha: 0.38)),
       ),
       hoverActions: [
-        IconButton(
-          icon: Icon(
-            Icons.play_arrow_rounded,
-            color: cs.onSurfaceVariant,
-          ),
-          onPressed: () => PlaybackController.playPlaylistTrack(
-            playlist.uid.toString(),
-            playlist.kind,
-            track.id,
-          ),
-        ),
         IconButton(
           icon: Icon(
             Icons.playlist_remove_rounded,

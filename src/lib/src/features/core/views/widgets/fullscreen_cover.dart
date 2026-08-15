@@ -74,18 +74,6 @@ class FullscreenCoverDialog extends StatelessWidget {
                 ),
               ),
             ),
-            Positioned(
-              top: 24,
-              right: 24,
-              child: IconButton(
-                icon: Icon(
-                  Icons.close_rounded,
-                  size: 32,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-                onPressed: () => Navigator.of(context).pop(),
-              ),
-            ),
           ],
         ),
       ),

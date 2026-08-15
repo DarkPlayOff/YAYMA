@@ -387,9 +387,16 @@ class _PlayPauseButton extends StatelessWidget {
     return SignalBuilder(
       builder: (context) {
         final isPlaying = isPlayingSignal();
+        final showBuffering = showBufferingIndicatorSignal.value;
         return IconButton(
           iconSize: 48,
-          icon: AnimatedSwitcher(
+          icon: showBuffering
+              ? M3ECircularWavyProgressIndicator(
+                  strokeWidth: 3,
+                  size: 40,
+                  color: accentColorSignal.value,
+                )
+              : AnimatedSwitcher(
             duration: const Duration(milliseconds: 250),
             switchInCurve: Curves.easeOutBack,
             switchOutCurve: Curves.easeIn,

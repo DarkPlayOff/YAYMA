@@ -7,6 +7,7 @@ import 'package:yayma/src/features/auth/providers/auth_provider.dart';
 import 'package:yayma/src/features/core/providers/navigation_provider.dart';
 import 'package:yayma/src/features/core/views/widgets/common_ui.dart';
 import 'package:yayma/src/features/core/views/widgets/media_card.dart';
+import 'package:yayma/src/features/core/views/widgets/responsive.dart';
 import 'package:yayma/src/features/core/views/widgets/track_elements.dart';
 import 'package:yayma/src/features/core/views/widgets/track_tile.dart';
 import 'package:yayma/src/features/playback/providers/playback_provider.dart';
@@ -190,8 +191,11 @@ class _ArtistViewState extends State<ArtistView> {
             SliverM3ECardList(
               haptic: M3EHapticFeedback.light,
               itemCount: tracks.length,
-              color: cs.onSurface.withValues(alpha: 0.04),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              color: Colors.transparent,
+              padding: EdgeInsets.symmetric(
+                horizontal: context.isNarrow ? 0 : 16,
+                vertical: 4,
+              ),
               itemBuilder: (context, index) {
                 final track = tracks[index];
                 return CommonTrackTile(
@@ -211,15 +215,6 @@ class _ArtistViewState extends State<ArtistView> {
                       color: cs.onSurface.withValues(alpha: 0.38),
                     ),
                   ),
-                  hoverActions: [
-                    IconButton(
-                      icon: Icon(
-                        Icons.play_arrow_rounded,
-                        color: cs.onSurfaceVariant,
-                      ),
-                      onPressed: () => PlaybackController.playTrack(track.id),
-                    ),
-                  ],
                   onTap: () => PlaybackController.playTrack(track.id),
                   onTitleTap: () {
                     if (track.albumId != null) {

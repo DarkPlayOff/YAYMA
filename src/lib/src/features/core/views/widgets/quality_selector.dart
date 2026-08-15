@@ -11,12 +11,12 @@ import 'package:yayma/src/rust/api/models.dart';
 
 class CommonQualitySelector extends SignalWidget {
   final Color? accentColor;
-  final bool isSmall;
+  final double iconSize;
 
   const CommonQualitySelector({
     this.accentColor,
     super.key,
-    this.isSmall = false,
+    this.iconSize = 20,
   });
 
   @override
@@ -26,16 +26,6 @@ class CommonQualitySelector extends SignalWidget {
         final quality = audioQualitySignal.value;
         final meta = trackMetadataSignal.value;
         final accentColor = this.accentColor ?? accentColorSignal.value;
-
-        var label = '';
-        switch (quality) {
-          case AudioQuality.low:
-            label = 'LQ';
-          case AudioQuality.normal:
-            label = 'NQ';
-          case AudioQuality.high:
-            label = 'HQ';
-        }
 
         final items = <AppContextMenuItem<dynamic>>[];
 
@@ -120,32 +110,10 @@ class CommonQualitySelector extends SignalWidget {
           },
           items: items,
           borderRadius: BorderRadius.circular(AppRadius.xs),
-          child: Container(
-            padding: EdgeInsets.symmetric(
-              horizontal: isSmall ? 8 : 10,
-              vertical: isSmall ? 4 : 5,
-            ),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(AppRadius.xs),
-              border: Border.all(
-                color: Theme.of(
-                  context,
-                ).colorScheme.onSurface.withValues(alpha: 0.1),
-              ),
-              color: Theme.of(
-                context,
-              ).colorScheme.onSurface.withValues(alpha: 0.05),
-            ),
-            child: Text(
-              label,
-              style: TextStyle(
-                color: quality == AudioQuality.high
-                    ? accentColor
-                    : Theme.of(context).colorScheme.onSurface,
-                fontSize: isSmall ? 11 : 12,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
+          child: Icon(
+            Icons.speed_rounded,
+            size: iconSize,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
           ),
         );
       },

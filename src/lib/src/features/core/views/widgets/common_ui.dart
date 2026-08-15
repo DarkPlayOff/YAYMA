@@ -92,6 +92,7 @@ class CommonDetailHeader extends StatelessWidget {
   final double coverSize;
   final bool isCircle;
   final List<Widget>? actions;
+  final Widget? titleTrailing;
 
   const CommonDetailHeader({
     required this.type,
@@ -104,6 +105,7 @@ class CommonDetailHeader extends StatelessWidget {
     this.coverSize = 250,
     this.isCircle = false,
     this.actions,
+    this.titleTrailing,
   });
 
   @override
@@ -117,6 +119,18 @@ class CommonDetailHeader extends StatelessWidget {
     final actualCoverSize = isNarrow
         ? (screenWidth - 80).clamp(150.0, 200.0)
         : coverSize;
+
+    final titleWidget = Text(
+      title,
+      textAlign: isNarrow ? TextAlign.center : TextAlign.start,
+      style: Theme.of(context).textTheme.displayMedium?.copyWith(
+        fontSize: isNarrow ? 32 : 48,
+        fontWeight: FontWeight.w900,
+        color: onSurface,
+        height: 1.05,
+        letterSpacing: -1.5,
+      ),
+    );
 
     final content = Column(
       crossAxisAlignment: isNarrow
@@ -133,17 +147,21 @@ class CommonDetailHeader extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 8),
-        Text(
-          title,
-          textAlign: isNarrow ? TextAlign.center : TextAlign.start,
-          style: Theme.of(context).textTheme.displayMedium?.copyWith(
-            fontSize: isNarrow ? 32 : 48,
-            fontWeight: FontWeight.w900,
-            color: onSurface,
-            height: 1.05,
-            letterSpacing: -1.5,
+        if (titleTrailing != null) ...[
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Flexible(child: titleWidget),
+              const SizedBox(width: 4),
+              Transform.translate(
+                offset: const Offset(0, 7),
+                child: titleTrailing,
+              ),
+            ],
           ),
-        ),
+        ] else ...[
+          titleWidget,
+        ],
         if (artists != null) ...[
           const SizedBox(height: 12),
           ArtistNamesWidget(
@@ -472,41 +490,49 @@ class _CommonProgressSliderState extends State<CommonProgressSlider> {
                       ),
                     ),
                     Expanded(
-                      child: M3ESlider(
-                        value: displayPosition.clamp(0, dur > 0 ? dur : 1.0),
-                        max: dur > 0 ? dur : 1.0,
-                        decoration: expressSliderDecoration(
-                          activeColor: accentColor,
-                          trackHeight: trackHeight,
-                          thumbWidth: thumbRadius,
-                          thumbHeight: thumbRadius * 3.5,
-                          inactiveColor: Theme.of(
-                            context,
-                          ).colorScheme.onSurface.withValues(alpha: 0.15),
-                        ),
-                        onChangeStart: (val) {
-                          setState(() => _dragValue = val);
-                        },
-                        onChanged: (val) {
-                          setState(() => _dragValue = val);
-                        },
-                        onChangeEnd: (val) {
-                          setState(() => _dragValue = val);
-                          _dragEndTimer?.cancel();
-                          _dragEndTimer = Timer(
-                            const Duration(milliseconds: 500),
-                            () {
-                              if (mounted) {
-                                setState(() => _dragValue = null);
-                              }
-                            },
-                          );
-                          unawaited(
-                            PlaybackController.seekTo(
-                              Duration(milliseconds: val.toInt()),
+                      child: ClipRect(
+                        child: SizedBox(
+                          height: 28,
+                          child: M3ESlider(
+                            value: displayPosition.clamp(
+                              0,
+                              dur > 0 ? dur : 1.0,
                             ),
-                          );
-                        },
+                            max: dur > 0 ? dur : 1.0,
+                            decoration: expressSliderDecoration(
+                              activeColor: accentColor,
+                              trackHeight: trackHeight,
+                              thumbWidth: thumbRadius,
+                              thumbHeight: thumbRadius * 3.5,
+                              inactiveColor: Theme.of(
+                                context,
+                              ).colorScheme.onSurface.withValues(alpha: 0.15),
+                            ),
+                            onChangeStart: (val) {
+                              setState(() => _dragValue = val);
+                            },
+                            onChanged: (val) {
+                              setState(() => _dragValue = val);
+                            },
+                            onChangeEnd: (val) {
+                              setState(() => _dragValue = val);
+                              _dragEndTimer?.cancel();
+                              _dragEndTimer = Timer(
+                                const Duration(milliseconds: 500),
+                                () {
+                                  if (mounted) {
+                                    setState(() => _dragValue = null);
+                                  }
+                                },
+                              );
+                              unawaited(
+                                PlaybackController.seekTo(
+                                  Duration(milliseconds: val.toInt()),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
                       ),
                     ),
                     SizedBox(
@@ -602,6 +628,13 @@ M3ESliderDecoration expressSliderDecoration({
 }) {
   return M3ESliderDecoration(
     haptic: M3EHapticFeedback.light,
+    hapticConfig: const M3EHapticConfig(
+      deltaProgressForDragThreshold: 0.04,
+      progressBasedDragMinScale: 0.05,
+      progressBasedDragMaxScale: 0.45,
+      additionalVelocityMaxBump: 0.05,
+      minimumDragInterval: Duration(milliseconds: 45),
+    ),
     trackHeight: trackHeight,
     trackCornerRadius: trackHeight / 2,
     thumbWidth: thumbWidth,
