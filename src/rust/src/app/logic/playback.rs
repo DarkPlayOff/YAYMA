@@ -76,6 +76,14 @@ pub async fn set_volume(ctx: &AppContext, volume: u8) {
     });
 }
 
+pub async fn set_transient_volume_gain(ctx: &AppContext, gain: u8) {
+    let _ = ctx
+        .audio
+        .tx
+        .send(AudioMessage::SetTransientVolumeGain(gain.min(100)))
+        .await;
+}
+
 pub async fn toggle_shuffle(ctx: &AppContext) {
     let _ = ctx.audio.tx.send(AudioMessage::ToggleShuffle).await;
 }

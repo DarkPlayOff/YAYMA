@@ -6,35 +6,40 @@ import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/features/playback/providers/playback_provider.dart';
 
 /// Handles Android audio focus: pausing/resuming playback on transient
-/// interruptions (calls, other apps) and ducking volume for notifications.
+/// interruptions (calls, other apps) and ducking for notifications.
 class AudioFocusManager {
   AudioFocusManager._();
 
   static StreamSubscription<AudioInterruptionEvent>? _interruptionSub;
   static EffectCleanup? _disposeSessionActiveEffect;
-  static int? _originalVolume;
-  static bool _isDucked = false;
-  // Tracks whether we currently hold audio focus, so re-running the
-  // `isPlaying` effect (e.g. from a volume change pushing a new
-  // PlaybackState) doesn't call setActive(true) again. On Android that
-  // re-requests audio focus and replaces the focus-change listener, which
-  // loses track of an in-progress duck and breaks its matching restore.
+  static Future<void> _interruptionQueue = Future.value();
+  static Future<void> _sessionQueue = Future.value();
+  static int _duckDepth = 0;
+  static int _pauseDepth = 0;
+  static bool _resumeAfterInterruption = false;
   static bool _sessionActive = false;
-  // null = not currently suppressed by an interruption; otherwise remembers
-  // whether we were actually playing when the (possibly nested) interruption
-  // started, so we only auto-resume what we auto-paused.
-  static bool? _wasPlayingBeforeInterruption;
-  // Bumped on every new fade so an in-flight one aborts instead of fighting
-  // a newer fade for the last word on the volume.
-  static int _fadeToken = 0;
+  static int _transientGain = 100;
 
+  static const _duckGain = 20;
   static const _duckFadeDuration = Duration(milliseconds: 200);
   static const _duckFadeSteps = 10;
 
   static Future<void> initialize(AudioSession session) async {
     await _interruptionSub?.cancel();
+    _duckDepth = 0;
+    _pauseDepth = 0;
+    _resumeAfterInterruption = false;
+    _transientGain = 100;
+    await PlaybackController.changeTransientVolumeGain(100);
+
     _interruptionSub = session.interruptionEventStream.listen(
-      _handleInterruption,
+      (event) {
+        // Stream callbacks do not await returned futures. Chaining them keeps
+        // the interruption state and fades strictly ordered.
+        _interruptionQueue = _interruptionQueue.then(
+          (_) => _handleInterruption(event),
+        );
+      },
       onError: (Object e, StackTrace st) {
         debugPrint('Audio interruption stream error: $e');
       },
@@ -42,9 +47,12 @@ class AudioFocusManager {
 
     _disposeSessionActiveEffect?.call();
     _disposeSessionActiveEffect = effect(() {
-      final state = playerStateSignal();
-      final isPlaying = state?.isPlaying ?? false;
-      unawaited(_syncSessionActive(session, isPlaying));
+      final isPlaying = playerStateSignal()?.isPlaying ?? false;
+      // Serialize setActive calls as well: overlapping activation and
+      // deactivation futures can otherwise complete in the wrong order.
+      _sessionQueue = _sessionQueue.then(
+        (_) => _syncSessionActive(session, isPlaying),
+      );
     });
   }
 
@@ -59,79 +67,50 @@ class AudioFocusManager {
   }
 
   static Future<void> _applyInterruption(AudioInterruptionEvent event) async {
-    if (event.begin) {
-      switch (event.type) {
-        case AudioInterruptionType.duck:
-          if (!_isDucked) {
-            _isDucked = true;
-            final currentVolume = playerVolumeSignal.value;
-            _originalVolume = currentVolume;
-            final duckVolume = (currentVolume * 0.2).round().clamp(0, 100);
-            await _fadeVolumeTo(duckVolume);
-          }
-        case AudioInterruptionType.pause:
-        case AudioInterruptionType.unknown:
-          // A stronger interruption (e.g. a call) can arrive while we're
-          // still ducked from a weaker one; restore volume now since the
-          // matching duck-end event isn't guaranteed after being
-          // superseded like this.
-          if (_isDucked) {
-            _isDucked = false;
-            if (_originalVolume != null) {
-              await _fadeVolumeTo(_originalVolume!);
-              _originalVolume = null;
+    switch (event.type) {
+      case AudioInterruptionType.duck:
+        if (event.begin) {
+          _duckDepth++;
+          if (_duckDepth == 1) await _fadeGainTo(_duckGain);
+        } else if (_duckDepth > 0) {
+          _duckDepth--;
+          if (_duckDepth == 0) await _fadeGainTo(100);
+        }
+      case AudioInterruptionType.pause:
+      case AudioInterruptionType.unknown:
+        if (event.begin) {
+          if (_pauseDepth == 0) {
+            // A stronger interruption can supersede ducking without Android
+            // sending its matching end event.
+            if (_duckDepth > 0) {
+              _duckDepth = 0;
+              await _fadeGainTo(100);
             }
+            _resumeAfterInterruption = isPlayingSignal.value;
+            _pauseDepth = 1;
+            if (_resumeAfterInterruption) await PlaybackController.pause();
+          } else {
+            _pauseDepth++;
           }
-          // Only capture on the outermost interruption so a nested one
-          // doesn't overwrite it with the already-paused state.
-          _wasPlayingBeforeInterruption ??= isPlayingSignal.value;
-          if (isPlayingSignal.value) {
-            await PlaybackController.pause();
+        } else if (_pauseDepth > 0) {
+          _pauseDepth--;
+          if (_pauseDepth == 0) {
+            if (_resumeAfterInterruption) await PlaybackController.play();
+            _resumeAfterInterruption = false;
           }
-      }
-    } else {
-      switch (event.type) {
-        case AudioInterruptionType.duck:
-          if (_isDucked) {
-            _isDucked = false;
-            if (_originalVolume != null) {
-              await _fadeVolumeTo(_originalVolume!);
-              _originalVolume = null;
-            }
-          }
-        case AudioInterruptionType.pause:
-        case AudioInterruptionType.unknown:
-          // Only resume what we paused ourselves - not if the user paused
-          // manually during the interruption, or nothing was playing to
-          // begin with. `unknown` is paused the same as `pause` on begin
-          // (see above), so it must be resumed the same way on end -
-          // otherwise playback is left stuck paused with no user action.
-          if (_wasPlayingBeforeInterruption ?? false) {
-            await PlaybackController.play();
-          }
-          _wasPlayingBeforeInterruption = null;
-      }
+        }
     }
   }
 
-  // Ramps the volume to [target] over `_duckFadeDuration` instead of
-  // snapping it instantly, so ducking for a notification doesn't sound like
-  // an abrupt cut. If a newer fade starts (e.g. a duck immediately followed
-  // by its end), this one bails out on its next step rather than fighting
-  // over the final value.
-  static Future<void> _fadeVolumeTo(int target) async {
-    final token = ++_fadeToken;
-    final start = playerVolumeSignal.value;
+  static Future<void> _fadeGainTo(int target) async {
+    final start = _transientGain;
     if (start == target) return;
     final stepDelay = _duckFadeDuration ~/ _duckFadeSteps;
     for (var i = 1; i <= _duckFadeSteps; i++) {
-      if (token != _fadeToken) return;
       final t = i / _duckFadeSteps;
-      final value = (start + (target - start) * t).round().clamp(0, 100);
-      await PlaybackController.changeVolume(value);
-      if (i < _duckFadeSteps) {
-        await Future<void>.delayed(stepDelay);
-      }
+      _transientGain = (start + (target - start) * t).round().clamp(0, 100);
+      await PlaybackController.changeTransientVolumeGain(_transientGain);
+      if (i < _duckFadeSteps) await Future<void>.delayed(stepDelay);
     }
   }
 
@@ -144,18 +123,13 @@ class AudioFocusManager {
         if (_sessionActive) return;
         final granted = await session.setActive(true);
         _sessionActive = granted;
-        if (!granted) {
-          await PlaybackController.pause();
-        }
+        if (!granted) await PlaybackController.pause();
       } else {
-        // Don't abandon focus while we're only paused because of an
-        // interruption (e.g. a call) — abandoning cancels the focus
-        // request, so we'd never receive the AUDIOFOCUS_GAIN needed to
-        // auto-resume once the interruption ends.
-        if (_wasPlayingBeforeInterruption != null) return;
-        if (!_sessionActive) return;
-        _sessionActive = false;
+        // Keep the request while paused by an active interruption so Android
+        // can deliver the matching focus-gain event.
+        if (_pauseDepth > 0 || !_sessionActive) return;
         await session.setActive(false);
+        _sessionActive = false;
       }
     } on Object catch (e, st) {
       debugPrint('Failed to sync audio session active state: $e\n$st');

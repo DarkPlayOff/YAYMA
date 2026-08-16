@@ -593,6 +593,9 @@ class PlaybackController {
       );
   static Future<void> changeVolume(int volume) =>
       runRustAction((ctx) => rust.setVolume(ctx: ctx, volume: volume));
+  static Future<void> changeTransientVolumeGain(int gain) => runRustAction(
+    (ctx) => rust.setTransientVolumeGain(ctx: ctx, gain: gain),
+  );
   static Future<void> seekTo(Duration duration) => runRustAction(
     (ctx) => rust.seek(ctx: ctx, positionMs: duration.inMilliseconds),
   );

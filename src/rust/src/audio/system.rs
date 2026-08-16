@@ -268,6 +268,9 @@ impl AudioSystem {
                     .await
             }
             AudioMessage::SetVolume(vol) => self.controller.set_volume(vol as f32 / 100.0),
+            AudioMessage::SetTransientVolumeGain(gain) => {
+                self.controller.set_transient_volume_gain(gain)
+            }
             AudioMessage::ToggleMute => self.controller.toggle_mute(),
 
             AudioMessage::PlayTrack(track) => {

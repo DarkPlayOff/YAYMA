@@ -3,7 +3,7 @@ use foldhash::HashMap;
 use parking_lot::RwLock;
 use rodio::Source;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU8, AtomicU64, Ordering};
 use std::time::Duration;
 use tokio::sync::Mutex;
 use yandex_music::model::track::Track;
@@ -33,6 +33,7 @@ pub struct AudioController {
     // already passed its last `.await` (and so can no longer be cancelled by `task.abort()`)
     // can still detect it's been superseded and skip touching the engine/signals.
     playback_generation: Arc<AtomicU64>,
+    transient_volume_gain: Arc<AtomicU8>,
     signals: AudioSignals,
     effect_handles: Arc<RwLock<HashMap<String, EffectHandle>>>,
 }
@@ -53,6 +54,7 @@ impl AudioController {
             track_progress,
             current_playback_task: Arc::new(Mutex::new(None)),
             playback_generation: Arc::new(AtomicU64::new(0)),
+            transient_volume_gain: Arc::new(AtomicU8::new(100)),
             signals,
             effect_handles: Arc::new(RwLock::new(effect_handles)),
         };
@@ -159,6 +161,9 @@ impl AudioController {
             AudioMessage::Resume => self.resume().await,
             AudioMessage::Stop => self.stop().await,
             AudioMessage::SetVolume(vol) => self.set_volume(vol as f32 / 100.0),
+            AudioMessage::SetTransientVolumeGain(gain) => {
+                self.set_transient_volume_gain(gain)
+            }
             AudioMessage::Seek(pos) => self.seek(pos).await,
             AudioMessage::ToggleMute => self.toggle_mute(),
             _ => {}
@@ -429,6 +434,12 @@ impl AudioController {
         self.apply_volume();
     }
 
+    pub fn set_transient_volume_gain(&self, gain: u8) {
+        self.transient_volume_gain
+            .store(gain.min(100), Ordering::Relaxed);
+        self.apply_volume();
+    }
+
     pub fn volume_up(&self, amount: u8) {
         let current = self.signals.volume.get();
         self.set_volume((current.saturating_add(amount) as f32) / 100.0);
@@ -451,7 +462,10 @@ impl AudioController {
         let volume = if muted {
             0.0
         } else {
-            self.signals.volume.get() as f32 / 100.0
+            let user_volume = self.signals.volume.get() as f32 / 100.0;
+            let transient_gain =
+                self.transient_volume_gain.load(Ordering::Relaxed) as f32 / 100.0;
+            user_volume * transient_gain
         };
         self.engine.set_volume(volume);
     }

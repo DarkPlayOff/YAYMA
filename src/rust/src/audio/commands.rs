@@ -14,6 +14,9 @@ pub enum AudioMessage {
     Prev,
     Seek(Duration),
     SetVolume(u8),
+    /// Applies a transient gain on top of the user volume without changing
+    /// the volume signal or its persisted setting (e.g. Android ducking).
+    SetTransientVolumeGain(u8),
     ToggleMute,
 
     // Queue & Context

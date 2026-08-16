@@ -39,6 +39,12 @@ pub async fn set_volume(ctx: &AppContext, volume: u8) {
     logic::set_volume(ctx, volume).await
 }
 
+/// Sets a non-persistent multiplier for temporary platform audio-focus
+/// attenuation. This deliberately leaves the user-visible volume unchanged.
+pub async fn set_transient_volume_gain(ctx: &AppContext, gain: u8) {
+    logic::set_transient_volume_gain(ctx, gain).await
+}
+
 pub async fn toggle_shuffle(ctx: &AppContext) {
     logic::toggle_shuffle(ctx).await
 }
