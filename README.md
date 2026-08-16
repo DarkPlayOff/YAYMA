@@ -1,6 +1,4 @@
-<img src="src/assets/icons/logo.webp" width="150" alt="Logo" />
-
-# YAYMA (Yet Another Yandex Music App)
+# <img src="src/assets/icons/logo.svg" width="48" align="middle" alt="YAYMA" /> YAYMA (Yet Another Yandex Music App)
 
 ![License](https://img.shields.io/github/license/darkplayoff/yayma)
 ![Downloads](https://img.shields.io/github/downloads/DarkPlayOff/YAYMA/total)

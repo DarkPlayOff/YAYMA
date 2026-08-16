@@ -44,8 +44,7 @@ dev_dependencies:
   very_good_analysis: ^10.3.0
 
 flutter_launcher_icons:
-  android: true
-  image_path: "assets/icons/logo.webp"
+  android: false
   windows:
     generate: true
     image_path: "assets/icons/logo.webp"
@@ -61,3 +60,7 @@ flutter:
 
   shaders:
     - shaders/vibe.frag
+
+dependency_overrides:
+  image: ^4.9.1
+  xml: ^7.0.1

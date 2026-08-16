@@ -1,0 +1,11 @@
+flutter_launcher_icons:
+  android: false
+  windows:
+    generate: true
+    image_path: "assets/icons/logo.webp"
+  linux:
+    generate: true
+    image_path: "assets/icons/logo.webp"
+  macos:
+    generate: true
+    image_path: "assets/icons/logo.webp"
