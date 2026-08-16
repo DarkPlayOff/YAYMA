@@ -1,6 +1,6 @@
 use crate::lyrics::{ParsedLine, ParsedWord};
 use quick_xml::events::{BytesStart, Event};
-use quick_xml::Reader;
+use quick_xml::{Reader, XmlVersion};
 
 #[derive(Debug, Clone)]
 struct SpanInfo {
@@ -28,7 +28,10 @@ fn get_attr(e: &BytesStart, name: &str) -> Option<String> {
     for attr in e.attributes().flatten() {
         let key = String::from_utf8_lossy(attr.key.as_ref()).to_string();
         if key == name || key.ends_with(&format!(":{name}")) {
-            return attr.unescape_value().ok().map(|v| v.to_string());
+            return attr
+                .normalized_value(XmlVersion::Implicit1_0)
+                .ok()
+                .map(|v| v.to_string());
         }
     }
     None

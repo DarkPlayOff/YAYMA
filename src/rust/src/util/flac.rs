@@ -3,6 +3,7 @@ use std::io::{BufWriter, Write};
 use symphonia::core::codecs::CODEC_TYPE_FLAC;
 use symphonia::core::formats::FormatOptions;
 use symphonia::core::io::MediaSourceStream;
+use symphonia::core::meta::MetadataOptions;
 use symphonia::core::probe::Hint;
 
 /// Extracts Native FLAC from an MP4 container
@@ -18,9 +19,9 @@ pub fn extract_native_flac(
 
     let probe = symphonia::default::get_probe();
 
-    let probed = probe.format(&hint, mss, &FormatOptions::default(), &Default::default())?;
-
-    let mut format = probed.format;
+    let mut format = probe
+        .format(&hint, mss, &FormatOptions::default(), &MetadataOptions::default())?
+        .format;
 
     let track = format
         .tracks()
@@ -29,10 +30,10 @@ pub fn extract_native_flac(
         .ok_or("FLAC track not found in the container")?;
 
     let track_id = track.id;
-    let codec_params = &track.codec_params;
 
     // STREAMINFO block is mandatory for Native FLAC. In MP4, it is stored in extra_data (34 bytes).
-    let extra_data = codec_params
+    let extra_data = track
+        .codec_params
         .extra_data
         .as_ref()
         .ok_or("Missing FLAC STREAMINFO (extra_data)")?;
