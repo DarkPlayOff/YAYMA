@@ -16,6 +16,15 @@
 #define AppVersion GetVersionNumbersString(ReleaseDir + "\" + AppExeName)
 #endif
 
+; Flutter bakes the pubspec build number ("+N") into the exe as a 4th version
+; component (e.g. 2.3.0.1). Strip it so the installer reports/names just x.y.z.
+#define AppVerDot1 = Pos(".", AppVersion)
+#define AppVerDot2 = Pos(".", Copy(AppVersion, AppVerDot1 + 1, 16)) + AppVerDot1
+#define AppVerDot3 = Pos(".", Copy(AppVersion, AppVerDot2 + 1, 16)) + AppVerDot2
+#if AppVerDot3 > 0
+#define AppVersion = Copy(AppVersion, 1, AppVerDot3 - 1)
+#endif
+
 [Setup]
 AppId={{6E4B6F0E-8C1E-4C9B-9C33-3E1B8F1A6D2E}
 AppName={#AppName}
