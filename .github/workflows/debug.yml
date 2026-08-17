@@ -8,7 +8,6 @@ jobs:
     uses: ./.github/workflows/bridge.yml
 
   build-linux-debug:
-    needs: generate-bridge
     runs-on: ubuntu-22.04
     env:
       RUSTFLAGS: -C link-arg=-fuse-ld=lld
@@ -17,12 +16,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Restore Bridge
-        uses: actions/download-artifact@v4
-        with:
-          name: frb-bridge
-          path: ${{ github.workspace }}
 
       - name: System Init
         run: |
@@ -43,6 +36,9 @@ jobs:
           channel: 'stable'
           cache: true
 
+      - name: Restore Bridge
+        uses: ./.github/actions/restore-bridge
+
       - name: Build
         working-directory: ./src
         run: |
@@ -61,7 +57,6 @@ jobs:
           path: linux_debug.tar.gz
 
   build-windows-debug:
-    needs: generate-bridge
     runs-on: windows-latest
     env:
       RUSTFLAGS: -C linker=lld-link.exe
@@ -70,12 +65,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Restore Bridge
-        uses: actions/download-artifact@v4
-        with:
-          name: frb-bridge
-          path: ${{ github.workspace }}
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -90,6 +79,9 @@ jobs:
         with:
           channel: 'stable'
           cache: true
+
+      - name: Restore Bridge
+        uses: ./.github/actions/restore-bridge
 
       - name: Build
         working-directory: ./src

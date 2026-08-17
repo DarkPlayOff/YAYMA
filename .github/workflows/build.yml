@@ -9,7 +9,6 @@ jobs:
     uses: ./.github/workflows/bridge.yml
 
   build-linux:
-    needs: generate-bridge
     runs-on: ubuntu-22.04
     env:
       RUSTFLAGS: -C link-arg=-fuse-ld=lld
@@ -18,12 +17,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Restore Bridge
-        uses: actions/download-artifact@v4
-        with:
-          name: frb-bridge
-          path: ${{ github.workspace }}
 
       - name: System Init
         run: |
@@ -43,6 +36,9 @@ jobs:
         with:
           channel: 'stable'
           cache: true
+
+      - name: Restore Bridge
+        uses: ./.github/actions/restore-bridge
 
       - name: Build
         working-directory: ./src
@@ -64,7 +60,6 @@ jobs:
           path: yayma-linux-*.tar.gz
 
   build-windows:
-    needs: generate-bridge
     runs-on: windows-latest
     env:
       RUSTFLAGS: -C linker=lld-link.exe
@@ -73,12 +68,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Restore Bridge
-        uses: actions/download-artifact@v4
-        with:
-          name: frb-bridge
-          path: ${{ github.workspace }}
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -93,6 +82,9 @@ jobs:
         with:
           channel: 'stable'
           cache: true
+
+      - name: Restore Bridge
+        uses: ./.github/actions/restore-bridge
 
       - name: Build
         working-directory: ./src
@@ -129,17 +121,10 @@ jobs:
           path: dist\yayma-windows-setup-*.exe
 
   build-android:
-    needs: generate-bridge
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Restore Bridge
-        uses: actions/download-artifact@v4
-        with:
-          name: frb-bridge
-          path: ${{ github.workspace }}
 
       - name: System Init
         run: |
@@ -201,6 +186,9 @@ jobs:
             echo "::error::Incomplete Android signing secrets: need all of ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD set together, or none of them."
             exit 1
           fi
+
+      - name: Restore Bridge
+        uses: ./.github/actions/restore-bridge
 
       - name: Build
         working-directory: ./src

@@ -63,11 +63,15 @@ jobs:
           flutter pub get
           flutter_rust_bridge_codegen generate
 
+      - name: Pack Bridge
+        run: |
+          tar -czf frb-bridge.tar.gz \
+            src/rust/src/frb_generated.rs \
+            src/lib/src/rust
+
       - name: Upload Bridge Artifact
         uses: actions/upload-artifact@v4
         with:
           name: frb-bridge
-          path: |
-            src/rust/src/frb_generated.rs
-            src/lib/src/rust
+          path: frb-bridge.tar.gz
           if-no-files-found: error

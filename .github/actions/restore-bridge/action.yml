@@ -1,0 +1,44 @@
+name: Restore Bridge
+description: Waits for the generate-bridge job to finish, then downloads the frb-bridge artifact
+
+runs:
+  using: composite
+  steps:
+    - name: Wait for Bridge
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        for i in $(seq 1 120); do
+          line=$(gh run view "$GITHUB_RUN_ID" --json jobs -q '.jobs[] | select(.name == "generate-bridge" or (.name | endswith(" / generate-bridge"))) | "\(.status) \(.conclusion)"' 2>/dev/null || true)
+          status=$(printf '%s' "$line" | cut -d' ' -f1)
+          conclusion=$(printf '%s' "$line" | cut -d' ' -f2)
+          if [ "$status" = "completed" ]; then
+            if [ "$conclusion" = "success" ]; then
+              echo "Bridge ready"
+              exit 0
+            fi
+            echo "::error::Bridge generation failed ($conclusion)"
+            exit 1
+          fi
+          sleep 10
+        done
+        echo "::error::Timed out waiting for bridge generation"
+        exit 1
+
+    - name: Download Bridge
+      uses: actions/download-artifact@v4
+      with:
+        name: frb-bridge
+        path: ${{ runner.temp }}/frb-bridge
+
+    - name: Extract Bridge
+      shell: bash
+      run: tar -xzf "$RUNNER_TEMP/frb-bridge/frb-bridge.tar.gz" -C "$GITHUB_WORKSPACE"
+
+    - name: Verify Bridge
+      shell: bash
+      run: |
+        test -f "$GITHUB_WORKSPACE/src/lib/src/rust/frb_generated.dart"
+        test -f "$GITHUB_WORKSPACE/src/lib/src/rust/api/simple.dart"
+        test -f "$GITHUB_WORKSPACE/src/rust/src/frb_generated.rs"
