@@ -34,11 +34,22 @@ runs:
 
     - name: Extract Bridge
       shell: bash
-      run: tar -xzf "$RUNNER_TEMP/frb-bridge/frb-bridge.tar.gz" -C "$GITHUB_WORKSPACE"
+      run: |
+        archive="$RUNNER_TEMP/frb-bridge/frb-bridge.tar.gz"
+        workspace="$GITHUB_WORKSPACE"
+        if command -v cygpath >/dev/null 2>&1; then
+          archive=$(cygpath -u "$archive")
+          workspace=$(cygpath -u "$workspace")
+        fi
+        tar -xzf "$archive" -C "$workspace"
 
     - name: Verify Bridge
       shell: bash
       run: |
-        test -f "$GITHUB_WORKSPACE/src/lib/src/rust/frb_generated.dart"
-        test -f "$GITHUB_WORKSPACE/src/lib/src/rust/api/simple.dart"
-        test -f "$GITHUB_WORKSPACE/src/rust/src/frb_generated.rs"
+        workspace="$GITHUB_WORKSPACE"
+        if command -v cygpath >/dev/null 2>&1; then
+          workspace=$(cygpath -u "$workspace")
+        fi
+        test -f "$workspace/src/lib/src/rust/frb_generated.dart"
+        test -f "$workspace/src/lib/src/rust/api/simple.dart"
+        test -f "$workspace/src/rust/src/frb_generated.rs"
