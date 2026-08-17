@@ -3,11 +3,12 @@ name: Debug Build
 on:
   workflow_dispatch:
 
-env:
-  FRB_VERSION: "2.13.0-beta.6"
-
 jobs:
+  generate-bridge:
+    uses: ./.github/workflows/bridge.yml
+
   build-linux-debug:
+    needs: generate-bridge
     runs-on: ubuntu-22.04
     env:
       RUSTFLAGS: -C link-arg=-fuse-ld=lld
@@ -17,6 +18,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Restore Bridge
+        uses: actions/download-artifact@v4
+        with:
+          name: frb-bridge
+          path: ${{ github.workspace }}
+
       - name: System Init
         run: |
           sudo apt-get update
@@ -24,24 +31,11 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rust-src
 
       - name: Setup Rust Cache
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: "src/rust -> src/target"
-          key: ${{ env.FRB_VERSION }}
-
-      - name: Install Tools
-        run: |
-          # Install binstall if not present
-          if [ ! -f "$HOME/.cargo/bin/cargo-binstall" ]; then
-            curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
-          fi
-          # Install others via binstall
-          cargo install flutter_rust_bridge_codegen --version "$FRB_VERSION" --locked
-          cargo binstall -y cargo-expand
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -54,7 +48,6 @@ jobs:
         run: |
           flutter config --no-analytics
           flutter pub get
-          flutter_rust_bridge_codegen generate
           flutter build linux --debug
 
       - name: Archive
@@ -68,6 +61,7 @@ jobs:
           path: linux_debug.tar.gz
 
   build-windows-debug:
+    needs: generate-bridge
     runs-on: windows-latest
     env:
       RUSTFLAGS: -C linker=lld-link.exe
@@ -77,28 +71,19 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Restore Bridge
+        uses: actions/download-artifact@v4
+        with:
+          name: frb-bridge
+          path: ${{ github.workspace }}
+
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rust-src
 
       - name: Setup Rust Cache
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: "src/rust -> src/target"
-          key: ${{ env.FRB_VERSION }}
-
-      - name: Install Tools
-        run: |
-          # Install binstall using curl to avoid PowerShell iwr issues
-          if ((Test-Path "$HOME\.cargo\bin\cargo-binstall.exe") -eq $false) {
-            curl.exe -L --proto "=https" --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.ps1 -o install-binstall.ps1
-            powershell -ExecutionPolicy RemoteSigned -File install-binstall.ps1 -Force
-          }
-          # Install others via binstall
-          cargo install flutter_rust_bridge_codegen --version "$env:FRB_VERSION" --locked
-          cargo binstall -y cargo-expand
-        shell: powershell
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -111,7 +96,6 @@ jobs:
         run: |
           flutter config --no-analytics
           flutter pub get
-          flutter_rust_bridge_codegen generate
           flutter build windows --debug
         shell: powershell
 
