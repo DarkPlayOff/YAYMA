@@ -4,10 +4,23 @@ use crate::audio::commands::AudioMessage;
 pub async fn load_persisted_settings(ctx: &AppContext) {
     let mut db = ctx.core.db.lock().await;
 
-    let volume = db.load_setting::<u8>("volume").await.unwrap_or(Some(100));
+    #[cfg(target_os = "android")]
+    {
+        // TODO: remove this. Temporary fix for users stuck with a low persisted
+        // volume from an old ducking bug — on Android there's no in-app slider to
+        // recover. Force the in-app volume to 100% on every launch and heal the
+        // stored value, then delete the cfg block once the bad value is flushed.
+        let _ = db.save_setting("volume", &100u8).await;
+        let _ = ctx.audio.tx.send(AudioMessage::SetVolume(100)).await;
+    }
 
-    if let Some(volume) = volume {
-        let _ = ctx.audio.tx.send(AudioMessage::SetVolume(volume)).await;
+    #[cfg(not(target_os = "android"))]
+    {
+        let volume = db.load_setting::<u8>("volume").await.unwrap_or(Some(100));
+
+        if let Some(volume) = volume {
+            let _ = ctx.audio.tx.send(AudioMessage::SetVolume(volume)).await;
+        }
     }
 
     if let Ok(Some(quality)) = db
