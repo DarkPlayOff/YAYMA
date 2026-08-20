@@ -91,3 +91,54 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release upload "${{ github.ref_name }}" PKGBUILD --clobber --repo "${{ github.repository }}"
+
+  update-nix-flake:
+    needs: create-release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Sync master
+        run: |
+          git fetch origin master
+          git checkout -B master origin/master
+
+      - name: Setup Nix
+        uses: DeterminateSystems/nix-installer-action@v22
+
+      - name: Update flake for release
+        env:
+          REPO: ${{ github.repository }}
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+
+          URL="https://github.com/${REPO}/releases/download/v${VERSION}/yayma-linux-x64-${VERSION}.tar.gz"
+          SRC_HASH=$(nix store prefetch-file --json "$URL" | jq -er .hash)
+          if [ -z "$SRC_HASH" ]; then
+            echo "::error::Failed to fetch/checksum ${URL}"
+            exit 1
+          fi
+
+          sed -i "s/^\([[:space:]]*version = \"\)[^\"]*\(\"\)/\1${VERSION}\2/" flake.nix
+          sed -i "s/^\([[:space:]]*srcHash = \"\)[^\"]*\(\"\)/\1${SRC_HASH}\2/" flake.nix
+
+          nix flake lock
+          nix build .#yayma
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add flake.nix flake.lock
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "chore: update nix flake for v${VERSION}"
+            git push origin master
+          fi
