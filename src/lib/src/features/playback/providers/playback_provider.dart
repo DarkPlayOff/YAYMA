@@ -419,9 +419,12 @@ final EffectCleanup _adjacentCoverPrecacheEffect = effect(() {
   }
 });
 
+// Material Orange 500 is the stable fallback before a cover palette is ready.
+const Color defaultAccentColor = Color(0xFFFF9800);
+
 // Accent color
 final FlutterComputed<Color> accentColorSignal = computed(
-  () => colorSchemeSignal()?.primary ?? Colors.deepOrange,
+  () => colorSchemeSignal()?.primary ?? defaultAccentColor,
   options: const ComputedOptions(name: 'accentColorSignal'),
 );
 

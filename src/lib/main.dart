@@ -52,7 +52,7 @@ class MyApp extends StatelessWidget {
       builder: (context) {
         final trackScheme = colorSchemeSignal();
         final base = ColorScheme.fromSeed(
-          seedColor: trackScheme?.primary ?? Colors.deepOrange,
+          seedColor: trackScheme?.primary ?? defaultAccentColor,
           brightness: Brightness.dark,
           dynamicSchemeVariant: DynamicSchemeVariant.expressive,
         );
