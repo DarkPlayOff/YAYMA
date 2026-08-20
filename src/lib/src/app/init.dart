@@ -56,15 +56,7 @@ class AppInit {
 
   static Future<void> _initAudioService() async {
     final session = await AudioSession.instance;
-    await session.configure(
-      const AudioSessionConfiguration(
-        androidAudioAttributes: AndroidAudioAttributes(
-          contentType: AndroidAudioContentType.music,
-          usage: AndroidAudioUsage.media,
-        ),
-        androidWillPauseWhenDucked: false,
-      ),
-    );
+    await session.configure(const AudioSessionConfiguration.music());
 
     await AudioFocusManager.initialize(session);
 
