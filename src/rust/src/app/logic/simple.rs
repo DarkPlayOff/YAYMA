@@ -231,3 +231,77 @@ pub async fn set_update_check_enabled(ctx: &AppContext, enabled: bool) {
         tracing::error!("Failed to save update_check setting: {:?}", e);
     }
 }
+
+pub async fn is_vibe_animation_enabled_init() -> bool {
+    if let Some(db_mutex) = get_init_db().await {
+        db_mutex
+            .lock()
+            .await
+            .load_setting("vibe_animation_enabled")
+            .await
+            .unwrap_or(Some(true))
+            .unwrap_or(true)
+    } else {
+        true
+    }
+}
+
+pub async fn set_vibe_animation_enabled(ctx: &AppContext, enabled: bool) {
+    let _ = ctx
+        .core
+        .db
+        .lock()
+        .await
+        .save_setting("vibe_animation_enabled", &enabled)
+        .await;
+}
+
+pub async fn get_vibe_render_scale_init() -> f64 {
+    let value = if let Some(db_mutex) = get_init_db().await {
+        db_mutex
+            .lock()
+            .await
+            .load_setting::<f64>("vibe_render_scale")
+            .await
+            .unwrap_or(Some(0.50))
+            .unwrap_or(0.50)
+    } else {
+        0.50
+    };
+    value.clamp(0.25, 0.50)
+}
+
+pub async fn set_vibe_render_scale(ctx: &AppContext, scale: f64) {
+    let scale = scale.clamp(0.25, 0.50);
+    let _ = ctx
+        .core
+        .db
+        .lock()
+        .await
+        .save_setting("vibe_render_scale", &scale)
+        .await;
+}
+
+pub async fn are_blur_effects_enabled_init() -> bool {
+    if let Some(db_mutex) = get_init_db().await {
+        db_mutex
+            .lock()
+            .await
+            .load_setting("blur_effects_enabled")
+            .await
+            .unwrap_or(Some(true))
+            .unwrap_or(true)
+    } else {
+        true
+    }
+}
+
+pub async fn set_blur_effects_enabled(ctx: &AppContext, enabled: bool) {
+    let _ = ctx
+        .core
+        .db
+        .lock()
+        .await
+        .save_setting("blur_effects_enabled", &enabled)
+        .await;
+}

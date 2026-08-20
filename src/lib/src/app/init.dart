@@ -8,6 +8,7 @@ import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/features/auth/providers/auth_provider.dart'
     show accountSignal, appContextSignal, authSignal;
 import 'package:yayma/src/features/core/providers/navigation_provider.dart';
+import 'package:yayma/src/features/core/providers/visual_effects_provider.dart';
 import 'package:yayma/src/features/library/providers/library_provider.dart';
 import 'package:yayma/src/features/playback/providers/audio_focus_manager.dart';
 import 'package:yayma/src/features/playback/providers/audio_handler.dart';
@@ -44,6 +45,10 @@ class AppInit {
 
       final customTitlebar = await simple.isCustomTitlebarEnabledInit();
       customTitlebarSignal.value = customTitlebar;
+
+      vibeVisibleSignal.value = await simple.isVibeAnimationEnabledInit();
+      vibeRenderScaleSignal.value = await simple.getVibeRenderScaleInit();
+      blurEffectsEnabledSignal.value = await simple.areBlurEffectsEnabledInit();
     } on Object catch (_) {}
 
     unawaited(_initializeAuthAndServices());

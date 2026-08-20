@@ -7,6 +7,7 @@ import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/features/auth/providers/auth_provider.dart';
 import 'package:yayma/src/features/auth/views/yandex_id_view.dart';
 import 'package:yayma/src/features/core/providers/navigation_provider.dart';
+import 'package:yayma/src/features/core/providers/visual_effects_provider.dart';
 import 'package:yayma/src/features/core/theme/app_tokens.dart';
 import 'package:yayma/src/features/core/views/widgets/rust_cached_image.dart';
 import 'package:yayma/src/features/home/providers/home_provider.dart';
@@ -202,9 +203,10 @@ class _FloatingNavBarState extends State<FloatingNavBar>
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(AppRadius.xxxl),
                       child: BackdropFilter(
+                        enabled: blurEffectsEnabledSignal.value && !isHome,
                         filter: ui.ImageFilter.blur(
-                          sigmaX: isHome ? 0 : 3,
-                          sigmaY: isHome ? 0 : 3,
+                          sigmaX: isHome ? 0 : 2,
+                          sigmaY: isHome ? 0 : 2,
                         ),
                         child: Container(
                           width: isNarrow ? null : 64,

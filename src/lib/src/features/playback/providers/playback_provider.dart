@@ -8,6 +8,7 @@ import 'package:signals_flutter/signals_flutter.dart';
 import 'package:windows_taskbar/windows_taskbar.dart';
 import 'package:yayma/src/features/auth/providers/auth_provider.dart';
 import 'package:yayma/src/features/core/providers/notification_provider.dart';
+import 'package:yayma/src/features/core/providers/visual_effects_provider.dart';
 import 'package:yayma/src/features/library/providers/library_provider.dart';
 import 'package:yayma/src/rust/api/audio_fx.dart' as rust;
 import 'package:yayma/src/rust/api/library.dart' as rust;
@@ -46,7 +47,9 @@ Future<void> initPlayback() async {
       case rust.AppEvent_PlaybackProgress(field0: final progress):
         playerProgressSignal.value = progress;
       case rust.AppEvent_VibeTick(field0: final tick):
-        vibeTickSignal.value = tick;
+        if (vibeVisibleSignal.value) {
+          vibeTickSignal.value = tick;
+        }
       case rust.AppEvent_LikedTracksChanged(field0: final tracks):
         likedTracksSignal.value = tracks;
       case rust.AppEvent_AccountUpdated(field0: final account):
@@ -87,6 +90,7 @@ Future<void> initPlayback() async {
   audioQualitySignal.value = await rust.getAudioQuality(ctx: ctx);
 
   _activatePersistentColorScheme();
+  _activateAdjacentCoverPrecache();
   _activateVibePalette();
   _activateBufferingDelay();
   _activateLyricsOverlayReset();
@@ -97,6 +101,7 @@ Future<void> initPlayback() async {
 }
 
 void _activatePersistentColorScheme() => _persistentColorSchemeEffect;
+void _activateAdjacentCoverPrecache() => _adjacentCoverPrecacheEffect;
 void _activateVibePalette() => _vibePaletteEffect;
 void _activateBufferingDelay() => _bufferingDelayEffect;
 void _activateTaskbarEffect() => _taskbarEffect;
@@ -299,29 +304,119 @@ final FlutterSignal<ColorScheme?> colorSchemeSignal = signal<ColorScheme?>(
   null,
 );
 
-// Effect to update color scheme from cached image path
+// Keep only the covers around the current queue position. Apart from avoiding
+// repeated palette extraction when going back, this lets the normal next-track
+// transition do its image work before the track actually changes.
+const int _preparedCoverCacheLimit = 6;
+final Map<String, ColorScheme> _preparedCoverSchemes = {};
+final Map<String, Future<ColorScheme?>> _preparingCoverSchemes = {};
+
+void _rememberCoverScheme(String url, ColorScheme scheme) {
+  _preparedCoverSchemes.remove(url);
+  _preparedCoverSchemes[url] = scheme;
+  while (_preparedCoverSchemes.length > _preparedCoverCacheLimit) {
+    _preparedCoverSchemes.remove(_preparedCoverSchemes.keys.first);
+  }
+}
+
+Future<ColorScheme?> _prepareCoverScheme(String url) {
+  final ready = _preparedCoverSchemes[url];
+  if (ready != null) {
+    // Refresh its position in the small LRU cache.
+    _rememberCoverScheme(url, ready);
+    return Future.value(ready);
+  }
+
+  final inFlight = _preparingCoverSchemes[url];
+  if (inFlight != null) return inFlight;
+
+  final future = () async {
+    try {
+      final ctx = appContextSignal.value;
+      if (ctx == null) return null;
+
+      final path = await rust.getCachedImagePath(ctx: ctx, url: url);
+      if (path == null) return null;
+
+      final file = File(path);
+      final paletteProvider = ResizeImage(
+        FileImage(file),
+        width: 32,
+        height: 32,
+      );
+      final scheme = await ColorScheme.fromImageProvider(
+        provider: paletteProvider,
+        brightness: Brightness.dark,
+      );
+      _rememberCoverScheme(url, scheme);
+
+      // Warm the exact decoded size used by BlurredCoverBackground. Resolving
+      // an ImageProvider is enough to put it into Flutter's shared image cache.
+      final backgroundProvider = ResizeImage(
+        FileImage(file),
+        width: 60,
+        height: 60,
+      );
+      final stream = backgroundProvider.resolve(ImageConfiguration.empty);
+      late final ImageStreamListener listener;
+      listener = ImageStreamListener(
+        (_, _) => stream.removeListener(listener),
+        onError: (_, _) => stream.removeListener(listener),
+      );
+      stream.addListener(listener);
+
+      return scheme;
+    } on Object catch (error) {
+      debugPrint('Cover preparation failed: $error');
+      return null;
+    }
+  }();
+
+  _preparingCoverSchemes[url] = future;
+  unawaited(
+    future.then((_) {
+      unawaited(_preparingCoverSchemes.remove(url));
+    }),
+  );
+  return future;
+}
+
+// Effect to update the scheme, normally from the already prepared queue entry.
 final EffectCleanup _persistentColorSchemeEffect = effect(() {
   final url = currentCoverUrlSignal();
-  final ctx = appContextSignal.value;
 
-  if (url == null || ctx == null) {
+  if (url == null || appContextSignal.value == null) {
     colorSchemeSignal.value = null;
     return;
   }
 
-  unawaited(() async {
-    final path = await rust.getCachedImagePath(ctx: ctx, url: url);
-    if (path == null) return;
+  final ready = _preparedCoverSchemes[url];
+  if (ready != null) {
+    _rememberCoverScheme(url, ready);
+    colorSchemeSignal.value = ready;
+    return;
+  }
 
-    // Check if the track hasn't changed while we were fetching path
+  unawaited(() async {
+    final scheme = await _prepareCoverScheme(url);
+    if (scheme == null) return;
+
+    // Check if the track hasn't changed while preparation was in flight.
     if (currentCoverUrlSignal() == url) {
-      final scheme = await ColorScheme.fromImageProvider(
-        provider: ResizeImage(FileImage(File(path)), width: 32, height: 32),
-        brightness: Brightness.dark,
-      );
       colorSchemeSignal.value = scheme;
     }
   }());
+});
+
+// Queue updates happen well ahead of playback. Prepare both neighbours so
+// next/previous buttons and automatic advancement don't decode on transition.
+final EffectCleanup _adjacentCoverPrecacheEffect = effect(() {
+  final previousUrl = previousTrackSignal()?.coverUrl;
+  final nextUrl = nextTrackSignal()?.coverUrl;
+  if (previousUrl != null) unawaited(_prepareCoverScheme(previousUrl));
+  if (nextUrl != null && nextUrl != previousUrl) {
+    unawaited(_prepareCoverScheme(nextUrl));
+  }
 });
 
 // Accent color

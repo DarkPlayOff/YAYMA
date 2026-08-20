@@ -6,6 +6,7 @@ import 'package:m3e_core/m3e_core.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/features/core/providers/navigation_provider.dart';
+import 'package:yayma/src/features/core/providers/visual_effects_provider.dart';
 import 'package:yayma/src/features/core/theme/app_tokens.dart';
 import 'package:yayma/src/features/core/views/widgets/common_ui.dart';
 import 'package:yayma/src/features/core/views/widgets/rust_cached_image.dart';
@@ -119,7 +120,7 @@ class _MobileMiniPlayerState extends State<MobileMiniPlayer> {
 
         final useLyricsStyle = isHome && showLyrics;
         final alpha = useLyricsStyle ? 0.5 : 0.9;
-        final blur = useLyricsStyle ? 0.0 : 3.0;
+        final blur = useLyricsStyle ? 0.0 : 2.0;
 
         final barColor =
             Color.lerp(
@@ -178,6 +179,7 @@ class _MobileMiniPlayerState extends State<MobileMiniPlayer> {
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(AppRadius.xl),
                         child: BackdropFilter(
+                          enabled: blurEffectsEnabledSignal.value && blur > 0,
                           filter: ui.ImageFilter.blur(
                             sigmaX: blur,
                             sigmaY: blur,
@@ -397,22 +399,22 @@ class _PlayPauseButton extends StatelessWidget {
                   color: accentColorSignal.value,
                 )
               : AnimatedSwitcher(
-            duration: const Duration(milliseconds: 250),
-            switchInCurve: Curves.easeOutBack,
-            switchOutCurve: Curves.easeIn,
-            transitionBuilder: (child, animation) {
-              return FadeTransition(
-                opacity: animation,
-                child: ScaleTransition(scale: animation, child: child),
-              );
-            },
-            child: Icon(
-              isPlaying
-                  ? Icons.pause_circle_filled_rounded
-                  : Icons.play_circle_filled_rounded,
-              key: ValueKey<bool>(isPlaying),
-            ),
-          ),
+                  duration: const Duration(milliseconds: 250),
+                  switchInCurve: Curves.easeOutBack,
+                  switchOutCurve: Curves.easeIn,
+                  transitionBuilder: (child, animation) {
+                    return FadeTransition(
+                      opacity: animation,
+                      child: ScaleTransition(scale: animation, child: child),
+                    );
+                  },
+                  child: Icon(
+                    isPlaying
+                        ? Icons.pause_circle_filled_rounded
+                        : Icons.play_circle_filled_rounded,
+                    key: ValueKey<bool>(isPlaying),
+                  ),
+                ),
           onPressed: PlaybackController.togglePlay,
         );
       },
@@ -520,6 +522,7 @@ class _MiniProgressBarState extends State<_MiniProgressBar> {
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(AppRadius.xs),
                     child: BackdropFilter(
+                      enabled: blurEffectsEnabledSignal.value && blur > 0,
                       filter: ui.ImageFilter.blur(sigmaX: blur, sigmaY: blur),
                       child: Container(
                         padding: const EdgeInsets.symmetric(

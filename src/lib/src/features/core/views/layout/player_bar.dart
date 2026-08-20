@@ -5,6 +5,7 @@ import 'package:m3e_core/m3e_core.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/features/core/providers/navigation_provider.dart';
+import 'package:yayma/src/features/core/providers/visual_effects_provider.dart';
 import 'package:yayma/src/features/core/theme/app_tokens.dart';
 import 'package:yayma/src/features/core/views/layout/mobile_mini_player.dart';
 import 'package:yayma/src/features/core/views/widgets/common_ui.dart';
@@ -29,7 +30,7 @@ class PlayerBar extends StatelessWidget {
 
         final useLyricsStyle = isHome && showLyrics;
         final alpha = useLyricsStyle ? 0.5 : 0.9;
-        final blur = useLyricsStyle ? 0.0 : 3.0;
+        final blur = useLyricsStyle ? 0.0 : 2.0;
 
         // Dynamic background color based on theme
         final barColor =
@@ -79,6 +80,7 @@ class PlayerBar extends StatelessWidget {
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(AppRadius.xl),
                 child: BackdropFilter(
+                  enabled: blurEffectsEnabledSignal.value && blur > 0,
                   filter: ui.ImageFilter.blur(sigmaX: blur, sigmaY: blur),
                   child: Row(
                     children: [
@@ -291,8 +293,7 @@ class _PlayerControls extends StatelessWidget {
         final isDisliked = isDislikedSignal();
         final isShuffled = isShuffledSignal();
         final repeatMode = repeatModeSignal();
-        final showBuffering =
-            showBufferingIndicatorSignal.value;
+        final showBuffering = showBufferingIndicatorSignal.value;
         final onSurfaceVariant = Theme.of(context).colorScheme.onSurfaceVariant;
 
         var repeatIcon = Icons.repeat;

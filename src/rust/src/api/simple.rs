@@ -113,3 +113,27 @@ pub async fn is_update_check_enabled(ctx: &AppContext) -> bool {
 pub async fn set_update_check_enabled(ctx: &AppContext, enabled: bool) {
     logic::set_update_check_enabled(ctx, enabled).await;
 }
+
+pub async fn is_vibe_animation_enabled_init() -> bool {
+    logic::is_vibe_animation_enabled_init().await
+}
+
+pub async fn set_vibe_animation_enabled(ctx: &AppContext, enabled: bool) {
+    logic::set_vibe_animation_enabled(ctx, enabled).await;
+}
+
+pub async fn get_vibe_render_scale_init() -> f64 {
+    logic::get_vibe_render_scale_init().await
+}
+
+pub async fn set_vibe_render_scale(ctx: &AppContext, scale: f64) {
+    logic::set_vibe_render_scale(ctx, scale).await;
+}
+
+pub async fn are_blur_effects_enabled_init() -> bool {
+    logic::are_blur_effects_enabled_init().await
+}
+
+pub async fn set_blur_effects_enabled(ctx: &AppContext, enabled: bool) {
+    logic::set_blur_effects_enabled(ctx, enabled).await;
+}

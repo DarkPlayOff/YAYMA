@@ -6,6 +6,7 @@ import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/features/auth/providers/auth_provider.dart';
 import 'package:yayma/src/features/core/providers/navigation_provider.dart';
 import 'package:yayma/src/features/core/providers/notification_provider.dart';
+import 'package:yayma/src/features/core/providers/visual_effects_provider.dart';
 import 'package:yayma/src/features/core/theme/app_tokens.dart';
 import 'package:yayma/src/features/core/views/widgets/responsive.dart';
 import 'package:yayma/src/features/library/providers/library_provider.dart';
@@ -118,6 +119,34 @@ class _SettingsViewState extends State<SettingsView> {
     }
   }
 
+  Future<void> _toggleVibeVisibility(bool enabled) async {
+    vibeVisibleSignal.value = enabled;
+    final ctx = appContextSignal.value;
+    if (ctx != null) {
+      await simple.setVibeAnimationEnabled(ctx: ctx, enabled: enabled);
+    }
+  }
+
+  Future<void> _saveVibeRenderScale(double scale) async {
+    final normalized = scale.clamp(
+      minVibeRenderScale,
+      maxVibeRenderScale,
+    );
+    vibeRenderScaleSignal.value = normalized;
+    final ctx = appContextSignal.value;
+    if (ctx != null) {
+      await simple.setVibeRenderScale(ctx: ctx, scale: normalized);
+    }
+  }
+
+  Future<void> _toggleBlurEffects(bool enabled) async {
+    blurEffectsEnabledSignal.value = enabled;
+    final ctx = appContextSignal.value;
+    if (ctx != null) {
+      await simple.setBlurEffectsEnabled(ctx: ctx, enabled: enabled);
+    }
+  }
+
   Future<void> _pickPath() async {
     final result = await FilePicker.getDirectoryPath();
     if (result != null) {
@@ -206,6 +235,79 @@ class _SettingsViewState extends State<SettingsView> {
                         subtitle: path.value ?? 'По умолчанию (Загрузки)',
                         icon: Icons.folder_open_rounded,
                         onTap: () => unawaited(_pickPath()),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 32),
+                  const _SectionTitle(title: 'Визуальные эффекты'),
+                  const SizedBox(height: 20),
+                  SignalBuilder(
+                    builder: (context) {
+                      final enabled = vibeVisibleSignal.value;
+                      return _SettingItem(
+                        title: 'Показывать волну',
+                        subtitle: 'Динамический фон, реагирующий на музыку',
+                        icon: Icons.waves_rounded,
+                        onTap: () => unawaited(
+                          _toggleVibeVisibility(!enabled),
+                        ),
+                        trailing: Switch(
+                          value: enabled,
+                          onChanged: (value) => unawaited(
+                            _toggleVibeVisibility(value),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  SignalBuilder(
+                    builder: (context) {
+                      final scale = vibeRenderScaleSignal.value;
+                      return _SettingItem(
+                        title: 'Разрешение волны',
+                        subtitle:
+                            '${(scale * 100).round()}% — выше качество, выше нагрузка',
+                        icon: Icons.high_quality_rounded,
+                        onTap: () {},
+                        trailing: SizedBox(
+                          width: isNarrow ? 120 : 200,
+                          child: Slider(
+                            value: scale,
+                            min: minVibeRenderScale,
+                            max: maxVibeRenderScale,
+                            divisions: 5,
+                            label: '${(scale * 100).round()}%',
+                            onChanged: vibeVisibleSignal.value
+                                ? (value) {
+                                    vibeRenderScaleSignal.value = value;
+                                  }
+                                : null,
+                            onChangeEnd: (value) => unawaited(
+                              _saveVibeRenderScale(value),
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  SignalBuilder(
+                    builder: (context) {
+                      final enabled = blurEffectsEnabledSignal.value;
+                      return _SettingItem(
+                        title: 'Размытие интерфейса',
+                        subtitle: 'Размывать фон под панелями управления',
+                        icon: Icons.blur_on_rounded,
+                        onTap: () => unawaited(
+                          _toggleBlurEffects(!enabled),
+                        ),
+                        trailing: Switch(
+                          value: enabled,
+                          onChanged: (value) => unawaited(
+                            _toggleBlurEffects(value),
+                          ),
+                        ),
                       );
                     },
                   ),

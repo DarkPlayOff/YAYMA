@@ -5,6 +5,7 @@ import 'dart:ui' as ui;
 import 'package:material_ui/material_ui.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/features/auth/providers/auth_provider.dart';
+import 'package:yayma/src/features/core/providers/visual_effects_provider.dart';
 import 'package:yayma/src/features/core/views/widgets/rust_cached_image.dart';
 import 'package:yayma/src/features/playback/providers/playback_provider.dart';
 import 'package:yayma/src/rust/api/audio_fx.dart' as rust_api;
@@ -111,14 +112,21 @@ class _WaveBackgroundState extends State<WaveBackground> {
   Widget build(BuildContext context) {
     final shader = _shader;
     if (shader == null) return Container(color: Colors.black);
-    return RepaintBoundary(
-      child: CustomPaint(
-        painter: PixelPerfectVibePainter(
-          shader: shader,
-          signal: vibeTickSignal,
-          devicePixelRatio: _devicePixelRatio,
-        ),
-      ),
+    return SignalBuilder(
+      builder: (context) {
+        if (!vibeVisibleSignal.value) return const SizedBox.shrink();
+        final renderScale = vibeRenderScaleSignal.value;
+        return RepaintBoundary(
+          child: CustomPaint(
+            painter: PixelPerfectVibePainter(
+              shader: shader,
+              signal: vibeTickSignal,
+              devicePixelRatio: _devicePixelRatio,
+              renderScale: renderScale,
+            ),
+          ),
+        );
+      },
     );
   }
 }
@@ -127,6 +135,7 @@ class PixelPerfectVibePainter extends CustomPainter {
   final ui.FragmentShader shader;
   final FlutterSignal<F32Array26> signal;
   final double devicePixelRatio;
+  final double renderScale;
   static const _rotData = [-0.3, 0.3, 0.4, -0.3, -0.3, -0.4, -0.3, -0.3, 0.4];
   static const _viewScale = 0.4;
 
@@ -134,12 +143,11 @@ class PixelPerfectVibePainter extends CustomPainter {
   // size * devicePixelRatio (not raw logical size) so screens with a high
   // DPR (phones) get the same effective sharpness as ~1x desktop displays
   // instead of a much blurrier result for the same nominal scale.
-  static const _renderScale = 0.5;
-
   PixelPerfectVibePainter({
     required this.shader,
     required this.signal,
     required this.devicePixelRatio,
+    required this.renderScale,
   }) : super(repaint: signal);
 
   final Paint _shaderPaint = Paint();
@@ -156,7 +164,7 @@ class PixelPerfectVibePainter extends CustomPainter {
     if (u.length < 26) return;
     final t = u[0];
 
-    final physicalScale = devicePixelRatio * _renderScale;
+    final physicalScale = devicePixelRatio * renderScale;
     final lowWidth = math.max(1, (size.width * physicalScale).round());
     final lowHeight = math.max(1, (size.height * physicalScale).round());
     final lowW = lowWidth.toDouble();
@@ -208,7 +216,8 @@ class PixelPerfectVibePainter extends CustomPainter {
       // Must stay in sync with the outer-radius formula in vibe.frag,
       // including its direct AUDIO_PUMP_GAIN term.
       final brMax = 1.2 * (1.0 - 0.3 * i);
-      final outer = 1.9 - 0.25 * i + brMax * (1.0 + boost * brMax) + boost * 0.008;
+      final outer =
+          1.9 - 0.25 * i + brMax * (1.0 + boost * brMax) + boost * 0.008;
       if (outer > maxOuter) maxOuter = outer;
     }
     shader.setFloat(5, maxOuter);
@@ -230,5 +239,7 @@ class PixelPerfectVibePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant PixelPerfectVibePainter oldDelegate) => false;
+  bool shouldRepaint(covariant PixelPerfectVibePainter oldDelegate) =>
+      oldDelegate.renderScale != renderScale ||
+      oldDelegate.devicePixelRatio != devicePixelRatio;
 }
