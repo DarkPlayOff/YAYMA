@@ -1,0 +1,52 @@
+name: Update Nix Flake
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release version to package, without the leading v (for example, 2.4.0)
+        required: true
+        type: string
+
+jobs:
+  update-nix:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout master
+        uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+
+      - name: Setup Nix
+        uses: DeterminateSystems/nix-installer-action@v22
+
+      - name: Update and verify flake
+        env:
+          REPO: ${{ github.repository }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          URL="https://github.com/${REPO}/releases/download/v${VERSION}/yayma-linux-x64-${VERSION}.tar.gz"
+          SRC_HASH=$(nix store prefetch-file --json "$URL" | jq -er .hash)
+
+          sed -i "s/^\([[:space:]]*version = \"\)[^\"]*\(\"\)/\1${VERSION}\2/" flake.nix
+          sed -i "s/^\([[:space:]]*srcHash = \"\)[^\"]*\(\"\)/\1${SRC_HASH}\2/" flake.nix
+
+          nix flake lock
+          nix build .#yayma
+
+      - name: Commit and push
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add flake.nix flake.lock
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "chore: update nix flake for v${VERSION}"
+            git push origin master
+          fi
