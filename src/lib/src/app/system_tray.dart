@@ -80,7 +80,7 @@ class SystemTrayManager with TrayListener, WindowListener {
     // Allow the window to actually close now that the user asked to quit.
     await windowManager.setPreventClose(false);
     await trayManager.destroy();
-    await windowManager.destroy();
+    await windowManager.close();
   }
 
   // --- TrayListener ---------------------------------------------------------
