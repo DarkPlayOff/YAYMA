@@ -30,6 +30,9 @@
               sha256 = srcHash;
             };
 
+            # Flutter bundles contain several top-level directories (data, lib, ...).
+            sourceRoot = ".";
+
             dontConfigure = true;
             dontBuild = true;
 
