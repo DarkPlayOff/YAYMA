@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 
 import 'package:flutter/services.dart';
 import 'package:m3e_core/m3e_core.dart';
@@ -133,6 +134,123 @@ class _AlbumViewState extends State<AlbumView> {
                   (likedAlbum) => likedAlbum.id == albumData.id,
                 );
                 final isDownloading = _isDownloadingAlbum.value;
+                final isAndroid = Platform.isAndroid;
+
+                final albumActions = [
+                  M3EButton.icon(
+                    onPressed: () => unawaited(
+                      _toggleAlbumLike(albumData, isLiked),
+                    ),
+                    icon: Icon(
+                      isLiked
+                          ? Icons.favorite_rounded
+                          : Icons.favorite_border_rounded,
+                    ),
+                    label: isAndroid
+                        ? const SizedBox.shrink()
+                        : Text(isLiked ? 'В любимых' : 'В любимые'),
+                    style: isLiked
+                        ? M3EButtonStyle.filled
+                        : M3EButtonStyle.outlined,
+                    size: M3EButtonSize.md,
+                    decoration: isLiked
+                        ? null
+                        : M3EButtonDecoration.styleFrom(
+                            backgroundColor: cs.onSurface.withValues(
+                              alpha: 0.1,
+                            ),
+                            foregroundColor: cs.onSurface,
+                          ),
+                  ),
+                  M3EButton.icon(
+                    onPressed: () => unawaited(_copyAlbumLink(albumData)),
+                    icon: const Icon(Icons.link_rounded),
+                    label: isAndroid
+                        ? const SizedBox.shrink()
+                        : const Text('Ссылка'),
+                    style: M3EButtonStyle.outlined,
+                    size: M3EButtonSize.md,
+                    decoration: M3EButtonDecoration.styleFrom(
+                      backgroundColor: cs.onSurface.withValues(alpha: 0.1),
+                      foregroundColor: cs.onSurface,
+                    ),
+                  ),
+                  M3EButton.icon(
+                    onPressed: isDownloading
+                        ? null
+                        : () => unawaited(_downloadAlbum(albumData)),
+                    icon: isDownloading
+                        ? const M3ECircularWavyProgressIndicator(
+                            strokeWidth: 2,
+                            size: 18,
+                          )
+                        : const Icon(Icons.download_rounded),
+                    label: isAndroid
+                        ? const SizedBox.shrink()
+                        : const Text('Скачать альбом'),
+                    style: M3EButtonStyle.outlined,
+                    size: M3EButtonSize.md,
+                    decoration: M3EButtonDecoration.styleFrom(
+                      backgroundColor: cs.onSurface.withValues(alpha: 0.1),
+                      foregroundColor: cs.onSurface,
+                    ),
+                  ),
+                ];
+                final androidAlbumActions = [
+                  IconButton(
+                    onPressed: () => unawaited(
+                      _toggleAlbumLike(albumData, isLiked),
+                    ),
+                    tooltip: isLiked ? 'В любимых' : 'В любимые',
+                    icon: Icon(
+                      isLiked
+                          ? Icons.favorite_rounded
+                          : Icons.favorite_border_rounded,
+                    ),
+                    style: IconButton.styleFrom(
+                      minimumSize: const Size(64, 56),
+                      iconSize: 26,
+                      backgroundColor: isLiked
+                          ? cs.primary
+                          : cs.onSurface.withValues(alpha: 0.1),
+                      foregroundColor: isLiked ? cs.onPrimary : cs.onSurface,
+                      side: isLiked
+                          ? null
+                          : BorderSide(color: cs.outlineVariant),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => unawaited(_copyAlbumLink(albumData)),
+                    tooltip: 'Ссылка',
+                    icon: const Icon(Icons.link_rounded),
+                    style: IconButton.styleFrom(
+                      minimumSize: const Size(64, 56),
+                      iconSize: 26,
+                      backgroundColor: cs.onSurface.withValues(alpha: 0.1),
+                      foregroundColor: cs.onSurface,
+                      side: BorderSide(color: cs.outlineVariant),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: isDownloading
+                        ? null
+                        : () => unawaited(_downloadAlbum(albumData)),
+                    tooltip: 'Скачать альбом',
+                    icon: isDownloading
+                        ? const M3ECircularWavyProgressIndicator(
+                            strokeWidth: 2,
+                            size: 18,
+                          )
+                        : const Icon(Icons.download_rounded),
+                    style: IconButton.styleFrom(
+                      minimumSize: const Size(64, 56),
+                      iconSize: 26,
+                      backgroundColor: cs.onSurface.withValues(alpha: 0.1),
+                      foregroundColor: cs.onSurface,
+                      side: BorderSide(color: cs.outlineVariant),
+                    ),
+                  ),
+                ];
 
                 return CommonDetailSliverLayout(
                   header: CommonDetailHeader(
@@ -141,60 +259,32 @@ class _AlbumViewState extends State<AlbumView> {
                     artists: albumData.artists,
                     secondarySubtitle: albumData.year?.toString(),
                     coverUrl: albumData.coverUrl,
-                    actions: [
-                      M3EButton.icon(
-                        onPressed: () => unawaited(
-                          _toggleAlbumLike(albumData, isLiked),
-                        ),
-                        icon: Icon(
-                          isLiked
-                              ? Icons.favorite_rounded
-                              : Icons.favorite_border_rounded,
-                        ),
-                        label: Text(isLiked ? 'В любимых' : 'В любимые'),
-                        style: isLiked
-                            ? M3EButtonStyle.filled
-                            : M3EButtonStyle.outlined,
-                        size: M3EButtonSize.md,
-                        decoration: isLiked
-                            ? null
-                            : M3EButtonDecoration.styleFrom(
-                                backgroundColor: cs.onSurface.withValues(
-                                  alpha: 0.1,
-                                ),
-                                foregroundColor: cs.onSurface,
-                              ),
-                      ),
-                      M3EButton.icon(
-                        onPressed: () => unawaited(_copyAlbumLink(albumData)),
-                        icon: const Icon(Icons.link_rounded),
-                        label: const Text('Ссылка'),
-                        style: M3EButtonStyle.outlined,
-                        size: M3EButtonSize.md,
-                        decoration: M3EButtonDecoration.styleFrom(
-                          backgroundColor: cs.onSurface.withValues(alpha: 0.1),
-                          foregroundColor: cs.onSurface,
-                        ),
-                      ),
-                      M3EButton.icon(
-                        onPressed: isDownloading
-                            ? null
-                            : () => unawaited(_downloadAlbum(albumData)),
-                        icon: isDownloading
-                            ? const M3ECircularWavyProgressIndicator(
-                                strokeWidth: 2,
-                                size: 18,
-                              )
-                            : const Icon(Icons.download_rounded),
-                        label: const Text('Скачать альбом'),
-                        style: M3EButtonStyle.outlined,
-                        size: M3EButtonSize.md,
-                        decoration: M3EButtonDecoration.styleFrom(
-                          backgroundColor: cs.onSurface.withValues(alpha: 0.1),
-                          foregroundColor: cs.onSurface,
-                        ),
-                      ),
-                    ],
+                    actions: isAndroid
+                        ? [
+                            Row(
+                              mainAxisSize: MainAxisSize.max,
+                              children: [
+                                for (
+                                  var i = 0;
+                                  i < androidAlbumActions.length;
+                                  i++
+                                )
+                                  Expanded(
+                                    child: Padding(
+                                      padding: EdgeInsets.only(
+                                        right: i == androidAlbumActions.length - 1
+                                            ? 0
+                                            : 6,
+                                      ),
+                                      child: Center(
+                                        child: androidAlbumActions[i],
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ]
+                        : albumActions,
                   ),
                   slivers: [
                     SliverM3ECardList(

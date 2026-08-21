@@ -31,35 +31,51 @@ class TrackDetailsDialog extends SignalWidget {
       return rust.getTrackDetails(ctx: ctx, trackId: trackId);
     });
 
+    return SignalBuilder(
+      builder: (context) {
+        final result = detailsAsync.value;
+        return result.map(
+          loading: () => const Dialog(
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            child: SizedBox(
+              width: 72,
+              height: 72,
+              child: CommonLoadingWidget(),
+            ),
+          ),
+          data: (details) => _buildDialog(
+            context,
+            details == null
+                ? const Center(child: Text('Загрузка...'))
+                : _buildDetails(context, details),
+          ),
+          error: (Object e, _) => _buildDialog(
+            context,
+            CommonErrorWidget(error: e.toString()),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildDialog(BuildContext context, Widget content) {
+    final cs = Theme.of(context).colorScheme;
     return AlertDialog(
       title: Text(
         'О треке',
         style: TextStyle(color: cs.onSurface, fontWeight: FontWeight.bold),
       ),
-      content: SizedBox(
-        width: 500,
-        child: SignalBuilder(
-          builder: (context) {
-            final result = detailsAsync.value;
-            return result.map(
-              data: (details) {
-                if (details == null) {
-                  return const Center(child: Text('Загрузка...'));
-                }
-                return _buildDetails(context, details);
-              },
-              loading: () => const CommonLoadingWidget(),
-              error: (Object e, _) => CommonErrorWidget(error: e.toString()),
-            );
-          },
-        ),
+      content: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 500),
+        child: content,
       ),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
           child: Text(
             'Закрыть',
-            style: TextStyle(color: Theme.of(context).colorScheme.primary),
+            style: TextStyle(color: cs.primary),
           ),
         ),
       ],

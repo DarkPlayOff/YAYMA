@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 
 import 'package:file_picker/file_picker.dart';
 import 'package:m3e_core/m3e_core.dart';
@@ -188,6 +189,7 @@ class _PlaylistContentState extends State<_PlaylistContent> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final searchActive = widget.searchController.text.isNotEmpty;
+    final isAndroid = Platform.isAndroid;
 
     return CommonDetailSliverLayout(
       header: CommonDetailHeader(
@@ -241,29 +243,65 @@ class _PlaylistContentState extends State<_PlaylistContent> {
             tooltip: 'Опции плейлиста',
           ),
         ),
-        actions: [
-          M3EButton.icon(
-            onPressed: () => PlaybackController.playPlaylist(
-              widget.playlist.uid.toString(),
-              widget.playlist.kind,
-            ),
-            icon: const Icon(Icons.play_arrow_rounded),
-            label: const Text('Слушать'),
-            size: M3EButtonSize.md,
-          ),
-          const SizedBox(width: 12),
-          M3EButton.icon(
-            onPressed: () => _handleUpload(context),
-            icon: const Icon(Icons.upload_rounded),
-            label: const Text('Загрузить трек'),
-            style: M3EButtonStyle.outlined,
-            size: M3EButtonSize.md,
-            decoration: M3EButtonDecoration.styleFrom(
-              backgroundColor: cs.onSurface.withValues(alpha: 0.1),
-              foregroundColor: cs.onSurface,
-            ),
-          ),
-        ],
+        actions: isAndroid
+            ? [
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      onPressed: () => PlaybackController.playPlaylist(
+                        widget.playlist.uid.toString(),
+                        widget.playlist.kind,
+                      ),
+                      tooltip: 'Слушать',
+                      icon: const Icon(Icons.play_arrow_rounded),
+                      style: IconButton.styleFrom(
+                        minimumSize: const Size(64, 56),
+                        iconSize: 26,
+                        backgroundColor: cs.onSurface.withValues(alpha: 0.1),
+                        foregroundColor: cs.onSurface,
+                        side: BorderSide(color: cs.outlineVariant),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      onPressed: () => _handleUpload(context),
+                      tooltip: 'Загрузить трек',
+                      icon: const Icon(Icons.upload_rounded),
+                      style: IconButton.styleFrom(
+                        minimumSize: const Size(64, 56),
+                        iconSize: 26,
+                        backgroundColor: cs.onSurface.withValues(alpha: 0.1),
+                        foregroundColor: cs.onSurface,
+                        side: BorderSide(color: cs.outlineVariant),
+                      ),
+                    ),
+                  ],
+                ),
+              ]
+            : [
+                M3EButton.icon(
+                  onPressed: () => PlaybackController.playPlaylist(
+                    widget.playlist.uid.toString(),
+                    widget.playlist.kind,
+                  ),
+                  icon: const Icon(Icons.play_arrow_rounded),
+                  label: const Text('Слушать'),
+                  size: M3EButtonSize.md,
+                ),
+                const SizedBox(width: 12),
+                M3EButton.icon(
+                  onPressed: () => _handleUpload(context),
+                  icon: const Icon(Icons.upload_rounded),
+                  label: const Text('Загрузить трек'),
+                  style: M3EButtonStyle.outlined,
+                  size: M3EButtonSize.md,
+                  decoration: M3EButtonDecoration.styleFrom(
+                    backgroundColor: cs.onSurface.withValues(alpha: 0.1),
+                    foregroundColor: cs.onSurface,
+                  ),
+                ),
+              ],
       ),
       slivers: [
         SliverToBoxAdapter(
@@ -512,10 +550,7 @@ class _TrackTile extends StatelessWidget {
     final dragHandle = dragEnabled
         ? ReorderableDragStartListener(
             index: index,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              child: dragIndicator,
-            ),
+            child: dragIndicator,
           )
         : dragIndicator;
     return CommonTrackTile(
@@ -525,19 +560,10 @@ class _TrackTile extends StatelessWidget {
       artists: track.artists,
       albumId: track.albumId,
       leading: SizedBox(
-        width: 128,
+        width: 84,
         child: Row(
           children: [
             dragHandle,
-            const SizedBox(width: 8),
-            Text(
-              '${index + 1}',
-              style: TextStyle(
-                color: cs.onSurface.withValues(alpha: 0.38),
-                fontSize: 14,
-              ),
-            ),
-            const Spacer(),
             TrackCover(url: track.coverUrl),
           ],
         ),

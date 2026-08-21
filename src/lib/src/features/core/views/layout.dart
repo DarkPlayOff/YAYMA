@@ -271,9 +271,20 @@ class _AnimatedPlayerBar extends StatelessWidget {
               begin: const Offset(0, 1),
               end: Offset.zero,
             ).animate(animation);
+            final opacityAnimation = Platform.isAndroid
+                ? Tween<double>(begin: 0, end: 1).animate(
+                    CurvedAnimation(
+                      parent: animation,
+                      curve: const Interval(0, 0.6, curve: Curves.easeIn),
+                    ),
+                  )
+                : animation;
             return SlideTransition(
               position: offsetAnimation,
-              child: child,
+              child: FadeTransition(
+                opacity: opacityAnimation,
+                child: child,
+              ),
             );
           },
           child: shouldShowBar
