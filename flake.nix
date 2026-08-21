@@ -33,6 +33,10 @@
             # Flutter bundles contain several top-level directories (data, lib, ...).
             sourceRoot = ".";
 
+            postUnpack = ''
+              addAutoPatchelfSearchPath "${pkgs.jdk}/lib/openjdk/lib/server"
+            '';
+
             dontConfigure = true;
             dontBuild = true;
 
