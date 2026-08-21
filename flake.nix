@@ -48,6 +48,7 @@
               pkgs.glib-networking
               pkgs.gsettings-desktop-schemas
               pkgs.gtk3
+              pkgs.jdk
               pkgs.libayatana-appindicator
               pkgs.libayatana-indicator
               pkgs.libsecret
