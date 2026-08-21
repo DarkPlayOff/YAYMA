@@ -129,7 +129,10 @@ impl ProviderId {
 
 /// Queries a single third-party provider (everything except [`ProviderId::Yandex`],
 /// which needs the authenticated `ApiService` and is handled by the caller).
-pub async fn fetch_from_provider(provider: ProviderId, query: &LyricsQuery) -> Option<Vec<ParsedLine>> {
+pub async fn fetch_from_provider(
+    provider: ProviderId,
+    query: &LyricsQuery,
+) -> Option<Vec<ParsedLine>> {
     let album = query.album.as_deref();
     match provider {
         ProviderId::Yandex => None,
@@ -158,11 +161,19 @@ mod tests {
     use super::*;
 
     fn line(text: &str, words: Vec<ParsedWord>) -> ParsedLine {
-        ParsedLine { start: 0.0, text: text.to_string(), words }
+        ParsedLine {
+            start: 0.0,
+            text: text.to_string(),
+            words,
+        }
     }
 
     fn word(text: &str) -> ParsedWord {
-        ParsedWord { text: text.to_string(), start: 0.0, end: 1.0 }
+        ParsedWord {
+            text: text.to_string(),
+            start: 0.0,
+            end: 1.0,
+        }
     }
 
     #[test]
@@ -173,18 +184,29 @@ mod tests {
 
     #[test]
     fn plain_lines_have_no_word_sync() {
-        let lines = vec![line("hello world", Vec::new()), line("second line", Vec::new())];
+        let lines = vec![
+            line("hello world", Vec::new()),
+            line("second line", Vec::new()),
+        ];
         assert!(!has_word_sync(&lines));
     }
 
     #[test]
     fn to_lines_dto_sorts_by_start_and_converts_to_milliseconds() {
         let lines = vec![
-            ParsedLine { start: 2.0, text: "second".to_string(), words: Vec::new() },
+            ParsedLine {
+                start: 2.0,
+                text: "second".to_string(),
+                words: Vec::new(),
+            },
             ParsedLine {
                 start: 1.0,
                 text: "first".to_string(),
-                words: vec![ParsedWord { text: "first".to_string(), start: 1.0, end: 1.5 }],
+                words: vec![ParsedWord {
+                    text: "first".to_string(),
+                    start: 1.0,
+                    end: 1.5,
+                }],
             },
         ];
         let dto = to_lines_dto(lines);

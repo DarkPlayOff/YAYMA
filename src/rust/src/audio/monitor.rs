@@ -57,8 +57,13 @@ impl BandFilters {
             .update(FilterType::LowPass, LOW_CUTOFF_HZ, 0.707, 0.0, sample_rate);
         self.mid
             .update(FilterType::BandPass, MID_CENTER_HZ, 0.6, 0.0, sample_rate);
-        self.high
-            .update(FilterType::HighPass, HIGH_CUTOFF_HZ, 0.707, 0.0, sample_rate);
+        self.high.update(
+            FilterType::HighPass,
+            HIGH_CUTOFF_HZ,
+            0.707,
+            0.0,
+            sample_rate,
+        );
         self.low.reset();
         self.mid.reset();
         self.high.reset();

@@ -664,13 +664,22 @@ impl AudioSystem {
     /// Builds a playback queue from locally cached (DB) metadata for the liked
     /// tracks list, without any network access. Used so that downloaded liked
     /// tracks can be played while offline.
-    async fn build_local_liked_context(&self, track_id: &str) -> Option<(im::Vector<Track>, usize)> {
+    async fn build_local_liked_context(
+        &self,
+        track_id: &str,
+    ) -> Option<(im::Vector<Track>, usize)> {
         let (liked_ids, _) = self.state.read().await.liked.ordered_snapshot();
         if liked_ids.is_empty() {
             return None;
         }
 
-        let metadata = self.db.lock().await.get_track_metadata(&liked_ids).await.ok()?;
+        let metadata = self
+            .db
+            .lock()
+            .await
+            .get_track_metadata(&liked_ids)
+            .await
+            .ok()?;
         let mut metadata_map: foldhash::HashMap<String, crate::storage::db::TrackMetadata> = {
             use foldhash::HashMapExt;
             foldhash::HashMap::new()
@@ -697,7 +706,10 @@ impl AudioSystem {
     /// without any network access. Used as an offline fallback for album/playlist
     /// tracks, where (unlike liked tracks) we don't keep a local ordered track
     /// list to reconstruct the full queue context.
-    async fn build_single_track_offline(&self, track_id: &str) -> Option<(im::Vector<Track>, usize)> {
+    async fn build_single_track_offline(
+        &self,
+        track_id: &str,
+    ) -> Option<(im::Vector<Track>, usize)> {
         let ids = vec![track_id.to_string()];
         let metadata = self.db.lock().await.get_track_metadata(&ids).await.ok()?;
         let m = metadata.into_iter().find(|m| m.id == track_id)?;

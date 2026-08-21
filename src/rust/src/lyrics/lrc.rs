@@ -33,13 +33,19 @@ pub fn parse(text: &str) -> Vec<ParsedLine> {
     let mut lines = Vec::new();
 
     for raw_line in text.lines() {
-        let Some(caps) = LINE_RE.captures(raw_line) else { continue };
+        let Some(caps) = LINE_RE.captures(raw_line) else {
+            continue;
+        };
         let start = parse_timestamp(&caps[1], &caps[2]);
         let rest = caps[3].trim();
 
         let word_caps: Vec<_> = INLINE_WORD_RE.captures_iter(rest).collect();
         if word_caps.is_empty() {
-            lines.push(ParsedLine { start, text: rest.to_string(), words: Vec::new() });
+            lines.push(ParsedLine {
+                start,
+                text: rest.to_string(),
+                words: Vec::new(),
+            });
             continue;
         }
 
@@ -54,11 +60,23 @@ pub fn parse(text: &str) -> Vec<ParsedLine> {
                 .get(i + 1)
                 .map(|next| parse_timestamp(&next[1], &next[2]))
                 .unwrap_or(word_start + 2.0);
-            words.push(ParsedWord { text: word_text.to_string(), start: word_start, end: word_end });
+            words.push(ParsedWord {
+                text: word_text.to_string(),
+                start: word_start,
+                end: word_end,
+            });
         }
 
-        let line_text = words.iter().map(|w| w.text.as_str()).collect::<Vec<_>>().join(" ");
-        lines.push(ParsedLine { start, text: line_text, words });
+        let line_text = words
+            .iter()
+            .map(|w| w.text.as_str())
+            .collect::<Vec<_>>()
+            .join(" ");
+        lines.push(ParsedLine {
+            start,
+            text: line_text,
+            words,
+        });
     }
 
     lines

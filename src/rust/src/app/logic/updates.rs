@@ -13,8 +13,14 @@ fn is_newer_version(current: &str, latest: &str) -> bool {
     let cur_clean = clean(current);
     let lat_clean = clean(latest);
 
-    let cur_parts: Vec<i32> = cur_clean.split('.').map(|s| s.parse().unwrap_or(0)).collect();
-    let lat_parts: Vec<i32> = lat_clean.split('.').map(|s| s.parse().unwrap_or(0)).collect();
+    let cur_parts: Vec<i32> = cur_clean
+        .split('.')
+        .map(|s| s.parse().unwrap_or(0))
+        .collect();
+    let lat_parts: Vec<i32> = lat_clean
+        .split('.')
+        .map(|s| s.parse().unwrap_or(0))
+        .collect();
 
     let max_len = std::cmp::max(cur_parts.len(), lat_parts.len());
     for i in 0..max_len {

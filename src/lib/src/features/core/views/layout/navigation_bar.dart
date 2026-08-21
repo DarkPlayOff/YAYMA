@@ -77,7 +77,10 @@ class _FloatingNavBarState extends State<FloatingNavBar>
         final currentState = currentNavStateSignal.value;
         final currentSection = currentState.section;
         final isHome = currentSection == AppSection.home;
-        final isAutoHideEnabled = autoHideNavbarSignal.value;
+        final isAutoHideEnabled =
+            !Platform.isAndroid && autoHideNavbarSignal.value;
+        final isDesktop =
+            Platform.isWindows || Platform.isLinux || Platform.isMacOS;
         final barColor = playerBarColorSignal.value;
 
         final isVisible =
@@ -91,7 +94,7 @@ class _FloatingNavBarState extends State<FloatingNavBar>
         const alpha = 0.5;
 
         final children = [
-          if (!isNarrow)
+          if (isDesktop)
             MouseRegion(
               onEnter: (_) {
                 setState(() {
@@ -143,8 +146,7 @@ class _FloatingNavBarState extends State<FloatingNavBar>
                 },
               ),
             ),
-          if (!isNarrow)
-            SizedBox(height: isNarrow ? 0 : 12, width: isNarrow ? 12 : 0),
+          if (isDesktop) const SizedBox(height: 12),
           _NavIcon(
             icon: Icons.home_rounded,
             isSelected: currentSection == AppSection.home,
@@ -165,7 +167,7 @@ class _FloatingNavBarState extends State<FloatingNavBar>
             onTap: () => setSection(AppSection.liked),
             isNarrow: isNarrow,
           ),
-          SizedBox(height: isNarrow ? 0 : 12, width: isNarrow ? 12 : 0),
+          if (isDesktop) const SizedBox(height: 12),
           _AccountButton(
             onOpened: () => setState(() => _isAccountMenuOpen = true),
             onClosed: () => setState(() => _isAccountMenuOpen = false),

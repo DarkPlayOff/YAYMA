@@ -30,7 +30,8 @@ class TrackVersionWidget extends StatelessWidget {
       child: Text(
         version!,
         style: TextStyle(
-          color: color ??
+          color:
+              color ??
               Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.38),
           fontSize: fontSize,
           fontWeight: FontWeight.w400,
@@ -63,8 +64,7 @@ class ArtistNamesWidget extends StatelessWidget {
     if (artists.isEmpty) return const SizedBox.shrink();
 
     final scheme = Theme.of(context).colorScheme;
-    final resolvedColor =
-        color ?? scheme.onSurface.withValues(alpha: 0.55);
+    final resolvedColor = color ?? scheme.onSurface.withValues(alpha: 0.55);
     final resolvedHoverColor = hoverColor ?? scheme.onSurface;
 
     if (maxLines == 1) {
@@ -221,8 +221,9 @@ class TrackCover extends StatelessWidget {
         : _CoverPlaceholder(isCircle: isCircle, size: size);
 
     final Widget content;
-    final placeholderColor =
-        Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.1);
+    final placeholderColor = Theme.of(
+      context,
+    ).colorScheme.onSurface.withValues(alpha: 0.1);
     if (shape != null && !isCircle) {
       content = M3EContainer(
         shape!,
@@ -241,7 +242,9 @@ class TrackCover extends StatelessWidget {
           shape: isCircle ? BoxShape.circle : BoxShape.rectangle,
         ),
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(isCircle ? size / 2 : borderRadius),
+          borderRadius: BorderRadius.circular(
+            isCircle ? size / 2 : borderRadius,
+          ),
           child: image,
         ),
       );

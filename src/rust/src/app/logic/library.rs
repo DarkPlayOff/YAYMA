@@ -292,10 +292,12 @@ async fn fetch_and_save_missing_metadata(
                     .first_mut()
                     .and_then(|a| a.id.take())
                     .map(|id| id.to_string());
-                let cover_url = t
-                    .og_image
-                    .take()
-                    .map(|img| format!("https://{}", img.replace("%%", crate::api::models::COVER_SIZE_MEDIUM)));
+                let cover_url = t.og_image.take().map(|img| {
+                    format!(
+                        "https://{}",
+                        img.replace("%%", crate::api::models::COVER_SIZE_MEDIUM)
+                    )
+                });
 
                 let duration_ms = t.duration.map(|d| d.as_millis() as u64).unwrap_or(0);
 

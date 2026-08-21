@@ -1,7 +1,9 @@
 use crate::api::models::{AppError, LyricsProviderSettingDto, LyricsResultDto};
 use crate::api::simple::AppEvent;
 use crate::app::AppContext;
-use crate::lyrics::{LyricsQuery, ParsedLine, ProviderId, fetch_from_provider, has_word_sync, lrc, to_lines_dto};
+use crate::lyrics::{
+    LyricsQuery, ParsedLine, ProviderId, fetch_from_provider, has_word_sync, lrc, to_lines_dto,
+};
 use futures::StreamExt;
 use futures::stream::FuturesUnordered;
 use std::collections::HashMap;
@@ -126,7 +128,9 @@ async fn race_batch(
     let mut first_any: Option<(ProviderId, Vec<ParsedLine>)> = None;
 
     while let Some(result) = pending.next().await {
-        let Some((provider, lines)) = result else { continue };
+        let Some((provider, lines)) = result else {
+            continue;
+        };
         if has_word_sync(&lines) {
             // Winner: the rest of `pending` is dropped here, cancelling
             // whatever's still in flight instead of waiting on it.
@@ -196,7 +200,9 @@ pub async fn get_lyrics(ctx: &AppContext, track_id: String) -> Option<LyricsResu
         return Some(to_result(provider, lines));
     }
 
-    batch_result.first_any.map(|(provider, lines)| to_result(provider, lines))
+    batch_result
+        .first_any
+        .map(|(provider, lines)| to_result(provider, lines))
 }
 
 fn to_result(provider: ProviderId, lines: Vec<ParsedLine>) -> LyricsResultDto {
@@ -236,7 +242,12 @@ pub async fn set_lyrics_provider_enabled(
     }
     let mut enabled = resolve_enabled(ctx).await;
     enabled.insert(id, is_enabled_flag);
-    ctx.core.db.lock().await.save_setting(ENABLED_KEY, &enabled).await?;
+    ctx.core
+        .db
+        .lock()
+        .await
+        .save_setting(ENABLED_KEY, &enabled)
+        .await?;
     Ok(())
 }
 
@@ -278,7 +289,11 @@ mod tests {
         seen.push(ProviderId::Yandex);
 
         let seen_set: HashSet<ProviderId> = seen.iter().copied().collect();
-        assert_eq!(seen.len(), seen_set.len(), "no provider should appear twice");
+        assert_eq!(
+            seen.len(),
+            seen_set.len(),
+            "no provider should appear twice"
+        );
         assert_eq!(seen_set, ProviderId::ALL.into_iter().collect());
     }
 }

@@ -320,12 +320,13 @@ impl TrackCache {
         if let Ok(mut entries) = fs::read_dir(&self.cache_dir).await {
             while let Ok(Some(entry)) = entries.next_entry().await {
                 if let Ok(metadata) = entry.metadata().await
-                    && metadata.is_file() {
-                        let path = entry.path();
-                        if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
-                            ids.push(stem.to_string());
-                        }
+                    && metadata.is_file()
+                {
+                    let path = entry.path();
+                    if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
+                        ids.push(stem.to_string());
                     }
+                }
             }
         }
         ids
@@ -338,9 +339,10 @@ impl TrackCache {
             let mut entries = fs::read_dir(&self.cache_dir).await?;
             while let Ok(Some(entry)) = entries.next_entry().await {
                 if let Ok(metadata) = entry.metadata().await
-                    && metadata.is_file() {
-                        size += metadata.len() as i64;
-                    }
+                    && metadata.is_file()
+                {
+                    size += metadata.len() as i64;
+                }
             }
             // Include covers
             let covers_dir = self.cache_dir.join("covers");
@@ -348,9 +350,10 @@ impl TrackCache {
                 let mut covers = fs::read_dir(&covers_dir).await?;
                 while let Ok(Some(entry)) = covers.next_entry().await {
                     if let Ok(metadata) = entry.metadata().await
-                        && metadata.is_file() {
-                            size += metadata.len() as i64;
-                        }
+                        && metadata.is_file()
+                    {
+                        size += metadata.len() as i64;
+                    }
                 }
             }
         }

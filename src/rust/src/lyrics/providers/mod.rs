@@ -21,7 +21,16 @@ static TITLE_CLEANUP_PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
 });
 
 const ARTIST_SEPARATORS: &[&str] = &[
-    " & ", " and ", ", ", " x ", " X ", " feat. ", " feat ", " ft. ", " ft ", " featuring ",
+    " & ",
+    " and ",
+    ", ",
+    " x ",
+    " X ",
+    " feat. ",
+    " feat ",
+    " ft. ",
+    " ft ",
+    " featuring ",
     " with ",
 ];
 

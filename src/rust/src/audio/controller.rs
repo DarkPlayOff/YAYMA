@@ -161,9 +161,7 @@ impl AudioController {
             AudioMessage::Resume => self.resume().await,
             AudioMessage::Stop => self.stop().await,
             AudioMessage::SetVolume(vol) => self.set_volume(vol as f32 / 100.0),
-            AudioMessage::SetTransientVolumeGain(gain) => {
-                self.set_transient_volume_gain(gain)
-            }
+            AudioMessage::SetTransientVolumeGain(gain) => self.set_transient_volume_gain(gain),
             AudioMessage::Seek(pos) => self.seek(pos).await,
             AudioMessage::ToggleMute => self.toggle_mute(),
             _ => {}
@@ -237,7 +235,10 @@ impl AudioController {
                     source.add_effect(
                         "monitor",
                         "Audio Monitor",
-                        Box::new(MonitorEffect::new(monitor, source.sample_rate().get() as f32)),
+                        Box::new(MonitorEffect::new(
+                            monitor,
+                            source.sample_rate().get() as f32,
+                        )),
                         monitor_params,
                     );
 
@@ -463,8 +464,7 @@ impl AudioController {
             0.0
         } else {
             let user_volume = self.signals.volume.get() as f32 / 100.0;
-            let transient_gain =
-                self.transient_volume_gain.load(Ordering::Relaxed) as f32 / 100.0;
+            let transient_gain = self.transient_volume_gain.load(Ordering::Relaxed) as f32 / 100.0;
             user_volume * transient_gain
         };
         self.engine.set_volume(volume);

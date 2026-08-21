@@ -103,7 +103,12 @@ List<LyricItem> _toLyricItems(List<LyricsLineDto> lines) {
     if (duration > const Duration(seconds: 7)) {
       const textDuration = Duration(seconds: 4);
       result.add(
-        LyricLine(current.time, current.text, textDuration, words: current.words),
+        LyricLine(
+          current.time,
+          current.text,
+          textDuration,
+          words: current.words,
+        ),
       );
 
       final timerStart = current.time + textDuration;

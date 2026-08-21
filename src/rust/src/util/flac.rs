@@ -20,7 +20,12 @@ pub fn extract_native_flac(
     let probe = symphonia::default::get_probe();
 
     let mut format = probe
-        .format(&hint, mss, &FormatOptions::default(), &MetadataOptions::default())?
+        .format(
+            &hint,
+            mss,
+            &FormatOptions::default(),
+            &MetadataOptions::default(),
+        )?
         .format;
 
     let track = format

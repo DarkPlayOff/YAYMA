@@ -64,7 +64,12 @@ async fn query_lyrics(artist: &str, title: &str, album: Option<&str>) -> Vec<Tra
 
     // Progressively looser fallbacks, tried in priority order until one yields lyrics.
     let mut attempts = vec![
-        (None, Some(cleaned_title.as_str()), Some(cleaned_artist.as_str()), album),
+        (
+            None,
+            Some(cleaned_title.as_str()),
+            Some(cleaned_artist.as_str()),
+            album,
+        ),
         (None, Some(cleaned_title.as_str()), None, None),
         (Some(combined.as_str()), None, None, None),
         (Some(cleaned_title.as_str()), None, None, None),
@@ -89,7 +94,9 @@ async fn query_lyrics(artist: &str, title: &str, album: Option<&str>) -> Vec<Tra
 /// LRC, some Enhanced — so this needs its own check rather than treating
 /// any `synced_lyrics` as equally good.
 fn has_word_sync(t: &Track) -> bool {
-    t.synced_lyrics.as_deref().is_some_and(lrc::has_inline_words)
+    t.synced_lyrics
+        .as_deref()
+        .is_some_and(lrc::has_inline_words)
 }
 
 fn best_matching(tracks: &[Track], duration: i32, title: &str, artist: &str) -> Option<usize> {
@@ -154,7 +161,6 @@ fn best_matching(tracks: &[Track], duration: i32, title: &str, artist: &str) -> 
     })
 }
 
-
 pub async fn get_lyrics(
     title: &str,
     artist: &str,
@@ -164,7 +170,10 @@ pub async fn get_lyrics(
     let tracks = query_lyrics(artist, title, album).await;
     let index = best_matching(&tracks, duration, title, artist)?;
     let track = &tracks[index];
-    let raw = track.synced_lyrics.clone().or_else(|| track.plain_lyrics.clone())?;
+    let raw = track
+        .synced_lyrics
+        .clone()
+        .or_else(|| track.plain_lyrics.clone())?;
     let lines = lrc::parse(&raw);
     if lines.is_empty() { None } else { Some(lines) }
 }
@@ -222,7 +231,13 @@ mod tests {
     #[test]
     fn unknown_duration_picks_best_title_artist_similarity_match() {
         let tracks = [
-            track("Completely Unrelated Song", "Some Other Band", 0.0, false, true),
+            track(
+                "Completely Unrelated Song",
+                "Some Other Band",
+                0.0,
+                false,
+                true,
+            ),
             track("Exact Title", "Exact Artist", 0.0, false, true),
         ];
         assert_eq!(

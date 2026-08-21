@@ -9,7 +9,8 @@ type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>
 
 use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue};
 use yandex_music::{
-    DEFAULT_CLIENT_ID, YandexMusicClient,
+    DEFAULT_CLIENT_ID,
+    YandexMusicClient,
     // ... (rest of imports remains similar, but I need to provide full block)
     api::{
         album::{
@@ -42,9 +43,8 @@ use yandex_music::{
         track::{
             add_disliked_tracks::AddDislikedTracksOptions, add_liked_tracks::AddLikedTracksOptions,
             get_file_info::GetFileInfoOptions, get_file_info_batch::GetFileInfoBatchOptions,
-            get_lyrics::GetLyricsOptions,
-            get_similar_tracks::GetSimilarTracksOptions, get_tracks::GetTracksOptions,
-            remove_disliked_tracks::RemoveDislikedTracksOptions,
+            get_lyrics::GetLyricsOptions, get_similar_tracks::GetSimilarTracksOptions,
+            get_tracks::GetTracksOptions, remove_disliked_tracks::RemoveDislikedTracksOptions,
             remove_liked_tracks::RemoveLikedTracksOptions,
         },
     },
@@ -420,7 +420,8 @@ impl ApiService {
     }
 
     pub async fn fetch_track_url(&self, track_id: String) -> Result<(String, String)> {
-        self.fetch_track_url_with_codec(track_id, self.get_quality(), None).await
+        self.fetch_track_url_with_codec(track_id, self.get_quality(), None)
+            .await
     }
 
     pub async fn fetch_track_url_for_download(&self, track_id: String) -> Result<(String, String)> {

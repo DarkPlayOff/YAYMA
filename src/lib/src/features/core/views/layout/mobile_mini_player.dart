@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:m3e_core/m3e_core.dart';
@@ -144,9 +143,9 @@ class _MobileMiniPlayerState extends State<MobileMiniPlayer> {
 
         final meta = trackMetadataSignal();
 
-        final bottomPadding = Platform.isAndroid && showLyrics
-            ? (MediaQuery.paddingOf(context).bottom + 16.0)
-            : 8.0;
+        // The app shell applies the Android system bottom inset via SafeArea.
+        // Keep only the visual gap here so the inset is not applied twice.
+        const bottomPadding = 8.0;
 
         return Padding(
           padding: EdgeInsets.fromLTRB(16, 0, 16, bottomPadding),

@@ -10,7 +10,18 @@ import 'package:yayma/src/rust/api/simple.dart';
 /// every size the Rust backend ever bakes into a `cover_url`
 /// (`COVER_SIZE_*` in `src/rust/src/api/models.rs`) so `resolveCoverUrl`
 /// can find and replace the existing token.
-const List<int> coverSizePicks = [30, 50, 80, 100, 200, 300, 400, 600, 800, 1000];
+const List<int> coverSizePicks = [
+  30,
+  50,
+  80,
+  100,
+  200,
+  300,
+  400,
+  600,
+  800,
+  1000,
+];
 
 /// Rewrites a Yandex cover URL to the smallest preset that is still large
 /// enough to cover [targetPx] device pixels, so covers are never upscaled

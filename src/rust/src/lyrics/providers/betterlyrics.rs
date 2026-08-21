@@ -11,7 +11,12 @@ struct TtmlResponse {
     ttml: String,
 }
 
-async fn fetch_ttml(artist: &str, title: &str, duration: i32, album: Option<&str>) -> Option<String> {
+async fn fetch_ttml(
+    artist: &str,
+    title: &str,
+    duration: i32,
+    album: Option<&str>,
+) -> Option<String> {
     let mut req = CLIENT
         .get(format!("{BASE_URL}/getLyrics"))
         .query(&[("s", title), ("a", artist)]);
@@ -39,5 +44,9 @@ pub async fn get_lyrics(
 ) -> Option<Vec<ParsedLine>> {
     let raw_ttml = fetch_ttml(artist, title, duration, album).await?;
     let parsed = ttml::parse_ttml(&raw_ttml);
-    if parsed.is_empty() { None } else { Some(parsed) }
+    if parsed.is_empty() {
+        None
+    } else {
+        Some(parsed)
+    }
 }

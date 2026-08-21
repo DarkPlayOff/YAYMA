@@ -57,14 +57,26 @@ fn convert_items(items: &[LyricsItem]) -> Option<Vec<ParsedLine>> {
                     .get(i + 1)
                     .map(|next| next.time.unwrap_or(0) as f64 / 1000.0)
                     .unwrap_or(word_start + 2.0);
-                words.push(ParsedWord { text: text.to_string(), start: word_start, end: word_end });
+                words.push(ParsedWord {
+                    text: text.to_string(),
+                    start: word_start,
+                    end: word_end,
+                });
             }
-            let text = words.iter().map(|w| w.text.as_str()).collect::<Vec<_>>().join(" ");
+            let text = words
+                .iter()
+                .map(|w| w.text.as_str())
+                .collect::<Vec<_>>()
+                .join(" ");
             lines.push(ParsedLine { start, text, words });
         } else {
             let text = item.text.clone().unwrap_or_default();
             if !text.trim().is_empty() {
-                lines.push(ParsedLine { start, text, words: Vec::new() });
+                lines.push(ParsedLine {
+                    start,
+                    text,
+                    words: Vec::new(),
+                });
             }
         }
     }
@@ -139,7 +151,10 @@ mod tests {
     use super::*;
 
     fn syllable(text: &str, time: i64) -> Syllable {
-        Syllable { text: Some(text.to_string()), time: Some(time) }
+        Syllable {
+            text: Some(text.to_string()),
+            time: Some(time),
+        }
     }
 
     #[test]

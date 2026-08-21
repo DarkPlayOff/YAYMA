@@ -40,7 +40,9 @@ class _AppLayoutState extends State<AppLayout> {
         final isCustomTitlebar = isDesktop && customTitlebarSignal.value;
 
         final screenWidth = MediaQuery.sizeOf(context).width;
-        final isNarrow = screenWidth < 600;
+        // Use the touch layout for all Android form factors, including
+        // tablets. A large Android screen must not select the desktop navbar.
+        final isNarrow = Platform.isAndroid || screenWidth < 600;
 
         return PopScope(
           canPop: !canGoBackSignal.value,
@@ -135,7 +137,8 @@ class _AppLayoutState extends State<AppLayout> {
                                 return const SizedBox.shrink();
                               }
                               return Align(
-                                alignment: isNarrow
+                                alignment:
+                                    MediaQuery.sizeOf(context).width < 600
                                     ? Alignment.bottomCenter
                                     : Alignment.centerLeft,
                                 child: const FloatingNavBar(),
@@ -297,7 +300,7 @@ class _WindowContent extends StatelessWidget {
         final isHome = state.section == AppSection.home;
         final showLyrics = showLyricsSignal.value;
         final screenWidth = MediaQuery.sizeOf(context).width;
-        final isNarrow = screenWidth < 600;
+        final isNarrow = Platform.isAndroid || screenWidth < 600;
 
         // Bottom padding calculation to avoid overlap with PlayerBar and NavBar
         // We only apply it to the browser (yandexId) and settings (account) to prevent them from being covered,

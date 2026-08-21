@@ -140,7 +140,11 @@ fn finish_bg_span(frame: SpanFrame, parent_start: f64) -> Option<ParsedLine> {
         .as_deref()
         .map(parse_time)
         .unwrap_or(parent_start);
-    Some(ParsedLine { start, text: final_text, words })
+    Some(ParsedLine {
+        start,
+        text: final_text,
+        words,
+    })
 }
 
 pub fn parse_ttml(ttml: &str) -> Vec<ParsedLine> {
@@ -236,7 +240,11 @@ pub fn parse_ttml(ttml: &str) -> Vec<ParsedLine> {
                             .collect::<Vec<_>>()
                             .join(" ");
                         if !line_text.is_empty() {
-                            lines.push(ParsedLine { start, text: line_text, words });
+                            lines.push(ParsedLine {
+                                start,
+                                text: line_text,
+                                words,
+                            });
                             lines.extend(frame.bg_lines);
                         }
                     }
@@ -276,4 +284,3 @@ fn close_span(frame: SpanFrame, span_stack: &mut [SpanFrame], p_frame: &mut Opti
         p.main_spans.push(span_info);
     }
 }
-

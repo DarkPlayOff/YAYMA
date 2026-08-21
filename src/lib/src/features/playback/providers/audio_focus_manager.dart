@@ -144,9 +144,10 @@ class AudioFocusManager {
     final stepDelay = _duckFadeDuration ~/ _duckFadeSteps;
     for (var step = 1; step <= _duckFadeSteps; step++) {
       final progress = step / _duckFadeSteps;
-      _transientGain = (start + (target - start) * progress)
-          .round()
-          .clamp(0, 100);
+      _transientGain = (start + (target - start) * progress).round().clamp(
+        0,
+        100,
+      );
       await PlaybackController.changeTransientVolumeGain(_transientGain);
       if (step < _duckFadeSteps) await Future<void>.delayed(stepDelay);
     }
