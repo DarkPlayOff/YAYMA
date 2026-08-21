@@ -35,7 +35,7 @@
 
             nativeBuildInputs = [
               pkgs.autoPatchelfHook
-              pkgs.wrapGAppsHook
+              pkgs.wrapGAppsHook3
             ];
 
             buildInputs = [
