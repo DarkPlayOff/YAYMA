@@ -1,4 +1,6 @@
-use crate::api::models::{PlaybackProgressDto, PlaybackState, SimpleTrackDto, UserAccountDto};
+use crate::api::models::{
+    InitialSettingsDto, PlaybackProgressDto, PlaybackState, SimpleTrackDto, UserAccountDto,
+};
 use crate::app::AppContext;
 use crate::app::logic::simple as logic;
 use crate::frb_generated::StreamSink;
@@ -54,6 +56,10 @@ pub async fn clear_track_cache(ctx: &AppContext) {
     logic::clear_track_cache(ctx).await
 }
 
+pub async fn get_initial_settings() -> InitialSettingsDto {
+    logic::get_initial_settings().await
+}
+
 pub fn is_discord_rpc_enabled(ctx: &AppContext) -> bool {
     logic::is_discord_rpc_enabled(ctx)
 }
@@ -66,10 +72,6 @@ pub async fn is_custom_titlebar_enabled(ctx: &AppContext) -> bool {
     logic::is_custom_titlebar_enabled(ctx).await
 }
 
-pub async fn is_custom_titlebar_enabled_init() -> bool {
-    logic::is_custom_titlebar_enabled_init().await
-}
-
 pub async fn set_custom_titlebar_enabled(ctx: &AppContext, enabled: bool) {
     logic::set_custom_titlebar_enabled(ctx, enabled).await;
 }
@@ -78,20 +80,12 @@ pub async fn is_auto_hide_navbar_enabled(ctx: &AppContext) -> bool {
     logic::is_auto_hide_navbar_enabled(ctx).await
 }
 
-pub async fn is_auto_hide_navbar_enabled_init() -> bool {
-    logic::is_auto_hide_navbar_enabled_init().await
-}
-
 pub async fn set_auto_hide_navbar_enabled(ctx: &AppContext, enabled: bool) {
     logic::set_auto_hide_navbar_enabled(ctx, enabled).await;
 }
 
 pub async fn is_close_to_tray_enabled(ctx: &AppContext) -> bool {
     logic::is_close_to_tray_enabled(ctx).await
-}
-
-pub async fn is_close_to_tray_enabled_init() -> bool {
-    logic::is_close_to_tray_enabled_init().await
 }
 
 pub async fn set_close_to_tray_enabled(ctx: &AppContext, enabled: bool) {
@@ -114,24 +108,12 @@ pub async fn set_update_check_enabled(ctx: &AppContext, enabled: bool) {
     logic::set_update_check_enabled(ctx, enabled).await;
 }
 
-pub async fn is_vibe_animation_enabled_init() -> bool {
-    logic::is_vibe_animation_enabled_init().await
-}
-
 pub async fn set_vibe_animation_enabled(ctx: &AppContext, enabled: bool) {
     logic::set_vibe_animation_enabled(ctx, enabled).await;
 }
 
-pub async fn get_vibe_render_scale_init() -> f64 {
-    logic::get_vibe_render_scale_init().await
-}
-
 pub async fn set_vibe_render_scale(ctx: &AppContext, scale: f64) {
     logic::set_vibe_render_scale(ctx, scale).await;
-}
-
-pub async fn are_blur_effects_enabled_init() -> bool {
-    logic::are_blur_effects_enabled_init().await
 }
 
 pub async fn set_blur_effects_enabled(ctx: &AppContext, enabled: bool) {

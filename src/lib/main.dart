@@ -9,7 +9,6 @@ import 'package:yayma/src/features/auth/views/auth/auth_screens.dart';
 import 'package:yayma/src/features/core/providers/navigation_provider.dart';
 import 'package:yayma/src/features/core/providers/notification_provider.dart';
 import 'package:yayma/src/features/playback/providers/playback_provider.dart';
-import 'package:yayma/src/rust/api/simple.dart' as simple;
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -21,7 +20,7 @@ Future<void> main() async {
   ]);
 
   if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
-    final isCustom = await simple.isCustomTitlebarEnabledInit();
+    final isCustom = customTitlebarSignal.value;
     customTitlebarSignal.value = isCustom;
 
     final windowOptions = WindowOptions(

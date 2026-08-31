@@ -6,20 +6,21 @@ pub struct TokenProvider;
 
 impl TokenProvider {
     pub async fn resolve() -> Option<(String, u64)> {
-        let mut db = crate::storage::db::AppDatabase::init(crate::app::get_data_dir())
-            .await
-            .ok()?;
+        let database = crate::app::get_database().await.ok()?;
+        let mut db = database.lock().await;
         db.load_auth_token().await.ok().flatten()
     }
 
     pub async fn store(token: &str, user_id: u64) -> Result<()> {
-        let mut db = crate::storage::db::AppDatabase::init(crate::app::get_data_dir()).await?;
+        let database = crate::app::get_database().await?;
+        let mut db = database.lock().await;
         db.save_auth_token(token, user_id).await?;
         Ok(())
     }
 
     pub async fn delete() -> Result<()> {
-        let mut db = crate::storage::db::AppDatabase::init(crate::app::get_data_dir()).await?;
+        let database = crate::app::get_database().await?;
+        let mut db = database.lock().await;
         db.delete_auth_token().await?;
         Ok(())
     }

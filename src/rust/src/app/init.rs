@@ -12,6 +12,20 @@ use std::sync::OnceLock;
 use tokio::sync::Mutex;
 
 static DATA_DIR: OnceLock<PathBuf> = OnceLock::new();
+static DATABASE: tokio::sync::OnceCell<Arc<Mutex<AppDatabase>>> =
+    tokio::sync::OnceCell::const_new();
+
+pub async fn get_database()
+-> Result<Arc<Mutex<AppDatabase>>, Box<dyn std::error::Error + Send + Sync>> {
+    let database = DATABASE
+        .get_or_try_init(|| async {
+            Ok::<_, Box<dyn std::error::Error + Send + Sync>>(Arc::new(Mutex::new(
+                AppDatabase::init(DATA_DIR.get().cloned()).await?,
+            )))
+        })
+        .await?;
+    Ok(database.clone())
+}
 
 pub fn get_data_dir() -> Option<PathBuf> {
     DATA_DIR.get().cloned()
@@ -47,8 +61,7 @@ async fn initialize_services(
     let api_arc = Arc::new(api);
     let (event_tx, event_rx) = flume::unbounded();
 
-    let db = AppDatabase::init(DATA_DIR.get().cloned()).await?;
-    let db_arc = Arc::new(Mutex::new(db));
+    let db_arc = get_database().await?;
     let http_cache = Arc::new(HttpCache::new(db_arc.clone(), DATA_DIR.get().cloned()));
     let track_cache = Arc::new(TrackCache::new(DATA_DIR.get().cloned()));
     let _ = track_cache.init().await;
@@ -76,13 +89,11 @@ async fn initialize_services(
     load_persisted_settings(&context).await;
     context.audio.signals.monitor.set_enabled(true);
 
-    let context_arc = Arc::new(context.clone());
-
-    workers::spawn_sync_worker(context_arc.clone(), shutdown_rx.clone());
-    workers::spawn_event_worker(context_arc.clone(), event_rx, shutdown_rx.clone());
-    workers::spawn_bridge_worker(context_arc.clone(), shutdown_rx.clone());
-    workers::spawn_settings_worker(context_arc.clone(), shutdown_rx.clone());
-    workers::spawn_cache_worker(context_arc.clone(), shutdown_rx.clone());
+    workers::spawn_sync_worker(context.clone(), shutdown_rx.clone());
+    workers::spawn_event_worker(context.clone(), event_rx, shutdown_rx.clone());
+    workers::spawn_bridge_worker(context.clone(), shutdown_rx.clone());
+    workers::spawn_settings_worker(context.clone(), shutdown_rx.clone());
+    workers::spawn_cache_worker(context.clone(), shutdown_rx.clone());
 
     AUDIO_READY.notify_waiters();
     Ok(context)

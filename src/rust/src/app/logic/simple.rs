@@ -1,3 +1,4 @@
+use crate::api::models::InitialSettingsDto;
 use crate::api::simple::AppEvent;
 use crate::app::AppContext;
 use crate::frb_generated::StreamSink;
@@ -45,21 +46,6 @@ pub async fn clear_track_cache(ctx: &AppContext) {
     let _ = ctx.core.track_cache.clear().await;
 }
 
-static INIT_DB: tokio::sync::OnceCell<Option<tokio::sync::Mutex<crate::storage::db::AppDatabase>>> =
-    tokio::sync::OnceCell::const_new();
-
-async fn get_init_db() -> Option<&'static tokio::sync::Mutex<crate::storage::db::AppDatabase>> {
-    INIT_DB
-        .get_or_init(|| async {
-            crate::storage::db::AppDatabase::init(crate::app::get_data_dir())
-                .await
-                .ok()
-                .map(tokio::sync::Mutex::new)
-        })
-        .await
-        .as_ref()
-}
-
 pub fn is_discord_rpc_enabled(ctx: &AppContext) -> bool {
     ctx.audio.signals.discord_rpc.get()
 }
@@ -80,18 +66,6 @@ pub async fn is_custom_titlebar_enabled(ctx: &AppContext) -> bool {
         .unwrap_or(true)
 }
 
-pub async fn is_custom_titlebar_enabled_init() -> bool {
-    if let Some(db_mutex) = get_init_db().await {
-        let mut db = db_mutex.lock().await;
-        db.load_setting("custom_titlebar")
-            .await
-            .unwrap_or(Some(true))
-            .unwrap_or(true)
-    } else {
-        true
-    }
-}
-
 pub async fn set_custom_titlebar_enabled(ctx: &AppContext, enabled: bool) {
     let mut db = ctx.core.db.lock().await;
     if let Err(e) = db.save_setting("custom_titlebar", &enabled).await {
@@ -107,18 +81,6 @@ pub async fn is_auto_hide_navbar_enabled(ctx: &AppContext) -> bool {
         .unwrap_or(false)
 }
 
-pub async fn is_auto_hide_navbar_enabled_init() -> bool {
-    if let Some(db_mutex) = get_init_db().await {
-        let mut db = db_mutex.lock().await;
-        db.load_setting("auto_hide_navbar")
-            .await
-            .unwrap_or(Some(false))
-            .unwrap_or(false)
-    } else {
-        false
-    }
-}
-
 pub async fn set_auto_hide_navbar_enabled(ctx: &AppContext, enabled: bool) {
     let mut db = ctx.core.db.lock().await;
     if let Err(e) = db.save_setting("auto_hide_navbar", &enabled).await {
@@ -132,18 +94,6 @@ pub async fn is_close_to_tray_enabled(ctx: &AppContext) -> bool {
         .await
         .unwrap_or(Some(true))
         .unwrap_or(true)
-}
-
-pub async fn is_close_to_tray_enabled_init() -> bool {
-    if let Some(db_mutex) = get_init_db().await {
-        let mut db = db_mutex.lock().await;
-        db.load_setting("close_to_tray")
-            .await
-            .unwrap_or(Some(true))
-            .unwrap_or(true)
-    } else {
-        true
-    }
 }
 
 pub async fn set_close_to_tray_enabled(ctx: &AppContext, enabled: bool) {
@@ -232,17 +182,43 @@ pub async fn set_update_check_enabled(ctx: &AppContext, enabled: bool) {
     }
 }
 
-pub async fn is_vibe_animation_enabled_init() -> bool {
-    if let Some(db_mutex) = get_init_db().await {
-        db_mutex
-            .lock()
+pub async fn get_initial_settings() -> InitialSettingsDto {
+    let Ok(database) = crate::app::get_database().await else {
+        return InitialSettingsDto::default();
+    };
+    let mut db = database.lock().await;
+    InitialSettingsDto {
+        custom_titlebar: db
+            .load_setting("custom_titlebar")
             .await
+            .unwrap_or(Some(true))
+            .unwrap_or(true),
+        auto_hide_navbar: db
+            .load_setting("auto_hide_navbar")
+            .await
+            .unwrap_or(Some(false))
+            .unwrap_or(false),
+        close_to_tray: db
+            .load_setting("close_to_tray")
+            .await
+            .unwrap_or(Some(true))
+            .unwrap_or(true),
+        vibe_animation_enabled: db
             .load_setting("vibe_animation_enabled")
             .await
             .unwrap_or(Some(true))
-            .unwrap_or(true)
-    } else {
-        true
+            .unwrap_or(true),
+        vibe_render_scale: db
+            .load_setting::<f64>("vibe_render_scale")
+            .await
+            .unwrap_or(Some(0.50))
+            .unwrap_or(0.50)
+            .clamp(0.25, 0.50),
+        blur_effects_enabled: db
+            .load_setting("blur_effects_enabled")
+            .await
+            .unwrap_or(Some(true))
+            .unwrap_or(true),
     }
 }
 
@@ -256,21 +232,6 @@ pub async fn set_vibe_animation_enabled(ctx: &AppContext, enabled: bool) {
         .await;
 }
 
-pub async fn get_vibe_render_scale_init() -> f64 {
-    let value = if let Some(db_mutex) = get_init_db().await {
-        db_mutex
-            .lock()
-            .await
-            .load_setting::<f64>("vibe_render_scale")
-            .await
-            .unwrap_or(Some(0.50))
-            .unwrap_or(0.50)
-    } else {
-        0.50
-    };
-    value.clamp(0.25, 0.50)
-}
-
 pub async fn set_vibe_render_scale(ctx: &AppContext, scale: f64) {
     let scale = scale.clamp(0.25, 0.50);
     let _ = ctx
@@ -280,20 +241,6 @@ pub async fn set_vibe_render_scale(ctx: &AppContext, scale: f64) {
         .await
         .save_setting("vibe_render_scale", &scale)
         .await;
-}
-
-pub async fn are_blur_effects_enabled_init() -> bool {
-    if let Some(db_mutex) = get_init_db().await {
-        db_mutex
-            .lock()
-            .await
-            .load_setting("blur_effects_enabled")
-            .await
-            .unwrap_or(Some(true))
-            .unwrap_or(true)
-    } else {
-        true
-    }
 }
 
 pub async fn set_blur_effects_enabled(ctx: &AppContext, enabled: bool) {

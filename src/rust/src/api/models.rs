@@ -6,6 +6,30 @@ pub const COVER_SIZE_SMALL: &str = "200x200";
 pub const COVER_SIZE_MEDIUM: &str = "600x600";
 pub const COVER_SIZE_LARGE: &str = "1000x1000";
 
+#[flutter_rust_bridge::frb(unignore)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct InitialSettingsDto {
+    pub custom_titlebar: bool,
+    pub auto_hide_navbar: bool,
+    pub close_to_tray: bool,
+    pub vibe_animation_enabled: bool,
+    pub vibe_render_scale: f64,
+    pub blur_effects_enabled: bool,
+}
+
+impl Default for InitialSettingsDto {
+    fn default() -> Self {
+        Self {
+            custom_titlebar: true,
+            auto_hide_navbar: false,
+            close_to_tray: true,
+            vibe_animation_enabled: true,
+            vibe_render_scale: 0.50,
+            blur_effects_enabled: true,
+        }
+    }
+}
+
 pub fn format_cover(uri: Option<String>, size: &str) -> Option<String> {
     uri.map(|mut s| {
         if let Some(pos) = s.find("%%") {

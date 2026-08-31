@@ -37,18 +37,13 @@ class AppInit {
     await simple.initAppInfrastructure(basePath: appDir.path);
 
     try {
-      final autoHide = await simple.isAutoHideNavbarEnabledInit();
-      autoHideNavbarSignal.value = autoHide;
-
-      final closeToTray = await simple.isCloseToTrayEnabledInit();
-      closeToTraySignal.value = closeToTray;
-
-      final customTitlebar = await simple.isCustomTitlebarEnabledInit();
-      customTitlebarSignal.value = customTitlebar;
-
-      vibeVisibleSignal.value = await simple.isVibeAnimationEnabledInit();
-      vibeRenderScaleSignal.value = await simple.getVibeRenderScaleInit();
-      blurEffectsEnabledSignal.value = await simple.areBlurEffectsEnabledInit();
+      final settings = await simple.getInitialSettings();
+      autoHideNavbarSignal.value = settings.autoHideNavbar;
+      closeToTraySignal.value = settings.closeToTray;
+      customTitlebarSignal.value = settings.customTitlebar;
+      vibeVisibleSignal.value = settings.vibeAnimationEnabled;
+      vibeRenderScaleSignal.value = settings.vibeRenderScale;
+      blurEffectsEnabledSignal.value = settings.blurEffectsEnabled;
     } on Object catch (_) {}
 
     unawaited(_initializeAuthAndServices());

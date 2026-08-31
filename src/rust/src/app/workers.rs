@@ -1,10 +1,9 @@
 use crate::api::simple::AppEvent;
 use crate::app::{AppContext, SETTINGS_CHANGED};
 use crate::audio::commands::AudioMessage;
-use std::sync::Arc;
 use tokio::sync::watch;
 
-pub fn spawn_sync_worker(ctx: Arc<AppContext>, mut shutdown_rx: watch::Receiver<bool>) {
+pub fn spawn_sync_worker(ctx: AppContext, mut shutdown_rx: watch::Receiver<bool>) {
     tokio::spawn(async move {
         let _ = ctx.audio.tx.send(AudioMessage::SyncLiked).await;
 
@@ -22,7 +21,7 @@ pub fn spawn_sync_worker(ctx: Arc<AppContext>, mut shutdown_rx: watch::Receiver<
 }
 
 pub fn spawn_event_worker(
-    ctx: Arc<AppContext>,
+    ctx: AppContext,
     event_rx: flume::Receiver<crate::audio::events::Event>,
     mut shutdown_rx: watch::Receiver<bool>,
 ) {
@@ -49,7 +48,7 @@ pub fn spawn_event_worker(
     });
 }
 
-pub fn spawn_bridge_worker(ctx: Arc<AppContext>, mut shutdown_rx: watch::Receiver<bool>) {
+pub fn spawn_bridge_worker(ctx: AppContext, mut shutdown_rx: watch::Receiver<bool>) {
     tokio::spawn(async move {
         let audio_signals = ctx.audio.signals.clone();
         let audio_state = ctx.audio.state.clone();
@@ -144,7 +143,7 @@ pub fn spawn_bridge_worker(ctx: Arc<AppContext>, mut shutdown_rx: watch::Receive
     });
 }
 
-pub fn spawn_settings_worker(ctx: Arc<AppContext>, mut shutdown_rx: watch::Receiver<bool>) {
+pub fn spawn_settings_worker(ctx: AppContext, mut shutdown_rx: watch::Receiver<bool>) {
     tokio::spawn(async move {
         loop {
             tokio::select! {
@@ -189,7 +188,7 @@ pub fn spawn_settings_worker(ctx: Arc<AppContext>, mut shutdown_rx: watch::Recei
     });
 }
 
-pub fn spawn_cache_worker(ctx: Arc<AppContext>, mut shutdown_rx: watch::Receiver<bool>) {
+pub fn spawn_cache_worker(ctx: AppContext, mut shutdown_rx: watch::Receiver<bool>) {
     tokio::spawn(async move {
         // Wait a bit after startup
         tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
