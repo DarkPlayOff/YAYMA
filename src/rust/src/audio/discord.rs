@@ -18,7 +18,6 @@ impl DiscordManager {
 
             loop {
                 std::thread::sleep(Duration::from_millis(1000));
-
                 let rpc_enabled = signals.discord_rpc.get();
 
                 // Если выключили - рубим сразу

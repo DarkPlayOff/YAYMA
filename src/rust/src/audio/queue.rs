@@ -1,7 +1,6 @@
 use super::enums::RepeatMode;
 use super::signals::AudioSignals;
 use crate::audio::cache::UrlCache;
-use crate::audio::events::Event;
 use crate::audio::progress::TrackProgress;
 use crate::audio::stream_manager::StreamManager;
 use crate::http::ApiService;
@@ -22,7 +21,6 @@ use crate::audio::fetcher::{
 use crate::audio::history::HistoryState;
 use crate::audio::prefetcher::UrlPrefetcher;
 use crate::audio::shuffle::ShuffleState;
-use flume::Sender;
 
 const URL_PREFETCH_WINDOW: usize = 5;
 const FETCH_THRESHOLD: usize = 2;
@@ -132,7 +130,6 @@ impl QueueSignals {
 pub struct QueueManager {
     api: Arc<ApiService>,
 
-    pub url_cache: UrlCache,
     pub stream_manager: Arc<StreamManager>,
     url_prefetcher: UrlPrefetcher,
 
@@ -150,8 +147,6 @@ pub struct QueueManager {
     wave_feedbacks: Vec<WaveTrackEvent>,
     wave_feedback_sent: bool,
     track_progress: Arc<TrackProgress>,
-
-    pub event_tx: Option<Sender<Event>>,
 }
 
 impl QueueManager {
@@ -166,7 +161,6 @@ impl QueueManager {
 
         Self {
             api,
-            url_cache,
             stream_manager,
             url_prefetcher,
             signals: QueueSignals::new(signals),
@@ -178,12 +172,7 @@ impl QueueManager {
             wave_feedbacks: Vec::new(),
             wave_feedback_sent: false,
             track_progress,
-            event_tx: None,
         }
-    }
-
-    pub fn set_event_tx(&mut self, tx: Sender<Event>) {
-        self.event_tx = Some(tx);
     }
 
     pub fn wave_context(&self) -> Option<Session> {
@@ -192,16 +181,6 @@ impl QueueManager {
 
     pub fn in_wave(&self) -> bool {
         matches!(*self.playback_context.lock(), PlaybackContext::Wave(_))
-    }
-
-    pub fn playback_context(&self) -> PlaybackContext {
-        self.playback_context.lock().clone()
-    }
-
-    pub fn wave_update_buffer(&mut self, tracks: Vec<Track>) {
-        for t in tracks {
-            self.wave_buffer.push_back(t);
-        }
     }
 
     pub async fn load(
@@ -543,19 +522,8 @@ impl QueueManager {
         self.update_prefetch_interest();
     }
 
-    pub fn get_current_wave_session(&self) -> Option<Session> {
-        self.fetch.wave_session_clone()
-    }
-
     fn fetch_wave_session_clone(&self) -> Option<Session> {
         self.fetch.wave_session_clone()
-    }
-
-    pub fn trigger_fetch_if_needed(&mut self) {
-        if self.in_wave() {
-            return;
-        }
-        self.trigger_fetch();
     }
 
     fn trigger_fetch(&mut self) {

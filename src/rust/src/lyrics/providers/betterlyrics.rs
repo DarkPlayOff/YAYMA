@@ -23,10 +23,10 @@ async fn fetch_ttml(
     if duration > 0 {
         req = req.query(&[("d", duration.to_string())]);
     }
-    if let Some(album) = album {
-        if !album.trim().is_empty() {
-            req = req.query(&[("al", album)]);
-        }
+    if let Some(album) = album
+        && !album.trim().is_empty()
+    {
+        req = req.query(&[("al", album)]);
     }
 
     let resp = req.send().await.ok()?;

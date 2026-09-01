@@ -1,10 +1,9 @@
 use crate::audio::cache::UrlCache;
 use crate::{
     audio::{
-        commands::AudioMessage, controller::AudioController, events::Event,
-        playback::PlaybackEngine, progress::TrackProgress, queue::QueueManager,
-        queue::as_wave_seed, signals::AudioSignals, state::SystemState,
-        stream_manager::StreamManager, yandex::YandexProvider,
+        commands::AudioMessage, controller::AudioController, playback::PlaybackEngine,
+        progress::TrackProgress, queue::QueueManager, queue::as_wave_seed, signals::AudioSignals,
+        state::SystemState, stream_manager::StreamManager, yandex::YandexProvider,
     },
     http::{ApiService, SessionExt},
 };
@@ -12,7 +11,6 @@ use crate::{
 #[cfg(not(any(target_os = "android")))]
 use crate::audio::{discord::DiscordManager, smtc::SmtcManager};
 
-use flume::Sender;
 use parking_lot::RwLock as PRwLock;
 use std::sync::Arc;
 use std::time::Duration;
@@ -22,13 +20,12 @@ use yandex_music::model::track::Track;
 pub type EffectHandles =
     Arc<parking_lot::RwLock<foldhash::HashMap<String, crate::audio::fx::EffectHandle>>>;
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
-type BoxFuture<'a, T> = std::pin::Pin<Box<dyn std::future::Future<Output = T> + Send + 'a>>;
 
 pub struct AudioSystem {
     controller: AudioController,
     queue: QueueManager,
     yandex: YandexProvider,
-    event_tx: Sender<Event>,
+    error_sink: Arc<dyn Fn(String) + Send + Sync>,
     state: Arc<RwLock<SystemState>>,
     signals: AudioSignals,
     tx: mpsc::Sender<AudioMessage>,
@@ -37,7 +34,7 @@ pub struct AudioSystem {
 
 impl AudioSystem {
     pub async fn spawn(
-        event_tx: Sender<Event>,
+        error_sink: Arc<dyn Fn(String) + Send + Sync>,
         api: Arc<ApiService>,
         db: Arc<tokio::sync::Mutex<crate::db::AppDatabase>>,
         _http_cache: Arc<crate::storage::cache::HttpCache>,
@@ -70,19 +67,19 @@ impl AudioSystem {
         let controller = AudioController::new(
             engine,
             stream_manager.clone(),
-            event_tx.clone(),
+            tx.clone(),
+            error_sink.clone(),
             signals.clone(),
             track_progress.clone(),
         );
 
-        let mut queue = QueueManager::new(
+        let queue = QueueManager::new(
             api.clone(),
             url_cache,
             stream_manager.clone(),
             signals.clone(),
             track_progress_inner,
         );
-        queue.set_event_tx(event_tx.clone());
 
         let state = Arc::new(RwLock::new(SystemState::default()));
 
@@ -100,7 +97,6 @@ impl AudioSystem {
         let (smtc, smtc_cmd_rx) = {
             let (smtc_cmd_tx, smtc_cmd_rx) = mpsc::unbounded_channel();
             let smtc = Arc::new(Mutex::new(SmtcManager::new(
-                event_tx.clone(),
                 smtc_cmd_tx,
                 _http_cache.clone(),
             )?));
@@ -115,7 +111,7 @@ impl AudioSystem {
             controller,
             queue,
             yandex,
-            event_tx: event_tx.clone(),
+            error_sink: error_sink.clone(),
             state: state.clone(),
             signals: signals.clone(),
             tx: tx.clone(),
@@ -175,13 +171,9 @@ impl AudioSystem {
         }
 
         // Main Audio Loop
-        let event_tx_clone = event_tx.clone();
         tokio::spawn(async move {
             while let Some(msg) = rx.recv().await {
-                if let Err(e) = system_loop.handle_message(msg).await {
-                    tracing::error!("Audio system error: {}", e);
-                    let _ = event_tx_clone.send(crate::audio::events::Event::Error(e.to_string()));
-                }
+                system_loop.process_message(msg).await;
             }
         });
 
@@ -205,7 +197,7 @@ impl AudioSystem {
             + 'static,
     {
         let tx = self.tx.clone();
-        let event_tx = self.event_tx.clone();
+        let error_sink = self.error_sink.clone();
         self.signals.set_buffering(true);
         tokio::spawn(async move {
             match fetcher().await {
@@ -213,7 +205,7 @@ impl AudioSystem {
                     let _ = tx.send(AudioMessage::LoadContext(ctx, tracks, index)).await;
                 }
                 Err(e) => {
-                    let _ = event_tx.send(Event::Error(e));
+                    error_sink(e);
                 }
             }
         });
@@ -223,30 +215,74 @@ impl AudioSystem {
         self.controller.get_effect_handles()
     }
 
-    /// Handles a follow-up message that a handler wants to queue behind itself.
-    ///
-    /// The main loop is the sole consumer of `self.tx`, so awaiting `tx.send()`
-    /// from inside `handle_message` wedges the audio system permanently once the
-    /// bounded channel fills up: nothing can drain it while we are blocked on it.
-    /// Running the follow-up directly preserves the ordering the channel gave us
-    /// without ever touching it. The boxing is what lets `handle_message` recurse.
-    fn dispatch(&mut self, msg: AudioMessage) -> BoxFuture<'_, Result<()>> {
-        Box::pin(self.handle_message(msg))
+    async fn load_context(
+        &mut self,
+        ctx: crate::audio::queue::PlaybackContext,
+        tracks: im::Vector<Track>,
+        index: usize,
+    ) {
+        let in_wave = matches!(&ctx, crate::audio::queue::PlaybackContext::Wave(_));
+        if let Some(track) = self.queue.load(ctx, tracks, index).await {
+            if in_wave {
+                self.send_wave_started();
+            }
+            self.controller
+                .play_track(track.clone(), false, Duration::ZERO, false)
+                .await;
+            if in_wave {
+                self.send_wave_track_started(&track);
+            }
+        }
     }
 
-    async fn handle_message(&mut self, msg: AudioMessage) -> Result<()> {
+    async fn load_standalone(
+        &mut self,
+        tracks: im::Vector<Track>,
+        start_paused: bool,
+        position: Duration,
+    ) {
+        if let Some(track) = self
+            .queue
+            .load(crate::audio::queue::PlaybackContext::Standalone, tracks, 0)
+            .await
+        {
+            self.controller
+                .play_track(track, start_paused, position, false)
+                .await;
+        }
+    }
+
+    async fn recreate_stream(&mut self) {
+        let device = self.signals.selected_device.get();
+        if let Err(e) = self.controller.recreate_engine(device.as_deref()) {
+            tracing::error!("Failed to recreate stream: {}", e);
+        } else {
+            self.reload_track().await;
+        }
+    }
+
+    async fn reload_track(&mut self) {
+        if let Some(track) = self.signals.current_track.get() {
+            let position_ms = self.signals.position_ms.get();
+            self.signals.set_buffering(true);
+            self.controller.invalidate_track(&track.id);
+            self.controller.replace_track(track, position_ms).await;
+        }
+    }
+
+    async fn process_message(&mut self, msg: AudioMessage) {
         match msg {
             AudioMessage::PlayPause => {
                 if self.signals.is_playing.get() {
-                    self.controller.handle_message(AudioMessage::Pause).await;
+                    self.controller.pause().await;
                 } else {
-                    self.controller.handle_message(AudioMessage::Resume).await;
+                    self.controller.resume().await;
                 }
             }
-            AudioMessage::Pause => self.controller.handle_message(AudioMessage::Pause).await,
-            AudioMessage::Resume => self.controller.handle_message(AudioMessage::Resume).await,
+            AudioMessage::Pause => self.controller.pause().await,
+            AudioMessage::Resume => self.controller.resume().await,
             AudioMessage::Stop => {
-                self.controller.handle_message(AudioMessage::Stop).await;
+                self.controller.stop().await;
                 self.queue.clear();
             }
             AudioMessage::Next => {
@@ -255,18 +291,14 @@ impl AudioSystem {
             AudioMessage::Prev => {
                 if let Some(prev_track) = self.queue.get_previous_track() {
                     self.controller
-                        .handle_message(AudioMessage::PlayTrack(prev_track))
+                        .play_track(prev_track, false, Duration::ZERO, false)
                         .await;
                 }
             }
             AudioMessage::TrackEnded => {
                 self.on_track_ended().await;
             }
-            AudioMessage::Seek(dur) => {
-                self.controller
-                    .handle_message(AudioMessage::Seek(dur))
-                    .await
-            }
+            AudioMessage::Seek(dur) => self.controller.seek(dur).await,
             AudioMessage::SetVolume(vol) => self.controller.set_volume(vol as f32 / 100.0),
             AudioMessage::SetTransientVolumeGain(gain) => {
                 self.controller.set_transient_volume_gain(gain)
@@ -274,63 +306,19 @@ impl AudioSystem {
             AudioMessage::ToggleMute => self.controller.toggle_mute(),
 
             AudioMessage::PlayTrack(track) => {
-                if let Some(playing_track) = self
-                    .queue
-                    .load(
-                        crate::audio::queue::PlaybackContext::Standalone,
-                        im::Vector::from(vec![track]),
-                        0,
-                    )
+                self.load_standalone(im::Vector::from(vec![track]), false, Duration::ZERO)
                     .await
-                {
-                    self.controller
-                        .handle_message(AudioMessage::PlayTrack(playing_track))
-                        .await;
-                }
             }
             AudioMessage::RestoreTrack(track, pos, was_playing) => {
-                if let Some(playing_track) = self
-                    .queue
-                    .load(
-                        crate::audio::queue::PlaybackContext::Standalone,
-                        im::Vector::from(vec![track]),
-                        0,
-                    )
+                self.load_standalone(im::Vector::from(vec![track]), !was_playing, pos)
                     .await
-                {
-                    self.controller
-                        .handle_message(AudioMessage::RestoreTrack(playing_track, pos, was_playing))
-                        .await;
-                }
             }
             AudioMessage::LoadContext(ctx, tracks, index) => {
-                let in_wave = matches!(&ctx, crate::audio::queue::PlaybackContext::Wave(_));
-                if let Some(track) = self.queue.load(ctx, tracks, index).await {
-                    if in_wave {
-                        self.send_wave_started();
-                    }
-                    self.controller
-                        .handle_message(AudioMessage::PlayTrack(track.clone()))
-                        .await;
-                    if in_wave {
-                        self.send_wave_track_started(&track);
-                    }
-                }
+                self.load_context(ctx, tracks, index).await;
             }
             AudioMessage::LoadTracks(tracks) => {
-                if let Some(track) = self
-                    .queue
-                    .load(
-                        crate::audio::queue::PlaybackContext::Standalone,
-                        im::Vector::from(tracks),
-                        0,
-                    )
+                self.load_standalone(im::Vector::from(tracks), false, Duration::ZERO)
                     .await
-                {
-                    self.controller
-                        .handle_message(AudioMessage::PlayTrack(track))
-                        .await;
-                }
             }
             AudioMessage::QueueTrack(track) => self.queue.queue_track(track),
             AudioMessage::PlayTrackNext(track) => self.queue.play_next(track),
@@ -365,12 +353,12 @@ impl AudioSystem {
                 };
 
                 if let Some((tracks, index)) = local_ctx {
-                    self.dispatch(AudioMessage::LoadContext(
+                    self.load_context(
                         crate::audio::queue::PlaybackContext::Standalone,
                         tracks,
                         index,
-                    ))
-                    .await?;
+                    )
+                    .await;
                 } else {
                     let yandex = self.yandex.clone();
                     self.spawn_fetch_context(move || async move {
@@ -389,12 +377,12 @@ impl AudioSystem {
                 };
 
                 if let Some((tracks, index)) = local_ctx {
-                    self.dispatch(AudioMessage::LoadContext(
+                    self.load_context(
                         crate::audio::queue::PlaybackContext::Standalone,
                         tracks,
                         index,
-                    ))
-                    .await?;
+                    )
+                    .await;
                 } else {
                     let yandex = self.yandex.clone();
                     self.spawn_fetch_context(move || async move {
@@ -413,12 +401,12 @@ impl AudioSystem {
                 };
 
                 if let Some((tracks, index)) = local_ctx {
-                    self.dispatch(AudioMessage::LoadContext(
+                    self.load_context(
                         crate::audio::queue::PlaybackContext::Standalone,
                         tracks,
                         index,
-                    ))
-                    .await?;
+                    )
+                    .await;
                 } else {
                     let yandex = self.yandex.clone();
                     self.spawn_fetch_context(move || async move {
@@ -431,19 +419,11 @@ impl AudioSystem {
             }
             AudioMessage::StartWave(seeds) => {
                 let yandex = self.yandex.clone();
-                let tx = self.tx.clone();
-                let event_tx = self.event_tx.clone();
-                self.signals.set_buffering(true);
-                tokio::spawn(async move {
-                    match yandex.fetch_wave_context(seeds).await {
-                        Ok((ctx, tracks, index)) => {
-                            let _ = tx.send(AudioMessage::LoadContext(ctx, tracks, index)).await;
-                        }
-                        Err(e) => {
-                            let _ =
-                                event_tx.send(Event::Error(format!("Failed to start wave: {e}")));
-                        }
-                    }
+                self.spawn_fetch_context(move || async move {
+                    yandex
+                        .fetch_wave_context(seeds)
+                        .await
+                        .map_err(|e| format!("Failed to start wave: {e}"))
                 });
             }
             AudioMessage::SyncLiked => {
@@ -515,26 +495,15 @@ impl AudioSystem {
                     let mut db = self.db.lock().await;
                     let _ = db.save_setting("audio_device", &device_name).await;
                 }
-                self.dispatch(AudioMessage::RecreateStream).await?;
+                self.recreate_stream().await;
             }
             AudioMessage::RecreateStream => {
-                let device = self.signals.selected_device.get();
-                if let Err(e) = self.controller.recreate_engine(device.as_deref()) {
-                    tracing::error!("Failed to recreate stream: {}", e);
-                } else {
-                    self.dispatch(AudioMessage::ReloadCurrentTrack).await?;
-                }
+                self.recreate_stream().await;
             }
             AudioMessage::ReloadCurrentTrack => {
-                if let Some(track) = self.signals.current_track.get() {
-                    let position_ms = self.signals.position_ms.get();
-                    self.signals.set_buffering(true);
-                    self.controller.invalidate_track(&track.id);
-                    self.controller.replace_track(track, position_ms).await;
-                }
+                self.reload_track().await;
             }
         }
-        Ok(())
     }
 
     async fn on_track_ended(&mut self) {
@@ -545,7 +514,7 @@ impl AudioSystem {
                 self.send_wave_track_started(&next_track);
             }
             self.controller
-                .handle_message(AudioMessage::PlayTrack(next_track))
+                .play_track(next_track, false, Duration::ZERO, false)
                 .await;
         } else {
             // Queue ended, start "My Wave"
@@ -571,7 +540,7 @@ impl AudioSystem {
                 self.send_wave_track_started(&next_track);
             }
             self.controller
-                .handle_message(AudioMessage::PlayTrack(next_track))
+                .play_track(next_track, false, Duration::ZERO, false)
                 .await;
         } else {
             // Queue ended, start "My Wave"

@@ -1,16 +1,13 @@
-use flume::Sender;
 use foldhash::HashMap;
 use parking_lot::RwLock;
 use rodio::Source;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU8, AtomicU64, Ordering};
-use std::time::Duration;
 use tokio::sync::Mutex;
 use yandex_music::model::track::Track;
 
 use crate::audio::{
     commands::AudioMessage,
-    events::Event,
     fx::{
         EffectHandle, FxSource,
         modules::{FadeEffect, MonitorEffect},
@@ -26,7 +23,8 @@ use crate::audio::{
 pub struct AudioController {
     engine: Arc<PlaybackEngine>,
     stream_manager: Arc<StreamManager>,
-    event_tx: Sender<Event>,
+    tx: tokio::sync::mpsc::Sender<AudioMessage>,
+    error_sink: Arc<dyn Fn(String) + Send + Sync>,
     pub track_progress: Arc<RwLock<Arc<TrackProgress>>>,
     current_playback_task: Arc<Mutex<Option<tokio::task::JoinHandle<()>>>>,
     // Bumped on every stop()/play_track() call so an in-flight playback task that has
@@ -42,7 +40,8 @@ impl AudioController {
     pub fn new(
         engine: PlaybackEngine,
         stream_manager: Arc<StreamManager>,
-        event_tx: Sender<Event>,
+        tx: tokio::sync::mpsc::Sender<AudioMessage>,
+        error_sink: Arc<dyn Fn(String) + Send + Sync>,
         signals: AudioSignals,
         track_progress: Arc<RwLock<Arc<TrackProgress>>>,
     ) -> Self {
@@ -50,7 +49,8 @@ impl AudioController {
         let controller = Self {
             engine: Arc::new(engine),
             stream_manager,
-            event_tx,
+            tx,
+            error_sink,
             track_progress,
             current_playback_task: Arc::new(Mutex::new(None)),
             playback_generation: Arc::new(AtomicU64::new(0)),
@@ -63,15 +63,12 @@ impl AudioController {
         controller
     }
 
-    pub fn signals(&self) -> AudioSignals {
-        self.signals.clone()
-    }
-
     fn start_monitor(&self) {
         let engine = self.engine.clone();
         let progress = self.track_progress.clone();
         let signals = self.signals.clone();
-        let event_tx = self.event_tx.clone();
+        let tx = self.tx.clone();
+        let error_sink = self.error_sink.clone();
         let controller = self.clone();
 
         tokio::spawn(async move {
@@ -87,9 +84,7 @@ impl AudioController {
                 if is_playing && is_buffering {
                     buffering_duration += check_interval;
                     if buffering_duration >= std::time::Duration::from_secs(15) {
-                        let _ = event_tx.send(Event::Error(
-                            "Buffering timed out after 15s, playback paused".to_string(),
-                        ));
+                        error_sink("Buffering timed out after 15s, playback paused".to_string());
                         controller.pause().await;
                         buffering_duration = std::time::Duration::ZERO;
                     }
@@ -101,7 +96,7 @@ impl AudioController {
                     if engine.is_empty() {
                         signals.set_playing(false);
                         signals.is_stopped.set(true);
-                        let _ = event_tx.send(Event::TrackEnded);
+                        let _ = tx.send(AudioMessage::TrackEnded).await;
                         continue;
                     }
 
@@ -124,12 +119,6 @@ impl AudioController {
         });
     }
 
-    pub async fn load(&self, track: Track, position_ms: u64) {
-        let start_paused = !self.signals.is_playing.get();
-        let start_pos = std::time::Duration::from_millis(position_ms);
-        self.play_track(track, start_paused, start_pos, false).await;
-    }
-
     pub async fn replace_track(&self, track: Track, position_ms: u64) {
         let start_paused = !self.signals.is_playing.get();
         let start_pos = std::time::Duration::from_millis(position_ms);
@@ -148,27 +137,7 @@ impl AudioController {
         self.engine.recreate(device_name)
     }
 
-    pub async fn handle_message(&self, cmd: AudioMessage) {
-        match cmd {
-            AudioMessage::PlayTrack(track) => {
-                self.play_track(track, false, std::time::Duration::ZERO, false)
-                    .await
-            }
-            AudioMessage::RestoreTrack(track, start_pos, was_playing) => {
-                self.play_track(track, !was_playing, start_pos, false).await
-            }
-            AudioMessage::Pause => self.pause().await,
-            AudioMessage::Resume => self.resume().await,
-            AudioMessage::Stop => self.stop().await,
-            AudioMessage::SetVolume(vol) => self.set_volume(vol as f32 / 100.0),
-            AudioMessage::SetTransientVolumeGain(gain) => self.set_transient_volume_gain(gain),
-            AudioMessage::Seek(pos) => self.seek(pos).await,
-            AudioMessage::ToggleMute => self.toggle_mute(),
-            _ => {}
-        }
-    }
-
-    async fn play_track(
+    pub(crate) async fn play_track(
         &self,
         track: Track,
         start_paused: bool,
@@ -202,7 +171,7 @@ impl AudioController {
         let engine = self.engine.clone();
         let stream_manager = self.stream_manager.clone();
         let progress = self.track_progress.clone();
-        let event_tx = self.event_tx.clone();
+        let error_sink = self.error_sink.clone();
         let signals = self.signals.clone();
         let track_clone = track.clone();
         let monitor = self.signals.monitor.clone();
@@ -335,7 +304,7 @@ impl AudioController {
                     signals.set_buffering(false);
                     signals.set_playing(false);
                     signals.is_stopped.set(true);
-                    let _ = event_tx.send(Event::Error(format!("Failed to play track: {}", e)));
+                    error_sink(format!("Failed to play track: {}", e));
                 }
             }
         });
@@ -344,7 +313,7 @@ impl AudioController {
         *task_guard = Some(task);
     }
 
-    async fn stop(&self) {
+    pub(crate) async fn stop(&self) {
         let mut task_guard = self.current_playback_task.lock().await;
         if let Some(task) = task_guard.take() {
             task.abort();
@@ -361,72 +330,23 @@ impl AudioController {
         self.signals.update_buffered_ratio(0.0);
     }
 
-    async fn pause(&self) {
+    pub(crate) async fn pause(&self) {
         self.engine.pause();
         self.signals.set_playing(false);
     }
 
-    async fn resume(&self) {
+    pub(crate) async fn resume(&self) {
         self.engine.play();
         self.signals.set_playing(true);
     }
 
-    async fn seek(&self, pos: std::time::Duration) {
+    pub(crate) async fn seek(&self, pos: std::time::Duration) {
         let _ = self.engine.try_seek(pos);
         self.track_progress.read().set_current_position(pos);
     }
 
     pub fn get_effect_handles(&self) -> Arc<RwLock<HashMap<String, EffectHandle>>> {
         self.effect_handles.clone()
-    }
-
-    pub fn set_effect_handles(&self, handles: HashMap<String, EffectHandle>) {
-        let mut guard = self.effect_handles.write();
-        *guard = handles;
-    }
-
-    pub fn toggle_effect(&self, name: &str) -> bool {
-        let guard = self.effect_handles.read();
-        if let Some(handle) = guard.get(name) {
-            let enabled = handle.is_enabled();
-            handle.set_enabled(!enabled);
-            return true;
-        }
-        false
-    }
-
-    pub fn is_effect_enabled(&self, name: &str) -> Option<bool> {
-        let guard = self.effect_handles.read();
-        guard.get(name).map(|h| h.is_enabled())
-    }
-
-    pub fn update_progress(&self, pos: Duration) {
-        let dur = self.signals.duration_ms.get();
-        self.signals.update_progress(pos.as_millis() as u64, dur);
-    }
-
-    pub fn current_amplitude(&self) -> f32 {
-        self.signals.monitor.combined_amplitude()
-    }
-
-    pub fn is_playing(&self) -> bool {
-        self.signals.is_playing.get()
-    }
-
-    pub fn current_track(&self) -> Option<Track> {
-        self.signals.current_track.get()
-    }
-
-    pub fn current_track_id(&self) -> Option<String> {
-        self.signals.current_track_id.get()
-    }
-
-    pub fn volume(&self) -> u8 {
-        self.signals.volume.get()
-    }
-
-    pub fn is_muted(&self) -> bool {
-        self.signals.is_muted.get()
     }
 
     pub fn set_volume(&self, volume: f32) {
@@ -439,16 +359,6 @@ impl AudioController {
         self.transient_volume_gain
             .store(gain.min(100), Ordering::Relaxed);
         self.apply_volume();
-    }
-
-    pub fn volume_up(&self, amount: u8) {
-        let current = self.signals.volume.get();
-        self.set_volume((current.saturating_add(amount) as f32) / 100.0);
-    }
-
-    pub fn volume_down(&self, amount: u8) {
-        let current = self.signals.volume.get();
-        self.set_volume((current.saturating_sub(amount) as f32) / 100.0);
     }
 
     pub fn toggle_mute(&self) {

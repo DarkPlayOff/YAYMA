@@ -4,8 +4,6 @@ use souvlaki::{MediaControlEvent, MediaControls, MediaMetadata, MediaPlayback, P
 use windows::{Win32::UI::Shell::SetCurrentProcessExplicitAppUserModelID, core::w};
 
 use crate::audio::commands::AudioMessage;
-use crate::audio::events::Event;
-use flume::Sender;
 use tokio::sync::mpsc;
 use yandex_music::model::track::Track;
 
@@ -22,7 +20,6 @@ pub struct SmtcManager {
 
 impl SmtcManager {
     pub fn new(
-        _event_tx: Sender<Event>,
         cmd_tx: mpsc::UnboundedSender<AudioMessage>,
         http_cache: std::sync::Arc<crate::storage::cache::HttpCache>,
     ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {

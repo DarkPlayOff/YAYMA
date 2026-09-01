@@ -52,6 +52,7 @@ impl AppContext {
         signals: AudioSignals,
         state: Arc<RwLock<SystemState>>,
         effect_handles: Arc<StdRwLock<HashMap<String, EffectHandle>>>,
+        event_sink: Arc<OnceCell<StreamSink<AppEvent>>>,
     ) -> (Self, watch::Receiver<bool>) {
         let (shutdown_tx, shutdown_rx) = watch::channel(false);
         let inner = Arc::new(AppContextInner {
@@ -68,7 +69,7 @@ impl AppContext {
                 track_cache,
             },
             system: AppSystemContext {
-                event_sink: Arc::new(OnceCell::new()),
+                event_sink,
                 shutdown_tx,
             },
         });
@@ -79,10 +80,6 @@ impl AppContext {
         if let Some(sink) = self.inner.system.event_sink.get() {
             let _ = sink.add(event);
         }
-    }
-
-    pub fn stop(&self) {
-        let _ = self.inner.system.shutdown_tx.send(true);
     }
 }
 

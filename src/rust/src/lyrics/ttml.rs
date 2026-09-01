@@ -214,10 +214,10 @@ pub fn parse_ttml(ttml: &str) -> Vec<ParsedLine> {
                         if let Some(last) = parent.spans.last_mut() {
                             last.trailing_space = true;
                         }
-                    } else if let Some(p) = p_frame.as_mut() {
-                        if let Some(last) = p.main_spans.last_mut() {
-                            last.trailing_space = true;
-                        }
+                    } else if let Some(p) = p_frame.as_mut()
+                        && let Some(last) = p.main_spans.last_mut()
+                    {
+                        last.trailing_space = true;
                     }
                 }
             }
@@ -230,23 +230,23 @@ pub fn parse_ttml(ttml: &str) -> Vec<ParsedLine> {
                     just_closed_span = true;
                     buf.clear();
                     continue;
-                } else if name == "p" {
-                    if let Some(frame) = p_frame.take() {
-                        let start = parse_time(&frame.begin);
-                        let words = merge_spans_into_words(&frame.main_spans);
-                        let line_text = words
-                            .iter()
-                            .map(|w| w.text.as_str())
-                            .collect::<Vec<_>>()
-                            .join(" ");
-                        if !line_text.is_empty() {
-                            lines.push(ParsedLine {
-                                start,
-                                text: line_text,
-                                words,
-                            });
-                            lines.extend(frame.bg_lines);
-                        }
+                } else if name == "p"
+                    && let Some(frame) = p_frame.take()
+                {
+                    let start = parse_time(&frame.begin);
+                    let words = merge_spans_into_words(&frame.main_spans);
+                    let line_text = words
+                        .iter()
+                        .map(|w| w.text.as_str())
+                        .collect::<Vec<_>>()
+                        .join(" ");
+                    if !line_text.is_empty() {
+                        lines.push(ParsedLine {
+                            start,
+                            text: line_text,
+                            words,
+                        });
+                        lines.extend(frame.bg_lines);
                     }
                 }
                 just_closed_span = false;
@@ -266,10 +266,10 @@ fn close_span(frame: SpanFrame, span_stack: &mut [SpanFrame], p_frame: &mut Opti
             .as_ref()
             .map(|p| parse_time(&p.begin))
             .unwrap_or(0.0);
-        if let Some(bg_line) = finish_bg_span(frame, parent_start) {
-            if let Some(p) = p_frame.as_mut() {
-                p.bg_lines.push(bg_line);
-            }
+        if let Some(bg_line) = finish_bg_span(frame, parent_start)
+            && let Some(p) = p_frame.as_mut()
+        {
+            p.bg_lines.push(bg_line);
         }
         return;
     }

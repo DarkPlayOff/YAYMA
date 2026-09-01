@@ -59,7 +59,17 @@ async fn initialize_services(
     api: ApiService,
 ) -> Result<AppContext, Box<dyn std::error::Error + Send + Sync>> {
     let api_arc = Arc::new(api);
-    let (event_tx, event_rx) = flume::unbounded();
+    let event_sink: Arc<
+        tokio::sync::OnceCell<crate::frb_generated::StreamSink<crate::api::simple::AppEvent>>,
+    > = Arc::new(tokio::sync::OnceCell::new());
+    let error_reporter: Arc<dyn Fn(String) + Send + Sync> = {
+        let event_sink = event_sink.clone();
+        Arc::new(move |msg| {
+            if let Some(sink) = event_sink.get() {
+                let _ = sink.add(crate::api::simple::AppEvent::Error(msg));
+            }
+        })
+    };
 
     let db_arc = get_database().await?;
     let http_cache = Arc::new(HttpCache::new(db_arc.clone(), DATA_DIR.get().cloned()));
@@ -67,7 +77,7 @@ async fn initialize_services(
     let _ = track_cache.init().await;
 
     let (audio_tx, signals, state, effect_handles) = AudioSystem::spawn(
-        event_tx.clone(),
+        error_reporter,
         api_arc.clone(),
         db_arc.clone(),
         http_cache.clone(),
@@ -84,13 +94,13 @@ async fn initialize_services(
         signals.clone(),
         state,
         effect_handles.clone(),
+        event_sink,
     );
 
     load_persisted_settings(&context).await;
     context.audio.signals.monitor.set_enabled(true);
 
     workers::spawn_sync_worker(context.clone(), shutdown_rx.clone());
-    workers::spawn_event_worker(context.clone(), event_rx, shutdown_rx.clone());
     workers::spawn_bridge_worker(context.clone(), shutdown_rx.clone());
     workers::spawn_settings_worker(context.clone(), shutdown_rx.clone());
     workers::spawn_cache_worker(context.clone(), shutdown_rx.clone());

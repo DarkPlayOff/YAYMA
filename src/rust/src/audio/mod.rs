@@ -4,7 +4,6 @@ pub mod controller;
 #[cfg(not(any(target_os = "android")))]
 pub mod discord;
 pub mod enums;
-pub mod events;
 pub mod fetcher;
 pub mod fx;
 pub mod history;

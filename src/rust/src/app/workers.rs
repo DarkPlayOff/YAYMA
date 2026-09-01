@@ -20,34 +20,6 @@ pub fn spawn_sync_worker(ctx: AppContext, mut shutdown_rx: watch::Receiver<bool>
     });
 }
 
-pub fn spawn_event_worker(
-    ctx: AppContext,
-    event_rx: flume::Receiver<crate::audio::events::Event>,
-    mut shutdown_rx: watch::Receiver<bool>,
-) {
-    use crate::audio::events::Event;
-    tokio::spawn(async move {
-        loop {
-            tokio::select! {
-                res = event_rx.recv_async() => {
-                    let Ok(event) = res else { break };
-                    match event {
-                        Event::TrackEnded => {
-                            let _ = ctx.audio.tx.send(AudioMessage::TrackEnded).await;
-                        }
-                        Event::Error(msg) => {
-                            ctx.send_event(crate::api::simple::AppEvent::Error(msg));
-                        }
-                    }
-                }
-                _ = shutdown_rx.changed() => {
-                    if *shutdown_rx.borrow() { break; }
-                }
-            }
-        }
-    });
-}
-
 pub fn spawn_bridge_worker(ctx: AppContext, mut shutdown_rx: watch::Receiver<bool>) {
     tokio::spawn(async move {
         let audio_signals = ctx.audio.signals.clone();

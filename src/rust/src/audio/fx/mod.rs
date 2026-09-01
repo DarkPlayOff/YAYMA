@@ -58,20 +58,6 @@ impl<T: Source<Item = f32> + Send + 'static> FxSource<T> {
         self.chain.get_handle(name)
     }
 
-    pub fn toggle_effect(&mut self, name: &str) -> bool {
-        if let Some(handle) = self.chain.get_handle(name) {
-            let enabled = handle.is_enabled();
-            handle.set_enabled(!enabled);
-            true
-        } else {
-            false
-        }
-    }
-
-    pub fn is_effect_enabled(&self, name: &str) -> Option<bool> {
-        self.chain.get_handle(name).map(|h| h.is_enabled())
-    }
-
     pub fn get_effect_handles(&self) -> HashMap<String, EffectHandle> {
         self.chain.handles()
     }

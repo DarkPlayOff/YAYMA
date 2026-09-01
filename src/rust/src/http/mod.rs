@@ -24,34 +24,28 @@ use yandex_music::{
             remove_disliked_artist::RemoveDislikedArtistOptions,
             remove_liked_artist::RemoveLikedArtistOptions,
         },
-        collection::sync::{CollectionSyncOption, CollectionSyncOptions},
         playlist::{
-            add_liked_playlist::AddLikedPlaylistOptions,
             change_playlist_visibility::ChangePlaylistVisibilityOptions,
             create_playlist::CreatePlaylistOptions, delete_playlist::DeletePlaylistOptions,
             get_all_playlists::GetAllPlaylistsOptions, get_playlists::GetPlaylistsOptions,
-            modify_playlist::ModifyPlaylistOptions,
-            remove_liked_playlist::RemoveLikedPlaylistOptions,
-            rename_playlist::RenamePlaylistOptions,
+            modify_playlist::ModifyPlaylistOptions, rename_playlist::RenamePlaylistOptions,
         },
         rotor::{
             create_session::CreateSessionOptions, get_session_tracks::GetSessionTracksOptions,
-            get_station_tracks::GetStationTracksOptions,
             send_station_feedback::SendStationFeedbackOptions,
         },
         search::get_search::SearchOptions,
         track::{
             add_disliked_tracks::AddDislikedTracksOptions, add_liked_tracks::AddLikedTracksOptions,
             get_file_info::GetFileInfoOptions, get_file_info_batch::GetFileInfoBatchOptions,
-            get_lyrics::GetLyricsOptions, get_similar_tracks::GetSimilarTracksOptions,
-            get_tracks::GetTracksOptions, remove_disliked_tracks::RemoveDislikedTracksOptions,
+            get_lyrics::GetLyricsOptions, get_tracks::GetTracksOptions,
+            remove_disliked_tracks::RemoveDislikedTracksOptions,
             remove_liked_tracks::RemoveLikedTracksOptions,
         },
     },
     model::{
         album::Album,
         artist::Artist,
-        collection::Collection,
         info::{
             file_info::{Codec, Quality, TrackFileInfo},
             lyrics::LyricsFormat,
@@ -65,7 +59,6 @@ use yandex_music::{
             Rotor,
             feedback::{StationFeedback, StationFeedbackEvent},
             session::Session,
-            station::StationTracks,
         },
         search::Search,
         track::{Track, TrackShort},
@@ -98,16 +91,6 @@ impl SessionExt for Session {
             .map(|w| w.id_for_from.as_str())
             .unwrap_or("rotor")
     }
-}
-
-#[derive(Debug, serde::Deserialize)]
-pub struct YandexResponse<T> {
-    pub result: T,
-}
-
-#[derive(Debug, serde::Deserialize)]
-pub struct UgcUploadInfo {
-    pub host: String,
 }
 
 pub struct ApiService {
@@ -251,11 +234,6 @@ impl ApiService {
         Ok(self.client.search(&opts).await?)
     }
 
-    pub async fn search_paginated(&self, query: &str, page: u32) -> Result<Search> {
-        let opts = SearchOptions::new(query).page(page);
-        Ok(self.client.search(&opts).await?)
-    }
-
     pub async fn fetch_liked_tracks(&self) -> Result<Playlist> {
         self.fetch_first(
             self.client.get_playlists(
@@ -376,11 +354,6 @@ impl ApiService {
     pub async fn fetch_tracks(&self, track_ids: Vec<String>) -> Result<Vec<Track>> {
         let opts = GetTracksOptions::new(track_ids);
         Ok(self.client.get_tracks(&opts).await?)
-    }
-
-    pub async fn fetch_similar_tracks(&self, track_id: String) -> Result<Vec<Track>> {
-        let opts = GetSimilarTracksOptions::new(track_id);
-        Ok(self.client.get_similar_tracks(&opts).await?.similar_tracks)
     }
 
     pub async fn fetch_file_info_batch(
@@ -511,18 +484,6 @@ impl ApiService {
         Ok(self.client.get_artist_albums(&opts).await?.albums)
     }
 
-    pub async fn fetch_artist_tracks(
-        &self,
-        artist_id: String,
-        page: u32,
-        page_size: u32,
-    ) -> Result<Vec<Track>> {
-        let opts = ArtistTracksOptions::new(artist_id)
-            .page(page)
-            .page_size(page_size);
-        Ok(self.client.get_artist_tracks(&opts).await?.tracks)
-    }
-
     pub async fn fetch_artist_tracks_paginated(
         &self,
         artist_id: String,
@@ -559,18 +520,6 @@ impl ApiService {
         Ok(self.client.get_session_tracks(opts).await?)
     }
 
-    pub async fn get_station_tracks(
-        &self,
-        station_id: &str,
-        queue: Option<&str>,
-    ) -> Result<StationTracks> {
-        let mut opts = GetStationTracksOptions::new(station_id).settings2(true);
-        if let Some(q) = queue {
-            opts = opts.queue(q);
-        }
-        Ok(self.client.get_station_tracks(&opts).await?)
-    }
-
     pub async fn send_rotor_feedback(
         &self,
         station_id: String,
@@ -600,18 +549,6 @@ impl ApiService {
         Ok(())
     }
 
-    pub async fn toggle_like_track(&self, track_id: String, is_liked: bool) -> Result<()> {
-        if is_liked {
-            let opts = RemoveLikedTracksOptions::new(self.user_id, vec![track_id]);
-            self.client.remove_liked_tracks(&opts).await?;
-        } else {
-            let opts = AddLikedTracksOptions::new(self.user_id, vec![track_id]);
-            self.client.add_liked_tracks(&opts).await?;
-        }
-
-        Ok(())
-    }
-
     pub async fn add_like_track(&self, track_id: String) -> Result<()> {
         let opts = AddLikedTracksOptions::new(self.user_id, vec![track_id]);
         self.client.add_liked_tracks(&opts).await?;
@@ -621,18 +558,6 @@ impl ApiService {
     pub async fn remove_like_track(&self, track_id: String) -> Result<()> {
         let opts = RemoveLikedTracksOptions::new(self.user_id, vec![track_id]);
         self.client.remove_liked_tracks(&opts).await?;
-        Ok(())
-    }
-
-    pub async fn toggle_dislike_track(&self, track_id: String, is_disliked: bool) -> Result<()> {
-        if is_disliked {
-            let opts = RemoveDislikedTracksOptions::new(self.user_id, vec![track_id]);
-            self.client.remove_disliked_tracks(&opts).await?;
-        } else {
-            let opts = AddDislikedTracksOptions::new(self.user_id, vec![track_id]);
-            self.client.add_disliked_tracks(&opts).await?;
-        }
-
         Ok(())
     }
 
@@ -657,12 +582,6 @@ impl ApiService {
     pub async fn remove_like_album(&self, album_id: u32) -> Result<()> {
         let opts = RemoveLikedAlbumOptions::new(self.user_id, album_id);
         self.client.remove_liked_album(&opts).await?;
-        Ok(())
-    }
-
-    pub async fn add_like_playlist(&self, owner_uid: u64, kind: u32) -> Result<()> {
-        let opts = AddLikedPlaylistOptions::new(self.user_id, owner_uid, kind);
-        self.client.add_liked_playlist(&opts).await?;
         Ok(())
     }
 
@@ -767,12 +686,6 @@ impl ApiService {
         Ok(())
     }
 
-    pub async fn remove_like_playlist(&self, owner_uid: u64, kind: u32) -> Result<()> {
-        let opts = RemoveLikedPlaylistOptions::new(self.user_id, owner_uid, kind);
-        self.client.remove_liked_playlist(&opts).await?;
-        Ok(())
-    }
-
     pub async fn add_like_artist(&self, artist_id: String) -> Result<()> {
         let opts = AddLikedArtistOptions::new(self.user_id, artist_id);
         self.client.add_liked_artist(&opts).await?;
@@ -827,22 +740,6 @@ impl ApiService {
         let library = self.client.get_liked_tracks(&opts).await?;
 
         Ok(library.tracks.into_iter().map(|t| t.id).collect())
-    }
-
-    pub async fn fetch_liked_collection(&self, revision: Option<u64>) -> Result<Collection> {
-        let get_opt = || {
-            let mut opt = CollectionSyncOption::new();
-            if let Some(rev) = revision {
-                opt = opt.revision(rev);
-            }
-            opt
-        };
-        let opts = CollectionSyncOptions::new()
-            .liked_tracks(get_opt())
-            .liked_albums(get_opt())
-            .liked_artists(get_opt())
-            .liked_playlists(get_opt());
-        Ok(self.client.collection_sync(&opts).await?)
     }
 }
 

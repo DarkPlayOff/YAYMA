@@ -47,7 +47,7 @@ pub async fn load_persisted_settings(ctx: &AppContext) {
         let eq_info = guard.get("eq").map(|_eq| true);
 
         let mut others = Vec::new();
-        for (id, _handle) in guard.iter() {
+        for id in guard.keys() {
             if matches!(id.as_str(), "eq" | "monitor" | "fade") {
                 continue;
             }
