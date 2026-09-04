@@ -11,6 +11,7 @@ import 'package:yayma/src/features/core/providers/notification_provider.dart';
 import 'package:yayma/src/features/core/theme/app_tokens.dart';
 import 'package:yayma/src/features/core/views/widgets/app_context_menu.dart';
 import 'package:yayma/src/features/core/views/widgets/common_ui.dart';
+import 'package:yayma/src/features/core/views/widgets/download_menu.dart';
 import 'package:yayma/src/features/core/views/widgets/lyrics_view.dart';
 import 'package:yayma/src/features/core/views/widgets/responsive.dart';
 import 'package:yayma/src/features/core/views/widgets/track_details_dialog.dart';
@@ -93,6 +94,41 @@ class _CommonTrackTileState extends State<CommonTrackTile> {
       );
     }
     return leading;
+  }
+
+  Future<void> _downloadTrack(DownloadMode mode) async {
+    final ctx = appContextSignal.value;
+    if (ctx == null) return;
+
+    showAppSuccess(
+      mode == DownloadMode.cache
+          ? 'Скачивание в кэш началось...'
+          : 'Скачивание в файл началось...',
+    );
+    downloadingTracksSignal.value = {
+      ...downloadingTracksSignal.value,
+      widget.trackId,
+    };
+
+    try {
+      final paths = await rust.downloadTracks(
+        ctx: ctx,
+        trackIds: [widget.trackId],
+        toCache: mode == DownloadMode.cache,
+      );
+      if (mode == DownloadMode.cache) {
+        showAppSuccess('Трек скачан');
+        unawaited(refreshDownloadedTracks());
+      } else {
+        final path = paths.isEmpty ? '' : paths.first;
+        showAppSuccess('Трек сохранен: $path');
+      }
+    } on Object catch (e) {
+      showAppError('Ошибка: $e');
+    } finally {
+      final newSet = {...downloadingTracksSignal.value}..remove(widget.trackId);
+      downloadingTracksSignal.value = newSet;
+    }
   }
 
   @override
@@ -180,30 +216,8 @@ class _CommonTrackTileState extends State<CommonTrackTile> {
                       showAppSuccess(
                         'Ссылка скопирована',
                       );
-                    case 'download':
-                      showAppSuccess('Скачивание началось...');
-                      final ctx = appContextSignal.value;
-                      if (ctx != null) {
-                        downloadingTracksSignal.value = {
-                          ...downloadingTracksSignal.value,
-                          widget.trackId,
-                        };
-                        try {
-                          await rust.downloadTrack(
-                            ctx: ctx,
-                            trackId: widget.trackId,
-                            toCache: true,
-                          );
-                          showAppSuccess('Трек скачан');
-                          unawaited(refreshDownloadedTracks());
-                        } on Object catch (e) {
-                          showAppError('Ошибка: $e');
-                        } finally {
-                          final newSet = {...downloadingTracksSignal.value}
-                            ..remove(widget.trackId);
-                          downloadingTracksSignal.value = newSet;
-                        }
-                      }
+                    case 'download_cache':
+                      await _downloadTrack(DownloadMode.cache);
                     case 'delete_downloaded':
                       final ctx = appContextSignal.value;
                       if (ctx != null) {
@@ -218,29 +232,8 @@ class _CommonTrackTileState extends State<CommonTrackTile> {
                           showAppError('Ошибка: $e');
                         }
                       }
-                    case 'download_to_file':
-                      showAppSuccess('Скачивание в файл началось...');
-                      final ctx = appContextSignal.value;
-                      if (ctx != null) {
-                        downloadingTracksSignal.value = {
-                          ...downloadingTracksSignal.value,
-                          widget.trackId,
-                        };
-                        try {
-                          final path = await rust.downloadTrack(
-                            ctx: ctx,
-                            trackId: widget.trackId,
-                            toCache: false,
-                          );
-                          showAppSuccess('Трек сохранен: $path');
-                        } on Object catch (e) {
-                          showAppError('Ошибка: $e');
-                        } finally {
-                          final newSet = {...downloadingTracksSignal.value}
-                            ..remove(widget.trackId);
-                          downloadingTracksSignal.value = newSet;
-                        }
-                      }
+                    case 'download_files':
+                      await _downloadTrack(DownloadMode.files);
                   }
                 },
                 items: [
@@ -283,23 +276,28 @@ class _CommonTrackTileState extends State<CommonTrackTile> {
                     label: 'О треке',
                     icon: Icons.info_outline_rounded,
                   ),
+                  const AppContextMenuItem(
+                    label: 'Скачать',
+                    icon: Icons.download_rounded,
+                    subItems: [
+                      AppContextMenuItem(
+                        value: 'download_cache',
+                        label: 'В кэш приложения',
+                        icon: Icons.offline_bolt_rounded,
+                      ),
+                      AppContextMenuItem(
+                        value: 'download_files',
+                        label: 'В отдельный файл',
+                        icon: Icons.file_download_rounded,
+                      ),
+                    ],
+                  ),
                   if (downloadedTracksSignal.value.contains(widget.trackId))
                     const AppContextMenuItem(
                       value: 'delete_downloaded',
                       label: 'Удалить из загрузок',
                       icon: Icons.remove_circle_outline_rounded,
-                    )
-                  else
-                    const AppContextMenuItem(
-                      value: 'download',
-                      label: 'Скачать',
-                      icon: Icons.download_done_rounded,
                     ),
-                  const AppContextMenuItem(
-                    value: 'download_to_file',
-                    label: 'Скачать в файл',
-                    icon: Icons.file_download_rounded,
-                  ),
                 ],
                 child: IconButton(
                   icon: Icon(

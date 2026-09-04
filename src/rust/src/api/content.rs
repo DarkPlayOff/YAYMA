@@ -2,9 +2,9 @@ use crate::api::models::{
     AlbumDetailsDto, AppError, ArtistDetailsDto, LyricsProviderSettingDto, LyricsResultDto,
     PlaylistDetailsDto, SearchResultsDto, StationCategoryDto, TrackDetailsDto,
 };
-use crate::app::AppContext;
 use crate::app::logic::content as logic;
 use crate::app::logic::lyrics as lyrics_logic;
+use crate::app::AppContext;
 
 pub async fn search(ctx: &AppContext, query: String) -> Option<SearchResultsDto> {
     logic::search(ctx, query).await
@@ -22,19 +22,13 @@ pub async fn get_downloads_size(ctx: &AppContext) -> i64 {
     logic::get_downloads_size(ctx).await
 }
 
-pub async fn download_track(
-    ctx: &AppContext,
-    track_id: String,
-    to_cache: bool,
-) -> Result<String, AppError> {
-    logic::download_track(ctx, track_id, to_cache).await
-}
-
-pub async fn download_tracks_batch(
+pub async fn download_tracks(
     ctx: &AppContext,
     track_ids: Vec<String>,
-) -> Result<(), AppError> {
-    logic::download_tracks_batch(ctx, track_ids).await
+    to_cache: bool,
+    collection_name: Option<String>,
+) -> Result<Vec<String>, AppError> {
+    logic::download_tracks(ctx, track_ids, to_cache, collection_name).await
 }
 
 pub async fn delete_downloaded_track(ctx: &AppContext, track_id: String) -> Result<(), AppError> {

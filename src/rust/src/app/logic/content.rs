@@ -1,7 +1,7 @@
 use crate::api::models::{
-    AlbumDetailsDto, AppError, ArtistDetailsDto, PlaylistDetailsDto, SearchResultsDto,
-    SimpleAlbumDto, SimpleArtistDto, SimplePlaylistDto, SimpleTrackDto, StationCategoryDto,
-    StationItemDto, TrackDetailsDto, format_cover,
+    format_cover, AlbumDetailsDto, AppError, ArtistDetailsDto, PlaylistDetailsDto,
+    SearchResultsDto, SimpleAlbumDto, SimpleArtistDto, SimplePlaylistDto, SimpleTrackDto,
+    StationCategoryDto, StationItemDto, TrackDetailsDto,
 };
 use crate::app::AppContext;
 use crate::storage::cache::HttpCache;
@@ -49,10 +49,71 @@ pub async fn get_downloads_size(_ctx: &AppContext) -> i64 {
     0
 }
 
-pub async fn download_track(
+enum DownloadDestination {
+    Cache,
+    Files {
+        directory: std::path::PathBuf,
+        prefix: String,
+    },
+}
+
+#[derive(Clone)]
+enum DownloadBatchTarget {
+    Cache,
+    Files {
+        directory: std::path::PathBuf,
+        width: usize,
+    },
+}
+
+impl DownloadBatchTarget {
+    fn destination(&self, index: usize) -> DownloadDestination {
+        match self {
+            Self::Cache => DownloadDestination::Cache,
+            Self::Files { directory, width } => DownloadDestination::Files {
+                directory: directory.clone(),
+                prefix: format!("{:0width$} - ", index + 1, width = width),
+            },
+        }
+    }
+}
+
+async fn get_download_directory(ctx: &AppContext) -> Result<std::path::PathBuf, AppError> {
+    ctx.core
+        .db
+        .lock()
+        .await
+        .load_download_path()
+        .await
+        .ok()
+        .flatten()
+        .map(std::path::PathBuf::from)
+        .or_else(|| {
+            directories::UserDirs::new().and_then(|u| u.download_dir().map(|p| p.to_path_buf()))
+        })
+        .ok_or_else(|| AppError::Unknown("Could not find download directory".into()))
+}
+
+fn sanitize_path_component(value: &str, fallback: &str) -> String {
+    let sanitized: String = value
+        .chars()
+        .map(|c| match c {
+            '?' | '/' | '\\' | '*' | '"' | '<' | '>' | '|' | ':' => '_',
+            _ => c,
+        })
+        .collect();
+    let sanitized = sanitized.trim().trim_matches('.');
+    if sanitized.is_empty() {
+        fallback.to_string()
+    } else {
+        sanitized.to_string()
+    }
+}
+
+async fn download_track_to_destination(
     ctx: &AppContext,
     track_id: String,
-    to_cache: bool,
+    destination: DownloadDestination,
 ) -> Result<String, AppError> {
     let api = &ctx.core.api;
     let (liked, disliked) = get_liked_snapshot(ctx).await;
@@ -80,41 +141,27 @@ pub async fn download_track(
         "mp3"
     };
 
+    let to_cache = matches!(&destination, DownloadDestination::Cache);
     let dest_path = if to_cache {
         let mut dir = ctx.core.track_cache.get_cache_dir().to_path_buf();
         dir.push(format!("{}.{}", track_id, ext));
         dir
     } else {
-        let mut dir = ctx
-            .core
-            .db
-            .lock()
-            .await
-            .load_download_path()
-            .await
-            .ok()
-            .flatten()
-            .map(std::path::PathBuf::from)
-            .or_else(|| {
-                directories::UserDirs::new().and_then(|u| u.download_dir().map(|p| p.to_path_buf()))
-            })
-            .ok_or_else(|| AppError::Unknown("Could not find download directory".into()))?;
-
         let artist_name = dto
             .artists
             .first()
             .map(|a| a.name.as_str())
             .unwrap_or("Unknown Artist");
 
-        let safe_base_name: String = format!("{} - {}", artist_name, dto.title)
-            .chars()
-            .map(|c| match c {
-                '?' | '/' | '\\' | '*' | '\"' | '<' | '>' | '|' => '_',
-                _ => c,
-            })
-            .collect();
+        let (directory, prefix) = match destination {
+            DownloadDestination::Files { directory, prefix } => (directory, prefix),
+            DownloadDestination::Cache => unreachable!(),
+        };
+        let safe_base_name =
+            sanitize_path_component(&format!("{} - {}", artist_name, dto.title), "Unknown Track");
 
-        dir.push(format!("{}.{}", safe_base_name, ext));
+        let mut dir = directory;
+        dir.push(format!("{}{}.{}", prefix, safe_base_name, ext));
         dir
     };
 
@@ -161,42 +208,91 @@ pub async fn download_track(
     Ok(dest_path.to_string_lossy().into_owned())
 }
 
+async fn download_tracks_with_target(
+    ctx: &AppContext,
+    track_ids: Vec<String>,
+    target: DownloadBatchTarget,
+) -> Vec<(usize, Result<String, AppError>)> {
+    use futures::stream::{self, StreamExt};
+
+    stream::iter(track_ids.into_iter().enumerate())
+        .map(|(index, track_id)| {
+            let ctx = ctx.clone();
+            let destination = target.destination(index);
+            async move {
+                ctx.send_event(crate::api::simple::AppEvent::TrackDownloadStarted(
+                    track_id.clone(),
+                ));
+                let result =
+                    download_track_to_destination(&ctx, track_id.clone(), destination).await;
+                match &result {
+                    Ok(_) => ctx.send_event(crate::api::simple::AppEvent::TrackDownloadFinished(
+                        track_id,
+                    )),
+                    Err(error) => {
+                        ctx.send_event(crate::api::simple::AppEvent::TrackDownloadFailed(
+                            track_id,
+                            error.to_string(),
+                        ))
+                    }
+                }
+                (index, result)
+            }
+        })
+        .buffer_unordered(5)
+        .collect()
+        .await
+}
+
+pub async fn download_tracks(
+    ctx: &AppContext,
+    track_ids: Vec<String>,
+    to_cache: bool,
+    collection_name: Option<String>,
+) -> Result<Vec<String>, AppError> {
+    if track_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let target = if to_cache {
+        DownloadBatchTarget::Cache
+    } else {
+        let mut directory = get_download_directory(ctx).await?;
+        if let Some(collection_name) = collection_name {
+            directory.push(sanitize_path_component(
+                &collection_name,
+                "Downloaded Collection",
+            ));
+            tokio::fs::create_dir_all(&directory).await?;
+        }
+        DownloadBatchTarget::Files {
+            directory,
+            width: track_ids.len().to_string().len(),
+        }
+    };
+
+    let mut results = download_tracks_with_target(ctx, track_ids, target).await;
+    results.sort_by_key(|(index, _)| *index);
+
+    let mut paths = Vec::with_capacity(results.len());
+    let mut first_error = None;
+    for (_, result) in results {
+        match result {
+            Ok(path) => paths.push(path),
+            Err(error) if first_error.is_none() => first_error = Some(error),
+            Err(_) => {}
+        }
+    }
+
+    first_error.map_or(Ok(paths), Err)
+}
+
 pub async fn delete_downloaded_track(ctx: &AppContext, track_id: String) -> Result<(), AppError> {
     ctx.core
         .track_cache
         .delete_track(&track_id)
         .await
         .map_err(|e| AppError::Unknown(e.to_string()))?;
-    Ok(())
-}
-
-pub async fn download_tracks_batch(
-    ctx: &AppContext,
-    track_ids: Vec<String>,
-) -> Result<(), AppError> {
-    use crate::api::simple::AppEvent;
-    use futures::stream::{self, StreamExt};
-
-    let ctx = ctx.clone();
-    tokio::spawn(async move {
-        let stream = stream::iter(track_ids).map(|track_id| {
-            let ctx = ctx.clone();
-            async move {
-                ctx.send_event(AppEvent::TrackDownloadStarted(track_id.clone()));
-                match download_track(&ctx, track_id.clone(), true).await {
-                    Ok(_) => {
-                        ctx.send_event(AppEvent::TrackDownloadFinished(track_id));
-                    }
-                    Err(e) => {
-                        ctx.send_event(AppEvent::TrackDownloadFailed(track_id, e.to_string()));
-                    }
-                }
-            }
-        });
-
-        stream.buffer_unordered(5).collect::<Vec<()>>().await;
-    });
-
     Ok(())
 }
 

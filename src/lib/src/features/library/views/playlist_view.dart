@@ -11,6 +11,7 @@ import 'package:yayma/src/features/core/providers/notification_provider.dart';
 import 'package:yayma/src/features/core/theme/app_tokens.dart';
 import 'package:yayma/src/features/core/views/widgets/app_context_menu.dart';
 import 'package:yayma/src/features/core/views/widgets/common_ui.dart';
+import 'package:yayma/src/features/core/views/widgets/download_menu.dart';
 import 'package:yayma/src/features/core/views/widgets/responsive.dart';
 import 'package:yayma/src/features/core/views/widgets/track_elements.dart';
 import 'package:yayma/src/features/core/views/widgets/track_tile.dart';
@@ -63,7 +64,7 @@ class _PlaylistViewState extends State<PlaylistView> {
       );
 
       // Store metadata if loading is successful
-      if (result != null) {
+      if (result != null && query.isEmpty) {
         _playlistMetadata.value = result;
       }
 
@@ -141,6 +142,7 @@ class _PlaylistContent extends StatefulWidget {
 class _PlaylistContentState extends State<_PlaylistContent> {
   // List of tracks for local manipulations (reorder)
   late List<SimpleTrackDto> _localTracks;
+  bool _isDownloading = false;
 
   @override
   void initState() {
@@ -182,6 +184,51 @@ class _PlaylistContentState extends State<_PlaylistContent> {
       } else {
         showAppError('Ошибка при загрузке трека');
       }
+    }
+  }
+
+  Future<void> _downloadPlaylist(DownloadMode mode) async {
+    if (_isDownloading || widget.playlist.tracks.isEmpty) return;
+
+    setState(() => _isDownloading = true);
+    showAppSuccess(
+      mode == DownloadMode.cache
+          ? 'Скачивание плейлиста в кэш началось...'
+          : 'Скачивание плейлиста в файлы началось...',
+    );
+
+    try {
+      if (mode == DownloadMode.cache) {
+        final ctx = appContextSignal.value;
+        if (ctx == null) return;
+        final trackIds = widget.playlist.tracks
+            .where((track) => !downloadedTracksSignal.value.contains(track.id))
+            .map((track) => track.id)
+            .toList();
+        if (trackIds.isNotEmpty) {
+          await rust.downloadTracks(
+            ctx: ctx,
+            trackIds: trackIds,
+            toCache: true,
+          );
+          unawaited(refreshDownloadedTracks());
+        }
+        if (!mounted) return;
+        showAppSuccess('Плейлист сохранён в кэш');
+      } else {
+        final paths = await downloadCollectionToFilesAction(
+          widget.playlist.tracks,
+          collectionName: 'Плейлист - ${widget.playlist.title}',
+        );
+
+        if (!mounted) return;
+        showAppSuccess('Сохранено файлов: ${paths.length}');
+      }
+    } on Object catch (e) {
+      if (!mounted) return;
+      showAppError('Ошибка при скачивании плейлиста: $e');
+    } finally {
+      if (mounted) setState(() => _isDownloading = false);
     }
   }
 
@@ -276,6 +323,12 @@ class _PlaylistContentState extends State<_PlaylistContent> {
                         side: BorderSide(color: cs.outlineVariant),
                       ),
                     ),
+                    const SizedBox(width: 8),
+                    DownloadTargetMenu(
+                      compact: true,
+                      isLoading: _isDownloading,
+                      onSelected: (mode) => unawaited(_downloadPlaylist(mode)),
+                    ),
                   ],
                 ),
               ]
@@ -300,6 +353,12 @@ class _PlaylistContentState extends State<_PlaylistContent> {
                     backgroundColor: cs.onSurface.withValues(alpha: 0.1),
                     foregroundColor: cs.onSurface,
                   ),
+                ),
+                const SizedBox(width: 12),
+                DownloadTargetMenu(
+                  compact: false,
+                  isLoading: _isDownloading,
+                  onSelected: (mode) => unawaited(_downloadPlaylist(mode)),
                 ),
               ],
       ),

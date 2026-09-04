@@ -278,31 +278,53 @@ Future<bool> uploadTrackAction(String filePath, {int? playlistKind}) async {
 
 final FlutterSignal<bool> isDownloadingAllLikedTracksSignal = signal(false);
 
-Future<void> downloadAllLikedTracksAction(List<SimpleTrackDto> tracks) async {
-  if (isDownloadingAllLikedTracksSignal.value) return;
+Future<List<String>> downloadLikedTracksAction(
+  List<SimpleTrackDto> tracks, {
+  required bool toCache,
+}) async {
+  if (isDownloadingAllLikedTracksSignal.value) return const [];
 
   final ctx = appContextSignal.value;
-  if (ctx == null) return;
+  if (ctx == null) return const [];
 
   isDownloadingAllLikedTracksSignal.value = true;
-  // Note: UI could handle the notification, but placing it here centralizes the logic.
-  // We'll let the provider handle it for now, similar to other actions.
 
   try {
-    final trackIds = tracks
-        .where((t) => !downloadedTracksSignal.value.contains(t.id))
-        .map((t) => t.id)
-        .toList();
+    final trackIds = toCache
+        ? tracks
+              .where((t) => !downloadedTracksSignal.value.contains(t.id))
+              .map((t) => t.id)
+              .toList()
+        : tracks.map((track) => track.id).toList();
 
-    if (trackIds.isNotEmpty) {
-      await downloadTracksBatch(ctx: ctx, trackIds: trackIds);
-    }
-  } catch (e) {
-    // Error handling will be deferred or handled by caller, or we could just log.
-    rethrow;
+    if (trackIds.isEmpty) return const [];
+
+    final paths = await downloadTracks(
+      ctx: ctx,
+      trackIds: trackIds,
+      toCache: toCache,
+      collectionName: toCache ? null : 'Любимые треки',
+    );
+    if (toCache) unawaited(refreshDownloadedTracks());
+    return paths;
   } finally {
     isDownloadingAllLikedTracksSignal.value = false;
   }
+}
+
+Future<List<String>> downloadCollectionToFilesAction(
+  List<SimpleTrackDto> tracks, {
+  required String collectionName,
+}) async {
+  final ctx = appContextSignal.value;
+  if (ctx == null || tracks.isEmpty) return const [];
+
+  return downloadTracks(
+    ctx: ctx,
+    trackIds: tracks.map((track) => track.id).toList(),
+    toCache: false,
+    collectionName: collectionName,
+  );
 }
 
 Future<int> deleteAllLikedTracksAction(List<SimpleTrackDto> tracks) async {

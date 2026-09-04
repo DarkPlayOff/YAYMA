@@ -9,6 +9,7 @@ import 'package:yayma/src/features/auth/providers/auth_provider.dart';
 import 'package:yayma/src/features/core/providers/navigation_provider.dart';
 import 'package:yayma/src/features/core/providers/notification_provider.dart';
 import 'package:yayma/src/features/core/views/widgets/common_ui.dart';
+import 'package:yayma/src/features/core/views/widgets/download_menu.dart';
 import 'package:yayma/src/features/core/views/widgets/responsive.dart';
 import 'package:yayma/src/features/core/views/widgets/track_tile.dart';
 import 'package:yayma/src/features/library/providers/library_provider.dart';
@@ -83,28 +84,46 @@ class _AlbumViewState extends State<AlbumView> {
     showAppSuccess('Ссылка скопирована');
   }
 
-  Future<void> _downloadAlbum(AlbumDetailsDto album) async {
+  Future<void> _downloadAlbum(AlbumDetailsDto album, DownloadMode mode) async {
     if (_isDownloadingAlbum.value) return;
 
     final ctx = appContextSignal.value;
     if (ctx == null) return;
 
     _isDownloadingAlbum.value = true;
-    showAppSuccess('Скачивание альбома началось...');
+    showAppSuccess(
+      mode == DownloadMode.cache
+          ? 'Скачивание альбома в кэш началось...'
+          : 'Скачивание альбома в файлы началось...',
+    );
 
     try {
-      final trackIds = album.tracks
-          .where((t) => !downloadedTracksSignal.value.contains(t.id))
-          .map((t) => t.id)
-          .toList();
+      if (mode == DownloadMode.cache) {
+        final trackIds = album.tracks
+            .where((t) => !downloadedTracksSignal.value.contains(t.id))
+            .map((t) => t.id)
+            .toList();
 
-      if (trackIds.isNotEmpty) {
-        await rust.downloadTracksBatch(ctx: ctx, trackIds: trackIds);
-        unawaited(refreshDownloadedTracks());
+        if (trackIds.isNotEmpty) {
+          await rust.downloadTracks(
+            ctx: ctx,
+            trackIds: trackIds,
+            toCache: true,
+          );
+          unawaited(refreshDownloadedTracks());
+        }
+
+        if (!mounted) return;
+        showAppSuccess('Альбом сохранён в кэш');
+      } else {
+        final paths = await downloadCollectionToFilesAction(
+          album.tracks,
+          collectionName: 'Альбом - ${album.title}',
+        );
+
+        if (!mounted) return;
+        showAppSuccess('Сохранено файлов: ${paths.length}');
       }
-
-      if (!mounted) return;
-      showAppSuccess('Альбом сохранён');
     } on Object catch (e) {
       if (!mounted) return;
       showAppError('Ошибка при скачивании: $e');
@@ -175,25 +194,11 @@ class _AlbumViewState extends State<AlbumView> {
                       foregroundColor: cs.onSurface,
                     ),
                   ),
-                  M3EButton.icon(
-                    onPressed: isDownloading
-                        ? null
-                        : () => unawaited(_downloadAlbum(albumData)),
-                    icon: isDownloading
-                        ? const M3ECircularWavyProgressIndicator(
-                            strokeWidth: 2,
-                            size: 18,
-                          )
-                        : const Icon(Icons.download_rounded),
-                    label: isAndroid
-                        ? const SizedBox.shrink()
-                        : const Text('Скачать альбом'),
-                    style: M3EButtonStyle.outlined,
-                    size: M3EButtonSize.md,
-                    decoration: M3EButtonDecoration.styleFrom(
-                      backgroundColor: cs.onSurface.withValues(alpha: 0.1),
-                      foregroundColor: cs.onSurface,
-                    ),
+                  DownloadTargetMenu(
+                    compact: isAndroid,
+                    isLoading: isDownloading,
+                    onSelected: (mode) =>
+                        unawaited(_downloadAlbum(albumData, mode)),
                   ),
                 ];
                 final androidAlbumActions = [
@@ -231,24 +236,11 @@ class _AlbumViewState extends State<AlbumView> {
                       side: BorderSide(color: cs.outlineVariant),
                     ),
                   ),
-                  IconButton(
-                    onPressed: isDownloading
-                        ? null
-                        : () => unawaited(_downloadAlbum(albumData)),
-                    tooltip: 'Скачать альбом',
-                    icon: isDownloading
-                        ? const M3ECircularWavyProgressIndicator(
-                            strokeWidth: 2,
-                            size: 18,
-                          )
-                        : const Icon(Icons.download_rounded),
-                    style: IconButton.styleFrom(
-                      minimumSize: const Size(64, 56),
-                      iconSize: 26,
-                      backgroundColor: cs.onSurface.withValues(alpha: 0.1),
-                      foregroundColor: cs.onSurface,
-                      side: BorderSide(color: cs.outlineVariant),
-                    ),
+                  DownloadTargetMenu(
+                    compact: true,
+                    isLoading: isDownloading,
+                    onSelected: (mode) =>
+                        unawaited(_downloadAlbum(albumData, mode)),
                   ),
                 ];
 
@@ -262,7 +254,6 @@ class _AlbumViewState extends State<AlbumView> {
                     actions: isAndroid
                         ? [
                             Row(
-                              mainAxisSize: MainAxisSize.max,
                               children: [
                                 for (
                                   var i = 0;
@@ -272,7 +263,8 @@ class _AlbumViewState extends State<AlbumView> {
                                   Expanded(
                                     child: Padding(
                                       padding: EdgeInsets.only(
-                                        right: i == androidAlbumActions.length - 1
+                                        right:
+                                            i == androidAlbumActions.length - 1
                                             ? 0
                                             : 6,
                                       ),

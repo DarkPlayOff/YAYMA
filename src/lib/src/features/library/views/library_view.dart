@@ -6,7 +6,9 @@ import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/features/core/providers/navigation_provider.dart';
 import 'package:yayma/src/features/core/providers/notification_provider.dart';
 import 'package:yayma/src/features/core/theme/app_tokens.dart';
+import 'package:yayma/src/features/core/views/widgets/app_context_menu.dart';
 import 'package:yayma/src/features/core/views/widgets/common_ui.dart';
+import 'package:yayma/src/features/core/views/widgets/download_menu.dart';
 import 'package:yayma/src/features/core/views/widgets/media_card.dart';
 import 'package:yayma/src/features/core/views/widgets/track_elements.dart';
 import 'package:yayma/src/features/core/views/widgets/track_tile.dart';
@@ -235,10 +237,22 @@ class _LikedTracksTab extends StatefulWidget {
 }
 
 class _LikedTracksTabState extends State<_LikedTracksTab> {
-  Future<void> _downloadAllLikedTracks(List<SimpleTrackDto> tracks) async {
+  Future<void> _downloadLikedTracks(
+    List<SimpleTrackDto> tracks,
+    DownloadMode mode,
+  ) async {
     showAppSuccess('Скачивание ${tracks.length} треков началось...');
     try {
-      await downloadAllLikedTracksAction(tracks);
+      final paths = await downloadLikedTracksAction(
+        tracks,
+        toCache: mode == DownloadMode.cache,
+      );
+      if (!mounted) return;
+      showAppSuccess(
+        mode == DownloadMode.cache
+            ? '\u041b\u044e\u0431\u0438\u043c\u044b\u0435 \u0442\u0440\u0435\u043a\u0438 \u0441\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u044b \u0432 \u043a\u044d\u0448'
+            : '\u0421\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u043e \u0444\u0430\u0439\u043b\u043e\u0432: ${paths.length}',
+      );
     } on Object catch (e) {
       if (!mounted) return;
       showAppError('Ошибка при скачивании: $e');
@@ -262,38 +276,40 @@ class _LikedTracksTabState extends State<_LikedTracksTab> {
     BuildContext context,
     List<SimpleTrackDto> tracks,
   ) {
-    showDialog<void>(
-      context: context,
-      builder: (context) {
-        final cs = Theme.of(context).colorScheme;
-        return AlertDialog(
-          title: Text(
-            'Удалить всё?',
-            style: TextStyle(color: cs.onSurface),
-          ),
-          content: Text(
-            'Вы действительно хотите удалить все скачанные любимые треки?',
-            style: TextStyle(color: cs.onSurfaceVariant),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Отмена'),
+    unawaited(
+      showDialog<void>(
+        context: context,
+        builder: (context) {
+          final cs = Theme.of(context).colorScheme;
+          return AlertDialog(
+            title: Text(
+              'Удалить всё?',
+              style: TextStyle(color: cs.onSurface),
             ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: cs.error,
-                foregroundColor: cs.onError,
+            content: Text(
+              'Вы действительно хотите удалить все скачанные любимые треки?',
+              style: TextStyle(color: cs.onSurfaceVariant),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Отмена'),
               ),
-              onPressed: () {
-                Navigator.pop(context);
-                unawaited(_deleteAllLikedTracks(tracks));
-              },
-              child: const Text('Удалить'),
-            ),
-          ],
-        );
-      },
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: cs.error,
+                  foregroundColor: cs.onError,
+                ),
+                onPressed: () {
+                  Navigator.pop(context);
+                  unawaited(_deleteAllLikedTracks(tracks));
+                },
+                child: const Text('Удалить'),
+              ),
+            ],
+          );
+        },
+      ),
     );
   }
 
@@ -376,7 +392,10 @@ class _LikedTracksTabState extends State<_LikedTracksTab> {
                           tracks.every((t) => downloadedTracks.contains(t.id));
 
                       if (allDownloaded) {
-                        return IconButton(
+                        return _LikedTracksCompletedActions(
+                          onSelected: (mode) => unawaited(
+                            _downloadLikedTracks(tracks, mode),
+                          ),
                           onPressed: () =>
                               _showDeleteAllConfirmation(context, tracks),
                           icon: const Icon(Icons.delete_sweep_rounded),
@@ -390,10 +409,13 @@ class _LikedTracksTabState extends State<_LikedTracksTab> {
                         );
                       }
 
-                      return IconButton(
+                      return _LikedTracksDownloadButton(
+                        onSelected: (mode) => unawaited(
+                          _downloadLikedTracks(tracks, mode),
+                        ),
                         onPressed: isDownloading || tracks.isEmpty
                             ? null
-                            : () => unawaited(_downloadAllLikedTracks(tracks)),
+                            : () {},
                         icon: isDownloading
                             ? const M3ECircularWavyProgressIndicator(
                                 strokeWidth: 2,
@@ -467,6 +489,101 @@ class _LikedTracksTabState extends State<_LikedTracksTab> {
           ],
         );
       },
+    );
+  }
+}
+
+class _LikedTracksCompletedActions extends StatelessWidget {
+  final VoidCallback? onPressed;
+  final Widget icon;
+  final String tooltip;
+  final ButtonStyle? style;
+  final void Function(DownloadMode mode) onSelected;
+
+  const _LikedTracksCompletedActions({
+    required this.onPressed,
+    required this.icon,
+    required this.tooltip,
+    required this.style,
+    required this.onSelected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        IconButton(
+          onPressed: onPressed,
+          icon: icon,
+          tooltip: tooltip,
+          style: style,
+        ),
+        DownloadTargetMenu(
+          compact: true,
+          isLoading: false,
+          onSelected: onSelected,
+        ),
+      ],
+    );
+  }
+}
+
+class _LikedTracksDownloadButton extends StatelessWidget {
+  final VoidCallback? onPressed;
+  final Widget icon;
+  final String tooltip;
+  final ButtonStyle? style;
+  final void Function(DownloadMode mode) onSelected;
+
+  const _LikedTracksDownloadButton({
+    required this.onPressed,
+    required this.icon,
+    required this.tooltip,
+    required this.style,
+    required this.onSelected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isEnabled = onPressed != null;
+    return IgnorePointer(
+      ignoring: !isEnabled,
+      child: AppContextMenu<DownloadMode>(
+        items: const [
+          AppContextMenuItem(
+            value: DownloadMode.cache,
+            label: 'В кэш приложения',
+            icon: Icons.offline_bolt_rounded,
+          ),
+          AppContextMenuItem(
+            value: DownloadMode.files,
+            label: 'В отдельные файлы',
+            icon: Icons.file_download_rounded,
+          ),
+          /*
+          AppContextMenuItem(
+            value: DownloadMode.cache,
+            label: 'Р’ РєСЌС€ РїСЂРёР»РѕР¶РµРЅРёСЏ',
+            icon: Icons.offline_bolt_rounded,
+          ),
+          AppContextMenuItem(
+            value: DownloadMode.files,
+            label: 'Р’ РѕС‚РґРµР»СЊРЅС‹Рµ С„Р°Р№Р»С‹',
+            icon: Icons.file_download_rounded,
+          ),
+          */
+        ],
+        onSelected: onSelected,
+        child: IgnorePointer(
+          child: IconButton(
+            onPressed: onPressed,
+            icon: icon,
+            tooltip: tooltip,
+            style: style,
+          ),
+        ),
+      ),
     );
   }
 }
