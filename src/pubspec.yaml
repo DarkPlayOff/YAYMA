@@ -18,6 +18,7 @@ dependencies:
   flutter_rust_bridge: 2.13.0
   flutter_rust_bridge_hooks: 2.13.0
   freezed_annotation: ^3.1.0
+  hotkey_manager: ^0.2.3
   intl: ^0.20.2
   json_annotation: ^4.11.0
   m3e_core: ^0.1.6

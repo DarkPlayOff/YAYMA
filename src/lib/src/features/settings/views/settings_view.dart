@@ -1,12 +1,14 @@
 import 'dart:async';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:hotkey_manager/hotkey_manager.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/features/auth/providers/auth_provider.dart';
 import 'package:yayma/src/features/core/providers/navigation_provider.dart';
 import 'package:yayma/src/features/core/providers/notification_provider.dart';
 import 'package:yayma/src/features/core/providers/visual_effects_provider.dart';
+import 'package:yayma/src/features/core/services/global_hotkey_service.dart';
 import 'package:yayma/src/features/core/theme/app_tokens.dart';
 import 'package:yayma/src/features/core/views/widgets/responsive.dart';
 import 'package:yayma/src/features/library/providers/library_provider.dart';
@@ -313,6 +315,23 @@ class _SettingsViewState extends State<SettingsView> {
                   ),
                   if (context.isDesktop) ...[
                     const SizedBox(height: 32),
+                    const _SectionTitle(title: 'Горячие клавиши'),
+                    const SizedBox(height: 20),
+                    _SettingItem(
+                      title: 'Управление горячими клавишами',
+                      subtitle:
+                          'Глобальные сочетания клавиш, работающие вне окна',
+                      icon: Icons.keyboard_command_key_rounded,
+                      onTap: () => unawaited(
+                        showDialog<void>(
+                          context: context,
+                          builder: (context) => const _GlobalHotkeysDialog(),
+                        ),
+                      ),
+                    ),
+                  ],
+                  if (context.isDesktop) ...[
+                    const SizedBox(height: 32),
                     const _SectionTitle(title: 'Внешний вид'),
                     const SizedBox(height: 20),
                     SignalBuilder(
@@ -508,6 +527,328 @@ class _SettingsViewState extends State<SettingsView> {
           const SliverToBoxAdapter(child: SizedBox(height: 60)),
         ],
       ),
+    );
+  }
+}
+
+class _GlobalHotkeysSettings extends StatefulWidget {
+  const _GlobalHotkeysSettings();
+
+  @override
+  State<_GlobalHotkeysSettings> createState() => _GlobalHotkeysSettingsState();
+}
+
+class _GlobalHotkeysSettingsState extends State<_GlobalHotkeysSettings> {
+  Future<void> _edit(GlobalHotkeyBinding binding) async {
+    final hotKey = await showDialog<HotKey>(
+      context: context,
+      builder: (context) => _HotkeyDialog(binding: binding),
+    );
+    if (!mounted || hotKey == null) return;
+
+    final conflict = GlobalHotkeyService.conflictFor(binding.action, hotKey);
+    if (conflict != null) {
+      showAppError(
+        'Это сочетание уже назначено для действия «${conflict.action.title}»',
+      );
+      return;
+    }
+
+    await GlobalHotkeyService.updateBinding(binding.action, hotKey);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isNarrow = context.isNarrow;
+
+    return ValueListenableBuilder<int>(
+      valueListenable: GlobalHotkeyService.changes,
+      builder: (context, _, child) {
+        final bindings = GlobalHotkeyService.bindings;
+        return Container(
+          decoration: BoxDecoration(
+            color: cs.onSurface.withValues(alpha: 0.04),
+            borderRadius: BorderRadius.circular(AppRadius.md),
+            border: Border.all(color: cs.onSurface.withValues(alpha: 0.1)),
+          ),
+          child: Column(
+            children: [
+              _HotkeyMasterRow(
+                enabled: GlobalHotkeyService.hotkeysEnabled,
+                onChanged: (enabled) => unawaited(
+                  GlobalHotkeyService.setAllEnabled(enabled: enabled),
+                ),
+              ),
+              Divider(
+                height: 1,
+                indent: isNarrow ? 16 : 20,
+                endIndent: isNarrow ? 16 : 20,
+              ),
+              for (var i = 0; i < bindings.length; i++) ...[
+                _HotkeySettingRow(
+                  binding: bindings[i],
+                  hotkeysEnabled: GlobalHotkeyService.hotkeysEnabled,
+                  onEnabledChanged: (enabled) => unawaited(
+                    GlobalHotkeyService.setEnabled(
+                      bindings[i].action,
+                      enabled: enabled,
+                    ),
+                  ),
+                  onEdit: () => unawaited(_edit(bindings[i])),
+                ),
+                if (i < bindings.length - 1)
+                  Divider(
+                    height: 1,
+                    indent: isNarrow ? 16 : 20,
+                    endIndent: isNarrow ? 16 : 20,
+                  ),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _GlobalHotkeysDialog extends StatefulWidget {
+  const _GlobalHotkeysDialog();
+
+  @override
+  State<_GlobalHotkeysDialog> createState() => _GlobalHotkeysDialogState();
+}
+
+class _GlobalHotkeysDialogState extends State<_GlobalHotkeysDialog> {
+  Future<void> _reset() async {
+    await GlobalHotkeyService.resetDefaults();
+    if (mounted) showAppSuccess('Горячие клавиши сброшены по умолчанию');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final screenHeight = MediaQuery.sizeOf(context).height;
+    final maxContentHeight = (screenHeight * 0.82).clamp(360.0, 760.0);
+
+    return AlertDialog(
+      title: const Text('Горячие клавиши'),
+      content: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: 560,
+          maxHeight: maxContentHeight,
+        ),
+        child: const SingleChildScrollView(
+          child: _GlobalHotkeysSettings(),
+        ),
+      ),
+      actions: [
+        SizedBox(
+          width: double.infinity,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              TextButton.icon(
+                onPressed: () => unawaited(_reset()),
+                icon: const Icon(Icons.restore_rounded, size: 18),
+                label: const Text('Сбросить по умолчанию'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Закрыть'),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _HotkeyMasterRow extends StatelessWidget {
+  final bool enabled;
+  final ValueChanged<bool> onChanged;
+
+  const _HotkeyMasterRow({required this.enabled, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isNarrow = context.isNarrow;
+    return Padding(
+      padding: EdgeInsets.symmetric(
+        horizontal: isNarrow ? 12 : 16,
+        vertical: isNarrow ? 10 : 12,
+      ),
+      child: Row(
+        children: [
+          Icon(
+            enabled ? Icons.keyboard_command_key_rounded : Icons.block_rounded,
+            color: enabled ? cs.primary : cs.onSurfaceVariant,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Использовать горячие клавиши',
+                  style: TextStyle(
+                    color: cs.onSurface,
+                    fontSize: isNarrow ? 14 : 15,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  enabled
+                      ? 'Все включённые сочетания активны в системе'
+                      : 'Все системные сочетания временно отключены',
+                  style: TextStyle(
+                    color: cs.onSurfaceVariant,
+                    fontSize: isNarrow ? 12 : 13,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Switch(value: enabled, onChanged: onChanged),
+        ],
+      ),
+    );
+  }
+}
+
+class _HotkeySettingRow extends StatelessWidget {
+  final GlobalHotkeyBinding binding;
+  final bool hotkeysEnabled;
+  final ValueChanged<bool> onEnabledChanged;
+  final VoidCallback onEdit;
+
+  const _HotkeySettingRow({
+    required this.binding,
+    required this.hotkeysEnabled,
+    required this.onEnabledChanged,
+    required this.onEdit,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isNarrow = context.isNarrow;
+    return Padding(
+      padding: EdgeInsets.symmetric(
+        horizontal: isNarrow ? 12 : 16,
+        vertical: isNarrow ? 8 : 10,
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  binding.action.title,
+                  style: TextStyle(
+                    color: binding.enabled && hotkeysEnabled
+                        ? cs.onSurface
+                        : cs.onSurfaceVariant,
+                    fontSize: isNarrow ? 14 : 15,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                InkWell(
+                  onTap: onEdit,
+                  borderRadius: BorderRadius.circular(AppRadius.xs),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: binding.enabled && hotkeysEnabled
+                          ? cs.primary.withValues(alpha: 0.12)
+                          : cs.onSurface.withValues(alpha: 0.06),
+                      borderRadius: BorderRadius.circular(AppRadius.xs),
+                    ),
+                    child: Text(
+                      GlobalHotkeyService.formatHotKey(binding.hotKey),
+                      style: TextStyle(
+                        color: binding.enabled && hotkeysEnabled
+                            ? cs.primary
+                            : cs.onSurfaceVariant,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            tooltip: 'Изменить сочетание',
+            onPressed: onEdit,
+            icon: const Icon(Icons.edit_rounded),
+          ),
+          Switch(value: binding.enabled, onChanged: onEnabledChanged),
+        ],
+      ),
+    );
+  }
+}
+
+class _HotkeyDialog extends StatefulWidget {
+  final GlobalHotkeyBinding binding;
+
+  const _HotkeyDialog({required this.binding});
+
+  @override
+  State<_HotkeyDialog> createState() => _HotkeyDialogState();
+}
+
+class _HotkeyDialogState extends State<_HotkeyDialog> {
+  late HotKey _hotKey;
+
+  @override
+  void initState() {
+    super.initState();
+    _hotKey = widget.binding.hotKey;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(widget.binding.action.title),
+      content: SizedBox(
+        width: 420,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Нажмите нужное сочетание клавиш'),
+            const SizedBox(height: 20),
+            Center(
+              child: HotKeyRecorder(
+                initalHotKey: _hotKey,
+                onHotKeyRecorded: (hotKey) {
+                  setState(() => _hotKey = hotKey);
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Отмена'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, _hotKey),
+          child: const Text('Сохранить'),
+        ),
+      ],
     );
   }
 }

@@ -8,6 +8,7 @@ import 'package:yayma/src/app/system_tray.dart';
 import 'package:yayma/src/features/auth/views/auth/auth_screens.dart';
 import 'package:yayma/src/features/core/providers/navigation_provider.dart';
 import 'package:yayma/src/features/core/providers/notification_provider.dart';
+import 'package:yayma/src/features/core/services/global_hotkey_service.dart';
 import 'package:yayma/src/features/playback/providers/playback_provider.dart';
 
 Future<void> main() async {
@@ -38,6 +39,8 @@ Future<void> main() async {
 
     await SystemTrayManager.instance.initialize();
   }
+
+  await GlobalHotkeyService.initialize();
 
   runApp(const MyApp());
 }
