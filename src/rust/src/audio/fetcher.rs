@@ -11,7 +11,7 @@ use yandex_music::model::rotor::feedback::{StationFeedback, StationFeedbackEvent
 use yandex_music::model::rotor::session::Session;
 use yandex_music::model::track::Track;
 
-pub const FETCH_BATCH_SIZE: usize = 10;
+pub const FETCH_BATCH_SIZE: usize = 50;
 pub const WAVE_VISIBLE_TRACKS: usize = 3;
 
 #[derive(Debug, Clone)]
@@ -32,6 +32,9 @@ pub struct FetchState {
     pub task: Option<JoinHandle<(Vec<Track>, Option<Session>)>>,
     pub pending_track_ids: Vec<String>,
     pub wave_session: Arc<Mutex<Option<Session>>>,
+    playlist_in_flight_ids: Vec<String>,
+    playlist_fetch_failed: Arc<Mutex<bool>>,
+    playlist_failure_requeues: u8,
 }
 
 impl Clone for FetchState {
@@ -40,6 +43,9 @@ impl Clone for FetchState {
             task: None, // JoinHandle cannot be cloned
             pending_track_ids: self.pending_track_ids.clone(),
             wave_session: self.wave_session.clone(),
+            playlist_in_flight_ids: self.playlist_in_flight_ids.clone(),
+            playlist_fetch_failed: self.playlist_fetch_failed.clone(),
+            playlist_failure_requeues: self.playlist_failure_requeues,
         }
     }
 }
@@ -56,6 +62,9 @@ impl FetchState {
             task: None,
             pending_track_ids: Vec::new(),
             wave_session: Arc::new(Mutex::new(None)),
+            playlist_in_flight_ids: Vec::new(),
+            playlist_fetch_failed: Arc::new(Mutex::new(false)),
+            playlist_failure_requeues: 0,
         }
     }
 
@@ -64,6 +73,9 @@ impl FetchState {
             task.abort();
         }
         self.pending_track_ids.clear();
+        self.playlist_in_flight_ids.clear();
+        *self.playlist_fetch_failed.lock() = false;
+        self.playlist_failure_requeues = 0;
         *self.wave_session.lock() = None;
     }
 
@@ -105,21 +117,34 @@ impl FetchState {
         debug_assert!(!self.is_fetching());
         let count = FETCH_BATCH_SIZE.min(self.pending_track_ids.len());
         let ids: Vec<String> = self.pending_track_ids.drain(0..count).collect();
+        self.playlist_in_flight_ids = ids.clone();
+        *self.playlist_fetch_failed.lock() = false;
+        let fetch_failed = self.playlist_fetch_failed.clone();
 
         self.task = Some(tokio::spawn(async move {
-            match api.fetch_tracks(ids).await {
-                Ok(tracks) => {
-                    let valid: Vec<Track> = tracks
-                        .into_iter()
-                        .filter(|t| t.available.unwrap_or(false))
-                        .collect();
-                    (valid, None)
+            let mut last_error = None;
+            for attempt in 0..3 {
+                let result =
+                    tokio::time::timeout(Duration::from_secs(10), api.fetch_tracks(ids.clone()))
+                        .await;
+                match result {
+                    Ok(Ok(tracks)) => {
+                        let valid: Vec<Track> = tracks
+                            .into_iter()
+                            .filter(|t| t.available.unwrap_or(false))
+                            .collect();
+                        return (valid, None);
+                    }
+                    Ok(Err(e)) => last_error = Some(e.to_string()),
+                    Err(_) => last_error = Some("request timed out".to_string()),
                 }
-                Err(e) => {
-                    error!(error = %e, "track_fetch_failed");
-                    (vec![], None)
+                if attempt < 2 {
+                    tokio::time::sleep(Duration::from_millis(250 * (1 << attempt))).await;
                 }
             }
+            error!(error = ?last_error, "track_fetch_failed");
+            *fetch_failed.lock() = true;
+            (vec![], None)
         }));
     }
 
@@ -181,7 +206,21 @@ impl FetchState {
 
     pub async fn await_task(&mut self) -> Option<(Vec<Track>, Option<Session>)> {
         let task = self.task.take()?;
-        (task.await).ok()
+        let result = (task.await).ok();
+        if *self.playlist_fetch_failed.lock() {
+            if self.playlist_failure_requeues == 0 {
+                let ids = std::mem::take(&mut self.playlist_in_flight_ids);
+                self.pending_track_ids.splice(0..0, ids);
+                self.playlist_failure_requeues = 1;
+            } else {
+                self.playlist_in_flight_ids.clear();
+            }
+        } else {
+            self.playlist_in_flight_ids.clear();
+            self.playlist_failure_requeues = 0;
+        }
+        *self.playlist_fetch_failed.lock() = false;
+        result
     }
 }
 

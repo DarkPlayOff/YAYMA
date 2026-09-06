@@ -134,6 +134,8 @@ impl ApiService {
             .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 YandexMusic/5.110.1")
             .default_headers(headers.clone())
             .brotli(true)
+            // Keep playlist/context requests from blocking playback indefinitely.
+            .timeout(FILE_INFO_REQUEST_TIMEOUT)
             .build()?;
 
         let client = Arc::new(YandexMusicClient::from_client(http_client.clone()));

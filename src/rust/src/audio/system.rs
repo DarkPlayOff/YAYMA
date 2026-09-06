@@ -13,6 +13,7 @@ use crate::audio::{discord::DiscordManager, smtc::SmtcManager};
 
 use parking_lot::RwLock as PRwLock;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 use tokio::sync::{Mutex, RwLock, mpsc};
 use yandex_music::model::track::Track;
@@ -30,6 +31,7 @@ pub struct AudioSystem {
     signals: AudioSignals,
     tx: mpsc::Sender<AudioMessage>,
     db: Arc<tokio::sync::Mutex<crate::db::AppDatabase>>,
+    context_generation: Arc<AtomicU64>,
 }
 
 impl AudioSystem {
@@ -116,6 +118,7 @@ impl AudioSystem {
             signals: signals.clone(),
             tx: tx.clone(),
             db,
+            context_generation: Arc::new(AtomicU64::new(0)),
         };
 
         let mut system_loop = system;
@@ -198,14 +201,25 @@ impl AudioSystem {
     {
         let tx = self.tx.clone();
         let error_sink = self.error_sink.clone();
+        let signals = self.signals.clone();
+        let context_generation = self.context_generation.clone();
+        let request_generation = context_generation.fetch_add(1, Ordering::SeqCst) + 1;
         self.signals.set_buffering(true);
         tokio::spawn(async move {
             match fetcher().await {
                 Ok((ctx, tracks, index)) => {
-                    let _ = tx.send(AudioMessage::LoadContext(ctx, tracks, index)).await;
+                    if context_generation.load(Ordering::SeqCst) == request_generation {
+                        let _ = tx.send(AudioMessage::LoadContext(ctx, tracks, index)).await;
+                    }
                 }
                 Err(e) => {
-                    error_sink(e);
+                    // The context request is not the audio stream itself.  Do not leave
+                    // the global buffering flag armed after a playlist/album request fails;
+                    // otherwise the playback watchdog can pause an unrelated track.
+                    if context_generation.load(Ordering::SeqCst) == request_generation {
+                        error_sink(e);
+                        signals.set_buffering(false);
+                    }
                 }
             }
         });
@@ -282,6 +296,7 @@ impl AudioSystem {
             AudioMessage::Pause => self.controller.pause().await,
             AudioMessage::Resume => self.controller.resume().await,
             AudioMessage::Stop => {
+                self.context_generation.fetch_add(1, Ordering::SeqCst);
                 self.controller.stop().await;
                 self.queue.clear();
             }
@@ -306,10 +321,12 @@ impl AudioSystem {
             AudioMessage::ToggleMute => self.controller.toggle_mute(),
 
             AudioMessage::PlayTrack(track) => {
+                self.context_generation.fetch_add(1, Ordering::SeqCst);
                 self.load_standalone(im::Vector::from(vec![track]), false, Duration::ZERO)
                     .await
             }
             AudioMessage::RestoreTrack(track, pos, was_playing) => {
+                self.context_generation.fetch_add(1, Ordering::SeqCst);
                 self.load_standalone(im::Vector::from(vec![track]), !was_playing, pos)
                     .await
             }
@@ -317,6 +334,7 @@ impl AudioSystem {
                 self.load_context(ctx, tracks, index).await;
             }
             AudioMessage::LoadTracks(tracks) => {
+                self.context_generation.fetch_add(1, Ordering::SeqCst);
                 self.load_standalone(im::Vector::from(tracks), false, Duration::ZERO)
                     .await
             }
@@ -328,6 +346,7 @@ impl AudioSystem {
             AudioMessage::ToggleRepeatMode => self.queue.toggle_repeat_mode(),
 
             AudioMessage::PlayPlaylist(kind) => {
+                self.context_generation.fetch_add(1, Ordering::SeqCst);
                 let yandex = self.yandex.clone();
                 self.spawn_fetch_context(move || async move {
                     yandex
@@ -337,6 +356,7 @@ impl AudioSystem {
                 });
             }
             AudioMessage::PlayAlbum(album_id) => {
+                self.context_generation.fetch_add(1, Ordering::SeqCst);
                 let yandex = self.yandex.clone();
                 self.spawn_fetch_context(move || async move {
                     yandex
@@ -346,6 +366,7 @@ impl AudioSystem {
                 });
             }
             AudioMessage::PlayAlbumTrack(aid, tid) => {
+                self.context_generation.fetch_add(1, Ordering::SeqCst);
                 let local_ctx = if self.queue.stream_manager.is_track_offline(&tid).await {
                     self.build_single_track_offline(&tid).await
                 } else {
@@ -370,6 +391,7 @@ impl AudioSystem {
                 }
             }
             AudioMessage::PlayPlaylistTrack(kind, tid) => {
+                self.context_generation.fetch_add(1, Ordering::SeqCst);
                 let local_ctx = if self.queue.stream_manager.is_track_offline(&tid).await {
                     self.build_single_track_offline(&tid).await
                 } else {
@@ -394,6 +416,7 @@ impl AudioSystem {
                 }
             }
             AudioMessage::PlayLikedTrack(tid) => {
+                self.context_generation.fetch_add(1, Ordering::SeqCst);
                 let local_ctx = if self.queue.stream_manager.is_track_offline(&tid).await {
                     self.build_local_liked_context(&tid).await
                 } else {
@@ -418,6 +441,7 @@ impl AudioSystem {
                 }
             }
             AudioMessage::StartWave(seeds) => {
+                self.context_generation.fetch_add(1, Ordering::SeqCst);
                 let yandex = self.yandex.clone();
                 self.spawn_fetch_context(move || async move {
                     yandex

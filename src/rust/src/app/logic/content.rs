@@ -9,6 +9,8 @@ use crate::util::flac::extract_native_flac;
 use foldhash::HashMapExt;
 use std::sync::Arc;
 
+const MAX_CONCURRENT_DOWNLOADS: usize = 3;
+
 async fn get_liked_snapshot(
     ctx: &AppContext,
 ) -> (foldhash::HashSet<String>, foldhash::HashSet<String>) {
@@ -239,7 +241,7 @@ async fn download_tracks_with_target(
                 (index, result)
             }
         })
-        .buffer_unordered(5)
+        .buffer_unordered(MAX_CONCURRENT_DOWNLOADS)
         .collect()
         .await
 }

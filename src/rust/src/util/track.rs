@@ -1,4 +1,4 @@
-use futures::future::join_all;
+use std::time::Duration;
 use yandex_music::model::artist::Artist;
 use yandex_music::model::playlist::PlaylistTracks;
 use yandex_music::model::track::Track;
@@ -143,7 +143,7 @@ pub fn extract_ids(playlist_tracks: &PlaylistTracks) -> Vec<String> {
 }
 
 /// Asynchronously retrieves full track data from a PlaylistTracks enum.
-/// If the data is partial, it performs a bulk fetch through the API in parallel chunks.
+/// If the data is partial, it performs a bulk fetch through the API in bounded chunks.
 pub async fn fetch_full_tracks(
     api: &crate::http::ApiService,
     playlist_tracks: PlaylistTracks,
@@ -154,21 +154,28 @@ pub async fn fetch_full_tracks(
         PlaylistTracks::Partial(partial) => {
             let ids: Vec<String> = partial.into_iter().map(|p| p.id.to_string()).collect();
 
-            // Prepare fetch tasks for parallel execution
-            let mut fetch_tasks = Vec::new();
-
-            // Fetch tracks in chunks of 100 to stay within API limits
-            for chunk in ids.chunks(100) {
-                let chunk_ids = chunk.to_vec();
-                fetch_tasks.push(async move { api.fetch_tracks(chunk_ids).await });
-            }
-
-            // Execute all requests in parallel and collect results
-            let results = join_all(fetch_tasks).await;
-
             let mut fetched = Vec::new();
-            for tracks in results.into_iter().flatten() {
-                fetched.extend(tracks);
+            // Keep requests sequential and bounded.  Apart from avoiding a burst of
+            // requests, this also keeps the API's batch limit explicit.
+            for chunk in ids.chunks(50) {
+                let chunk_ids = chunk.to_vec();
+                for attempt in 0..3 {
+                    let result = tokio::time::timeout(
+                        Duration::from_secs(10),
+                        api.fetch_tracks(chunk_ids.clone()),
+                    )
+                    .await;
+                    match result {
+                        Ok(Ok(tracks)) => {
+                            fetched.extend(tracks);
+                            break;
+                        }
+                        Ok(Err(_)) | Err(_) if attempt < 2 => {
+                            tokio::time::sleep(Duration::from_millis(250 * (1 << attempt))).await;
+                        }
+                        Ok(Err(_)) | Err(_) => break,
+                    }
+                }
             }
             fetched
         }
