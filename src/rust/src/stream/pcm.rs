@@ -61,6 +61,15 @@ pub struct BufferedStreamingSource {
     controller: StreamController,
 }
 
+impl Drop for BufferedStreamingSource {
+    fn drop(&mut self) {
+        // Ensure the decoder loop exits as soon as it reaches its command
+        // checkpoint after a skipped track, instead of waiting for another
+        // source read or seek request.
+        self.controller.stop();
+    }
+}
+
 impl BufferedStreamingSource {
     fn recycle_current(&mut self) {
         if self.pending_samples.capacity() > 0 {

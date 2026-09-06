@@ -23,7 +23,11 @@ use crate::audio::prefetcher::UrlPrefetcher;
 use crate::audio::shuffle::ShuffleState;
 
 const URL_PREFETCH_WINDOW: usize = 5;
-const FETCH_THRESHOLD: usize = 2;
+// Keep a reasonably sized playback window ahead of the current item.  The
+// fetcher loads 50 tracks at a time, so starting a request with ten items left
+// gives the request enough time to complete without making initial playlist
+// loading wait for the whole playlist.
+const FETCH_THRESHOLD: usize = 10;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum PlaybackContext {
@@ -212,7 +216,10 @@ impl QueueManager {
                         .map(extract_ids)
                         .unwrap_or_default();
 
-                    let loaded_count = (start_index + tracks.len()).min(all_track_ids.len());
+                    // `tracks` is the fetched prefix, while `start_index` only
+                    // selects where playback starts inside that prefix. Do not
+                    // skip the tracks between the start position and page end.
+                    let loaded_count = tracks.len().min(all_track_ids.len());
                     self.fetch
                         .set_pending_ids(all_track_ids.into_iter().skip(loaded_count).collect());
 
@@ -461,6 +468,16 @@ impl QueueManager {
             if remaining <= 1 && !self.fetch.is_fetching() {
                 self.trigger_fetch();
             }
+        }
+
+        // `advance_to` is also used by direct queue controls (for example
+        // shuffle/next), not only by `get_next_track`.  Keep the lazy playlist
+        // window topped up for those paths as well.
+        if !self.in_wave()
+            && index + FETCH_THRESHOLD + 1 >= self.signals.queue().len()
+            && !self.fetch.is_fetching()
+        {
+            self.trigger_fetch();
         }
 
         self.update_prefetch_interest();

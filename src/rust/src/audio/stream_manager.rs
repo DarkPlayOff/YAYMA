@@ -5,7 +5,7 @@ use crate::storage::cache::TrackCache;
 use crate::stream;
 use foldhash::HashMap;
 use parking_lot::Mutex;
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 use std::sync::Arc;
 
 use yandex_music::model::track::Track;
@@ -21,22 +21,37 @@ pub struct PreparedStream {
     pub buffering: Arc<stream::BufferingGate>,
 }
 
-// A rapid chain of skips (each landing on a not-yet-cached track) used to call
-// `cache.clear()` on every single one of them, discarding in-flight prewarm work for
-// whichever track the user actually lands on. Keeping a small ring of slots instead lets
-// a couple of concurrent prewarms survive a quick skip-skip-skip.
-const MAX_PREWARM_ENTRIES: usize = 3;
+// Keep one prepared stream ahead of the current track. This mirrors the desktop client's
+// single-source preload policy and avoids competing network reads during rapid skips.
+const MAX_PREWARM_ENTRIES: usize = 1;
 
 #[derive(Default)]
 struct PrewarmCache {
     entries: HashMap<String, PreparedStream>,
+    in_flight: HashSet<String>,
     // Insertion order, oldest first, for FIFO eviction once `entries` is full.
     order: VecDeque<String>,
 }
 
 impl PrewarmCache {
     fn contains(&self, id: &str) -> bool {
-        self.entries.contains_key(id)
+        self.entries.contains_key(id) || self.in_flight.contains(id)
+    }
+
+    fn start(&mut self, id: &str) -> bool {
+        if self.contains(id) || self.in_flight.len() >= MAX_PREWARM_ENTRIES {
+            return false;
+        }
+        self.in_flight.insert(id.to_owned());
+        true
+    }
+
+    fn finish(&mut self, id: &str, result: Option<PreparedStream>) {
+        if self.in_flight.remove(id)
+            && let Some(result) = result
+        {
+            self.insert(id.to_owned(), result);
+        }
     }
 
     fn remove(&mut self, id: &str) -> Option<PreparedStream> {
@@ -91,24 +106,22 @@ impl StreamManager {
 
     pub fn prewarm(&self, track: Track) {
         let id = track.id.clone();
-        {
-            let cache = self.prewarm_cache.lock();
-            if cache.contains(&id) {
-                return;
-            }
+        if !self.prewarm_cache.lock().start(&id) {
+            return;
         }
 
         let this = self.clone();
         tokio::spawn(async move {
-            if let Ok(result) = this.create_stream_session(&track).await {
-                this.prewarm_cache.lock().insert(track.id, result);
-            }
+            let result = this.create_stream_session(&track).await.ok();
+            this.prewarm_cache.lock().finish(&track.id, result);
         });
     }
 
     pub fn invalidate_track(&self, track_id: &str) {
         self.url_cache.remove(track_id);
-        self.prewarm_cache.lock().remove(track_id);
+        let mut cache = self.prewarm_cache.lock();
+        cache.remove(track_id);
+        cache.in_flight.remove(track_id);
     }
 
     pub async fn is_track_offline(&self, track_id: &str) -> bool {

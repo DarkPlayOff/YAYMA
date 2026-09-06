@@ -3,6 +3,7 @@ use crate::audio::signals::AudioSignals;
 use crate::http::ApiService;
 use im::Vector;
 use std::sync::Arc;
+use yandex_music::model::playlist::PlaylistTracks;
 use yandex_music::model::track::Track;
 
 type ContextResult =
@@ -42,6 +43,39 @@ impl YandexProvider {
         error_msg: &'static str,
     ) -> ContextResult {
         if let Some(tracks_enum) = playlist.tracks.take() {
+            // Partial playlist responses contain only IDs.  Resolve the first
+            // API-sized page so playback can start immediately, while keeping
+            // the original Partial list in the context for QueueManager to
+            // lazily resolve as the user approaches its end.
+            if let PlaylistTracks::Partial(partial) = tracks_enum.clone() {
+                let target_index = track_id
+                    .as_ref()
+                    .and_then(|id| partial.iter().position(|p| p.id == *id));
+                if target_index.is_none_or(|index| index < crate::audio::fetcher::FETCH_BATCH_SIZE)
+                {
+                    let first = partial
+                        .iter()
+                        .take(crate::audio::fetcher::FETCH_BATCH_SIZE)
+                        .cloned()
+                        .collect::<Vec<_>>();
+                    let initial = crate::util::track::fetch_full_tracks(
+                        &self.api,
+                        PlaylistTracks::Partial(first),
+                    )
+                    .await;
+                    if !initial.is_empty() {
+                        playlist.tracks = Some(tracks_enum);
+                        return self
+                            .build_context(
+                                initial,
+                                track_id,
+                                || PlaybackContext::Playlist(playlist),
+                                error_msg,
+                            )
+                            .await;
+                    }
+                }
+            }
             let tracks = crate::util::track::fetch_full_tracks(&self.api, tracks_enum).await;
             return self
                 .build_context(

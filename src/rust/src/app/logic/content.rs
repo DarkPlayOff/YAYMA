@@ -1,15 +1,18 @@
 use crate::api::models::{
-    format_cover, AlbumDetailsDto, AppError, ArtistDetailsDto, PlaylistDetailsDto,
-    SearchResultsDto, SimpleAlbumDto, SimpleArtistDto, SimplePlaylistDto, SimpleTrackDto,
-    StationCategoryDto, StationItemDto, TrackDetailsDto,
+    AlbumDetailsDto, AppError, ArtistDetailsDto, PlaylistDetailsDto, SearchResultsDto,
+    SimpleAlbumDto, SimpleArtistDto, SimplePlaylistDto, SimpleTrackDto, StationCategoryDto,
+    StationItemDto, TrackDetailsDto, format_cover,
 };
 use crate::app::AppContext;
 use crate::storage::cache::HttpCache;
 use crate::util::flac::extract_native_flac;
 use foldhash::HashMapExt;
 use std::sync::Arc;
+use std::sync::OnceLock;
+use tokio::sync::Mutex;
 
 const MAX_CONCURRENT_DOWNLOADS: usize = 3;
+static BULK_DOWNLOAD_QUEUE: OnceLock<Mutex<()>> = OnceLock::new();
 
 async fn get_liked_snapshot(
     ctx: &AppContext,
@@ -167,7 +170,10 @@ async fn download_track_to_destination(
         dir
     };
 
-    let bytes = reqwest::get(url).await?.bytes().await?;
+    let bytes = crate::http::send_with_retry(|| api.http_client.get(&url))
+        .await?
+        .bytes()
+        .await?;
 
     if to_cache {
         tokio::fs::write(&dest_path, &bytes).await?;
@@ -255,6 +261,14 @@ pub async fn download_tracks(
     if track_ids.is_empty() {
         return Ok(Vec::new());
     }
+
+    // Serialize independent bulk jobs so a second playlist download cannot
+    // compete with the first one for bandwidth. Individual files remain
+    // limited by MAX_CONCURRENT_DOWNLOADS inside the job.
+    let _bulk_guard = BULK_DOWNLOAD_QUEUE
+        .get_or_init(|| Mutex::new(()))
+        .lock()
+        .await;
 
     let target = if to_cache {
         DownloadBatchTarget::Cache

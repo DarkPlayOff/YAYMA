@@ -4,6 +4,7 @@ use parking_lot::RwLock;
 use serde_json;
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::time::sleep;
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
@@ -71,6 +72,34 @@ use yandex_music::{
 // timeout this request could otherwise hang far longer than 15s, so it errors out well before
 // the watchdog would kick in, giving a real `Event::Error` instead of an unexplained pause.
 const FILE_INFO_REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
+const MAX_REQUEST_ATTEMPTS: usize = 3;
+
+fn retryable_status(status: reqwest::StatusCode) -> bool {
+    matches!(status.as_u16(), 408 | 429 | 500..=504)
+}
+
+/// Execute a raw request with the same bounded retry policy as the desktop client.
+/// The reqwest client timeout provides cancellation of the in-flight operation.
+pub async fn send_with_retry<F>(mut make_request: F) -> Result<reqwest::Response>
+where
+    F: FnMut() -> reqwest::RequestBuilder,
+{
+    let mut last_error: Option<Box<dyn std::error::Error + Send + Sync>> = None;
+    for attempt in 0..MAX_REQUEST_ATTEMPTS {
+        match make_request().send().await {
+            Ok(response) if response.status().is_success() => return Ok(response),
+            Ok(response) if retryable_status(response.status()) => {
+                last_error = Some(format!("HTTP {}", response.status()).into());
+            }
+            Ok(response) => return Err(format!("HTTP {}", response.status()).into()),
+            Err(error) => last_error = Some(error.into()),
+        }
+        if attempt + 1 < MAX_REQUEST_ATTEMPTS {
+            sleep(Duration::from_millis(200 * (1 << attempt))).await;
+        }
+    }
+    Err(last_error.unwrap_or_else(|| "request failed".into()))
+}
 
 pub trait SessionExt {
     fn station_id(&self) -> &str;
@@ -189,9 +218,19 @@ impl ApiService {
     }
 
     pub async fn fetch_ugc_upload_info(&self, kind: u32, name: &str) -> Result<String> {
-        Ok(self.http_client.post(format!("https://api.music.yandex.ru/loader/upload-url?uid={0}&playlist-id={0}:{1}&path={2}", self.user_id, kind, urlencoding::encode(name)))
-            .send().await?.json::<serde_json::Value>().await?["post-target"]
-            .as_str().ok_or("No target")?.to_string())
+        let url = format!(
+            "https://api.music.yandex.ru/loader/upload-url?uid={0}&playlist-id={0}:{1}&path={2}",
+            self.user_id,
+            kind,
+            urlencoding::encode(name)
+        );
+        Ok(send_with_retry(|| self.http_client.post(&url))
+            .await?
+            .json::<serde_json::Value>()
+            .await?["post-target"]
+            .as_str()
+            .ok_or("No target")?
+            .to_string())
     }
 
     pub async fn upload_ugc_track(&self, url: &str, path: &str) -> Result<String> {
@@ -257,7 +296,10 @@ impl ApiService {
             "https://api.music.yandex.ru/users/{}/likes/albums?rich=true",
             self.user_id
         );
-        let body: serde_json::Value = self.http_client.get(url).send().await?.json().await?;
+        let body: serde_json::Value = send_with_retry(|| self.http_client.get(&url))
+            .await?
+            .json()
+            .await?;
         Ok(Self::extract_liked(&body, "albums", "album"))
     }
 
@@ -266,7 +308,10 @@ impl ApiService {
             "https://api.music.yandex.ru/users/{}/likes/artists?with-timestamps=false",
             self.user_id
         );
-        let body: serde_json::Value = self.http_client.get(url).send().await?.json().await?;
+        let body: serde_json::Value = send_with_retry(|| self.http_client.get(&url))
+            .await?
+            .json()
+            .await?;
         Ok(Self::extract_liked(&body, "artists", "artist"))
     }
 
@@ -364,7 +409,19 @@ impl ApiService {
         quality: Quality,
     ) -> Result<Vec<TrackFileInfo>> {
         let opts = GetFileInfoBatchOptions::new(track_ids).quality(quality);
-        Ok(self.file_info_client.get_file_info_batch(&opts).await?)
+        let mut last_error = None;
+        for attempt in 0..MAX_REQUEST_ATTEMPTS {
+            match self.file_info_client.get_file_info_batch(&opts).await {
+                Ok(value) => return Ok(value),
+                Err(error) => {
+                    last_error = Some(error);
+                    if attempt + 1 < MAX_REQUEST_ATTEMPTS {
+                        sleep(Duration::from_millis(200 * (1 << attempt))).await;
+                    }
+                }
+            }
+        }
+        Err(last_error.expect("file info attempts are non-empty").into())
     }
 
     fn map_quality(quality: AudioQuality) -> Quality {
@@ -390,7 +447,27 @@ impl ApiService {
             opts = opts.codecs([codec]);
         }
 
-        let info = self.file_info_client.get_file_info(&opts).await?;
+        let mut last_error = None;
+        let mut info = None;
+        for attempt in 0..MAX_REQUEST_ATTEMPTS {
+            match self.file_info_client.get_file_info(&opts).await {
+                Ok(value) => {
+                    info = Some(value);
+                    break;
+                }
+                Err(error) => {
+                    last_error = Some(error);
+                    if attempt + 1 < MAX_REQUEST_ATTEMPTS {
+                        sleep(Duration::from_millis(200 * (1 << attempt))).await;
+                    }
+                }
+            }
+        }
+        let info = info.ok_or_else(|| {
+            last_error
+                .expect("file info attempts are non-empty")
+                .to_string()
+        })?;
         Ok((info.url, info.codec))
     }
 
