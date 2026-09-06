@@ -99,9 +99,40 @@ mimalloc = { version = "0.1.52" }
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(frb_expand)'] }
 
 [profile.release]
-opt-level = 3
+opt-level = "z"
 lto = "thin"
 codegen-units = 1
 panic = "abort"
 debug = false
 debug-assertions = false
+strip = "symbols"
+
+[profile.release.package.yayma]
+opt-level = 3
+
+[profile.release.package.rodio]
+opt-level = 3
+
+[profile.release.package.symphonia]
+opt-level = 3
+
+[profile.release.package.symphonia-core]
+opt-level = 3
+
+[profile.release.package.symphonia-bundle-flac]
+opt-level = 3
+
+[profile.release.package.symphonia-bundle-mp3]
+opt-level = 3
+
+[profile.release.package.symphonia-codec-aac]
+opt-level = 3
+
+[profile.release.package.symphonia-format-isomp4]
+opt-level = 3
+
+[profile.release.package.symphonia-metadata]
+opt-level = 3
+
+[profile.release.package.symphonia-utils-xiph]
+opt-level = 3
