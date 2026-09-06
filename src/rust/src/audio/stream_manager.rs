@@ -92,6 +92,7 @@ impl StreamManager {
         let http_client = reqwest::Client::builder()
             .pool_max_idle_per_host(4)
             .pool_idle_timeout(std::time::Duration::from_secs(60))
+            .timeout(std::time::Duration::from_secs(10))
             .build()
             .expect("failed to create streaming http client");
 
@@ -170,17 +171,21 @@ impl StreamManager {
 
         // 2. Fallback to streaming.
         let duration_ms = track.duration.map(|d| d.as_millis() as u64);
-        let (url, codec) = if let Some(cached) = self.url_cache.get(&track.id) {
+        let (url, mirror_urls, codec) = if let Some(cached) = self.url_cache.get(&track.id) {
             cached
         } else {
-            let (url, codec) = self
+            let info = self
                 .api
-                .fetch_track_url(track.id.clone())
+                .fetch_track_stream_info(track.id.clone())
                 .await
                 .map_err(|e| Box::<dyn std::error::Error + Send + Sync>::from(e.to_string()))?;
-            self.url_cache
-                .insert(track.id.clone(), url.clone(), codec.clone());
-            (url, codec)
+            self.url_cache.insert(
+                track.id.clone(),
+                info.url.clone(),
+                info.mirror_urls.clone(),
+                info.codec.clone(),
+            );
+            (info.url, info.mirror_urls, info.codec)
         };
 
         let client = self.http_client.clone();
@@ -188,6 +193,7 @@ impl StreamManager {
         let data_source = stream::StreamingDataSource::new(
             client,
             url,
+            mirror_urls,
             Arc::clone(&progress),
             Arc::clone(&buffering),
             duration_ms,

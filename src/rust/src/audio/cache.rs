@@ -9,6 +9,7 @@ const STRM_URL_TTL: Duration = Duration::from_secs(45);
 #[derive(Clone)]
 struct CachedUrl {
     url: String,
+    mirror_urls: Vec<String>,
     codec: String,
     fetched_at: Instant,
 }
@@ -25,19 +26,20 @@ impl UrlCache {
         }
     }
 
-    pub fn get(&self, track_id: &str) -> Option<(String, String)> {
+    pub fn get(&self, track_id: &str) -> Option<(String, Vec<String>, String)> {
         let entry = self.cache.read().get(track_id).cloned()?;
         if entry.fetched_at.elapsed() >= STRM_URL_TTL {
             return None;
         }
-        Some((entry.url, entry.codec))
+        Some((entry.url, entry.mirror_urls, entry.codec))
     }
 
-    pub fn insert(&self, track_id: String, url: String, codec: String) {
+    pub fn insert(&self, track_id: String, url: String, mirror_urls: Vec<String>, codec: String) {
         self.cache.write().insert(
             track_id,
             CachedUrl {
                 url,
+                mirror_urls,
                 codec,
                 fetched_at: Instant::now(),
             },

@@ -141,7 +141,30 @@ impl Iterator for BufferedStreamingSource {
                     return self.next();
                 }
                 Err(TryRecvError::Empty) => {
-                    return Some(0.0);
+                    // Do not manufacture silence while the network source is
+                    // buffering: silence is interpreted by the mixer as valid
+                    // audio and masks stalls. Wait until the decoder produces
+                    // samples, reaches EOF, or exits.
+                    match self.rx.recv() {
+                        Ok(message) => match message {
+                            SampleMessage::Samples(samples, msg_gen)
+                                if msg_gen == current_generation =>
+                            {
+                                self.pending_samples = samples;
+                                self.sample_pos = 0;
+                            }
+                            SampleMessage::Finished(msg_gen) if msg_gen == current_generation => {
+                                self.finished_generation = Some(msg_gen);
+                                return None;
+                            }
+                            SampleMessage::Samples(samples, _) => {
+                                let _ = self.recycle_tx.try_send(samples);
+                                return self.next();
+                            }
+                            SampleMessage::Finished(_) => return self.next(),
+                        },
+                        Err(_) => return None,
+                    }
                 }
                 Err(TryRecvError::Disconnected) => return None,
             }

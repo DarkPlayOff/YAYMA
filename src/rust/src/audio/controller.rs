@@ -31,6 +31,11 @@ pub struct AudioController {
     // already passed its last `.await` (and so can no longer be cancelled by `task.abort()`)
     // can still detect it's been superseded and skip touching the engine/signals.
     playback_generation: Arc<AtomicU64>,
+    // Mirrors the original player's mediaElementErrorReloadCount: a stream
+    // that ends before the known track duration gets two recovery attempts
+    // before it is treated as a normal end/error.
+    stream_error_retries: Arc<AtomicU8>,
+    reload_in_flight: Arc<AtomicU8>,
     transient_volume_gain: Arc<AtomicU8>,
     signals: AudioSignals,
     effect_handles: Arc<RwLock<HashMap<String, EffectHandle>>>,
@@ -54,6 +59,8 @@ impl AudioController {
             track_progress,
             current_playback_task: Arc::new(Mutex::new(None)),
             playback_generation: Arc::new(AtomicU64::new(0)),
+            stream_error_retries: Arc::new(AtomicU8::new(0)),
+            reload_in_flight: Arc::new(AtomicU8::new(0)),
             transient_volume_gain: Arc::new(AtomicU8::new(100)),
             signals,
             effect_handles: Arc::new(RwLock::new(effect_handles)),
@@ -70,6 +77,8 @@ impl AudioController {
         let tx = self.tx.clone();
         let error_sink = self.error_sink.clone();
         let controller = self.clone();
+        let stream_error_retries = self.stream_error_retries.clone();
+        let reload_in_flight = self.reload_in_flight.clone();
 
         tokio::spawn(async move {
             let mut buffering_duration = std::time::Duration::ZERO;
@@ -94,6 +103,23 @@ impl AudioController {
 
                 if is_playing && !is_buffering {
                     if engine.is_empty() {
+                        let position = engine.pos();
+                        let duration_ms = signals.duration_ms.get();
+                        let ended_early = duration_ms > 0
+                            && position.as_millis().saturating_add(1_000) < duration_ms as u128;
+                        if ended_early
+                            && stream_error_retries.load(Ordering::SeqCst) < 2
+                            && reload_in_flight
+                                .compare_exchange(0, 1, Ordering::SeqCst, Ordering::SeqCst)
+                                .is_ok()
+                        {
+                            stream_error_retries.fetch_add(1, Ordering::SeqCst);
+                            signals.set_buffering(true);
+                            let _ = tx.send(AudioMessage::ReloadCurrentTrack).await;
+                            continue;
+                        }
+
+                        stream_error_retries.store(0, Ordering::SeqCst);
                         signals.set_playing(false);
                         signals.is_stopped.set(true);
                         let _ = tx.send(AudioMessage::TrackEnded).await;
@@ -164,6 +190,8 @@ impl AudioController {
         self.signals.set_buffering(true);
 
         if !soft_reload {
+            self.stream_error_retries.store(0, Ordering::SeqCst);
+            self.reload_in_flight.store(0, Ordering::SeqCst);
             self.signals.is_stopped.set(false);
             self.signals.set_current_track(Some(track.clone()));
         }
@@ -176,6 +204,9 @@ impl AudioController {
         let track_clone = track.clone();
         let monitor = self.signals.monitor.clone();
         let effect_handles_store = self.effect_handles.clone();
+        let reload_in_flight = self.reload_in_flight.clone();
+        let stream_error_retries = self.stream_error_retries.clone();
+        let tx = self.tx.clone();
 
         self.apply_volume();
 
@@ -189,6 +220,8 @@ impl AudioController {
                     if generation.load(Ordering::SeqCst) != my_generation {
                         return;
                     }
+
+                    reload_in_flight.store(0, Ordering::SeqCst);
 
                     let crate::audio::stream_manager::PreparedStream {
                         session,
@@ -300,6 +333,20 @@ impl AudioController {
                     }
                 }
                 Err(e) => {
+                    if stream_error_retries.load(Ordering::SeqCst) < 2
+                        && reload_in_flight
+                            .compare_exchange(0, 1, Ordering::SeqCst, Ordering::SeqCst)
+                            .is_ok()
+                    {
+                        stream_error_retries.fetch_add(1, Ordering::SeqCst);
+                        signals.set_buffering(true);
+                        if !start_paused {
+                            signals.set_playing(true);
+                        }
+                        let _ = tx.send(AudioMessage::ReloadCurrentTrack).await;
+                        return;
+                    }
+
                     tracing::error!("Failed to create stream session: {:?}", e);
                     signals.set_buffering(false);
                     signals.set_playing(false);

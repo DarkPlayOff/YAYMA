@@ -135,6 +135,13 @@ pub struct ApiService {
     pub quality: RwLock<AudioQuality>,
 }
 
+#[derive(Clone, Debug)]
+pub struct TrackStreamInfo {
+    pub url: String,
+    pub mirror_urls: Vec<String>,
+    pub codec: String,
+}
+
 impl ApiService {
     pub async fn new(token: String, user_id: Option<u64>) -> Result<Self> {
         let quality = RwLock::new(AudioQuality::default());
@@ -471,6 +478,42 @@ impl ApiService {
         Ok((info.url, info.codec))
     }
 
+    pub async fn fetch_track_stream_info(&self, track_id: String) -> Result<TrackStreamInfo> {
+        let opts = GetFileInfoOptions::new(track_id).quality(Self::map_quality(self.get_quality()));
+        let mut last_error = None;
+        let mut info = None;
+        for attempt in 0..MAX_REQUEST_ATTEMPTS {
+            match self.file_info_client.get_file_info(&opts).await {
+                Ok(value) => {
+                    info = Some(value);
+                    break;
+                }
+                Err(error) => {
+                    last_error = Some(error);
+                    if attempt + 1 < MAX_REQUEST_ATTEMPTS {
+                        sleep(Duration::from_millis(200 * (1 << attempt))).await;
+                    }
+                }
+            }
+        }
+        let info = info.ok_or_else(|| {
+            last_error
+                .expect("stream info attempts are non-empty")
+                .to_string()
+        })?;
+        let mirror_urls = info
+            .urls
+            .iter()
+            .filter(|u| *u != &info.url)
+            .cloned()
+            .collect();
+        Ok(TrackStreamInfo {
+            url: info.url,
+            mirror_urls,
+            codec: info.codec,
+        })
+    }
+
     pub async fn fetch_track_url(&self, track_id: String) -> Result<(String, String)> {
         self.fetch_track_url_with_codec(track_id, self.get_quality(), None)
             .await
@@ -500,7 +543,7 @@ impl ApiService {
     pub async fn fetch_track_urls_batch(
         &self,
         track_ids: Vec<String>,
-    ) -> Result<Vec<(String, String, String)>> {
+    ) -> Result<Vec<(String, String, Vec<String>, String)>> {
         let quality = self.get_quality();
 
         let infos = self
@@ -518,7 +561,15 @@ impl ApiService {
         Ok(track_ids
             .into_iter()
             .zip(infos)
-            .map(|(track_id, info)| (track_id, info.url, info.codec))
+            .map(|(track_id, info)| {
+                let mirror_urls = info
+                    .urls
+                    .iter()
+                    .filter(|url| *url != &info.url)
+                    .cloned()
+                    .collect();
+                (track_id, info.url, mirror_urls, info.codec)
+            })
             .collect())
     }
 

@@ -61,8 +61,8 @@ impl UrlPrefetcher {
 
                             match result {
                                 Ok(Ok(urls)) => {
-                                    for (id, url, codec) in urls {
-                                        cache.insert(id, url, codec);
+                                    for (id, url, mirror_urls, codec) in urls {
+                                        cache.insert(id, url, mirror_urls, codec);
                                     }
                                 }
                                 Ok(Err(e)) => {

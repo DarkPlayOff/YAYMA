@@ -23,8 +23,11 @@ type FetchFuture = std::pin::Pin<
     >,
 >;
 
-const MIN_INITIAL_DATA: usize = 128 * 1024;
-const MAX_ATTEMPTS: usize = 150; // Wait up to 75 seconds for buffering
+const INITIAL_BUFFER_SECONDS: u64 = 5;
+const MIN_INITIAL_DATA: usize = 512 * 1024;
+const MAX_ATTEMPTS: usize = 20; // 10 seconds total while waiting for a range
+const RANGE_TIMEOUT: Duration = Duration::from_secs(10);
+const MAX_RANGE_RETRIES: usize = 3;
 
 enum FetchCommand {
     Fetch {
@@ -51,6 +54,7 @@ impl StreamingDataSource {
     pub async fn new(
         client: Client,
         url: String,
+        mirror_urls: Vec<String>,
         progress: Arc<TrackProgress>,
         buffering: Arc<BufferingGate>,
         duration_ms: Option<u64>,
@@ -58,11 +62,12 @@ impl StreamingDataSource {
         let progress_generation = progress.get_generation();
 
         // 1. Fetch first chunk to get total content size
-        let range_header = format!("bytes=0-{}", MIN_INITIAL_DATA - 1);
-        let resp = client
-            .get(&url)
-            .header("Range", range_header)
-            .send()
+        let mut urls = Vec::with_capacity(1 + mirror_urls.len());
+        urls.push(url.clone());
+        urls.extend(mirror_urls);
+
+        let initial_size = MIN_INITIAL_DATA;
+        let resp = Self::fetch_range_response(&client, &urls, 0, initial_size as u64)
             .await?
             .error_for_status()
             .map_err(|e| {
@@ -123,7 +128,10 @@ impl StreamingDataSource {
             (8 * 1024 * 1024, 256 * 1024, 1024 * 1024)
         };
 
-        let initial_data = resp.bytes().await?;
+        let initial_data = tokio::time::timeout(RANGE_TIMEOUT, resp.bytes())
+            .await
+            .map_err(|_| "initial stream range body timed out")??;
+        let initial_data_len = initial_data.len();
 
         let buffer = Arc::new(Mutex::new(BufferState::new(
             total,
@@ -150,7 +158,7 @@ impl StreamingDataSource {
 
         let context = FetchContext {
             client,
-            url: url.clone(),
+            urls,
             buffer: Arc::clone(&buffer),
             progress: Arc::clone(&progress),
             generation: generation_clone,
@@ -177,7 +185,23 @@ impl StreamingDataSource {
             prefetch_size,
         };
 
-        src.wait_for(0, MIN_INITIAL_DATA)?;
+        let initial_required = duration_ms
+            .filter(|duration| *duration > 0)
+            .map(|duration| {
+                ((total as f64 * INITIAL_BUFFER_SECONDS as f64 * 1000.0 / duration as f64) as usize)
+                    .max(MIN_INITIAL_DATA)
+                    .min(total as usize)
+            })
+            .unwrap_or(MIN_INITIAL_DATA);
+        if initial_required > initial_data_len {
+            // The probe above already populated [0, initial_data_len). Continue
+            // from its contiguous end instead of requesting the same bytes again.
+            src.fetch(
+                initial_data_len as u64,
+                (initial_required - initial_data_len) as u64,
+            )?;
+        }
+        src.wait_for_async(0, initial_required).await?;
         Ok(src)
     }
 
@@ -249,8 +273,8 @@ impl StreamingDataSource {
                                             buf.mark_pending(new_start, new_end);
                                         }
                                         let client = ctx.client.clone();
-                                        let url = ctx.url.clone();
-                                        let fut = Self::fetch_range_timeout(client, url, new_start, new_end);
+                                        let urls = ctx.urls.clone();
+                                        let fut = Self::fetch_range_timeout(client, urls, new_start, new_end);
                                         current_fetch = Some((fut, new_start, new_end, new_gen));
                                     } else {
                                         let _ = ctx.tx_res.send(());
@@ -261,8 +285,8 @@ impl StreamingDataSource {
                                         buf.mark_pending(new_start, new_end);
                                     }
                                     let client = ctx.client.clone();
-                                    let url = ctx.url.clone();
-                                    let fut = Self::fetch_range_timeout(client, url, new_start, new_end);
+                                    let urls = ctx.urls.clone();
+                                    let fut = Self::fetch_range_timeout(client, urls, new_start, new_end);
                                     current_fetch = Some((fut, new_start, new_end, new_gen));
                                 }
                             } else {
@@ -276,65 +300,100 @@ impl StreamingDataSource {
         }
     }
 
-    fn fetch_range_timeout(client: Client, url: String, start: u64, end: u64) -> FetchFuture {
-        Box::pin(tokio::time::timeout(Duration::from_secs(75), async move {
-            Self::fetch_range_async(&client, &url, start, end).await
-        }))
+    fn fetch_range_timeout(client: Client, urls: Vec<String>, start: u64, end: u64) -> FetchFuture {
+        Box::pin(tokio::time::timeout(
+            RANGE_TIMEOUT * MAX_RANGE_RETRIES as u32,
+            async move { Self::fetch_range_async(&client, &urls, start, end).await },
+        ))
+    }
+
+    async fn fetch_range_response(
+        client: &Client,
+        urls: &[String],
+        start: u64,
+        size: u64,
+    ) -> Result<reqwest::Response> {
+        let end = start.saturating_add(size);
+        let mut last = None;
+        for attempt in 0..MAX_RANGE_RETRIES {
+            let url = &urls[attempt % urls.len()];
+            match tokio::time::timeout(
+                RANGE_TIMEOUT,
+                client
+                    .get(url)
+                    .header(
+                        "Range",
+                        format!("bytes={}-{}", start, end.saturating_sub(1)),
+                    )
+                    .send(),
+            )
+            .await
+            {
+                Ok(Ok(resp)) if resp.status().is_success() || resp.status().is_redirection() => {
+                    return Ok(resp);
+                }
+                Ok(Ok(resp)) => {
+                    last = Some(format!("stream url rejected (status {})", resp.status()))
+                }
+                Ok(Err(err)) => last = Some(err.to_string()),
+                Err(_) => last = Some("stream range request timed out".into()),
+            }
+            if attempt + 1 < MAX_RANGE_RETRIES {
+                tokio::time::sleep(Duration::from_millis(200 * (attempt as u64 + 1))).await;
+            }
+        }
+        Err(last
+            .unwrap_or_else(|| "stream range request failed".into())
+            .into())
     }
 
     async fn fetch_range_async(
         client: &Client,
-        url: &str,
+        urls: &[String],
         start: u64,
         end: u64,
     ) -> Result<bytes::Bytes> {
         let hdr = format!("bytes={}-{}", start, end.saturating_sub(1));
-        let mut attempts = 0;
-        let max_retries = 6;
-        let mut backoff = Duration::from_secs(1);
-
-        loop {
-            match client.get(url).header("Range", &hdr).send().await {
-                Ok(resp) => {
-                    // 4xx means the signed URL itself was rejected (expired
-                    // or invalid) — retrying the same URL won't help, so
-                    // bail immediately and let the caller refetch a fresh
-                    // one instead of burning through all retries.
+        let mut last_error: Option<Box<dyn std::error::Error + Send + Sync>> = None;
+        for attempt in 0..MAX_RANGE_RETRIES {
+            let url = &urls[attempt % urls.len()];
+            match tokio::time::timeout(RANGE_TIMEOUT, client.get(url).header("Range", &hdr).send())
+                .await
+            {
+                Ok(Ok(resp)) => {
                     let status = resp.status();
                     if status.is_client_error() {
-                        return Err(Box::from(format!(
+                        last_error = Some(Box::from(format!(
                             "stream url rejected (status {})",
                             status.as_u16()
                         )));
-                    }
-                    match resp.error_for_status() {
-                        Ok(resp) => match resp.bytes().await {
-                            Ok(bytes) => return Ok(bytes),
-                            Err(e) => {
-                                attempts += 1;
-                                if attempts >= max_retries {
-                                    return Err(e.into());
+                    } else {
+                        match resp.error_for_status() {
+                            Ok(resp) => {
+                                match tokio::time::timeout(RANGE_TIMEOUT, resp.bytes()).await {
+                                    Ok(Ok(bytes)) => return Ok(bytes),
+                                    Ok(Err(e)) => last_error = Some(e.into()),
+                                    Err(_) => {
+                                        last_error = Some("stream range body timed out".into())
+                                    }
                                 }
                             }
-                        },
-                        Err(e) => {
-                            attempts += 1;
-                            if attempts >= max_retries {
-                                return Err(e.into());
-                            }
+                            Err(e) => last_error = Some(e.into()),
                         }
                     }
                 }
+                Ok(Err(e)) => {
+                    last_error = Some(e.into());
+                }
                 Err(e) => {
-                    attempts += 1;
-                    if attempts >= max_retries {
-                        return Err(e.into());
-                    }
+                    last_error = Some(e.into());
                 }
             }
-            tokio::time::sleep(backoff).await;
-            backoff *= 2;
+            if attempt + 1 < MAX_RANGE_RETRIES {
+                tokio::time::sleep(Duration::from_millis(200 * (attempt as u64 + 1))).await;
+            }
         }
+        Err(last_error.unwrap_or_else(|| "stream range request exhausted retries".into()))
     }
 
     fn fetch(&self, start: u64, size: u64) -> Result<()> {
@@ -409,6 +468,58 @@ impl StreamingDataSource {
 
         self.buffering.set(false);
 
+        result
+    }
+
+    async fn wait_for_async(&self, pos: u64, min: usize) -> Result<()> {
+        let needed = min.min(self.total_bytes.saturating_sub(pos) as usize);
+
+        let mut last_available = {
+            let buf = self.buffer.lock();
+            let available = buf.available_from(pos);
+            if available >= needed {
+                return Ok(());
+            }
+            available
+        };
+
+        self.buffering.set(true);
+
+        let mut attempts = 0usize;
+        let mut result = Ok(());
+
+        while attempts < MAX_ATTEMPTS {
+            match tokio::time::timeout(Duration::from_millis(500), self.fetch_rx.recv_async()).await
+            {
+                Ok(Ok(_)) => {
+                    let buf = self.buffer.lock();
+                    let available = buf.available_from(pos);
+                    if available >= needed {
+                        break;
+                    }
+
+                    if available > last_available {
+                        attempts = 0;
+                    } else {
+                        attempts += 1;
+                    }
+                    last_available = available;
+                }
+                Ok(Err(_)) => {
+                    result = Err("fetch channel closed".into());
+                    break;
+                }
+                Err(_) => {
+                    attempts += 1;
+                }
+            }
+        }
+
+        if attempts >= MAX_ATTEMPTS {
+            result = Err("wait_for_data timed out".into());
+        }
+
+        self.buffering.set(false);
         result
     }
 
@@ -493,7 +604,7 @@ impl StreamingDataSource {
 
 struct FetchContext {
     client: Client,
-    url: String,
+    urls: Vec<String>,
     buffer: Arc<Mutex<BufferState>>,
     progress: Arc<TrackProgress>,
     generation: Arc<AtomicU64>,
