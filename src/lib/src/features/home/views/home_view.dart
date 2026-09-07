@@ -252,44 +252,25 @@ class _HomeTrackHeaderState extends State<_HomeTrackHeader> {
                               navigateTo(AppSection.album, meta.albumId);
                             }
                           },
-                          child: AnimatedSwitcher(
-                            duration: const Duration(milliseconds: 300),
-                            switchInCurve: Curves.easeOutCubic,
-                            switchOutCurve: Curves.easeInCubic,
-                            transitionBuilder: (child, animation) {
-                              final offset = Tween<Offset>(
-                                begin: const Offset(0, 0.06),
-                                end: Offset.zero,
-                              ).animate(animation);
-                              return FadeTransition(
-                                opacity: animation,
-                                child: SlideTransition(
-                                  position: offset,
-                                  child: child,
-                                ),
-                              );
-                            },
-                            child: Text(
-                              meta.title,
-                              key: ValueKey('home-title-${meta.id}'),
-                              style: TextStyle(
-                                fontSize: widget.small
-                                    ? (widget.isNarrow ? 18 : 32)
-                                    : (widget.isNarrow ? 22 : 42),
-                                fontWeight: FontWeight.w900,
-                                color: Theme.of(context).colorScheme.onSurface,
-                                letterSpacing: -1,
-                                height: 1.05,
-                                decoration: hovered && meta.albumId != null
-                                    ? TextDecoration.underline
-                                    : null,
-                                shadows: widget.isNarrow
-                                    ? null
-                                    : const [Shadow(blurRadius: 20)],
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                          child: Text(
+                            meta.title,
+                            style: TextStyle(
+                              fontSize: widget.small
+                                  ? (widget.isNarrow ? 18 : 32)
+                                  : (widget.isNarrow ? 22 : 42),
+                              fontWeight: FontWeight.w900,
+                              color: Theme.of(context).colorScheme.onSurface,
+                              letterSpacing: -1,
+                              height: 1.05,
+                              decoration: hovered && meta.albumId != null
+                                  ? TextDecoration.underline
+                                  : null,
+                              shadows: widget.isNarrow
+                                  ? null
+                                  : const [Shadow(blurRadius: 20)],
                             ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         );
                       },

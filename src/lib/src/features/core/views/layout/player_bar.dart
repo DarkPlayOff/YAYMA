@@ -155,18 +155,17 @@ class _TrackInfoState extends State<_TrackInfo> {
                     navigateTo(AppSection.album, meta.albumId);
                   }
                 },
-                child: PlayerCoverRectReporter(
-                  child: AnimatedScale(
-                    scale: isPlaying ? 1.0 : 0.96,
-                    duration: const Duration(milliseconds: 350),
-                    curve: Curves.easeInOutCubic,
-                    child: AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 400),
-                      child: ClipRRect(
-                        key: ValueKey(meta.coverUrl),
-                        borderRadius: BorderRadius.circular(AppRadius.sm),
-                        child: Stack(
-                          children: [
+                child: AnimatedScale(
+                  scale: isPlaying ? 1.0 : 0.96,
+                  duration: const Duration(milliseconds: 350),
+                  curve: Curves.easeInOutCubic,
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 400),
+                    child: ClipRRect(
+                      key: ValueKey(meta.coverUrl),
+                      borderRadius: BorderRadius.circular(AppRadius.sm),
+                      child: Stack(
+                        children: [
                             if (meta.coverUrl != null)
                               RustCachedImage(
                                 imageUrl: meta.coverUrl,
@@ -209,8 +208,7 @@ class _TrackInfoState extends State<_TrackInfo> {
                                   },
                                 ),
                               ),
-                          ],
-                        ),
+                        ],
                       ),
                     ),
                   ),

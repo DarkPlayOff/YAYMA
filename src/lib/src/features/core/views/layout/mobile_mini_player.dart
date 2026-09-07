@@ -302,25 +302,24 @@ class _MobileCover extends StatelessWidget {
             scale: isPlaying ? 1.0 : 0.96,
             duration: const Duration(milliseconds: 350),
             curve: Curves.easeInOutCubic,
-            child: PlayerCoverRectReporter(
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(AppRadius.sm),
-                child: meta.coverUrl != null
-                    ? RustCachedImage(
-                        imageUrl: meta.coverUrl,
-                        width: coverSize,
-                        height: coverSize,
-                        errorWidget: Container(
-                          width: coverSize,
-                          height: coverSize,
-                          color: cs.onSurface.withValues(alpha: 0.1),
-                        ),
-                      )
-                    : Container(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(AppRadius.sm),
+              child: meta.coverUrl != null
+                  ? RustCachedImage(
+                      imageUrl: meta.coverUrl,
+                      width: coverSize,
+                      height: coverSize,
+                      errorWidget: Container(
                         width: coverSize,
                         height: coverSize,
                         color: cs.onSurface.withValues(alpha: 0.1),
                       ),
+                    )
+                  : Container(
+                      width: coverSize,
+                      height: coverSize,
+                      color: cs.onSurface.withValues(alpha: 0.1),
+                    ),
               ),
             ),
           ),

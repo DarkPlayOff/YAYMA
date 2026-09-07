@@ -58,7 +58,6 @@ class _CommonTrackTileState extends State<CommonTrackTile> {
   final ValueNotifier<bool> _isPressed = ValueNotifier(false);
   final ValueNotifier<bool> _isTitleHovered = ValueNotifier(false);
   final ValueNotifier<bool> _isMenuOpen = ValueNotifier(false);
-  final GlobalKey _coverKey = GlobalKey();
 
   @override
   void dispose() {
@@ -70,15 +69,6 @@ class _CommonTrackTileState extends State<CommonTrackTile> {
   }
 
   void _handleTap() {
-    if (widget.leading is TrackCover) {
-      final cover = widget.leading! as TrackCover;
-      flyCoverToPlayer(
-        context,
-        coverKey: _coverKey,
-        coverUrl: cover.url,
-        borderRadius: cover.isCircle ? cover.size / 2 : cover.borderRadius,
-      );
-    }
     widget.onTap?.call();
   }
 
@@ -363,12 +353,9 @@ class _CommonTrackTileState extends State<CommonTrackTile> {
                             child: Row(
                               children: [
                                 if (widget.leading != null) ...[
-                                  KeyedSubtree(
-                                    key: _coverKey,
-                                    child: _adjustLeading(
-                                      widget.leading!,
-                                      isNarrow,
-                                    ),
+                                  _adjustLeading(
+                                    widget.leading!,
+                                    isNarrow,
                                   ),
                                   SizedBox(width: isNarrow ? 12 : 16),
                                 ],
