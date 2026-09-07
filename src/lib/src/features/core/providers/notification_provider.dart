@@ -61,6 +61,7 @@ class _GlobalNotificationListenerState extends State<GlobalNotificationListener>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
   late final Animation<Offset> _offsetAnimation;
+  late final EffectCleanup _notificationEffect;
   AppNotification? _currentNotification;
   DateTime? _lastShown;
 
@@ -82,7 +83,7 @@ class _GlobalNotificationListenerState extends State<GlobalNotificationListener>
           ),
         );
 
-    effect(() {
+    _notificationEffect = effect(() {
       final notif = appNotificationSignal.value;
       if (notif == null) return;
       if (_lastShown != null && notif.timestamp.isBefore(_lastShown!)) return;
@@ -116,6 +117,7 @@ class _GlobalNotificationListenerState extends State<GlobalNotificationListener>
 
   @override
   void dispose() {
+    _notificationEffect();
     _controller.dispose();
     super.dispose();
   }

@@ -8,10 +8,13 @@ import 'package:yayma/src/features/core/views/widgets/common_ui.dart';
 import 'package:yayma/src/rust/api/content.dart' as rust;
 import 'package:yayma/src/rust/api/models.dart';
 
-class TrackDetailsDialog extends SignalWidget {
+class TrackDetailsDialog extends StatefulWidget {
   final String trackId;
 
   const TrackDetailsDialog({required this.trackId, super.key});
+
+  @override
+  State<TrackDetailsDialog> createState() => _TrackDetailsDialogState();
 
   static void show(BuildContext context, String trackId) {
     unawaited(
@@ -21,19 +24,26 @@ class TrackDetailsDialog extends SignalWidget {
       ),
     );
   }
+}
+
+class _TrackDetailsDialogState extends State<TrackDetailsDialog> {
+  late final FutureSignal<TrackDetailsDto?> _detailsAsync;
+
+  @override
+  void initState() {
+    super.initState();
+    _detailsAsync = futureSignal(() async {
+      final ctx = appContextSignal.value;
+      if (ctx == null) return null;
+      return rust.getTrackDetails(ctx: ctx, trackId: widget.trackId);
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final detailsAsync = futureSignal(() async {
-      final ctx = appContextSignal.value;
-      if (ctx == null) return null;
-      return rust.getTrackDetails(ctx: ctx, trackId: trackId);
-    });
-
     return SignalBuilder(
       builder: (context) {
-        final result = detailsAsync.value;
+        final result = _detailsAsync.value;
         return result.map(
           loading: () => const Dialog(
             backgroundColor: Colors.transparent,

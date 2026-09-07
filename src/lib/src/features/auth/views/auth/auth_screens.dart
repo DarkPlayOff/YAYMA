@@ -97,6 +97,12 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final _tokenController = TextEditingController();
 
+  @override
+  void dispose() {
+    _tokenController.dispose();
+    super.dispose();
+  }
+
   void _showWebView() {
     if (Platform.isAndroid) {
       Navigator.push<void>(

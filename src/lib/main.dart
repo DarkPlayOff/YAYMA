@@ -79,7 +79,6 @@ class MyApp extends StatelessWidget {
           title: 'YAYMA',
           debugShowCheckedModeBanner: false,
           theme: _buildTheme(scheme2026),
-          localizationsDelegates: GlobalMaterialLocalizations.delegates,
           builder: (context, child) {
             return AnimatedTheme(
               data: _buildTheme(scheme2026),

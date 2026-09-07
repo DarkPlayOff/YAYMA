@@ -320,7 +320,6 @@ class _MobileCover extends StatelessWidget {
                       height: coverSize,
                       color: cs.onSurface.withValues(alpha: 0.1),
                     ),
-              ),
             ),
           ),
         );

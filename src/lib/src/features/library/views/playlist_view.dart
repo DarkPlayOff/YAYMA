@@ -500,47 +500,51 @@ class _PlaylistContentState extends State<_PlaylistContent> {
     PlaylistDetailsDto playlist,
   ) async {
     final controller = TextEditingController(text: playlist.title);
-    await showDialog<void>(
-      context: context,
-      builder: (context) {
-        final cs = Theme.of(context).colorScheme;
-        return AlertDialog(
-          title: Text(
-            'Переименовать плейлист',
-            style: TextStyle(color: cs.onSurface),
-          ),
-          content: TextField(
-            controller: controller,
-            autofocus: true,
-            style: TextStyle(color: cs.onSurface),
-            decoration: InputDecoration(
-              filled: true,
-              fillColor: cs.onSurface.withValues(alpha: 0.05),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(AppRadius.sm),
-                borderSide: BorderSide.none,
+    try {
+      await showDialog<void>(
+        context: context,
+        builder: (context) {
+          final cs = Theme.of(context).colorScheme;
+          return AlertDialog(
+            title: Text(
+              'Переименовать плейлист',
+              style: TextStyle(color: cs.onSurface),
+            ),
+            content: TextField(
+              controller: controller,
+              autofocus: true,
+              style: TextStyle(color: cs.onSurface),
+              decoration: InputDecoration(
+                filled: true,
+                fillColor: cs.onSurface.withValues(alpha: 0.05),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(AppRadius.sm),
+                  borderSide: BorderSide.none,
+                ),
               ),
             ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Отмена'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                if (controller.text.isNotEmpty) {
-                  await renamePlaylistAction(playlist.kind, controller.text);
-                  widget.refresh();
-                  if (context.mounted) Navigator.pop(context);
-                }
-              },
-              child: const Text('Сохранить'),
-            ),
-          ],
-        );
-      },
-    );
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Отмена'),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  if (controller.text.isNotEmpty) {
+                    await renamePlaylistAction(playlist.kind, controller.text);
+                    widget.refresh();
+                    if (context.mounted) Navigator.pop(context);
+                  }
+                },
+                child: const Text('Сохранить'),
+              ),
+            ],
+          );
+        },
+      );
+    } finally {
+      controller.dispose();
+    }
   }
 
   Future<void> _showDeleteConfirm(

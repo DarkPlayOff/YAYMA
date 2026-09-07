@@ -137,7 +137,7 @@ class _LibraryViewState extends State<LibraryView>
             );
           },
         ),
-      ),
+      ).whenComplete(controller.dispose),
     );
   }
 
