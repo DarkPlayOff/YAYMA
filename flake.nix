@@ -53,6 +53,7 @@
               pkgs.gsettings-desktop-schemas
               pkgs.gtk3
               pkgs.jdk
+              pkgs.keybinder3
               pkgs.libayatana-appindicator
               pkgs.libayatana-indicator
               pkgs.libsecret
