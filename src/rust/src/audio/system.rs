@@ -21,6 +21,7 @@ use yandex_music::model::track::Track;
 pub type EffectHandles =
     Arc<parking_lot::RwLock<foldhash::HashMap<String, crate::audio::fx::EffectHandle>>>;
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
+const PREVIOUS_TRACK_RESTART_THRESHOLD: Duration = Duration::from_secs(5);
 
 pub struct AudioSystem {
     controller: AudioController,
@@ -304,7 +305,13 @@ impl AudioSystem {
                 self.play_next().await;
             }
             AudioMessage::Prev => {
-                if let Some(prev_track) = self.queue.get_previous_track() {
+                if self.signals.position_ms.get()
+                    > PREVIOUS_TRACK_RESTART_THRESHOLD.as_millis() as u64
+                {
+                    self.controller.seek(Duration::ZERO).await;
+                    self.signals
+                        .update_progress(0, self.signals.duration_ms.get());
+                } else if let Some(prev_track) = self.queue.get_previous_track() {
                     self.controller
                         .play_track(prev_track, false, Duration::ZERO, false)
                         .await;
