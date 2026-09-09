@@ -1,8 +1,21 @@
 use crate::app::AppContext;
 use crate::audio::commands::AudioMessage;
+use std::collections::HashMap;
+
+fn parse_setting<T: serde::de::DeserializeOwned>(
+    settings: &HashMap<String, String>,
+    key: &str,
+) -> Option<T> {
+    settings
+        .get(key)
+        .and_then(|value| serde_json::from_str(value).ok())
+}
 
 pub async fn load_persisted_settings(ctx: &AppContext) {
-    let mut db = ctx.core.db.lock().await;
+    let settings = {
+        let mut db = ctx.core.db.lock().await;
+        db.load_all_settings().await.unwrap_or_default()
+    };
 
     #[cfg(target_os = "android")]
     {
@@ -10,31 +23,31 @@ pub async fn load_persisted_settings(ctx: &AppContext) {
         // volume from an old ducking bug — on Android there's no in-app slider to
         // recover. Force the in-app volume to 100% on every launch and heal the
         // stored value, then delete the cfg block once the bad value is flushed.
+        let mut db = ctx.core.db.lock().await;
         let _ = db.save_setting("volume", &100u8).await;
         let _ = ctx.audio.tx.send(AudioMessage::SetVolume(100)).await;
     }
 
     #[cfg(not(target_os = "android"))]
     {
-        let volume = db.load_setting::<u8>("volume").await.unwrap_or(Some(100));
+        let volume = parse_setting::<u8>(&settings, "volume").or(Some(100));
 
         if let Some(volume) = volume {
             let _ = ctx.audio.tx.send(AudioMessage::SetVolume(volume)).await;
         }
     }
 
-    if let Ok(Some(quality)) = db
-        .load_setting::<crate::api::models::AudioQuality>("audio_quality")
-        .await
+    if let Some(quality) =
+        parse_setting::<crate::api::models::AudioQuality>(&settings, "audio_quality")
     {
         ctx.core.api.set_quality(quality);
     }
 
-    if let Ok(Some(rpc_enabled)) = db.load_setting::<bool>("discord_rpc").await {
+    if let Some(rpc_enabled) = parse_setting::<bool>(&settings, "discord_rpc") {
         ctx.audio.signals.discord_rpc.set(rpc_enabled);
     }
 
-    if let Ok(Some(device)) = db.load_setting::<String>("audio_device").await
+    if let Some(device) = parse_setting::<String>(&settings, "audio_device")
         && !device.is_empty()
     {
         ctx.audio.signals.selected_device.set(Some(device));
@@ -58,7 +71,7 @@ pub async fn load_persisted_settings(ctx: &AppContext) {
     };
 
     if eq_info.is_some()
-        && let Ok(Some((enabled, bands))) = db.load_equalizer().await
+        && let Some((enabled, bands)) = parse_setting::<(bool, Vec<f32>)>(&settings, "equalizer")
     {
         let guard = ctx.audio.effect_handles.read();
         if let Some(eq) = guard.get("eq") {
@@ -70,7 +83,9 @@ pub async fn load_persisted_settings(ctx: &AppContext) {
     }
 
     for id in other_effects {
-        if let Ok(Some((enabled, params))) = db.load_effect(&id).await {
+        if let Some((enabled, params)) =
+            parse_setting::<(bool, Vec<f32>)>(&settings, &format!("effect_{id}"))
+        {
             let guard = ctx.audio.effect_handles.read();
             if let Some(handle) = guard.get(&id) {
                 handle.set_enabled(enabled);

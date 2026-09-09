@@ -14,13 +14,18 @@ import 'package:yayma/src/features/playback/providers/playback_provider.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  await Future.wait([
-    AppInit.initialize(),
-    if (Platform.isWindows || Platform.isLinux || Platform.isMacOS)
-      windowManager.ensureInitialized(),
-  ]);
+  final isDesktop = Platform.isWindows || Platform.isLinux || Platform.isMacOS;
+  final appInitialization = AppInit.initialize();
+  final windowInitialization = isDesktop
+      ? windowManager.ensureInitialized()
+      : Future<void>.value();
 
-  if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+  runApp(const MyApp());
+
+  await Future.wait([appInitialization, windowInitialization]);
+
+  Future<void>? windowReady;
+  if (isDesktop) {
     final isCustom = customTitlebarSignal.value;
     customTitlebarSignal.value = isCustom;
 
@@ -32,17 +37,20 @@ Future<void> main() async {
       skipTaskbar: false,
       titleBarStyle: isCustom ? TitleBarStyle.hidden : TitleBarStyle.normal,
     );
-    await windowManager.waitUntilReadyToShow(windowOptions, () async {
+    windowReady = windowManager.waitUntilReadyToShow(windowOptions, () async {
       await windowManager.show();
       await windowManager.focus();
     });
-
-    await SystemTrayManager.instance.initialize();
   }
 
-  await GlobalHotkeyService.initialize();
+  // Defer optional desktop integrations until Flutter has rendered its first frame.
+  await WidgetsBinding.instance.endOfFrame;
 
-  runApp(const MyApp());
+  if (windowReady != null) {
+    await windowReady;
+    await SystemTrayManager.instance.initialize();
+    await GlobalHotkeyService.initialize();
+  }
 }
 
 class MyApp extends StatelessWidget {
@@ -74,14 +82,15 @@ class MyApp extends StatelessWidget {
                 onTertiaryContainer: base.onTertiaryContainer,
                 onErrorContainer: base.onErrorContainer,
               );
+        final theme = _buildTheme(scheme2026);
 
         return MaterialApp(
           title: 'YAYMA',
           debugShowCheckedModeBanner: false,
-          theme: _buildTheme(scheme2026),
+          theme: theme,
           builder: (context, child) {
             return AnimatedTheme(
-              data: _buildTheme(scheme2026),
+              data: theme,
               duration: const Duration(milliseconds: 300),
               curve: Curves.easeOut,
               child: RepaintBoundary(

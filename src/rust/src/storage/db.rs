@@ -1,5 +1,6 @@
 use crate::api::models::TrackArtistDto;
 use crate::storage::models::*;
+use std::collections::HashMap;
 use std::path::PathBuf;
 use toasty::Db;
 use tokio::sync::OnceCell;
@@ -391,6 +392,14 @@ impl AppDatabase {
             return Ok(Some(parsed));
         }
         Ok(None)
+    }
+
+    pub async fn load_all_settings(&mut self) -> toasty::Result<HashMap<String, String>> {
+        let settings: Vec<AppSetting> = AppSetting::all().exec(&mut self.db).await?;
+        Ok(settings
+            .into_iter()
+            .map(|setting| (setting.key, setting.value))
+            .collect())
     }
 
     pub async fn save_app_setting(&mut self, key: &str, value: &str) -> toasty::Result<()> {

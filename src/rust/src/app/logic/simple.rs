@@ -2,6 +2,16 @@ use crate::api::models::InitialSettingsDto;
 use crate::api::simple::AppEvent;
 use crate::app::AppContext;
 use crate::frb_generated::StreamSink;
+use std::collections::HashMap;
+
+fn parse_setting<T: serde::de::DeserializeOwned>(
+    settings: &HashMap<String, String>,
+    key: &str,
+) -> Option<T> {
+    settings
+        .get(key)
+        .and_then(|value| serde_json::from_str(value).ok())
+}
 
 pub fn get_app_version() -> String {
     env!("PUBSPEC_VERSION").to_string()
@@ -187,38 +197,16 @@ pub async fn get_initial_settings() -> InitialSettingsDto {
         return InitialSettingsDto::default();
     };
     let mut db = database.lock().await;
+    let settings = db.load_all_settings().await.unwrap_or_default();
     InitialSettingsDto {
-        custom_titlebar: db
-            .load_setting("custom_titlebar")
-            .await
-            .unwrap_or(Some(true))
-            .unwrap_or(true),
-        auto_hide_navbar: db
-            .load_setting("auto_hide_navbar")
-            .await
-            .unwrap_or(Some(false))
-            .unwrap_or(false),
-        close_to_tray: db
-            .load_setting("close_to_tray")
-            .await
-            .unwrap_or(Some(true))
-            .unwrap_or(true),
-        vibe_animation_enabled: db
-            .load_setting("vibe_animation_enabled")
-            .await
-            .unwrap_or(Some(true))
-            .unwrap_or(true),
-        vibe_render_scale: db
-            .load_setting::<f64>("vibe_render_scale")
-            .await
-            .unwrap_or(Some(0.50))
+        custom_titlebar: parse_setting(&settings, "custom_titlebar").unwrap_or(true),
+        auto_hide_navbar: parse_setting(&settings, "auto_hide_navbar").unwrap_or(false),
+        close_to_tray: parse_setting(&settings, "close_to_tray").unwrap_or(true),
+        vibe_animation_enabled: parse_setting(&settings, "vibe_animation_enabled").unwrap_or(true),
+        vibe_render_scale: parse_setting::<f64>(&settings, "vibe_render_scale")
             .unwrap_or(0.50)
             .clamp(0.25, 0.50),
-        blur_effects_enabled: db
-            .load_setting("blur_effects_enabled")
-            .await
-            .unwrap_or(Some(true))
-            .unwrap_or(true),
+        blur_effects_enabled: parse_setting(&settings, "blur_effects_enabled").unwrap_or(true),
     }
 }
 
