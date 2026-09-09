@@ -212,10 +212,12 @@ class PixelPerfectVibePainter extends CustomPainter {
         ..setFloat(b + 2, boost)
         ..setFloat(b + 3, 0.6 * react);
 
-      // Conservative bound: spark <= 1.2, blob noise wobble <= 0.35.
+      // Conservative bound: transformed spark <= 1.2 * SPARK_GAIN (0.48),
+      // blob noise wobble <= 0.35.
       // Must stay in sync with the outer-radius formula in vibe.frag,
       // including its direct AUDIO_PUMP_GAIN term.
-      final brMax = 1.2 * (1.0 - 0.3 * i);
+      const sparkMax = 1.2 * 0.4; // polynomial maximum * SPARK_GAIN
+      final brMax = sparkMax * (1.0 - 0.3 * i);
       final outer =
           1.9 - 0.25 * i + brMax * (1.0 + boost * brMax) + boost * 0.008;
       if (outer > maxOuter) maxOuter = outer;

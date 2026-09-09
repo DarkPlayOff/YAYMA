@@ -164,13 +164,13 @@ void main() {
         vec2 blobUv = uv * blobA.w + blobA.xy;
         float blobLen = length(blobUv);
         float blobNoise = snoise3(vec3(blobUv * 1.2 + 1.57 * blobIndex, blobA.z)) * 0.5 + 0.5;
-        float edgeMask = smoothstep(blobNoise + blobB.x, blobNoise, blobLen);
+        float edgeMask = 1.0 - smoothstep(blobNoise, blobNoise + blobB.x, blobLen);
         float coreGlow = blobB.y / (1.0 + abs(blobLen - blobNoise) * 11.0);
 
         vec3 blobColor = clamp(mix(vColor[i], vColor[i + 3], clamp(blobUv.y * 2.0, 0.0, 1.0)) + coreGlow,
                          0.0, 1.0) +
                    blobB.w * (1.0 - smoothstep(0.2, outer * 0.8, mainLen));
-        color = mix(color, blobColor, edgeMask * smoothstep(outer, 0.5, mainLen));
+        color = mix(color, blobColor, edgeMask * (1.0 - smoothstep(0.5, outer, mainLen)));
       }
     }
 
