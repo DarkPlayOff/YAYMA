@@ -33,3 +33,28 @@ impl HistoryState {
         self.entries.clone()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::util::track::test_track;
+
+    #[test]
+    fn push_caps_at_max_and_keeps_newest() {
+        let mut h = HistoryState::empty();
+        for i in 0..150 {
+            h.push(test_track(&format!("t{i}")));
+        }
+        assert_eq!(h.entries.len(), 100);
+        assert_eq!(h.entries.front().unwrap().id, "t50");
+        assert_eq!(h.entries.back().unwrap().id, "t149");
+    }
+
+    #[test]
+    fn reset_clears() {
+        let mut h = HistoryState::empty();
+        h.push(test_track("a"));
+        h.reset();
+        assert!(h.entries.is_empty());
+    }
+}

@@ -89,3 +89,69 @@ impl Effect for OverdriveEffect {
         self.tone_filter.reset();
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn effect() -> (OverdriveEffect, Arc<EffectParams>) {
+        let info = vec![
+            crate::audio::fx::param::ParamInfo {
+                name: "Drive",
+                min: 0.0,
+                max: 1.0,
+                default: 0.5,
+                step: 0.05,
+                unit: "",
+            },
+            crate::audio::fx::param::ParamInfo {
+                name: "Tone",
+                min: 1000.0,
+                max: 10000.0,
+                default: 3000.0,
+                step: 10.0,
+                unit: "Hz",
+            },
+            crate::audio::fx::param::ParamInfo {
+                name: "Mix",
+                min: 0.0,
+                max: 1.0,
+                default: 0.5,
+                step: 0.05,
+                unit: "",
+            },
+        ];
+        let params = Arc::new(EffectParams::new(&info));
+        let effect = OverdriveEffect::new(params.clone(), 44100.0);
+        (effect, params)
+    }
+
+    #[test]
+    fn dry_mix_keeps_channels_separate() {
+        let (mut fx, params) = effect();
+        params.set(2, 0.0); // mix = 0 → pure dry
+        let left_in: Vec<f32> = (0..256).map(|i| i as f32 / 256.0).collect();
+        let right_in: Vec<f32> = (0..256).map(|i| 1.0 - i as f32 / 256.0).collect();
+        let mut left = left_in.clone();
+        let mut right = right_in.clone();
+        fx.process(&mut left, &mut right);
+        // Right dry must come from the RIGHT input, not the left.
+        assert_eq!(left, left_in);
+        assert_eq!(right, right_in);
+    }
+
+    #[test]
+    fn blocks_larger_than_max_block_are_fully_processed() {
+        let (mut fx, params) = effect();
+        params.set(0, 0.0); // drive = 1.0
+        params.set(2, 1.0); // mix = 1 → pure wet
+        let mut left = vec![0.25f32; 600];
+        let mut right = vec![0.25f32; 600];
+        fx.process(&mut left, &mut right);
+        // Tail past MAX_BLOCK (512) must be processed, not left as dry input.
+        // The 80Hz highpass settles DC to ~0 well before sample 550.
+        assert!((left[550] - 0.25).abs() > 0.01);
+        assert!((right[550] - 0.25).abs() > 0.01);
+        assert!(left.iter().all(|v| v.is_finite()));
+    }
+}

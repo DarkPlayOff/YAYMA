@@ -159,3 +159,88 @@ impl EffectChain {
         self.handles.clear();
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::audio::fx::param::ParamInfo;
+
+    struct GainEffect {
+        gain: f32,
+    }
+
+    impl super::super::Effect for GainEffect {
+        fn process(&mut self, left: &mut [f32], right: &mut [f32]) {
+            for (l, r) in left.iter_mut().zip(right.iter_mut()) {
+                *l *= self.gain;
+                *r *= self.gain;
+            }
+        }
+
+        fn reset(&mut self) {}
+    }
+
+    fn chain_with_gain(channels: u16, gain: f32, enabled: bool) -> EffectChain {
+        let mut chain = EffectChain::new(channels, 44100);
+        let params = Arc::new(EffectParams::new(&[ParamInfo {
+            name: "gain",
+            min: 0.0,
+            max: 4.0,
+            default: 1.0,
+            step: 0.1,
+            unit: "",
+        }]));
+        params.set_enabled(enabled);
+        chain.add_effect(
+            "gain",
+            "Gain",
+            Box::new(GainEffect { gain }),
+            params,
+        );
+        chain
+    }
+
+    #[test]
+    fn empty_chain_leaves_buffer_untouched() {
+        let mut chain = EffectChain::new(2, 44100);
+        let mut buf = vec![0.5f32; 8];
+        let snapshot = buf.clone();
+        chain.process_block(&mut buf, 8);
+        assert_eq!(buf, snapshot);
+    }
+
+    #[test]
+    fn stereo_effect_processes_both_channels() {
+        let mut chain = chain_with_gain(2, 2.0, true);
+        // L/R interleaved: [l0, r0, l1, r1]
+        let mut buf = vec![0.25, 0.5, 0.25, 0.5];
+        chain.process_block(&mut buf, 4);
+        assert_eq!(buf, vec![0.5, 1.0, 0.5, 1.0]);
+    }
+
+    #[test]
+    fn disabled_effect_is_skipped() {
+        let mut chain = chain_with_gain(2, 2.0, false);
+        let mut buf = vec![0.25, 0.5, 0.25, 0.5];
+        let snapshot = buf.clone();
+        chain.process_block(&mut buf, 4);
+        assert_eq!(buf, snapshot);
+    }
+
+    #[test]
+    fn mono_tracks_go_through_effects() {
+        // Regression test: mono used to bypass the whole chain.
+        let mut chain = chain_with_gain(1, 2.0, true);
+        let mut buf = vec![0.25, 0.25, 0.25, 0.25];
+        chain.process_block(&mut buf, 4);
+        assert_eq!(buf, vec![0.5, 0.5, 0.5, 0.5]);
+    }
+
+    #[test]
+    fn extra_channels_pass_through_untouched() {
+        let mut chain = chain_with_gain(4, 2.0, true);
+        let mut buf = vec![0.25, 0.5, 0.75, 1.0];
+        chain.process_block(&mut buf, 4);
+        assert_eq!(buf, vec![0.5, 1.0, 0.75, 1.0]);
+    }
+}

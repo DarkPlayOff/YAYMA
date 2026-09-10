@@ -198,3 +198,60 @@ fn flush_denormal(v: f32) -> f32 {
         0.0
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn nan_input_does_not_poison_state() {
+        let mut f = StereoBiquad::new();
+        f.update(FilterType::LowPass, 1000.0, 0.707, 0.0, 44100.0);
+        let mut left = [f32::NAN, 1.0, 0.5, 0.0];
+        let mut right = [0.25, f32::INFINITY, -0.5, 0.0];
+        f.process_block(&mut left, &mut right);
+        assert!(left.iter().all(|v| v.is_finite()));
+        assert!(right.iter().all(|v| v.is_finite()));
+        // State must recover: silence in, silence out.
+        let mut l2 = [0.0; 64];
+        let mut r2 = [0.0; 64];
+        f.process_block(&mut l2, &mut r2);
+        assert!(l2.iter().all(|v| v.is_finite()));
+        assert!(r2.iter().all(|v| v.is_finite()));
+    }
+
+    #[test]
+    fn silence_decays_to_exact_zero() {
+        let mut f = StereoBiquad::new();
+        f.update(FilterType::LowPass, 100.0, 0.707, 0.0, 44100.0);
+        let mut left = [1.0; 32];
+        let mut right = [1.0; 32];
+        f.process_block(&mut left, &mut right);
+        // Pole magnitude ≈ 0.99/sample: one 4096-block only reaches ~1e-18,
+        // still above the 1e-20 flush threshold. Two blocks reach ~1e-36.
+        for _ in 0..2 {
+            let mut lz = [0.0; 4096];
+            let mut rz = [0.0; 4096];
+            f.process_block(&mut lz, &mut rz);
+            assert!(lz.iter().all(|v| v.is_finite()));
+        }
+        // Next block must be exactly zero — no denormal residue, no ringing.
+        let mut lz2 = [0.0; 64];
+        let mut rz2 = [0.0; 64];
+        f.process_block(&mut lz2, &mut rz2);
+        assert!(lz2.iter().all(|&v| v == 0.0));
+        assert!(rz2.iter().all(|&v| v == 0.0));
+    }
+
+    #[test]
+    fn invalid_params_do_not_panic_or_poison() {
+        let mut f = StereoBiquad::new();
+        // NaN freq/Q/gain fall back to sane defaults (bad sample_rate is a
+        // debug_assert programming error, tested separately by inspection).
+        f.update(FilterType::Peak, f32::NAN, f32::INFINITY, f32::NAN, 44100.0);
+        let mut left = [0.5; 16];
+        let mut right = [0.5; 16];
+        f.process_block(&mut left, &mut right);
+        assert!(left.iter().all(|v| v.is_finite()));
+    }
+}

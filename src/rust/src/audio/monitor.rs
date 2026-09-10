@@ -375,3 +375,34 @@ impl Clone for Monitor {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn vibe_bands_read_is_non_destructive() {
+        let monitor = Monitor::new(1024);
+        let block = vec![0.5f32; 256];
+        monitor.process_block(&block, &block);
+        let first = monitor.vibe_bands();
+        assert!(first[0] > 0.1, "bass band must observe DC energy");
+        // Old swap-on-read returned zeros on the second poll; max-hold keeps values.
+        let second = monitor.vibe_bands();
+        assert_eq!(first, second);
+    }
+
+    #[test]
+    fn peak_decay_happens_per_block_not_per_sample() {
+        let tracker = AmplitudeTracker::new(1.0, 0.0, 0, 44100);
+        tracker.process(1.0);
+        assert_eq!(f32::from_bits(tracker.peak.load(Ordering::Relaxed)), 1.0);
+        // 100 samples at zero: per-sample decay would already collapse the peak.
+        for _ in 0..100 {
+            tracker.process(0.0);
+        }
+        tracker.tick_block();
+        let peak = f32::from_bits(tracker.peak.load(Ordering::Relaxed));
+        assert!(peak > 0.9, "peak must survive 100 silent samples, got {peak}");
+    }
+}

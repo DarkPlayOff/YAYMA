@@ -726,3 +726,100 @@ pub fn as_wave_seed(track: &Track) -> String {
         track.id.clone()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::audio::cache::UrlCache;
+    use crate::audio::signals::AudioSignals;
+    use crate::storage::cache::TrackCache;
+    use crate::util::track::test_track;
+
+    async fn manager() -> QueueManager {
+        let api = Arc::new(
+            crate::http::ApiService::new("test-token".to_string(), Some(12345))
+                .await
+                .expect("api builds offline"),
+        );
+        let url_cache = UrlCache::new();
+        let track_cache = Arc::new(TrackCache::new(None));
+        let stream_manager = Arc::new(StreamManager::new(
+            api.clone(),
+            url_cache.clone(),
+            track_cache,
+        ));
+        QueueManager::new(
+            api,
+            url_cache,
+            stream_manager,
+            AudioSignals::new(),
+            Arc::new(TrackProgress::default()),
+        )
+    }
+
+    fn standalone(n: usize) -> Vector<Track> {
+        (0..n).map(|i| test_track(&format!("t{i}"))).collect()
+    }
+
+    #[tokio::test]
+    async fn load_keeps_prefix_so_prev_works_from_middle() {
+        let mut q = manager().await;
+        let first = q
+            .load(PlaybackContext::Standalone, standalone(5), 2)
+            .await
+            .expect("load returns start track");
+        assert_eq!(first.id, "t2");
+        // Regression test for slice_from: tracks before start_index survive.
+        let prev = q.get_previous_track().expect("prev exists");
+        assert_eq!(prev.id, "t1");
+        let next = q.get_next_track().await.expect("next exists");
+        assert_eq!(next.id, "t2");
+    }
+
+    #[tokio::test]
+    async fn next_advances_and_ends_at_tail() {
+        let mut q = manager().await;
+        q.load(PlaybackContext::Standalone, standalone(3), 0).await;
+        assert_eq!(q.get_next_track().await.unwrap().id, "t1");
+        assert_eq!(q.get_next_track().await.unwrap().id, "t2");
+        assert!(q.get_next_track().await.is_none());
+    }
+
+    #[tokio::test]
+    async fn repeat_all_wraps_around() {
+        let mut q = manager().await;
+        q.load(PlaybackContext::Standalone, standalone(2), 1).await;
+        q.toggle_repeat_mode(); // None -> All
+        assert_eq!(q.get_next_track().await.unwrap().id, "t0");
+    }
+
+    #[tokio::test]
+    async fn remove_current_track_stays_navigable() {
+        let mut q = manager().await;
+        q.load(PlaybackContext::Standalone, standalone(3), 1).await;
+        q.remove_track(1); // remove "t1" under the cursor
+        // Cursor clamps into range: prev/next must not panic or dangle.
+        let prev = q.get_previous_track().expect("prev exists");
+        assert_eq!(prev.id, "t0");
+        assert!(q.get_next_track().await.is_some());
+    }
+
+    #[tokio::test]
+    async fn clear_empties_queue() {
+        let mut q = manager().await;
+        q.load(PlaybackContext::Standalone, standalone(3), 0).await;
+        q.clear();
+        assert!(q.get_next_track().await.is_none());
+        assert!(q.get_previous_track().is_none());
+    }
+
+    #[tokio::test]
+    async fn shuffle_roundtrip_restores_walk_order() {
+        let mut q = manager().await;
+        q.load(PlaybackContext::Standalone, standalone(4), 0).await;
+        q.toggle_shuffle();
+        q.toggle_shuffle();
+        assert_eq!(q.get_next_track().await.unwrap().id, "t1");
+        assert_eq!(q.get_next_track().await.unwrap().id, "t2");
+    }
+}

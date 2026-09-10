@@ -287,4 +287,21 @@ mod tests {
         cache.finish("track-42", second, None);
         assert!(!cache.in_flight.contains_key("track-42"));
     }
+
+    #[test]
+    fn duplicate_prewarm_start_is_rejected() {
+        let mut cache = PrewarmCache::default();
+        cache.start("track-7").expect("first attempt starts");
+        assert!(cache.start("track-7").is_none());
+        assert!(!cache.has_ready("track-7"));
+    }
+
+    #[test]
+    fn invalidate_unblocks_a_new_attempt() {
+        let mut cache = PrewarmCache::default();
+        cache.start("track-7").expect("first attempt starts");
+        cache.invalidate("track-7");
+        assert!(!cache.has_ready("track-7"));
+        cache.start("track-7").expect("attempt restarts after invalidate");
+    }
 }

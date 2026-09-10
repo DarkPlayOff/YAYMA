@@ -91,6 +91,54 @@ impl EffectParams {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn params() -> EffectParams {
+        EffectParams::new(&[ParamInfo {
+            name: "gain",
+            min: 0.0,
+            max: 1.0,
+            default: 0.5,
+            step: 0.1,
+            unit: "",
+        }])
+    }
+
+    #[test]
+    fn nan_and_infinite_sets_are_ignored() {
+        let p = params();
+        p.set(0, f32::NAN);
+        assert_eq!(p.get(0), 0.5);
+        p.set(0, f32::INFINITY);
+        assert_eq!(p.get(0), 0.5);
+        p.set(0, f32::NEG_INFINITY);
+        assert_eq!(p.get(0), 0.5);
+    }
+
+    #[test]
+    fn values_are_clamped() {
+        let p = params();
+        p.set(0, 5.0);
+        assert_eq!(p.get(0), 1.0);
+        p.set(0, -5.0);
+        assert_eq!(p.get(0), 0.0);
+    }
+
+    #[test]
+    fn oob_access_never_corrupts_valid_params() {
+        let p = params();
+        // Out-of-bounds access must not touch valid slots in any profile:
+        // debug builds trap via debug_assert, release builds ignore.
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            p.set(99, 1.0);
+            p.get(99)
+        }));
+        assert_eq!(p.get(0), 0.5);
+    }
+}
+
 #[derive(Clone)]
 pub struct EffectHandle {
     pub id: String,

@@ -326,4 +326,14 @@ mod tests {
         );
         assert_eq!(state.pending_track_ids, vec!["first"]);
     }
+
+    #[test]
+    fn reset_clears_pending_and_session() {
+        let mut state = FetchState::new();
+        state.set_pending_ids(vec!["a".into()]).unwrap();
+        state.reset();
+        assert!(state.pending_track_ids.is_empty());
+        assert!(!state.is_fetching());
+        assert!(state.wave_session_clone().is_none());
+    }
 }

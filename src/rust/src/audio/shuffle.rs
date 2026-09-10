@@ -91,3 +91,62 @@ impl ShuffleState {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::util::track::test_track;
+
+    fn queue(ids: &[&str]) -> Vector<Track> {
+        ids.iter().map(|id| test_track(id)).collect()
+    }
+
+    fn ids(v: &Vector<Track>) -> Vec<String> {
+        v.iter().map(|t| t.id.clone()).collect()
+    }
+
+    #[test]
+    fn enable_keeps_current_first_and_disable_restores_order() {
+        let mut s = ShuffleState::inactive();
+        let q = queue(&["a", "b", "c", "d", "e"]);
+        let (shuffled, new_index) = s.enable(q.clone(), 2);
+        // Current track stays first at index 0.
+        assert_eq!(new_index, 0);
+        assert_eq!(shuffled[0].id, "c");
+        // Same multiset of tracks.
+        let mut got = ids(&shuffled);
+        got.sort();
+        assert_eq!(got, vec!["a", "b", "c", "d", "e"]);
+
+        let (restored, restored_index) =
+            s.disable(new_index).expect("disable must return original");
+        assert_eq!(ids(&restored), vec!["a", "b", "c", "d", "e"]);
+        // "c" was at index 2 originally.
+        assert_eq!(restored_index, 2);
+    }
+
+    #[test]
+    fn remove_keeps_disable_mapping_valid() {
+        let mut s = ShuffleState::inactive();
+        let q = queue(&["a", "b", "c", "d"]);
+        let (mut shuffled, _) = s.enable(q, 0);
+        assert_eq!(shuffled[0].id, "a");
+        // Remove shuffled position 1 (whatever track it holds).
+        shuffled.remove(1);
+        s.record_removed(1);
+        // disable(0) must still map to original index of "a" == 0.
+        let (_, restored_index) = s.disable(0).expect("disable must work");
+        assert_eq!(restored_index, 0);
+    }
+
+    #[test]
+    fn insert_does_not_break_mapping() {
+        let mut s = ShuffleState::inactive();
+        let q = queue(&["a", "b", "c"]);
+        let (mut shuffled, _) = s.enable(q, 0);
+        shuffled.insert(1, test_track("x"));
+        s.record_inserted(1);
+        let (_, restored_index) = s.disable(0).expect("disable must work");
+        assert_eq!(restored_index, 0);
+    }
+}

@@ -181,3 +181,11 @@ pub async fn fetch_full_tracks(
         }
     }
 }
+
+/// Minimal `Track` for unit tests. Only `id`/`realId` are required by the
+/// model's deserializer; everything else defaults.
+#[cfg(test)]
+pub fn test_track(id: &str) -> Track {
+    serde_json::from_value(serde_json::json!({ "id": id, "realId": id }))
+        .expect("test track JSON must deserialize")
+}
