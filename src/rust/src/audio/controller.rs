@@ -95,6 +95,7 @@ impl AudioController {
                     if buffering_duration >= std::time::Duration::from_secs(15) {
                         error_sink("Buffering timed out after 15s, playback paused".to_string());
                         controller.pause().await;
+                        signals.set_buffering(false);
                         buffering_duration = std::time::Duration::ZERO;
                     }
                 } else {
@@ -115,14 +116,17 @@ impl AudioController {
                         {
                             stream_error_retries.fetch_add(1, Ordering::SeqCst);
                             signals.set_buffering(true);
-                            let _ = tx.send(AudioMessage::ReloadCurrentTrack).await;
+                            // Non-blocking: never stall the monitor on a full actor queue.
+                            if tx.try_send(AudioMessage::ReloadCurrentTrack).is_err() {
+                                reload_in_flight.store(0, Ordering::SeqCst);
+                            }
                             continue;
                         }
 
                         stream_error_retries.store(0, Ordering::SeqCst);
                         signals.set_playing(false);
                         signals.is_stopped.set(true);
-                        let _ = tx.send(AudioMessage::TrackEnded).await;
+                        let _ = tx.try_send(AudioMessage::TrackEnded);
                         continue;
                     }
 
@@ -139,6 +143,13 @@ impl AudioController {
 
                         let amp = signals.monitor.combined_amplitude();
                         signals.amplitude.set(amp);
+                    } else {
+                        // Keep position fresh while unfocused: Prev threshold
+                        // and reload use position_ms, only heavy UI updates
+                        // (amplitude/buffered) stay gated.
+                        let pos = engine.pos();
+                        signals.update_progress(pos.as_millis() as u64, signals.duration_ms.get());
+                        progress.read().set_current_position(pos);
                     }
                 }
             }
@@ -343,10 +354,17 @@ impl AudioController {
                         if !start_paused {
                             signals.set_playing(true);
                         }
-                        let _ = tx.send(AudioMessage::ReloadCurrentTrack).await;
+                        if tx.try_send(AudioMessage::ReloadCurrentTrack).is_err() {
+                            reload_in_flight.store(0, Ordering::SeqCst);
+                            signals.set_buffering(false);
+                        }
                         return;
                     }
 
+                    // Release the reload gate: it is only cleared on success,
+                    // so a failed reload would otherwise block all future
+                    // recovery attempts forever.
+                    reload_in_flight.store(0, Ordering::SeqCst);
                     tracing::error!("Failed to create stream session: {:?}", e);
                     signals.set_buffering(false);
                     signals.set_playing(false);
@@ -383,13 +401,22 @@ impl AudioController {
     }
 
     pub(crate) async fn resume(&self) {
+        if self.engine.is_empty() && self.signals.current_track.get().is_none() {
+            return;
+        }
         self.engine.play();
         self.signals.set_playing(true);
     }
 
     pub(crate) async fn seek(&self, pos: std::time::Duration) {
-        let _ = self.engine.try_seek(pos);
-        self.track_progress.read().set_current_position(pos);
+        if self.engine.try_seek(pos).is_err() {
+            // Unsupported seek: keep UI and engine in sync at zero instead of
+            // showing `pos` while audio restarts from the beginning.
+            self.track_progress.read().set_current_position(std::time::Duration::ZERO);
+            self.signals.update_progress(0, self.signals.duration_ms.get());
+        } else {
+            self.track_progress.read().set_current_position(pos);
+        }
     }
 
     pub fn get_effect_handles(&self) -> Arc<RwLock<HashMap<String, EffectHandle>>> {
@@ -397,7 +424,7 @@ impl AudioController {
     }
 
     pub fn set_volume(&self, volume: f32) {
-        let vol_u8 = (volume * 100.0) as u8;
+        let vol_u8 = (volume * 100.0).round().clamp(0.0, 100.0) as u8;
         self.signals.set_volume(vol_u8.min(100), false);
         self.apply_volume();
     }

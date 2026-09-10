@@ -5,6 +5,10 @@ use yandex_music::model::track::Track;
 
 #[derive(Debug, Clone)]
 pub enum AudioMessage {
+    ContextFetched {
+        generation: u64,
+        result: Result<(PlaybackContext, Vector<Track>, usize), String>,
+    },
     // Basic playback
     PlayPause,
     Pause,

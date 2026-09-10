@@ -362,6 +362,18 @@ impl StreamingDataSource {
             {
                 Ok(Ok(resp)) => {
                     let status = resp.status();
+                    // Fail fast on client errors (e.g. 403 expired URL, 404):
+                    // retrying other mirrors won't help and only adds latency.
+                    // 408/429 are retryable.
+                    if status.is_client_error()
+                        && status.as_u16() != 408
+                        && status.as_u16() != 429
+                    {
+                        return Err(Box::from(format!(
+                            "stream url rejected (status {})",
+                            status.as_u16()
+                        )));
+                    }
                     if status.is_client_error() {
                         last_error = Some(Box::from(format!(
                             "stream url rejected (status {})",
@@ -370,11 +382,29 @@ impl StreamingDataSource {
                     } else {
                         match resp.error_for_status() {
                             Ok(resp) => {
-                                match tokio::time::timeout(RANGE_TIMEOUT, resp.bytes()).await {
-                                    Ok(Ok(bytes)) => return Ok(bytes),
-                                    Ok(Err(e)) => last_error = Some(e.into()),
-                                    Err(_) => {
-                                        last_error = Some("stream range body timed out".into())
+                                // Validate Content-Range when server answers 206.
+                                if resp.status().as_u16() == 206
+                                    && let Some(range) = resp.headers().get("content-range")
+                                    && let Ok(s) = range.to_str()
+                                    && let Some(unit) = s.split_whitespace().next()
+                                    && unit != "bytes"
+                                {
+                                    last_error = Some("invalid content-range unit".into());
+                                } else {
+                                    match tokio::time::timeout(RANGE_TIMEOUT, resp.bytes()).await {
+                                        Ok(Ok(bytes)) => {
+                                            if bytes.is_empty() {
+                                                last_error = Some(
+                                                    "empty stream range body".into(),
+                                                );
+                                            } else {
+                                                return Ok(bytes);
+                                            }
+                                        }
+                                        Ok(Err(e)) => last_error = Some(e.into()),
+                                        Err(_) => {
+                                            last_error = Some("stream range body timed out".into())
+                                        }
                                     }
                                 }
                             }
@@ -686,6 +716,8 @@ impl Seek for StreamingDataSource {
 impl Drop for StreamingDataSource {
     fn drop(&mut self) {
         let _ = self.fetch_tx.send(FetchCommand::Shutdown);
-        if let Some(_h) = self.task_handle.take() {}
+        if let Some(handle) = self.task_handle.take() {
+            handle.abort();
+        }
     }
 }

@@ -5,7 +5,7 @@ use crate::storage::cache::TrackCache;
 use crate::stream;
 use foldhash::HashMap;
 use parking_lot::Mutex;
-use std::collections::{HashSet, VecDeque};
+use std::collections::VecDeque;
 use std::sync::Arc;
 
 use yandex_music::model::track::Track;
@@ -28,29 +28,33 @@ const MAX_PREWARM_ENTRIES: usize = 1;
 #[derive(Default)]
 struct PrewarmCache {
     entries: HashMap<String, PreparedStream>,
-    in_flight: HashSet<String>,
+    in_flight: HashMap<String, u64>,
+    next_generation: u64,
     // Insertion order, oldest first, for FIFO eviction once `entries` is full.
     order: VecDeque<String>,
 }
 
 impl PrewarmCache {
     fn contains(&self, id: &str) -> bool {
-        self.entries.contains_key(id) || self.in_flight.contains(id)
+        self.entries.contains_key(id) || self.in_flight.contains_key(id)
     }
 
-    fn start(&mut self, id: &str) -> bool {
-        if self.contains(id) || self.in_flight.len() >= MAX_PREWARM_ENTRIES {
-            return false;
+    fn start(&mut self, id: &str) -> Option<u64> {
+        if self.contains(id) || self.entries.len() + self.in_flight.len() >= MAX_PREWARM_ENTRIES {
+            return None;
         }
-        self.in_flight.insert(id.to_owned());
-        true
+        self.next_generation = self.next_generation.wrapping_add(1);
+        let generation = self.next_generation;
+        self.in_flight.insert(id.to_owned(), generation);
+        Some(generation)
     }
 
-    fn finish(&mut self, id: &str, result: Option<PreparedStream>) {
-        if self.in_flight.remove(id)
-            && let Some(result) = result
-        {
-            self.insert(id.to_owned(), result);
+    fn finish(&mut self, id: &str, generation: u64, result: Option<PreparedStream>) {
+        if self.in_flight.get(id) == Some(&generation) {
+            self.in_flight.remove(id);
+            if let Some(result) = result {
+                self.insert(id.to_owned(), result);
+            }
         }
     }
 
@@ -60,6 +64,11 @@ impl PrewarmCache {
             self.order.retain(|existing| existing != id);
         }
         result
+    }
+
+    fn invalidate(&mut self, id: &str) -> Option<PreparedStream> {
+        self.in_flight.remove(id);
+        self.remove(id)
     }
 
     fn insert(&mut self, id: String, result: PreparedStream) {
@@ -94,7 +103,7 @@ impl StreamManager {
             .pool_idle_timeout(std::time::Duration::from_secs(60))
             .timeout(std::time::Duration::from_secs(10))
             .build()
-            .expect("failed to create streaming http client");
+            .unwrap_or_else(|_| reqwest::Client::new());
 
         Self {
             api,
@@ -107,22 +116,29 @@ impl StreamManager {
 
     pub fn prewarm(&self, track: Track) {
         let id = track.id.clone();
-        if !self.prewarm_cache.lock().start(&id) {
+        let Some(generation) = self.prewarm_cache.lock().start(&id) else {
             return;
-        }
+        };
 
         let this = self.clone();
         tokio::spawn(async move {
-            let result = this.create_stream_session(&track).await.ok();
-            this.prewarm_cache.lock().finish(&track.id, result);
+            let result = match this.create_stream_session(&track).await {
+                Ok(session) => Some(session),
+                Err(e) => {
+                    tracing::warn!(track_id = %track.id, error = %e, "prewarm_failed");
+                    None
+                }
+            };
+            this.prewarm_cache
+                .lock()
+                .finish(&track.id, generation, result);
         });
     }
 
     pub fn invalidate_track(&self, track_id: &str) {
         self.url_cache.remove(track_id);
         let mut cache = self.prewarm_cache.lock();
-        cache.remove(track_id);
-        cache.in_flight.remove(track_id);
+        cache.invalidate(track_id);
     }
 
     pub async fn is_track_offline(&self, track_id: &str) -> bool {
@@ -145,14 +161,25 @@ impl StreamManager {
         if let Some((path, codec)) = self.track_cache.get_track_file(&track.id).await {
             let codec_clone = codec.clone();
 
-            // For a local file, we know the length immediately and we don't have to wait for buffering
-            let file = std::fs::File::open(&path).map_err(|e| {
+            // Blocking FS stays off the async executor.
+            let (file, total_bytes) = tokio::task::spawn_blocking(move || {
+                let file = std::fs::File::open(&path)?;
+                let total = file.metadata().map(|m| m.len()).unwrap_or(0);
+                std::io::Result::Ok((file, total))
+            })
+            .await
+            .map_err(|e| Box::<dyn std::error::Error + Send + Sync>::from(e.to_string()))?
+            .map_err(|e| {
                 Box::<dyn std::error::Error + Send + Sync>::from(format!(
                     "failed to open offline file: {}",
                     e
                 ))
             })?;
-            let total_bytes = file.metadata().map(|m| m.len()).unwrap_or(0);
+            if total_bytes == 0 {
+                return Err(Box::<dyn std::error::Error + Send + Sync>::from(
+                    "offline file is empty",
+                ));
+            }
 
             let session = tokio::task::spawn_blocking(move || {
                 stream::create_streaming_session(file, total_bytes, codec_clone, progress_clone)
@@ -190,6 +217,8 @@ impl StreamManager {
 
         let client = self.http_client.clone();
         let buffering = stream::BufferingGate::new();
+        let track_id = track.id.clone();
+        let url_cache = self.url_cache.clone();
         let data_source = stream::StreamingDataSource::new(
             client,
             url,
@@ -199,7 +228,14 @@ impl StreamManager {
             duration_ms,
         )
         .await
-        .map_err(|e| Box::<dyn std::error::Error + Send + Sync>::from(e.to_string()))?;
+        .map_err(|e| {
+            let msg = e.to_string();
+            // Expired/rejected stream URL: drop it so the next attempt refetches.
+            if msg.contains("403") || msg.contains("rejected") {
+                url_cache.remove(&track_id);
+            }
+            Box::<dyn std::error::Error + Send + Sync>::from(msg)
+        })?;
         let codec_clone = codec.clone();
 
         let total_bytes = data_source.total_bytes();
@@ -215,5 +251,26 @@ impl StreamManager {
             codec,
             buffering,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::PrewarmCache;
+
+    #[test]
+    fn stale_prewarm_finish_cannot_consume_a_new_attempt() {
+        let mut cache = PrewarmCache::default();
+        let first = cache.start("track-42").expect("first attempt starts");
+
+        cache.invalidate("track-42");
+        let second = cache.start("track-42").expect("second attempt starts");
+        assert_ne!(first, second);
+
+        cache.finish("track-42", first, None);
+        assert_eq!(cache.in_flight.get("track-42"), Some(&second));
+
+        cache.finish("track-42", second, None);
+        assert!(!cache.in_flight.contains_key("track-42"));
     }
 }

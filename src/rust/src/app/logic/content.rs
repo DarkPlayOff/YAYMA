@@ -13,6 +13,42 @@ use tokio::sync::Mutex;
 
 const MAX_CONCURRENT_DOWNLOADS: usize = 3;
 static BULK_DOWNLOAD_QUEUE: OnceLock<Mutex<()>> = OnceLock::new();
+static TRACK_DOWNLOAD_LOCKS: OnceLock<Mutex<foldhash::HashMap<String, Arc<Mutex<()>>>>> =
+    OnceLock::new();
+
+fn track_download_locks() -> &'static Mutex<foldhash::HashMap<String, Arc<Mutex<()>>>> {
+    TRACK_DOWNLOAD_LOCKS.get_or_init(|| Mutex::new(foldhash::HashMap::new()))
+}
+
+/// Stream a download response to `part_path` without buffering the whole
+/// track in RAM (FLAC tracks are tens of MB).
+async fn stream_response_to_file(
+    mut response: reqwest::Response,
+    part_path: &std::path::Path,
+) -> Result<(), AppError> {
+    use tokio::io::AsyncWriteExt;
+    if let Some(parent) = part_path.parent() {
+        tokio::fs::create_dir_all(parent)
+            .await
+            .map_err(|e| AppError::Unknown(e.to_string()))?;
+    }
+    let mut file = tokio::fs::File::create(part_path)
+        .await
+        .map_err(|e| AppError::Unknown(e.to_string()))?;
+    while let Some(chunk) = response
+        .chunk()
+        .await
+        .map_err(|e| AppError::Unknown(e.to_string()))?
+    {
+        file.write_all(&chunk)
+            .await
+            .map_err(|e| AppError::Unknown(e.to_string()))?;
+    }
+    file.flush()
+        .await
+        .map_err(|e| AppError::Unknown(e.to_string()))?;
+    Ok(())
+}
 
 async fn get_liked_snapshot(
     ctx: &AppContext,
@@ -170,13 +206,39 @@ async fn download_track_to_destination(
         dir
     };
 
-    let bytes = crate::http::send_with_retry(|| api.http_client.get(&url))
-        .await?
-        .bytes()
-        .await?;
+    let bytes = if to_cache {
+        // Deduplicate parallel downloads of the same track and never expose
+        // a partially written file: stream to `.part`, then atomically rename.
+        let guard = {
+            let mut locks = track_download_locks().lock().await;
+            locks
+                .entry(track_id.clone())
+                .or_insert_with(|| Arc::new(Mutex::new(())))
+                .clone()
+        };
+        let _permit = guard.lock().await;
 
-    if to_cache {
-        tokio::fs::write(&dest_path, &bytes).await?;
+        // Another task may have finished while we waited for the lock.
+        if dest_path.exists()
+            && let Ok(meta) = tokio::fs::metadata(&dest_path).await
+            && meta.len() > 0
+        {
+            return Ok(dest_path.to_string_lossy().into_owned());
+        }
+
+        let part_path = dest_path.with_extension(format!(
+            "{}.part",
+            dest_path
+                .extension()
+                .and_then(|e| e.to_str())
+                .unwrap_or("bin")
+        ));
+        let response = crate::http::send_with_retry(|| api.http_client.get(&url)).await?;
+        stream_response_to_file(response, &part_path).await?;
+        tokio::fs::rename(&part_path, &dest_path)
+            .await
+            .map_err(|e| AppError::Unknown(e.to_string()))?;
+
         if let Some(mut url) = dto.cover_url {
             if url.starts_with("//") {
                 url.insert_str(0, "https:");
@@ -185,6 +247,20 @@ async fn download_track_to_destination(
                 let _ = ctx.core.track_cache.save_cover(&url, &http_path).await;
             }
         }
+        return Ok(dest_path.to_string_lossy().into_owned());
+    } else {
+        // File downloads: still stream to tmp to avoid RAM spikes.
+        let tmp_path = dest_path.with_extension("download_tmp");
+        let response = crate::http::send_with_retry(|| api.http_client.get(&url)).await?;
+        stream_response_to_file(response, &tmp_path).await?;
+        let bytes = tokio::fs::read(&tmp_path)
+            .await
+            .map_err(|e| AppError::Unknown(e.to_string()))?;
+        let _ = tokio::fs::remove_file(&tmp_path).await;
+        bytes
+    };
+
+    if to_cache {
         return Ok(dest_path.to_string_lossy().into_owned());
     }
 

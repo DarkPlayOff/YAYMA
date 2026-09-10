@@ -84,4 +84,10 @@ impl ShuffleState {
             self.index_map.insert(at, None);
         }
     }
+
+    pub fn record_removed(&mut self, at: usize) {
+        if self.is_active && at < self.index_map.len() {
+            self.index_map.remove(at);
+        }
+    }
 }

@@ -62,14 +62,23 @@ impl EffectParams {
 
     #[inline(always)]
     pub fn get(&self, idx: usize) -> f32 {
-        self.values.get(idx).map_or(0.0, |v| v.get())
+        debug_assert!(idx < self.values.len(), "EffectParams::get OOB index {idx}");
+        self.values.get(idx).map_or(0.0, |v| {
+            let val = v.get();
+            if val.is_finite() { val } else { 0.0 }
+        })
     }
 
     #[inline(always)]
     pub fn set(&self, idx: usize, val: f32) {
+        if !val.is_finite() {
+            return;
+        }
         if let Some(atomic) = self.values.get(idx) {
             let info = &self.info[idx];
             atomic.set(val.clamp(info.min, info.max));
+        } else {
+            debug_assert!(false, "EffectParams::set OOB index {idx}");
         }
     }
 

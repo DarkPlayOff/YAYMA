@@ -8,6 +8,10 @@ use parking_lot::Mutex;
 use crate::audio::fx::biquad::{FilterType, StereoBiquad};
 use crate::util::reactive::Signal;
 
+// Max frames processed in one realtime callback; band scratch buffers are
+// preallocated to this in configure() so process_block never allocates.
+const MAX_MONITOR_BLOCK: usize = 2048;
+
 // Crossover points for the bass/mid/high split fed into the vibe visualizer.
 // Real band-limited energy (via biquad filters below), not a proxy derived
 // from the rectified signal's envelope dynamics.
@@ -50,6 +54,8 @@ impl BandFilters {
 
     fn configure(&mut self, sample_rate: f32) {
         if (self.sample_rate - sample_rate).abs() < 1.0 {
+            // Still ensure scratch is preallocated even when rate is unchanged.
+            self.ensure_capacity(MAX_MONITOR_BLOCK);
             return;
         }
         self.sample_rate = sample_rate;
@@ -67,6 +73,7 @@ impl BandFilters {
         self.low.reset();
         self.mid.reset();
         self.high.reset();
+        self.ensure_capacity(MAX_MONITOR_BLOCK);
     }
 
     fn ensure_capacity(&mut self, len: usize) {
@@ -118,13 +125,21 @@ impl AmplitudeTracker {
             self.peak.store(abs_sample.to_bits(), Ordering::Relaxed);
             self.samples_since_peak.store(0, Ordering::Relaxed);
         } else {
-            let samples = self.samples_since_peak.fetch_add(1, Ordering::Relaxed);
-            if samples >= self.peak_hold_samples {
-                let new_peak = peak * 0.995;
-                self.peak.store(new_peak.to_bits(), Ordering::Relaxed);
-            }
+            self.samples_since_peak.fetch_add(1, Ordering::Relaxed);
         }
         new_value
+    }
+
+    /// Decay the held peak once per audio block (not per sample: a per-sample
+    /// `* 0.995` at 48kHz collapses to zero in milliseconds and flickers).
+    #[inline]
+    pub fn tick_block(&self) {
+        let samples = self.samples_since_peak.load(Ordering::Relaxed);
+        if samples >= self.peak_hold_samples {
+            let peak = f32::from_bits(self.peak.load(Ordering::Relaxed));
+            self.peak
+                .store((peak * 0.995).to_bits(), Ordering::Relaxed);
+        }
     }
     #[inline]
     pub fn amplitude(&self) -> f32 {
@@ -177,6 +192,18 @@ pub struct Monitor {
 
 impl Monitor {
     pub fn new(_notify_samples: usize) -> Self {
+        let internal = Arc::new(MonitorInternal {
+            combined_amplitude: AtomicU32::new(0),
+            bass_amp: AtomicU32::new(0),
+            mid_amp: AtomicU32::new(0),
+            high_amp: AtomicU32::new(0),
+            bands: Mutex::new(BandFilters::new()),
+            position: AtomicU64::new(0),
+            enabled: AtomicBool::new(true),
+            focused: AtomicBool::new(true),
+        });
+        // Preallocate band scratch outside the realtime thread.
+        internal.bands.lock().ensure_capacity(MAX_MONITOR_BLOCK);
         Self {
             amplitude_left: AmplitudeTracker::default(),
             amplitude_right: AmplitudeTracker::default(),
@@ -184,16 +211,7 @@ impl Monitor {
                 crate::audio::vibe::VibeEngine::new(),
             )),
             playing: Signal::new(false),
-            internal: Arc::new(MonitorInternal {
-                combined_amplitude: AtomicU32::new(0),
-                bass_amp: AtomicU32::new(0),
-                mid_amp: AtomicU32::new(0),
-                high_amp: AtomicU32::new(0),
-                bands: Mutex::new(BandFilters::new()),
-                position: AtomicU64::new(0),
-                enabled: AtomicBool::new(true),
-                focused: AtomicBool::new(true),
-            }),
+            internal,
         }
     }
 
@@ -236,12 +254,19 @@ impl Monitor {
         self.internal
             .position
             .fetch_add(len as u64, Ordering::Relaxed);
+        self.amplitude_left.tick_block();
+        self.amplitude_right.tick_block();
 
         // Real frequency-selective bass/mid/high split, via biquad crossover
         // filters run over the actual (non-rectified) signal.
-        {
-            let mut bands = self.internal.bands.lock();
-            bands.ensure_capacity(len);
+        // try_lock: never block the realtime thread on configure() from UI.
+        if let Some(mut bands) = self.internal.bands.try_lock() {
+            if bands.low_l.len() < len {
+                // Scratch smaller than this block (configure() preallocates
+                // MAX_MONITOR_BLOCK, so this is a fallback): skip band split
+                // for this block instead of allocating in hot path.
+                return;
+            }
             bands.low_l[..len].copy_from_slice(&left[..len]);
             bands.low_r[..len].copy_from_slice(&right[..len]);
             bands.mid_l[..len].copy_from_slice(&left[..len]);
@@ -275,18 +300,12 @@ impl Monitor {
             }
 
             let update_peak = |atomic: &AtomicU32, val: f32| {
-                let mut cur = atomic.load(Ordering::Relaxed);
-                while val > f32::from_bits(cur) {
-                    match atomic.compare_exchange_weak(
-                        cur,
-                        val.to_bits(),
-                        Ordering::Relaxed,
-                        Ordering::Relaxed,
-                    ) {
-                        Ok(_) => break,
-                        Err(a) => cur = a,
-                    }
-                }
+                // Max-hold with slow per-block decay so UI polling at any rate
+                // sees a stable value instead of zeros (old swap-on-read).
+                let cur = f32::from_bits(atomic.load(Ordering::Relaxed));
+                let decayed = cur * 0.98;
+                let target = val.max(decayed);
+                atomic.store(target.to_bits(), Ordering::Relaxed);
             };
 
             update_peak(&self.internal.bass_amp, local_bass_peak);
@@ -297,11 +316,14 @@ impl Monitor {
 
     #[inline]
     pub fn vibe_bands(&self) -> [f32; 3] {
-        [
-            f32::from_bits(self.internal.bass_amp.swap(0, Ordering::Relaxed)),
-            f32::from_bits(self.internal.mid_amp.swap(0, Ordering::Relaxed)),
-            f32::from_bits(self.internal.high_amp.swap(0, Ordering::Relaxed)),
-        ]
+        // Non-destructive read: UI may poll at any rate without zeroing peaks.
+        let b = [
+            f32::from_bits(self.internal.bass_amp.load(Ordering::Relaxed)),
+            f32::from_bits(self.internal.mid_amp.load(Ordering::Relaxed)),
+            f32::from_bits(self.internal.high_amp.load(Ordering::Relaxed)),
+        ];
+        // Guard the shader against NaN poisoning.
+        b.map(|v| if v.is_finite() { v } else { 0.0 })
     }
 
     #[inline]

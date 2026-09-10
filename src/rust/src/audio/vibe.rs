@@ -128,11 +128,13 @@ impl VibeEngine {
         const ATTACK_RATE: [f32; 3] = [9.0, 15.0, 19.0];
 
         for i in 0..3 {
+            // Guard the shader: NaN bands would poison max_observed and uniforms.
+            let band = if bands[i].is_finite() { bands[i] } else { 0.0 };
             self.max_observed[i] = (self.max_observed[i] * 0.995).max(0.01);
-            if bands[i] > self.max_observed[i] {
-                self.max_observed[i] = bands[i];
+            if band > self.max_observed[i] {
+                self.max_observed[i] = band;
             }
-            let normalized = (bands[i] / self.max_observed[i]).min(1.5);
+            let normalized = (band / self.max_observed[i]).min(1.5);
 
             let fast_lerp = (dt * FAST_RATE).min(1.0);
             let slow_lerp = (dt * SLOW_RATE).min(1.0);

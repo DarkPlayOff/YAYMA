@@ -51,28 +51,60 @@ impl YandexProvider {
                 let target_index = track_id
                     .as_ref()
                     .and_then(|id| partial.iter().position(|p| p.id == *id));
-                if target_index.is_none_or(|index| index < crate::audio::fetcher::FETCH_BATCH_SIZE)
+                // Resolve a window around the target so playback starts fast
+                // even deep inside a big playlist; the rest stays lazy.
+                // NOTE: QueueManager derives the lazy tail as
+                // `all_ids.skip(loaded_count)`, so the context playlist is
+                // trimmed to `ids[window_start..]` — tracks before the window
+                // are dropped (Prev limited to the window) but the pending
+                // tail stays exact.
+                let (window_start, window): (usize, Vec<_>) = match target_index {
+                    Some(idx) if idx >= crate::audio::fetcher::FETCH_BATCH_SIZE => {
+                        let half = crate::audio::fetcher::FETCH_BATCH_SIZE / 2;
+                        let start = idx.saturating_sub(half);
+                        let end = (start + crate::audio::fetcher::FETCH_BATCH_SIZE)
+                            .min(partial.len());
+                        (start, partial[start..end].to_vec())
+                    }
+                    _ => (
+                        0,
+                        partial
+                            .iter()
+                            .take(crate::audio::fetcher::FETCH_BATCH_SIZE)
+                            .cloned()
+                            .collect(),
+                    ),
+                };
                 {
-                    let first = partial
-                        .iter()
-                        .take(crate::audio::fetcher::FETCH_BATCH_SIZE)
-                        .cloned()
-                        .collect::<Vec<_>>();
                     let initial = crate::util::track::fetch_full_tracks(
                         &self.api,
-                        PlaylistTracks::Partial(first),
+                        PlaylistTracks::Partial(window),
                     )
                     .await;
                     if !initial.is_empty() {
-                        playlist.tracks = Some(tracks_enum);
-                        return self
-                            .build_context(
-                                initial,
-                                track_id,
-                                || PlaybackContext::Playlist(playlist),
-                                error_msg,
-                            )
-                            .await;
+                        // Trim context so pending-ids math stays correct.
+                        playlist.tracks = Some(PlaylistTracks::Partial(
+                            partial[window_start..].to_vec(),
+                        ));
+                        let index_in_window = track_id
+                            .as_ref()
+                            .and_then(|tid| initial.iter().position(|t| &t.id == tid))
+                            .or_else(|| {
+                                target_index.map(|idx| {
+                                    (idx - window_start).min(initial.len().saturating_sub(1))
+                                })
+                            })
+                            .unwrap_or(0);
+                        let found = track_id.as_ref().is_none_or(|tid| {
+                            initial.iter().any(|t| &t.id == tid)
+                        });
+                        if found {
+                            return Ok((
+                                PlaybackContext::Playlist(playlist),
+                                Vector::from(initial),
+                                index_in_window,
+                            ));
+                        }
                     }
                 }
             }

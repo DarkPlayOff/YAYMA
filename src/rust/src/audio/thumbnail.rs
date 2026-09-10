@@ -66,12 +66,9 @@ impl ThumbnailManager {
         let bytes = Arc::new(img_bytes);
         *PENDING_BYTES.lock() = Some(bytes);
 
-        if let Some(old) = CURRENT_BITMAP.lock().take() {
-            unsafe {
-                let _ = DeleteObject(HBITMAP(old.hbitmap_ptr as *mut _).into());
-            }
-        }
-
+        // Don't delete the current bitmap here: subclass_proc deletes the old
+        // bitmap only after the new one is installed, and DWM may still be
+        // reading it. Just invalidate so DWM re-requests.
         unsafe {
             let hwnd = HWND(self.hwnd_ptr as *mut _);
             if IsWindow(Some(hwnd)).as_bool() {
@@ -206,8 +203,14 @@ unsafe extern "system" fn subclass_proc(
 }
 
 fn create_hbitmap_from_wic(bytes: &[u8], target_w: u32, target_h: u32) -> Option<HBITMAP> {
+    use std::sync::Once;
+    static COM_INIT: Once = Once::new();
     unsafe {
-        let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+        // CoInitializeEx without matching CoUninitialize bumps the COM refcount;
+        // init once per process instead of once per cover.
+        COM_INIT.call_once(|| {
+            let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+        });
         let factory = WIC_FACTORY.with(|f| {
             if f.borrow().is_none() {
                 *f.borrow_mut() =
@@ -257,10 +260,18 @@ fn create_hbitmap_from_wic(bytes: &[u8], target_w: u32, target_h: u32) -> Option
         };
 
         let hdc = GetDC(None);
+        if hdc.is_invalid() {
+            return None;
+        }
         let mut bits_ptr = std::ptr::null_mut();
-        let hbitmap =
-            CreateDIBSection(Some(hdc), &bmi, DIB_RGB_COLORS, &mut bits_ptr, None, 0).ok()?;
+        let hbitmap_result =
+            CreateDIBSection(Some(hdc), &bmi, DIB_RGB_COLORS, &mut bits_ptr, None, 0);
         ReleaseDC(None, hdc);
+        let hbitmap = hbitmap_result.ok()?;
+        if bits_ptr.is_null() {
+            let _ = DeleteObject(hbitmap.into());
+            return None;
+        }
 
         let dest_ptr = bits_ptr as *mut u8;
         std::ptr::write_bytes(dest_ptr, 0, (target_w * target_h * 4) as usize);

@@ -21,12 +21,25 @@ pub struct EffectChain {
 
 impl EffectChain {
     pub fn new(channels: u16, _sample_rate: u32) -> Self {
+        // Preallocate scratch buffers outside the realtime callback
+        // to avoid heap allocation in process_block hot path.
+        const INITIAL_FRAMES: usize = 2048;
         Self {
             slots: Vec::new(),
             handles: HashMap::new(),
             channels: channels as usize,
-            left: Vec::new(),
-            right: Vec::new(),
+            left: vec![0.0; INITIAL_FRAMES],
+            right: vec![0.0; INITIAL_FRAMES],
+        }
+    }
+
+    /// Ensure scratch capacity without allocating in the audio thread if possible.
+    pub fn ensure_capacity(&mut self, frames: usize) {
+        if self.left.len() < frames {
+            self.left.resize(frames, 0.0);
+        }
+        if self.right.len() < frames {
+            self.right.resize(frames, 0.0);
         }
     }
 
@@ -64,7 +77,7 @@ impl EffectChain {
 
     #[inline]
     pub fn process_block(&mut self, buffer: &mut [f32], len: usize) {
-        if self.slots.is_empty() || len == 0 || self.channels < 2 {
+        if self.slots.is_empty() || len == 0 || self.channels == 0 {
             return;
         }
 
@@ -79,21 +92,45 @@ impl EffectChain {
             return;
         }
 
-        if self.left.capacity() < frames {
-            self.left.reserve(frames - self.left.capacity());
+        debug_assert!(
+            self.left.len() >= frames && self.right.len() >= frames,
+            "EffectChain scratch under capacity: have {}/{}, need {frames}",
+            self.left.len(),
+            self.right.len()
+        );
+        // Fallback path only: avoid unsafe set_len; resize keeps init memory.
+        if self.left.len() < frames {
+            self.left.resize(frames, 0.0);
         }
-        if self.right.capacity() < frames {
-            self.right.reserve(frames - self.right.capacity());
+        if self.right.len() < frames {
+            self.right.resize(frames, 0.0);
         }
 
-        unsafe {
-            self.left.set_len(frames);
-            self.right.set_len(frames);
+        if ch == 1 {
+            // Mono: run effects on duplicated mono so monitor/fade/FX keep working.
+            for i in 0..frames {
+                let m = buffer[i];
+                self.left[i] = m;
+                self.right[i] = m;
+            }
+
+            for slot in &mut self.slots {
+                if slot.params.is_enabled() {
+                    slot.effect
+                        .process(&mut self.left[..frames], &mut self.right[..frames]);
+                }
+            }
+
+            for i in 0..frames {
+                buffer[i] = 0.5 * (self.left[i] + self.right[i]);
+            }
+            return;
         }
 
         for i in 0..frames {
             let base = i * ch;
             self.left[i] = buffer[base];
+            // For >2 channels process first two, rest pass through untouched.
             self.right[i] = buffer[base + 1];
         }
 

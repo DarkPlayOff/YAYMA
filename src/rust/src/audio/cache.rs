@@ -35,7 +35,20 @@ impl UrlCache {
     }
 
     pub fn insert(&self, track_id: String, url: String, mirror_urls: Vec<String>, codec: String) {
-        self.cache.write().insert(
+        let mut cache = self.cache.write();
+        // Sweep expired entries + cap size so a long session doesn't grow
+        // one entry per played track forever.
+        cache.retain(|_, e| e.fetched_at.elapsed() < STRM_URL_TTL);
+        if cache.len() > 200 {
+            if let Some(oldest) = cache
+                .iter()
+                .min_by_key(|(_, e)| e.fetched_at)
+                .map(|(k, _)| k.clone())
+            {
+                cache.remove(&oldest);
+            }
+        }
+        cache.insert(
             track_id,
             CachedUrl {
                 url,

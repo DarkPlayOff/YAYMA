@@ -185,7 +185,13 @@ impl AudioSystem {
     }
 
     /// Universal spawn for loading playback context
-    fn spawn_fetch_context<F, Fut>(&self, fetcher: F)
+    fn begin_context_change(&self) -> u64 {
+        self.context_generation
+            .fetch_add(1, Ordering::AcqRel)
+            .wrapping_add(1)
+    }
+
+    fn spawn_fetch_context<F, Fut>(&self, generation: u64, fetcher: F)
     where
         F: FnOnce() -> Fut + Send + 'static,
         Fut: std::future::Future<
@@ -201,28 +207,12 @@ impl AudioSystem {
             + 'static,
     {
         let tx = self.tx.clone();
-        let error_sink = self.error_sink.clone();
-        let signals = self.signals.clone();
-        let context_generation = self.context_generation.clone();
-        let request_generation = context_generation.fetch_add(1, Ordering::SeqCst) + 1;
         self.signals.set_buffering(true);
         tokio::spawn(async move {
-            match fetcher().await {
-                Ok((ctx, tracks, index)) => {
-                    if context_generation.load(Ordering::SeqCst) == request_generation {
-                        let _ = tx.send(AudioMessage::LoadContext(ctx, tracks, index)).await;
-                    }
-                }
-                Err(e) => {
-                    // The context request is not the audio stream itself.  Do not leave
-                    // the global buffering flag armed after a playlist/album request fails;
-                    // otherwise the playback watchdog can pause an unrelated track.
-                    if context_generation.load(Ordering::SeqCst) == request_generation {
-                        error_sink(e);
-                        signals.set_buffering(false);
-                    }
-                }
-            }
+            let result = fetcher().await;
+            let _ = tx
+                .send(AudioMessage::ContextFetched { generation, result })
+                .await;
         });
     }
 
@@ -238,6 +228,38 @@ impl AudioSystem {
     ) {
         let in_wave = matches!(&ctx, crate::audio::queue::PlaybackContext::Wave(_));
         if let Some(track) = self.queue.load(ctx, tracks, index).await {
+            if in_wave {
+                self.send_wave_started();
+            }
+            self.controller
+                .play_track(track.clone(), false, Duration::ZERO, false)
+                .await;
+            if in_wave {
+                self.send_wave_track_started(&track);
+            }
+        }
+    }
+
+    async fn load_fetched_context(
+        &mut self,
+        generation: u64,
+        ctx: crate::audio::queue::PlaybackContext,
+        tracks: im::Vector<Track>,
+        index: usize,
+    ) {
+        if self.context_generation.load(Ordering::Acquire) != generation {
+            return;
+        }
+
+        let in_wave = matches!(&ctx, crate::audio::queue::PlaybackContext::Wave(_));
+        if let Some(track) = self.queue.load(ctx, tracks, index).await {
+            // Keep the check in the actor immediately before applying the loaded
+            // queue/controller state. ContextFetched messages are the only path
+            // where a background fetch can reach playback.
+            if self.context_generation.load(Ordering::Acquire) != generation {
+                return;
+            }
+
             if in_wave {
                 self.send_wave_started();
             }
@@ -287,6 +309,19 @@ impl AudioSystem {
 
     async fn process_message(&mut self, msg: AudioMessage) {
         match msg {
+            AudioMessage::ContextFetched { generation, result } => match result {
+                Ok((ctx, tracks, index)) => {
+                    self.load_fetched_context(generation, ctx, tracks, index)
+                        .await;
+                }
+                Err(e) => {
+                    if self.context_generation.load(Ordering::Acquire) != generation {
+                        return;
+                    }
+                    (self.error_sink)(e);
+                    self.signals.set_buffering(false);
+                }
+            },
             AudioMessage::PlayPause => {
                 if self.signals.is_playing.get() {
                     self.controller.pause().await;
@@ -297,7 +332,7 @@ impl AudioSystem {
             AudioMessage::Pause => self.controller.pause().await,
             AudioMessage::Resume => self.controller.resume().await,
             AudioMessage::Stop => {
-                self.context_generation.fetch_add(1, Ordering::SeqCst);
+                self.begin_context_change();
                 self.controller.stop().await;
                 self.queue.clear();
             }
@@ -328,20 +363,21 @@ impl AudioSystem {
             AudioMessage::ToggleMute => self.controller.toggle_mute(),
 
             AudioMessage::PlayTrack(track) => {
-                self.context_generation.fetch_add(1, Ordering::SeqCst);
+                self.begin_context_change();
                 self.load_standalone(im::Vector::from(vec![track]), false, Duration::ZERO)
                     .await
             }
             AudioMessage::RestoreTrack(track, pos, was_playing) => {
-                self.context_generation.fetch_add(1, Ordering::SeqCst);
+                self.begin_context_change();
                 self.load_standalone(im::Vector::from(vec![track]), !was_playing, pos)
                     .await
             }
             AudioMessage::LoadContext(ctx, tracks, index) => {
+                self.begin_context_change();
                 self.load_context(ctx, tracks, index).await;
             }
             AudioMessage::LoadTracks(tracks) => {
-                self.context_generation.fetch_add(1, Ordering::SeqCst);
+                self.begin_context_change();
                 self.load_standalone(im::Vector::from(tracks), false, Duration::ZERO)
                     .await
             }
@@ -353,9 +389,9 @@ impl AudioSystem {
             AudioMessage::ToggleRepeatMode => self.queue.toggle_repeat_mode(),
 
             AudioMessage::PlayPlaylist(kind) => {
-                self.context_generation.fetch_add(1, Ordering::SeqCst);
+                let generation = self.begin_context_change();
                 let yandex = self.yandex.clone();
-                self.spawn_fetch_context(move || async move {
+                self.spawn_fetch_context(generation, move || async move {
                     yandex
                         .fetch_playlist_context(kind, None)
                         .await
@@ -363,9 +399,9 @@ impl AudioSystem {
                 });
             }
             AudioMessage::PlayAlbum(album_id) => {
-                self.context_generation.fetch_add(1, Ordering::SeqCst);
+                let generation = self.begin_context_change();
                 let yandex = self.yandex.clone();
-                self.spawn_fetch_context(move || async move {
+                self.spawn_fetch_context(generation, move || async move {
                     yandex
                         .fetch_album_context(album_id, None)
                         .await
@@ -373,84 +409,143 @@ impl AudioSystem {
                 });
             }
             AudioMessage::PlayAlbumTrack(aid, tid) => {
-                self.context_generation.fetch_add(1, Ordering::SeqCst);
-                let local_ctx = if self.queue.stream_manager.is_track_offline(&tid).await {
-                    self.build_single_track_offline(&tid).await
-                } else {
-                    None
-                };
-
-                if let Some((tracks, index)) = local_ctx {
-                    self.load_context(
-                        crate::audio::queue::PlaybackContext::Standalone,
-                        tracks,
-                        index,
-                    )
-                    .await;
-                } else {
-                    let yandex = self.yandex.clone();
-                    self.spawn_fetch_context(move || async move {
-                        yandex
-                            .fetch_album_context(aid, Some(tid))
-                            .await
-                            .map_err(|e| format!("Failed to load album: {e}"))
-                    });
-                }
+                let generation = self.begin_context_change();
+                // Offline check + DB read run in background so the actor stays
+                // responsive to Pause/Seek/Next while they complete.
+                let tx = self.tx.clone();
+                let stream_manager = self.queue.stream_manager.clone();
+                let db = self.db.clone();
+                let yandex = self.yandex.clone();
+                tokio::spawn(async move {
+                    let local_ctx =
+                        if stream_manager.is_track_offline(&tid).await {
+                            Self::build_single_track_offline_static(&db, &tid).await
+                        } else {
+                            None
+                        };
+                    if let Some((tracks, index)) = local_ctx {
+                        let _ = tx
+                            .send(AudioMessage::LoadContext(
+                                crate::audio::queue::PlaybackContext::Standalone,
+                                tracks,
+                                index,
+                            ))
+                            .await;
+                    } else {
+                        match yandex.fetch_album_context(aid, Some(tid)).await {
+                            Ok((ctx, tracks, index)) => {
+                                let _ = tx
+                                    .send(AudioMessage::ContextFetched {
+                                        generation,
+                                        result: Ok((ctx, tracks, index)),
+                                    })
+                                    .await;
+                            }
+                            Err(e) => {
+                                let _ = tx
+                                    .send(AudioMessage::ContextFetched {
+                                        generation,
+                                        result: Err(format!("Failed to load album: {e}")),
+                                    })
+                                    .await;
+                            }
+                        }
+                    }
+                });
             }
             AudioMessage::PlayPlaylistTrack(kind, tid) => {
-                self.context_generation.fetch_add(1, Ordering::SeqCst);
-                let local_ctx = if self.queue.stream_manager.is_track_offline(&tid).await {
-                    self.build_single_track_offline(&tid).await
-                } else {
-                    None
-                };
-
-                if let Some((tracks, index)) = local_ctx {
-                    self.load_context(
-                        crate::audio::queue::PlaybackContext::Standalone,
-                        tracks,
-                        index,
-                    )
-                    .await;
-                } else {
-                    let yandex = self.yandex.clone();
-                    self.spawn_fetch_context(move || async move {
-                        yandex
-                            .fetch_playlist_context(kind, Some(tid))
-                            .await
-                            .map_err(|e| format!("Failed to load playlist track: {e}"))
-                    });
-                }
+                let generation = self.begin_context_change();
+                let tx = self.tx.clone();
+                let stream_manager = self.queue.stream_manager.clone();
+                let db = self.db.clone();
+                let yandex = self.yandex.clone();
+                tokio::spawn(async move {
+                    let local_ctx =
+                        if stream_manager.is_track_offline(&tid).await {
+                            Self::build_single_track_offline_static(&db, &tid).await
+                        } else {
+                            None
+                        };
+                    if let Some((tracks, index)) = local_ctx {
+                        let _ = tx
+                            .send(AudioMessage::LoadContext(
+                                crate::audio::queue::PlaybackContext::Standalone,
+                                tracks,
+                                index,
+                            ))
+                            .await;
+                    } else {
+                        match yandex.fetch_playlist_context(kind, Some(tid)).await {
+                            Ok((ctx, tracks, index)) => {
+                                let _ = tx
+                                    .send(AudioMessage::ContextFetched {
+                                        generation,
+                                        result: Ok((ctx, tracks, index)),
+                                    })
+                                    .await;
+                            }
+                            Err(e) => {
+                                let _ = tx
+                                    .send(AudioMessage::ContextFetched {
+                                        generation,
+                                        result: Err(format!(
+                                            "Failed to load playlist track: {e}"
+                                        )),
+                                    })
+                                    .await;
+                            }
+                        }
+                    }
+                });
             }
             AudioMessage::PlayLikedTrack(tid) => {
-                self.context_generation.fetch_add(1, Ordering::SeqCst);
-                let local_ctx = if self.queue.stream_manager.is_track_offline(&tid).await {
-                    self.build_local_liked_context(&tid).await
-                } else {
-                    None
-                };
-
-                if let Some((tracks, index)) = local_ctx {
-                    self.load_context(
-                        crate::audio::queue::PlaybackContext::Standalone,
-                        tracks,
-                        index,
-                    )
-                    .await;
-                } else {
-                    let yandex = self.yandex.clone();
-                    self.spawn_fetch_context(move || async move {
-                        yandex
-                            .fetch_liked_context(Some(tid))
-                            .await
-                            .map_err(|e| format!("Failed to load liked track: {e}"))
-                    });
-                }
+                let generation = self.begin_context_change();
+                let tx = self.tx.clone();
+                let stream_manager = self.queue.stream_manager.clone();
+                let db = self.db.clone();
+                let state = self.state.clone();
+                let yandex = self.yandex.clone();
+                tokio::spawn(async move {
+                    let local_ctx =
+                        if stream_manager.is_track_offline(&tid).await {
+                            Self::build_local_liked_context_static(&db, &state, &tid).await
+                        } else {
+                            None
+                        };
+                    if let Some((tracks, index)) = local_ctx {
+                        let _ = tx
+                            .send(AudioMessage::LoadContext(
+                                crate::audio::queue::PlaybackContext::Standalone,
+                                tracks,
+                                index,
+                            ))
+                            .await;
+                    } else {
+                        match yandex.fetch_liked_context(Some(tid)).await {
+                            Ok((ctx, tracks, index)) => {
+                                let _ = tx
+                                    .send(AudioMessage::ContextFetched {
+                                        generation,
+                                        result: Ok((ctx, tracks, index)),
+                                    })
+                                    .await;
+                            }
+                            Err(e) => {
+                                let _ = tx
+                                    .send(AudioMessage::ContextFetched {
+                                        generation,
+                                        result: Err(format!("Failed to load liked track: {e}")),
+                                    })
+                                    .await;
+                            }
+                        }
+                    }
+                });
             }
             AudioMessage::StartWave(seeds) => {
-                self.context_generation.fetch_add(1, Ordering::SeqCst);
+                let generation = self.begin_context_change();
                 let yandex = self.yandex.clone();
-                self.spawn_fetch_context(move || async move {
+                self.spawn_fetch_context(generation, move || async move {
                     yandex
                         .fetch_wave_context(seeds)
                         .await
@@ -476,7 +571,6 @@ impl AudioSystem {
                         }
                     } else {
                         self.send_wave_feedback("like", Some(track_id), None, true);
-                        self.queue.refresh_wave_queue();
                     }
                 }
             }
@@ -489,7 +583,6 @@ impl AudioSystem {
                         }
                     } else {
                         self.send_wave_feedback("unlike", Some(track_id), None, true);
-                        self.queue.refresh_wave_queue();
                     }
                 }
             }
@@ -522,10 +615,12 @@ impl AudioSystem {
             }
             AudioMessage::SetAudioDevice(device_name) => {
                 self.signals.selected_device.set(device_name.clone());
-                {
-                    let mut db = self.db.lock().await;
+                // Don't hold the actor on a DB write; persist in background.
+                let db = self.db.clone();
+                tokio::spawn(async move {
+                    let mut db = db.lock().await;
                     let _ = db.save_setting("audio_device", &device_name).await;
-                }
+                });
                 self.recreate_stream().await;
             }
             AudioMessage::RecreateStream => {
@@ -550,7 +645,8 @@ impl AudioSystem {
         } else {
             // Queue ended, start "My Wave"
             let yandex = self.yandex.clone();
-            self.spawn_fetch_context(move || async move {
+            let generation = self.begin_context_change();
+            self.spawn_fetch_context(generation, move || async move {
                 yandex
                     .fetch_wave_context(vec!["user:onyourwave".to_string()])
                     .await
@@ -576,7 +672,8 @@ impl AudioSystem {
         } else {
             // Queue ended, start "My Wave"
             let yandex = self.yandex.clone();
-            self.spawn_fetch_context(move || async move {
+            let generation = self.begin_context_change();
+            self.spawn_fetch_context(generation, move || async move {
                 yandex
                     .fetch_wave_context(vec!["user:onyourwave".to_string()])
                     .await
@@ -631,14 +728,14 @@ impl AudioSystem {
 
     pub fn send_wave_like(&mut self, track: &Track) {
         let track_id = as_wave_seed(track);
+        // Like/unlike don't change the queue: only send feedback, keep the
+        // 3-track prefetch buffer intact (refresh only on dislike).
         self.send_wave_feedback("like", Some(track_id), None, true);
-        self.queue.refresh_wave_queue();
     }
 
     pub fn send_wave_unlike(&mut self, track: &Track) {
         let track_id = as_wave_seed(track);
         self.send_wave_feedback("unlike", Some(track_id), None, true);
-        self.queue.refresh_wave_queue();
     }
 
     pub fn send_wave_dislike(&mut self, track: &Track) {
@@ -661,20 +758,17 @@ impl AudioSystem {
         self.queue.refresh_wave_queue();
     }
 
-    /// Builds a playback queue from locally cached (DB) metadata for the liked
-    /// tracks list, without any network access. Used so that downloaded liked
-    /// tracks can be played while offline.
-    async fn build_local_liked_context(
-        &self,
+    async fn build_local_liked_context_static(
+        db: &Arc<tokio::sync::Mutex<crate::db::AppDatabase>>,
+        state: &Arc<RwLock<SystemState>>,
         track_id: &str,
     ) -> Option<(im::Vector<Track>, usize)> {
-        let (liked_ids, _) = self.state.read().await.liked.ordered_snapshot();
+        let (liked_ids, _) = state.read().await.liked.ordered_snapshot();
         if liked_ids.is_empty() {
             return None;
         }
 
-        let metadata = self
-            .db
+        let metadata = db
             .lock()
             .await
             .get_track_metadata(&liked_ids)
@@ -706,12 +800,12 @@ impl AudioSystem {
     /// without any network access. Used as an offline fallback for album/playlist
     /// tracks, where (unlike liked tracks) we don't keep a local ordered track
     /// list to reconstruct the full queue context.
-    async fn build_single_track_offline(
-        &self,
+    async fn build_single_track_offline_static(
+        db: &Arc<tokio::sync::Mutex<crate::db::AppDatabase>>,
         track_id: &str,
     ) -> Option<(im::Vector<Track>, usize)> {
         let ids = vec![track_id.to_string()];
-        let metadata = self.db.lock().await.get_track_metadata(&ids).await.ok()?;
+        let metadata = db.lock().await.get_track_metadata(&ids).await.ok()?;
         let m = metadata.into_iter().find(|m| m.id == track_id)?;
         let mut tracks = im::Vector::new();
         tracks.push_back(crate::util::track::track_from_metadata(&m));

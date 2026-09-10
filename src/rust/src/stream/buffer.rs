@@ -103,7 +103,7 @@ impl BufferState {
             .unwrap_or(0)
     }
 
-    pub fn read_at(&mut self, pos: u64, buf: &mut [u8]) -> usize {
+    pub fn read_at(&self, pos: u64, buf: &mut [u8]) -> usize {
         self.segments
             .iter()
             .find(|s| s.contains(pos))
@@ -311,21 +311,41 @@ impl BufferState {
                 }
             }
         }
+        self.recompute_max_buffered();
     }
 
     pub fn clear(&mut self, start: u64) {
         self.pending = None;
         self.eof = false;
-        if start <= self.max_buffered_from_start {
-            self.buffering_base = start;
-            self.max_buffered_from_start = start;
-        }
+        // Always rebase: after a far forward seek past buffered data the old
+        // base would make enforce_buffer_limit evict the fresh segment.
+        self.buffering_base = start;
+        self.max_buffered_from_start = self.max_buffered_from_start.max(start);
+        self.recompute_max_buffered();
     }
 
     pub fn discard_before(&mut self, pos: u64) {
         let keep_history = 256 * 1024;
         let safe_pos = pos.saturating_sub(keep_history);
         self.buffering_base = self.buffering_base.max(pos);
+
+        // Drop fully consumed segments, keeping at most one for seek-back history.
+        let first_live = self
+            .segments
+            .iter()
+            .position(|s| s.end_pos() > safe_pos);
+        match first_live {
+            Some(idx) if idx > 1 => {
+                self.segments.drain(0..idx - 1);
+            }
+            Some(_) => {}
+            None => {
+                if self.segments.len() > 1 {
+                    let last = self.segments.len() - 1;
+                    self.segments.drain(0..last);
+                }
+            }
+        }
 
         for seg in &mut self.segments {
             if seg.start_pos < safe_pos && seg.end_pos() > safe_pos {
@@ -383,5 +403,17 @@ impl BufferState {
 
     pub fn clear_pending(&mut self) {
         self.pending = None;
+    }
+
+    fn recompute_max_buffered(&mut self) {
+        let base = self.buffering_base;
+        let mut best = base;
+        for s in &self.segments {
+            if s.contains(base) || s.start_pos == base {
+                best = best.max(s.end_pos());
+            }
+        }
+        // best == base means no live segment at base: clamp stale max down.
+        self.max_buffered_from_start = best;
     }
 }

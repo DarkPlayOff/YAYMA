@@ -10,7 +10,8 @@ pub struct OverdriveEffect {
     pre_filter: StereoBiquad,
     tone_filter: StereoBiquad,
     sample_rate: f32,
-    dry_buf: [f32; MAX_BLOCK],
+    dry_l: [f32; MAX_BLOCK],
+    dry_r: [f32; MAX_BLOCK],
 }
 
 impl OverdriveEffect {
@@ -20,7 +21,8 @@ impl OverdriveEffect {
             pre_filter: StereoBiquad::new(),
             tone_filter: StereoBiquad::new(),
             sample_rate,
-            dry_buf: [0.0; MAX_BLOCK],
+            dry_l: [0.0; MAX_BLOCK],
+            dry_r: [0.0; MAX_BLOCK],
         }
     }
 
@@ -54,25 +56,31 @@ impl Effect for OverdriveEffect {
             self.sample_rate,
         );
 
-        let len = left.len().min(right.len()).min(MAX_BLOCK);
+        let total = left.len().min(right.len());
+        let mut offset = 0;
+        while offset < total {
+            let len = (total - offset).min(MAX_BLOCK);
 
-        // Save dry signal to stack buffer (no heap allocation)
-        self.dry_buf[..len].copy_from_slice(&left[..len]);
+            // Save dry signal per channel (no heap allocation)
+            self.dry_l[..len].copy_from_slice(&left[offset..offset + len]);
+            self.dry_r[..len].copy_from_slice(&right[offset..offset + len]);
 
-        self.pre_filter
-            .process_block(&mut left[..len], &mut right[..len]);
+            let (wl, wr) = (&mut left[offset..offset + len], &mut right[offset..offset + len]);
+            self.pre_filter.process_block(wl, wr);
 
-        for (l, r) in left[..len].iter_mut().zip(right[..len].iter_mut()) {
-            *l = Self::soft_clip(*l * drive) * drive_inv;
-            *r = Self::soft_clip(*r * drive) * drive_inv;
-        }
+            for (l, r) in wl.iter_mut().zip(wr.iter_mut()) {
+                *l = Self::soft_clip(*l * drive) * drive_inv;
+                *r = Self::soft_clip(*r * drive) * drive_inv;
+            }
 
-        self.tone_filter
-            .process_block(&mut left[..len], &mut right[..len]);
+            self.tone_filter.process_block(wl, wr);
 
-        for i in 0..len {
-            left[i] = left[i] * mix + self.dry_buf[i] * dry;
-            right[i] = right[i] * mix + self.dry_buf[i] * dry;
+            for i in 0..len {
+                wl[i] = wl[i] * mix + self.dry_l[i] * dry;
+                wr[i] = wr[i] * mix + self.dry_r[i] * dry;
+            }
+
+            offset += len;
         }
     }
 

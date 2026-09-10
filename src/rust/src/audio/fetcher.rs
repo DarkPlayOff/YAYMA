@@ -14,6 +14,23 @@ use yandex_music::model::track::Track;
 pub const FETCH_BATCH_SIZE: usize = 50;
 pub const WAVE_VISIBLE_TRACKS: usize = 3;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FetchError {
+    AlreadyFetching,
+    MissingWaveSession,
+    PendingIdsNotEmpty,
+}
+
+pub enum FetchTaskResult {
+    Playlist {
+        ids: Vec<String>,
+        result: Result<Vec<Track>, String>,
+    },
+    Wave {
+        result: Result<(Vec<Track>, Session), String>,
+    },
+}
+
 #[derive(Debug, Clone)]
 pub enum WaveTrackOutcome {
     Finished,
@@ -29,25 +46,10 @@ pub struct WaveTrackEvent {
 }
 
 pub struct FetchState {
-    pub task: Option<JoinHandle<(Vec<Track>, Option<Session>)>>,
+    pub task: Option<JoinHandle<FetchTaskResult>>,
     pub pending_track_ids: Vec<String>,
     pub wave_session: Arc<Mutex<Option<Session>>>,
-    playlist_in_flight_ids: Vec<String>,
-    playlist_fetch_failed: Arc<Mutex<bool>>,
     playlist_failure_requeues: u8,
-}
-
-impl Clone for FetchState {
-    fn clone(&self) -> Self {
-        Self {
-            task: None, // JoinHandle cannot be cloned
-            pending_track_ids: self.pending_track_ids.clone(),
-            wave_session: self.wave_session.clone(),
-            playlist_in_flight_ids: self.playlist_in_flight_ids.clone(),
-            playlist_fetch_failed: self.playlist_fetch_failed.clone(),
-            playlist_failure_requeues: self.playlist_failure_requeues,
-        }
-    }
 }
 
 impl Default for FetchState {
@@ -62,8 +64,6 @@ impl FetchState {
             task: None,
             pending_track_ids: Vec::new(),
             wave_session: Arc::new(Mutex::new(None)),
-            playlist_in_flight_ids: Vec::new(),
-            playlist_fetch_failed: Arc::new(Mutex::new(false)),
             playlist_failure_requeues: 0,
         }
     }
@@ -73,18 +73,16 @@ impl FetchState {
             task.abort();
         }
         self.pending_track_ids.clear();
-        self.playlist_in_flight_ids.clear();
-        *self.playlist_fetch_failed.lock() = false;
         self.playlist_failure_requeues = 0;
         *self.wave_session.lock() = None;
     }
 
-    pub fn set_pending_ids(&mut self, ids: Vec<String>) {
-        debug_assert!(
-            self.pending_track_ids.is_empty(),
-            "set_pending_ids called with non-empty list; call reset() first"
-        );
+    pub fn set_pending_ids(&mut self, ids: Vec<String>) -> Result<(), FetchError> {
+        if !self.pending_track_ids.is_empty() {
+            return Err(FetchError::PendingIdsNotEmpty);
+        }
         self.pending_track_ids = ids;
+        Ok(())
     }
 
     pub fn is_fetching(&self) -> bool {
@@ -113,13 +111,12 @@ impl FetchState {
         self.wave_session.clone()
     }
 
-    pub fn trigger_playlist_batch(&mut self, api: Arc<ApiService>) {
-        debug_assert!(!self.is_fetching());
+    pub fn trigger_playlist_batch(&mut self, api: Arc<ApiService>) -> Result<(), FetchError> {
+        if self.is_fetching() {
+            return Err(FetchError::AlreadyFetching);
+        }
         let count = FETCH_BATCH_SIZE.min(self.pending_track_ids.len());
         let ids: Vec<String> = self.pending_track_ids.drain(0..count).collect();
-        self.playlist_in_flight_ids = ids.clone();
-        *self.playlist_fetch_failed.lock() = false;
-        let fetch_failed = self.playlist_fetch_failed.clone();
 
         self.task = Some(tokio::spawn(async move {
             let mut last_error = None;
@@ -133,7 +130,10 @@ impl FetchState {
                             .into_iter()
                             .filter(|t| t.available.unwrap_or(false))
                             .collect();
-                        return (valid, None);
+                        return FetchTaskResult::Playlist {
+                            ids,
+                            result: Ok(valid),
+                        };
                     }
                     Ok(Err(e)) => last_error = Some(e.to_string()),
                     Err(_) => last_error = Some("request timed out".to_string()),
@@ -143,9 +143,12 @@ impl FetchState {
                 }
             }
             error!(error = ?last_error, "track_fetch_failed");
-            *fetch_failed.lock() = true;
-            (vec![], None)
+            FetchTaskResult::Playlist {
+                ids,
+                result: Err(last_error.unwrap_or_else(|| "track fetch failed".into())),
+            }
         }));
+        Ok(())
     }
 
     pub fn trigger_wave_batch(
@@ -153,13 +156,18 @@ impl FetchState {
         api: Arc<ApiService>,
         wave_seeds: Vec<String>,
         pending_feedback: Vec<WaveTrackEvent>,
-    ) {
-        debug_assert!(!self.is_fetching());
+    ) -> Result<(), FetchError> {
+        if self.is_fetching() {
+            return Err(FetchError::AlreadyFetching);
+        }
         let session = match self.wave_session_clone() {
             Some(s) => s,
-            None => return,
+            None => return Err(FetchError::MissingWaveSession),
         };
-        let session_id = session.radio_session_id.clone().unwrap_or_default();
+        let session_id = match session.radio_session_id.clone() {
+            Some(id) if !id.is_empty() => id,
+            _ => return Err(FetchError::MissingWaveSession),
+        };
 
         self.task = Some(tokio::spawn(async move {
             let feedbacks: Vec<StationFeedback> = pending_feedback
@@ -194,33 +202,78 @@ impl FetchState {
                         .iter()
                         .map(|item| item.track.clone())
                         .collect();
-                    (new_tracks, Some(response))
+                    FetchTaskResult::Wave {
+                        result: Ok((new_tracks, response)),
+                    }
                 }
                 Err(e) => {
                     error!(error = %e, "wave_fetch_failed");
-                    (vec![], None)
+                    FetchTaskResult::Wave {
+                        result: Err(e.to_string()),
+                    }
                 }
             }
         }));
+        Ok(())
     }
 
     pub async fn await_task(&mut self) -> Option<(Vec<Track>, Option<Session>)> {
-        let task = self.task.take()?;
-        let result = (task.await).ok();
-        if *self.playlist_fetch_failed.lock() {
-            if self.playlist_failure_requeues == 0 {
-                let ids = std::mem::take(&mut self.playlist_in_flight_ids);
-                self.pending_track_ids.splice(0..0, ids);
-                self.playlist_failure_requeues = 1;
-            } else {
-                self.playlist_in_flight_ids.clear();
-            }
-        } else {
-            self.playlist_in_flight_ids.clear();
-            self.playlist_failure_requeues = 0;
+        self.await_task_timeout(Duration::from_secs(30)).await
+    }
+
+    /// Bounded wait for the in-flight fetch so the audio actor never blocks
+    /// on a ~30s network fetch. On timeout the task handle is kept and the
+    /// result is picked up later via poll_fetch().
+    pub async fn await_task_timeout(
+        &mut self,
+        timeout: Duration,
+    ) -> Option<(Vec<Track>, Option<Session>)> {
+        if self.task.is_none() {
+            return None;
         }
-        *self.playlist_fetch_failed.lock() = false;
-        result
+        if !self.is_finished() {
+            // Wait without consuming the handle: `&mut JoinHandle` is itself
+            // a Future, so a timeout leaves `self.task` intact for poll_fetch().
+            if let Some(task) = self.task.as_mut() {
+                let _ = tokio::time::timeout(timeout, &mut *task).await;
+            }
+            if !self.is_finished() {
+                return None;
+            }
+        }
+        self.await_task_inner().await
+    }
+
+    async fn await_task_inner(&mut self) -> Option<(Vec<Track>, Option<Session>)> {
+        let task = self.task.take()?;
+        let result = match task.await {
+            Ok(result) => result,
+            Err(_) => {
+                self.playlist_failure_requeues = 0;
+                return None;
+            }
+        };
+
+        match result {
+            FetchTaskResult::Playlist { ids, result } => match result {
+                Ok(tracks) => {
+                    self.playlist_failure_requeues = 0;
+                    Some((tracks, None))
+                }
+                Err(error) => {
+                    error!(error = %error, "track_fetch_failed");
+                    if self.playlist_failure_requeues == 0 {
+                        self.pending_track_ids.splice(0..0, ids);
+                        self.playlist_failure_requeues = 1;
+                    }
+                    Some((vec![], None))
+                }
+            },
+            FetchTaskResult::Wave { result } => {
+                self.playlist_failure_requeues = 0;
+                Some(result.map_or((vec![], None), |(tracks, session)| (tracks, Some(session))))
+            }
+        }
     }
 }
 
@@ -229,10 +282,24 @@ pub struct WaveExtensionHandles {
     pub queue_length: Signal<usize>,
     pub wave_session: Arc<Mutex<Option<Session>>>,
     pub playback_context: Arc<Mutex<crate::audio::queue::PlaybackContext>>,
+    pub generation: u64,
+    pub generation_ref: Arc<std::sync::atomic::AtomicU64>,
 }
 
 impl WaveExtensionHandles {
     pub fn apply(self, additional: Vector<Track>, session: Session) {
+        self.apply_if_current(additional, session);
+    }
+
+    /// Apply only if no load()/clear() happened since the task was spawned.
+    pub fn apply_if_current(self, additional: Vector<Track>, session: Session) {
+        if self
+            .generation_ref
+            .load(std::sync::atomic::Ordering::Relaxed)
+            != self.generation
+        {
+            return;
+        }
         *self.wave_session.lock() = Some(session.clone());
         *self.playback_context.lock() = crate::audio::queue::PlaybackContext::Wave(session);
 
@@ -245,5 +312,22 @@ impl WaveExtensionHandles {
         self.queue.update(|q| q.extend(visible));
         self.queue_length
             .set(self.queue.with(|q: &Vector<Track>| q.len()));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn set_pending_ids_rejects_replacement() {
+        let mut state = FetchState::new();
+        state.set_pending_ids(vec!["first".into()]).unwrap();
+
+        assert_eq!(
+            state.set_pending_ids(vec!["replacement".into()]),
+            Err(FetchError::PendingIdsNotEmpty)
+        );
+        assert_eq!(state.pending_track_ids, vec!["first"]);
     }
 }

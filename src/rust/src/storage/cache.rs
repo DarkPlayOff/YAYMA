@@ -46,6 +46,7 @@ impl HttpCache {
         let client = reqwest::Client::builder()
             .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 YandexMusic/5.82.0")
             .pool_max_idle_per_host(5)
+            .timeout(std::time::Duration::from_secs(30))
             .build()
             .unwrap_or_else(|_| reqwest::Client::new());
 
@@ -100,8 +101,22 @@ impl HttpCache {
         };
 
         if let Some(tx) = tx {
-            // We are the downloader
-            let result = self.perform_download(url).await;
+            // We are the downloader. Guard the map entry so a cancelled
+            // download never leaves a dead channel behind.
+            let url_key = url.to_string();
+            let result = tokio::time::timeout(
+                std::time::Duration::from_secs(60),
+                self.perform_download(url),
+            )
+            .await
+            .map_err(|_| {
+                Box::<dyn std::error::Error + Send + Sync>::from("http cache download timed out")
+            })
+            .and_then(|r| r);
+
+            // Remove before send: a waiter subscribing between send and remove
+            // would wait on an already-fired broadcast channel forever.
+            get_active_downloads().map.lock().remove(&url_key);
 
             // Broadcast the result to all waiters
             let broadcast_result = result
@@ -110,7 +125,6 @@ impl HttpCache {
                 .map_err(|e| e.to_string());
 
             let _ = tx.send(broadcast_result);
-            get_active_downloads().map.lock().remove(url);
 
             result
         } else {
@@ -160,10 +174,22 @@ impl HttpCache {
 
         let mut size = response.content_length().unwrap_or(0);
 
-        // Stream the response to file to avoid loading everything into RAM
+        // Stream the response to file to avoid loading everything into RAM.
+        // A chunk error must fail the download: treating it as EOF would cache
+        // a truncated file as valid forever.
         let mut file = fs::File::create(&file_path).await?;
         let mut response = response;
-        while let Ok(Some(chunk)) = response.chunk().await {
+        while let Some(chunk) = tokio::time::timeout(
+            std::time::Duration::from_secs(30),
+            response.chunk(),
+        )
+        .await
+        .map_err(|_| {
+            Box::<dyn std::error::Error + Send + Sync>::from("http cache chunk timed out")
+        })?
+        .map_err(|e| {
+            Box::<dyn std::error::Error + Send + Sync>::from(format!("http cache chunk failed: {e}"))
+        })? {
             tokio::io::AsyncWriteExt::write_all(&mut file, &chunk).await?;
         }
         tokio::io::AsyncWriteExt::flush(&mut file).await?;
@@ -247,6 +273,11 @@ pub struct TrackCache {
     cache_dir: PathBuf,
 }
 
+/// Single source of truth for offline track extensions.
+/// `m4a` files carry AAC codec — mapping lives here only.
+pub const SUPPORTED_TRACK_EXTS: &[(&str, &str)] =
+    &[("flac", "flac"), ("m4a", "aac"), ("mp3", "mp3")];
+
 impl TrackCache {
     pub fn new(base_path: Option<PathBuf>) -> Self {
         let cache_dir = if let Some(path) = base_path {
@@ -296,11 +327,14 @@ impl TrackCache {
     }
 
     pub async fn get_track_file(&self, track_id: &str) -> Option<(PathBuf, String)> {
-        // Try to find the file with any supported extension
-        for ext in ["flac", "m4a", "mp3"] {
+        // Try to find the file with any supported extension.
+        // Skips stale `.part` files and empty/corrupt downloads.
+        for (ext, codec) in SUPPORTED_TRACK_EXTS {
             let path = self.cache_dir.join(format!("{}.{}", track_id, ext));
-            if path.exists() {
-                let codec = if ext == "m4a" { "aac" } else { ext };
+            if path.exists()
+                && let Ok(meta) = std::fs::metadata(&path)
+                && meta.len() > 0
+            {
                 return Some((path, codec.to_string()));
             }
         }
@@ -369,12 +403,21 @@ impl TrackCache {
     }
 
     pub async fn delete_track(&self, track_id: &str) -> Result<(), std::io::Error> {
-        // Delete the track file
-        for ext in ["flac", "m4a", "mp3", "aac"] {
+        // Delete the track file (final + stale partials)
+        for (ext, _) in SUPPORTED_TRACK_EXTS {
             let path = self.cache_dir.join(format!("{}.{}", track_id, ext));
             if path.exists() {
                 let _ = fs::remove_file(path).await;
             }
+            let part = self.cache_dir.join(format!("{}.{}.part", track_id, ext));
+            if part.exists() {
+                let _ = fs::remove_file(part).await;
+            }
+        }
+        // Legacy `.aac` files never matched get_track_file — clean them too.
+        let legacy = self.cache_dir.join(format!("{}.aac", track_id));
+        if legacy.exists() {
+            let _ = fs::remove_file(legacy).await;
         }
         Ok(())
     }

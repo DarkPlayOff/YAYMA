@@ -58,8 +58,13 @@ impl StereoBiquad {
     }
 
     pub fn update(&mut self, ftype: FilterType, freq: f32, q: f32, gain_db: f32, sample_rate: f32) {
+        debug_assert!(sample_rate >= 8000.0, "StereoBiquad::update bad sample_rate {sample_rate}");
+        let sample_rate = sample_rate.max(8000.0);
+        let freq = if freq.is_finite() { freq } else { 1000.0 };
+        let q = if q.is_finite() { q } else { 0.707 };
+        let gain_db = if gain_db.is_finite() { gain_db } else { 0.0 };
         let freq = freq.clamp(10.0, sample_rate * 0.499);
-        let q = q.max(0.01);
+        let q = q.clamp(0.01, 30.0);
 
         let w0 = 2.0 * PI * freq / sample_rate;
         let cos_w0 = w0.cos();
@@ -152,23 +157,29 @@ impl StereoBiquad {
         let (mut s1r, mut s2r) = (self.s1r, self.s2r);
 
         for (l, r) in left.iter_mut().zip(right.iter_mut()) {
-            let xl = *l;
+            let mut xl = *l;
+            let mut xr = *r;
+            if !xl.is_finite() {
+                xl = 0.0;
+            }
+            if !xr.is_finite() {
+                xr = 0.0;
+            }
             let yl = b0 * xl + s1l;
             s1l = b1 * xl - a1 * yl + s2l;
             s2l = b2 * xl - a2 * yl;
             *l = yl;
 
-            let xr = *r;
             let yr = b0 * xr + s1r;
             s1r = b1 * xr - a1 * yr + s2r;
             s2r = b2 * xr - a2 * yr;
             *r = yr;
         }
 
-        self.s1l = s1l;
-        self.s2l = s2l;
-        self.s1r = s1r;
-        self.s2r = s2r;
+        self.s1l = flush_denormal(s1l);
+        self.s2l = flush_denormal(s2l);
+        self.s1r = flush_denormal(s1r);
+        self.s2r = flush_denormal(s2r);
     }
 
     pub fn reset(&mut self) {
@@ -176,5 +187,14 @@ impl StereoBiquad {
         self.s2l = 0.0;
         self.s1r = 0.0;
         self.s2r = 0.0;
+    }
+}
+
+#[inline(always)]
+fn flush_denormal(v: f32) -> f32 {
+    if v.is_finite() {
+        if v.abs() < 1e-20 { 0.0 } else { v }
+    } else {
+        0.0
     }
 }

@@ -108,15 +108,21 @@ impl Iterator for BufferedStreamingSource {
     type Item = f32;
 
     fn next(&mut self) -> Option<f32> {
-        let current_generation = self.generation.load(Ordering::Acquire);
-        if self.pending_generation != current_generation {
-            self.pending_generation = current_generation;
-            self.recycle_current();
-            self.sample_pos = 0;
-            self.finished_generation = None;
-        }
+        loop {
+            let current_generation = self.generation.load(Ordering::Acquire);
+            if self.pending_generation != current_generation {
+                self.pending_generation = current_generation;
+                self.recycle_current();
+                self.sample_pos = 0;
+                self.finished_generation = None;
+            }
 
-        if self.sample_pos >= self.pending_samples.len() {
+            if self.sample_pos < self.pending_samples.len() {
+                let sample = self.pending_samples[self.sample_pos];
+                self.sample_pos += 1;
+                return Some(sample);
+            }
+
             if let Some(finished_gen) = self.finished_generation
                 && finished_gen == current_generation
             {
@@ -127,52 +133,58 @@ impl Iterator for BufferedStreamingSource {
                 Ok(SampleMessage::Samples(samples, msg_gen)) => {
                     if msg_gen != current_generation {
                         let _ = self.recycle_tx.try_send(samples);
-                        return self.next();
+                        continue;
                     }
                     self.recycle_current();
                     self.pending_samples = samples;
                     self.sample_pos = 0;
+                    continue;
                 }
                 Ok(SampleMessage::Finished(msg_gen)) => {
                     if msg_gen == current_generation {
                         self.finished_generation = Some(msg_gen);
                         return None;
                     }
-                    return self.next();
+                    continue;
                 }
                 Err(TryRecvError::Empty) => {
                     // Do not manufacture silence while the network source is
-                    // buffering: silence is interpreted by the mixer as valid
-                    // audio and masks stalls. Wait until the decoder produces
-                    // samples, reaches EOF, or exits.
-                    match self.rx.recv() {
-                        Ok(message) => match message {
-                            SampleMessage::Samples(samples, msg_gen)
-                                if msg_gen == current_generation =>
-                            {
-                                self.pending_samples = samples;
-                                self.sample_pos = 0;
+                    // buffering. Wait with a timeout so seek/stop (generation
+                    // bump) wakes us even when the decoder is stalled.
+                    match self.rx.recv_timeout(Duration::from_millis(150)) {
+                        Ok(SampleMessage::Samples(samples, msg_gen)) => {
+                            if msg_gen != current_generation {
+                                let _ = self.recycle_tx.try_send(samples);
+                                continue;
                             }
-                            SampleMessage::Finished(msg_gen) if msg_gen == current_generation => {
+                            self.recycle_current();
+                            self.pending_samples = samples;
+                            self.sample_pos = 0;
+                            continue;
+                        }
+                        Ok(SampleMessage::Finished(msg_gen)) => {
+                            if msg_gen == current_generation {
                                 self.finished_generation = Some(msg_gen);
                                 return None;
                             }
-                            SampleMessage::Samples(samples, _) => {
-                                let _ = self.recycle_tx.try_send(samples);
-                                return self.next();
+                            continue;
+                        }
+                        Err(crossbeam_channel::RecvTimeoutError::Timeout) => {
+                            // Timeout: re-check generation instead of blocking
+                            // indefinitely on a stalled network source.
+                            if self.generation.load(Ordering::Acquire) != current_generation {
+                                continue;
                             }
-                            SampleMessage::Finished(_) => return self.next(),
-                        },
-                        Err(_) => return None,
+                            continue;
+                        }
+                        Err(crossbeam_channel::RecvTimeoutError::Disconnected) => {
+                            return None;
+                        }
                     }
                 }
                 Err(TryRecvError::Disconnected) => return None,
             }
         }
-
-        let sample = self.pending_samples[self.sample_pos];
-        self.sample_pos += 1;
-        Some(sample)
     }
 }
 
@@ -303,7 +315,9 @@ fn run_decode_loop<R: std::io::Read + std::io::Seek + Send + Sync + 'static>(
                     position,
                     generation: new_gen,
                 }) => {
-                    let _ = decoder.try_seek(position);
+                    if let Err(e) = decoder.try_seek(position) {
+                        tracing::warn!(error = %e, "decoder coarse seek failed");
+                    }
                     if progress_generation == progress.get_generation() {
                         progress.set_current_position(position);
                     }
@@ -329,7 +343,9 @@ fn run_decode_loop<R: std::io::Read + std::io::Seek + Send + Sync + 'static>(
                 recv(cmd_rx) -> msg => {
                     match msg {
                         Ok(DecoderCommand::Seek { position, generation: new_gen }) => {
-                            let _ = decoder.try_seek(position);
+                            if let Err(e) = decoder.try_seek(position) {
+                                tracing::warn!(error = %e, "decoder coarse seek failed");
+                            }
                             if progress_generation == progress.get_generation() {
                                 progress.set_current_position(position);
                             }
@@ -369,7 +385,9 @@ fn run_decode_loop<R: std::io::Read + std::io::Seek + Send + Sync + 'static>(
                     position,
                     generation: new_gen,
                 }) => {
-                    let _ = decoder.try_seek(position);
+                    if let Err(e) = decoder.try_seek(position) {
+                        tracing::warn!(error = %e, "decoder coarse seek failed");
+                    }
                     if progress_generation == progress.get_generation() {
                         progress.set_current_position(position);
                     }
