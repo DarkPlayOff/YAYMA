@@ -72,11 +72,8 @@ class _LibraryViewState extends State<LibraryView>
         builder: (context) => StatefulBuilder(
           builder: (context, setState) {
             final cs = Theme.of(context).colorScheme;
-            return AlertDialog(
-              title: Text(
-                'Новый плейлист',
-                style: TextStyle(color: cs.onSurface),
-              ),
+            return AppDialog(
+              title: 'Новый плейлист',
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -109,10 +106,7 @@ class _LibraryViewState extends State<LibraryView>
                 ],
               ),
               actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Отмена'),
-                ),
+                AppDialog.cancelButton(context),
                 ElevatedButton(
                   onPressed: () async {
                     if (controller.text.isNotEmpty) {
@@ -281,20 +275,14 @@ class _LikedTracksTabState extends State<_LikedTracksTab> {
         context: context,
         builder: (context) {
           final cs = Theme.of(context).colorScheme;
-          return AlertDialog(
-            title: Text(
-              'Удалить всё?',
-              style: TextStyle(color: cs.onSurface),
-            ),
+          return AppDialog(
+            title: 'Удалить всё?',
             content: Text(
               'Вы действительно хотите удалить все скачанные любимые треки?',
               style: TextStyle(color: cs.onSurfaceVariant),
             ),
             actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Отмена'),
-              ),
+              AppDialog.cancelButton(context),
               ElevatedButton(
                 style: ElevatedButton.styleFrom(
                   backgroundColor: cs.error,
@@ -447,7 +435,7 @@ class _LikedTracksTabState extends State<_LikedTracksTab> {
                         ),
                       ),
                     )
-                  : M3ECardList.builder(
+                  : M3ESegmentedList.builder(
                       haptic: M3EHapticFeedback.light,
                       itemCount: tracks.length,
                       listPadding: const EdgeInsets.only(bottom: 140),

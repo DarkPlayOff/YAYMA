@@ -2,6 +2,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/features/core/providers/notification_provider.dart';
 import 'package:yayma/src/features/core/theme/app_tokens.dart';
+import 'package:yayma/src/features/core/views/widgets/common_ui.dart';
 import 'package:yayma/src/features/core/views/widgets/rust_cached_image.dart';
 import 'package:yayma/src/features/library/providers/library_provider.dart';
 import 'package:yayma/src/rust/api/models.dart';
@@ -23,14 +24,8 @@ class AddToPlaylistDialog extends SignalWidget {
     final cs = Theme.of(context).colorScheme;
     final playlists = playlistsSignal.value;
 
-    return AlertDialog(
-      title: Text(
-        'Добавить в плейлист',
-        style: TextStyle(
-          color: cs.onSurface,
-          fontWeight: FontWeight.bold,
-        ),
-      ),
+    return AppDialog(
+      title: 'Добавить в плейлист',
       content: SizedBox(
         width: 400,
         height: 500,
@@ -97,15 +92,7 @@ class AddToPlaylistDialog extends SignalWidget {
                 },
               ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: Text(
-            'Отмена',
-            style: TextStyle(color: cs.onSurfaceVariant),
-          ),
-        ),
-      ],
+      actions: [AppDialog.closeButton(context, 'Отмена')],
     );
   }
 }

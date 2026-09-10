@@ -5,6 +5,7 @@ import 'package:m3e_core/m3e_core.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:yayma/src/features/core/theme/app_tokens.dart';
+import 'package:yayma/src/features/core/views/widgets/common_ui.dart';
 import 'package:yayma/src/features/settings/services/update_service.dart';
 
 class UpdateDialog extends StatefulWidget {
@@ -396,31 +397,16 @@ class _UpdateDialogState extends State<UpdateDialog> {
       );
     }
 
-    return AlertDialog(
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(AppRadius.xxl),
-        side: BorderSide(color: cs.onSurface.withValues(alpha: 0.1)),
+    return AppDialog(
+      title: titleText,
+      titleIcon: Icons.system_update_rounded,
+      titleStyle: TextStyle(
+        color: cs.onSurface,
+        fontWeight: FontWeight.bold,
+        fontSize: 18,
       ),
-      title: Row(
-        children: [
-          Icon(Icons.system_update_rounded, color: cs.onSurface),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              titleText,
-              style: TextStyle(
-                color: cs.onSurface,
-                fontWeight: FontWeight.bold,
-                fontSize: 18,
-              ),
-            ),
-          ),
-        ],
-      ),
-      content: SizedBox(
-        width: 500,
-        child: content,
-      ),
+      contentWidth: 500,
+      content: content,
       actions: actions,
     );
   }

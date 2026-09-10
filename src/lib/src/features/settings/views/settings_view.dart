@@ -10,6 +10,7 @@ import 'package:yayma/src/features/core/providers/notification_provider.dart';
 import 'package:yayma/src/features/core/providers/visual_effects_provider.dart';
 import 'package:yayma/src/features/core/services/global_hotkey_service.dart';
 import 'package:yayma/src/features/core/theme/app_tokens.dart';
+import 'package:yayma/src/features/core/views/widgets/common_ui.dart';
 import 'package:yayma/src/features/core/views/widgets/responsive.dart';
 import 'package:yayma/src/features/library/providers/library_provider.dart';
 import 'package:yayma/src/features/settings/views/lyrics_providers_dialog.dart';
@@ -40,41 +41,41 @@ class _SettingsViewState extends State<SettingsView> {
     _pathSignal = futureSignal(() async {
       final ctx = appContextSignal.value;
       if (ctx == null) return null;
-      return rust.getDownloadPath(ctx: ctx);
+      return await rust.getDownloadPath(ctx: ctx);
     });
     _cacheSizeSignal = futureSignal(() async {
       final ctx = appContextSignal.value;
       if (ctx == null) return 0;
-      return simple.getCacheSize(ctx: ctx);
+      return await simple.getCacheSize(ctx: ctx);
     });
     _trackCacheSizeSignal = futureSignal(() async {
       final ctx = appContextSignal.value;
       if (ctx == null) return 0;
-      return simple.getTrackCacheSize(ctx: ctx);
+      return await simple.getTrackCacheSize(ctx: ctx);
     });
     _versionSignal = futureSignal(() async {
-      return simple.getAppVersion();
+      return await simple.getAppVersion();
     });
     _discordRpcSignal = futureSignal(() async {
       final ctx = appContextSignal.value;
       if (ctx == null) return false;
-      return simple.isDiscordRpcEnabled(ctx: ctx);
+      return await simple.isDiscordRpcEnabled(ctx: ctx);
     });
     _customTitlebarSignal = futureSignal(() async {
       final ctx = appContextSignal.value;
       if (ctx == null) return true;
-      return simple.isCustomTitlebarEnabled(ctx: ctx);
+      return await simple.isCustomTitlebarEnabled(ctx: ctx);
     });
-    _autoHideNavbarSignal = futureSignal(() async {
-      return autoHideNavbarSignal.value;
-    });
-    _closeToTraySignal = futureSignal(() async {
-      return closeToTraySignal.value;
-    });
+    _autoHideNavbarSignal = futureSignal(
+      () => Future.value(autoHideNavbarSignal.value),
+    );
+    _closeToTraySignal = futureSignal(
+      () => Future.value(closeToTraySignal.value),
+    );
     _updateCheckSignal = futureSignal(() async {
       final ctx = appContextSignal.value;
       if (ctx == null) return true;
-      return simple.isUpdateCheckEnabled(ctx: ctx);
+      return await simple.isUpdateCheckEnabled(ctx: ctx);
     });
   }
 
@@ -630,8 +631,8 @@ class _GlobalHotkeysDialogState extends State<_GlobalHotkeysDialog> {
     final screenHeight = MediaQuery.sizeOf(context).height;
     final maxContentHeight = (screenHeight * 0.82).clamp(360.0, 760.0);
 
-    return AlertDialog(
-      title: const Text('Горячие клавиши'),
+    return AppDialog(
+      title: 'Горячие клавиши',
       content: ConstrainedBox(
         constraints: BoxConstraints(
           maxWidth: 560,
@@ -818,8 +819,8 @@ class _HotkeyDialogState extends State<_HotkeyDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(widget.binding.action.title),
+    return AppDialog(
+      title: widget.binding.action.title,
       content: SizedBox(
         width: 420,
         child: Column(
@@ -840,10 +841,7 @@ class _HotkeyDialogState extends State<_HotkeyDialog> {
         ),
       ),
       actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Отмена'),
-        ),
+        AppDialog.cancelButton(context),
         FilledButton(
           onPressed: () => Navigator.pop(context, _hotKey),
           child: const Text('Сохранить'),

@@ -16,7 +16,7 @@ final FutureSignal<SearchResultsDto?> searchResultsSignal =
       final ctx = appContextSignal.value;
       if (ctx == null) return null;
 
-      return search(ctx: ctx, query: query);
+      return await search(ctx: ctx, query: query);
     });
 
 Timer? _searchDebounce;

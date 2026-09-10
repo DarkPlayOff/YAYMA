@@ -70,17 +70,17 @@ Future<void> initPlayback() async {
           trackId,
         };
       case rust.AppEvent_TrackDownloadFinished(field0: final trackId):
-        final newSet = {...downloadingTracksSignal.value};
-        newSet.remove(trackId);
-        downloadingTracksSignal.value = newSet;
+        downloadingTracksSignal.value = {
+          ...downloadingTracksSignal.value,
+        }..remove(trackId);
         unawaited(refreshDownloadedTracks());
       case rust.AppEvent_TrackDownloadFailed(
         field0: final trackId,
         field1: final error,
       ):
-        final newSet = {...downloadingTracksSignal.value};
-        newSet.remove(trackId);
-        downloadingTracksSignal.value = newSet;
+        downloadingTracksSignal.value = {
+          ...downloadingTracksSignal.value,
+        }..remove(trackId);
         showAppError('Ошибка загрузки трека: $error');
       case _:
         break;
@@ -128,9 +128,9 @@ final EffectCleanup _wifiLockEffect = effect(() {
       (state?.isBuffering ?? false) || (state?.isPlaying ?? false);
 
   if (shouldHold) {
-    _wifiLockChannel.invokeMethod('acquire').catchError((e) {});
+    unawaited(_wifiLockChannel.invokeMethod('acquire').catchError((e) {}));
   } else {
-    _wifiLockChannel.invokeMethod('release').catchError((e) {});
+    unawaited(_wifiLockChannel.invokeMethod('release').catchError((e) {}));
   }
 });
 
@@ -260,7 +260,7 @@ final FutureSignal<List<SimpleTrackDto>> queueTracksSignal = computedAsync(
     final _ = state.queueCount;
     final _ = state.isShuffled;
 
-    return rust.getQueue(ctx: ctx);
+    return await rust.getQueue(ctx: ctx);
   },
   options: const AsyncSignalOptions(name: 'queueTracksSignal'),
 );

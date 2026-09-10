@@ -39,7 +39,7 @@ class _AlbumViewState extends State<AlbumView> {
       if (id == null) return null;
       final ctx = appContextSignal.value;
       if (ctx == null) return null;
-      return rust.getAlbumDetails(albumId: id, ctx: ctx);
+      return await rust.getAlbumDetails(albumId: id, ctx: ctx);
     });
     unawaited(refreshLikedAlbums());
   }
@@ -279,7 +279,7 @@ class _AlbumViewState extends State<AlbumView> {
                         : albumActions,
                   ),
                   slivers: [
-                    SliverM3ECardList(
+                    SliverM3ESegmentedList(
                       haptic: M3EHapticFeedback.light,
                       itemCount: albumData.tracks.length,
                       color: Colors.transparent,

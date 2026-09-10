@@ -66,7 +66,7 @@ class _RootScreenState extends State<RootScreen> {
                               UpdateDialog.show(context, initialInfo: info);
                             }
                           }
-                        } catch (e) {
+                        } on Object catch (e) {
                           debugPrint('Error checking for updates: $e');
                         }
                       }());
@@ -387,7 +387,7 @@ class _YandexLoginDialogState extends State<YandexLoginDialog> {
             }
           },
           onNavigationRequest: (request) async {
-            return _parseToken(request.url);
+            return await _parseToken(request.url);
           },
           onPageFinished: (url) async {
             unawaited(_parseToken(url));

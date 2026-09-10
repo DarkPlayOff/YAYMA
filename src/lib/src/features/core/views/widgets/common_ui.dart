@@ -6,7 +6,6 @@ import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/features/core/theme/app_tokens.dart';
 import 'package:yayma/src/features/core/views/widgets/app_context_menu.dart';
 import 'package:yayma/src/features/core/views/widgets/responsive.dart';
-import 'package:yayma/src/features/core/views/widgets/rust_cached_image.dart';
 import 'package:yayma/src/features/core/views/widgets/track_elements.dart';
 import 'package:yayma/src/features/playback/providers/playback_provider.dart';
 import 'package:yayma/src/rust/api/models.dart';
@@ -794,5 +793,130 @@ class _BurstPainter extends CustomPainter {
     return oldDelegate.progress != progress ||
         oldDelegate.opacity != opacity ||
         oldDelegate.color != color;
+  }
+}
+
+/// Shared application dialog shell: one shape, one title style and standard
+/// dismiss buttons for every standard AlertDialog-based dialog.
+///
+/// Anything non-standard (custom positioning, bare Dialog hosts like login or
+/// the account menu) stays on raw Dialog/AlertDialog deliberately.
+class AppDialog extends StatelessWidget {
+  /// Fully custom title (e.g. a row with a close button or tabs). Takes
+  /// precedence over [title]/[titleIcon].
+  final Widget? titleWidget;
+
+  /// Plain-text title, rendered bold in [titleStyle] unless overridden.
+  final String? title;
+
+  /// Optional leading icon for the plain-text title row.
+  final IconData? titleIcon;
+
+  /// Style for the plain-text title. Defaults to bold onSurface.
+  final TextStyle? titleStyle;
+
+  final Widget? content;
+
+  /// Constrains content width (replaces `SizedBox(width: ...)` wrappers).
+  final double? contentWidth;
+
+  final List<Widget>? actions;
+
+  final EdgeInsetsGeometry? titlePadding;
+  final EdgeInsetsGeometry? contentPadding;
+  final EdgeInsetsGeometry? actionsPadding;
+  final ShapeBorder? shape;
+  final Color? surfaceTintColor;
+  final bool scrollable;
+
+  const AppDialog({
+    super.key,
+    this.titleWidget,
+    this.title,
+    this.titleIcon,
+    this.titleStyle,
+    this.content,
+    this.contentWidth,
+    this.actions,
+    this.titlePadding,
+    this.contentPadding,
+    this.actionsPadding,
+    this.shape,
+    this.surfaceTintColor,
+    this.scrollable = false,
+  });
+
+  /// The app-wide dialog shape. Used automatically; exposed for the rare
+  /// dialog that needs the shape without the full shell.
+  static ShapeBorder shapeOf(BuildContext context) {
+    return RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(AppRadius.xxl),
+      side: BorderSide(
+        color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.1),
+      ),
+    );
+  }
+
+  /// Standard dismiss action with default button color.
+  static Widget cancelButton(BuildContext context, [String label = 'Отмена']) {
+    return TextButton(
+      onPressed: () => Navigator.pop(context),
+      child: Text(label),
+    );
+  }
+
+  /// Standard dismiss action in muted color.
+  static Widget closeButton(BuildContext context, [String label = 'Закрыть']) {
+    final cs = Theme.of(context).colorScheme;
+    return TextButton(
+      onPressed: () => Navigator.pop(context),
+      child: Text(label, style: TextStyle(color: cs.onSurfaceVariant)),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final titleText = title;
+
+    var effectiveTitle = titleWidget;
+    effectiveTitle ??= titleText != null
+        ? Row(
+            children: [
+              if (titleIcon != null) ...[
+                Icon(titleIcon, color: cs.onSurface),
+                const SizedBox(width: 12),
+              ],
+              Expanded(
+                child: Text(
+                  titleText,
+                  style:
+                      titleStyle ??
+                      TextStyle(
+                        color: cs.onSurface,
+                        fontWeight: FontWeight.bold,
+                      ),
+                ),
+              ),
+            ],
+          )
+        : null;
+
+    var body = content;
+    if (body != null && contentWidth != null) {
+      body = SizedBox(width: contentWidth, child: body);
+    }
+
+    return AlertDialog(
+      shape: shape ?? shapeOf(context),
+      surfaceTintColor: surfaceTintColor,
+      titlePadding: titlePadding,
+      contentPadding: contentPadding,
+      actionsPadding: actionsPadding,
+      scrollable: scrollable,
+      title: effectiveTitle,
+      content: body,
+      actions: actions,
+    );
   }
 }

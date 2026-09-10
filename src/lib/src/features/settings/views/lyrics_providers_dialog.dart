@@ -4,6 +4,7 @@ import 'package:m3e_core/m3e_core.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:yayma/src/features/auth/providers/auth_provider.dart';
 import 'package:yayma/src/features/core/theme/app_tokens.dart';
+import 'package:yayma/src/features/core/views/widgets/common_ui.dart';
 import 'package:yayma/src/features/playback/providers/lyrics_provider.dart';
 import 'package:yayma/src/rust/api/content.dart' as rust;
 import 'package:yayma/src/rust/api/models.dart';
@@ -79,30 +80,16 @@ class _LyricsProvidersDialogState extends State<LyricsProvidersDialog> {
     final cs = Theme.of(context).colorScheme;
     final primaryColor = cs.primary;
 
-    return AlertDialog(
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(AppRadius.xxl),
-        side: BorderSide(color: cs.onSurface.withValues(alpha: 0.1)),
+    return AppDialog(
+      title: 'Источники текста песен',
+      titleIcon: Icons.lyrics_rounded,
+      titleStyle: TextStyle(
+        color: cs.onSurface,
+        fontWeight: FontWeight.bold,
+        fontSize: 18,
       ),
-      title: Row(
-        children: [
-          Icon(Icons.lyrics_rounded, color: cs.onSurface),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              'Источники текста песен',
-              style: TextStyle(
-                color: cs.onSurface,
-                fontWeight: FontWeight.bold,
-                fontSize: 18,
-              ),
-            ),
-          ),
-        ],
-      ),
-      content: SizedBox(
-        width: 500,
-        child: _loading
+      contentWidth: 500,
+      content: _loading
             ? const SizedBox(
                 height: 150,
                 child: Center(child: M3ELoadingIndicator()),
@@ -168,15 +155,8 @@ class _LyricsProvidersDialogState extends State<LyricsProvidersDialog> {
                   ),
                 ],
               ),
-      ),
       actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: Text(
-            'Закрыть',
-            style: TextStyle(color: cs.onSurfaceVariant),
-          ),
-        ),
+        AppDialog.closeButton(context),
       ],
     );
   }

@@ -213,7 +213,7 @@ class _SearchResults extends StatelessWidget {
         ],
         if (results.tracks.isNotEmpty) ...[
           const SliverToBoxAdapter(child: CommonSectionTitle(title: 'Треки')),
-          SliverM3ECardList(
+          SliverM3ESegmentedList(
             haptic: M3EHapticFeedback.light,
             itemCount: results.tracks.length,
             color: Colors.transparent,

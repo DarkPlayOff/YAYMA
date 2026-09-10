@@ -188,7 +188,7 @@ class _ArtistViewState extends State<ArtistView> {
                 padding: const EdgeInsets.fromLTRB(40, 24, 40, 16),
               ),
             ),
-            SliverM3ECardList(
+            SliverM3ESegmentedList(
               haptic: M3EHapticFeedback.light,
               itemCount: tracks.length,
               color: Colors.transparent,

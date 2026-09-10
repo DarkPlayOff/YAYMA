@@ -148,7 +148,7 @@ class _MobileMiniPlayerState extends State<MobileMiniPlayer> {
         const bottomPadding = 8.0;
 
         return Padding(
-          padding: EdgeInsets.fromLTRB(16, 0, 16, bottomPadding),
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, bottomPadding),
           child: SizedBox(
             height: 80,
             width: defaultWidth,

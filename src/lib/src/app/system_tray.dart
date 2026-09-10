@@ -98,6 +98,7 @@ class SystemTrayManager with TrayListener, WindowListener {
     // bringAppToFront makes the owning window foreground before TrackPopupMenu,
     // which is required on Windows for the menu to dismiss on an outside click
     // (classic Win32 notification-icon menu behaviour, MS KB Q135788).
+    // ignore: deprecated_member_use (no replacement; still required on Windows)
     unawaited(trayManager.popUpContextMenu(bringAppToFront: true));
   }
 

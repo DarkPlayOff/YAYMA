@@ -35,7 +35,7 @@ class _TrackDetailsDialogState extends State<TrackDetailsDialog> {
     _detailsAsync = futureSignal(() async {
       final ctx = appContextSignal.value;
       if (ctx == null) return null;
-      return rust.getTrackDetails(ctx: ctx, trackId: widget.trackId);
+      return await rust.getTrackDetails(ctx: ctx, trackId: widget.trackId);
     });
   }
 
@@ -71,11 +71,8 @@ class _TrackDetailsDialogState extends State<TrackDetailsDialog> {
 
   Widget _buildDialog(BuildContext context, Widget content) {
     final cs = Theme.of(context).colorScheme;
-    return AlertDialog(
-      title: Text(
-        'О треке',
-        style: TextStyle(color: cs.onSurface, fontWeight: FontWeight.bold),
-      ),
+    return AppDialog(
+      title: 'О треке',
       content: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 500),
         child: content,

@@ -421,7 +421,7 @@ class _PlaylistContentState extends State<_PlaylistContent> {
             ),
           )
         else if (searchActive)
-          SliverM3ECardList(
+          SliverM3ESegmentedList(
             haptic: M3EHapticFeedback.light,
             itemCount: _localTracks.length,
             color: Colors.transparent,
@@ -505,11 +505,8 @@ class _PlaylistContentState extends State<_PlaylistContent> {
         context: context,
         builder: (context) {
           final cs = Theme.of(context).colorScheme;
-          return AlertDialog(
-            title: Text(
-              'Переименовать плейлист',
-              style: TextStyle(color: cs.onSurface),
-            ),
+          return AppDialog(
+            title: 'Переименовать плейлист',
             content: TextField(
               controller: controller,
               autofocus: true,
@@ -524,10 +521,7 @@ class _PlaylistContentState extends State<_PlaylistContent> {
               ),
             ),
             actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Отмена'),
-              ),
+              AppDialog.cancelButton(context),
               ElevatedButton(
                 onPressed: () async {
                   if (controller.text.isNotEmpty) {
@@ -555,20 +549,14 @@ class _PlaylistContentState extends State<_PlaylistContent> {
       context: context,
       builder: (context) {
         final cs = Theme.of(context).colorScheme;
-        return AlertDialog(
-          title: Text(
-            'Удалить плейлист?',
-            style: TextStyle(color: cs.onSurface),
-          ),
+        return AppDialog(
+          title: 'Удалить плейлист?',
           content: Text(
             "Вы уверены, что хотите удалить '${playlist.title}'? Это действие нельзя отменить.",
             style: TextStyle(color: cs.onSurfaceVariant),
           ),
           actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Отмена'),
-            ),
+            AppDialog.cancelButton(context),
             ElevatedButton(
               onPressed: () async {
                 await deletePlaylistAction(playlist.kind);

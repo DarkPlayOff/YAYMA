@@ -157,18 +157,22 @@ unsafe extern "system" fn subclass_proc(
         let mut hbitmap_ptr_to_set = None;
         {
             let mut cache_guard = CURRENT_BITMAP.lock();
-            if let Some(cache) = cache_guard
-                .as_ref()
-                .filter(|c| c.width == tw && c.height == th)
+            // A pending cover invalidates the cache even at matching size —
+            // otherwise the old bitmap would be reused until DWM happens to
+            // ask for a different size ("updates every other time").
+            // Consumed via take(): repeat polls then hit the fast cache path
+            // instead of re-running the full WIC decode per request.
+            let pending = PENDING_BYTES.lock().take();
+            if pending.is_none()
+                && let Some(cache) = cache_guard
+                    .as_ref()
+                    .filter(|c| c.width == tw && c.height == th)
             {
                 hbitmap_ptr_to_set = Some(cache.hbitmap_ptr);
             }
 
             if hbitmap_ptr_to_set.is_none() {
-                let bytes_to_use = PENDING_BYTES
-                    .lock()
-                    .as_ref()
-                    .cloned()
+                let bytes_to_use = pending
                     .or_else(|| cache_guard.as_ref().map(|c| c.raw_bytes.clone()));
 
                 if let Some(bytes) = bytes_to_use

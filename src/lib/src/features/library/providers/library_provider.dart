@@ -319,7 +319,7 @@ Future<List<String>> downloadCollectionToFilesAction(
   final ctx = appContextSignal.value;
   if (ctx == null || tracks.isEmpty) return const [];
 
-  return downloadTracks(
+  return await downloadTracks(
     ctx: ctx,
     trackIds: tracks.map((track) => track.id).toList(),
     toCache: false,

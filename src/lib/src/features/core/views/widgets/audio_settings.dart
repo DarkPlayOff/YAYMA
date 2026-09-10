@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:m3e_core/m3e_core.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:signals_flutter/signals_flutter.dart';
+import 'package:yayma/src/features/core/views/widgets/common_ui.dart';
 import 'package:yayma/src/features/playback/providers/playback_provider.dart';
 import 'package:yayma/src/rust/api/models.dart';
 
@@ -104,9 +105,9 @@ class _AudioSettingsDialogState extends State<AudioSettingsDialog> {
 
         return DefaultTabController(
           length: 2,
-          child: AlertDialog(
+          child: AppDialog(
             titlePadding: EdgeInsets.zero,
-            title: Column(
+            titleWidget: Column(
               children: [
                 Padding(
                   padding: const EdgeInsets.fromLTRB(24, 20, 24, 8),
@@ -118,14 +119,6 @@ class _AudioSettingsDialogState extends State<AudioSettingsDialog> {
                           color: cs.onSurface,
                           fontWeight: FontWeight.w900,
                         ),
-                      ),
-                      const Spacer(),
-                      IconButton(
-                        icon: Icon(
-                          Icons.close,
-                          color: cs.onSurfaceVariant,
-                        ),
-                        onPressed: () => Navigator.pop(context),
                       ),
                     ],
                   ),
