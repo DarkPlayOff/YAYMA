@@ -287,12 +287,8 @@ pub struct WaveExtensionHandles {
 }
 
 impl WaveExtensionHandles {
-    pub fn apply(self, additional: Vector<Track>, session: Session) {
-        self.apply_if_current(additional, session);
-    }
-
     /// Apply only if no load()/clear() happened since the task was spawned.
-    pub fn apply_if_current(self, additional: Vector<Track>, session: Session) {
+    pub fn apply(self, additional: Vector<Track>, session: Session) {
         if self
             .generation_ref
             .load(std::sync::atomic::Ordering::Relaxed)

@@ -323,7 +323,7 @@ impl QueueManager {
                 session.sequence.iter().map(|s| s.track.clone()).collect();
 
             if !additional.is_empty() {
-                handles.apply_if_current(additional, session);
+                handles.apply(additional, session);
             }
         });
     }
@@ -368,14 +368,6 @@ impl QueueManager {
             self.signals.repeat_mode(),
         )?;
         self.advance_to(prev)
-    }
-
-    pub async fn play_track_at_index(&mut self, index: usize) -> Option<Track> {
-        self.poll_fetch().await;
-        if index >= self.signals.queue().len() {
-            return None;
-        }
-        self.advance_to(index)
     }
 
     async fn try_advance_or_fetch(&mut self, current: usize) -> Option<Track> {
@@ -674,14 +666,19 @@ impl QueueManager {
         let current_index = self.signals.index();
         let current_id = queue.get(current_index).map(|t| t.id.clone());
 
-        let needed: Vec<String> = (0..URL_PREFETCH_WINDOW)
-            .filter_map(|i| queue.get(current_index + i))
-            .map(|t| t.id.clone())
-            .collect();
-
         if let Some(next_track) = queue.get(current_index + 1) {
             self.stream_manager.prewarm(next_track.clone());
         }
+
+        // Division of labor with prewarm above: a ready decode session
+        // already resolved + cached this track's URL, so don't spend a URL
+        // batch slot on it. (In-flight prewarm is NOT excluded: if it fails,
+        // the URL prefetch is the fallback that keeps the start fast.)
+        let needed: Vec<String> = (0..URL_PREFETCH_WINDOW)
+            .filter_map(|i| queue.get(current_index + i))
+            .map(|t| t.id.clone())
+            .filter(|id| !self.stream_manager.has_prewarm_ready(id))
+            .collect();
 
         self.url_prefetcher.update(needed, current_id);
     }

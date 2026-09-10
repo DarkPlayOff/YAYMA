@@ -86,10 +86,6 @@ pub async fn get_download_path(ctx: &AppContext) -> Result<Option<String>, AppEr
     Ok(ctx.core.db.lock().await.load_download_path().await?)
 }
 
-pub async fn get_downloads_size(_ctx: &AppContext) -> i64 {
-    0
-}
-
 enum DownloadDestination {
     Cache,
     Files {

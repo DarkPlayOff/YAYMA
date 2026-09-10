@@ -39,6 +39,13 @@ impl PrewarmCache {
         self.entries.contains_key(id) || self.in_flight.contains_key(id)
     }
 
+    /// True when a finished decode session is cached for `id` (not merely
+    /// in flight). Used to skip redundant URL prefetching for that track:
+    /// session building already resolved and cached its URL.
+    fn has_ready(&self, id: &str) -> bool {
+        self.entries.contains_key(id)
+    }
+
     fn start(&mut self, id: &str) -> Option<u64> {
         if self.contains(id) || self.entries.len() + self.in_flight.len() >= MAX_PREWARM_ENTRIES {
             return None;
@@ -139,6 +146,13 @@ impl StreamManager {
         self.url_cache.remove(track_id);
         let mut cache = self.prewarm_cache.lock();
         cache.invalidate(track_id);
+    }
+
+    /// Whether a finished prewarm session is cached for `track_id`.
+    /// Its URL was resolved during session building, so the URL prefetcher
+    /// can skip this id without risking a cold start.
+    pub fn has_prewarm_ready(&self, track_id: &str) -> bool {
+        self.prewarm_cache.lock().has_ready(track_id)
     }
 
     pub async fn is_track_offline(&self, track_id: &str) -> bool {

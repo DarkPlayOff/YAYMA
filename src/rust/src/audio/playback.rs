@@ -94,14 +94,6 @@ impl PlaybackEngine {
         }
     }
 
-    pub fn is_paused(&self) -> bool {
-        self.state
-            .read()
-            .as_ref()
-            .map(|s| s.sink.is_paused())
-            .unwrap_or(true)
-    }
-
     pub fn is_empty(&self) -> bool {
         self.state
             .read()
