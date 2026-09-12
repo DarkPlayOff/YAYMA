@@ -67,6 +67,7 @@ regex = "1.13.1"
 quick-xml = "0.41.0"
 [target.'cfg(not(target_os = "android"))'.dependencies]
 discord-rich-presence = "1.1.0"
+wayclip-global-hotkey = "0.7"
 souvlaki = { git = "https://github.com/Sinono3/souvlaki", rev = "436a5aedd85a755ba119916ba4504fb866803797" }
 
 [target.'cfg(target_os = "windows")'.dependencies]

@@ -1,6 +1,7 @@
 pub mod audio_fx;
 pub mod auth;
 pub mod content;
+pub mod hotkeys;
 pub mod library;
 pub mod models;
 pub mod playback;

@@ -8,6 +8,37 @@ pub const COVER_SIZE_LARGE: &str = "1000x1000";
 
 #[flutter_rust_bridge::frb(unignore)]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct HotkeyBindingDto {
+    pub action: String,
+    pub enabled: bool,
+    /// A `keyboard_types::Code` variant name ("Space", "ArrowLeft", "KeyL").
+    pub key: String,
+    pub ctrl: bool,
+    pub alt: bool,
+    pub shift: bool,
+    pub meta: bool,
+}
+
+#[flutter_rust_bridge::frb(unignore)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct HotkeySettingsDto {
+    pub enabled: bool,
+    pub bindings: Vec<HotkeyBindingDto>,
+}
+
+#[flutter_rust_bridge::frb(unignore)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct HotkeyUpdateResultDto {
+    /// Updated settings on success.
+    pub settings: Option<HotkeySettingsDto>,
+    /// Action name that already owns the requested combo.
+    pub conflict_with: Option<String>,
+    /// True when the captured key usage cannot be mapped to a hotkey code.
+    pub invalid_key: bool,
+}
+
+#[flutter_rust_bridge::frb(unignore)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct InitialSettingsDto {
     pub custom_titlebar: bool,
     pub auto_hide_navbar: bool,
