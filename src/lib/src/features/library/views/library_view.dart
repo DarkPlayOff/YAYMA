@@ -175,7 +175,11 @@ class _LibraryViewState extends State<LibraryView>
                     ? const SizedBox.shrink()
                     : const Text('Создать плейлист'),
                 style: M3EButtonStyle.outlined,
-                size: isNarrow ? M3EButtonSize.sm : M3EButtonSize.md,
+                // In icon-only mode the package still inserts the icon-label
+                // gap, which pushes the icon off-center; drop the gap.
+                size: isNarrow
+                    ? M3EButtonSize.fromBase(M3EButtonSize.sm, iconGap: 0)
+                    : M3EButtonSize.md,
                 decoration: M3EButtonDecoration.styleFrom(
                   foregroundColor: Theme.of(context).colorScheme.primary,
                 ),

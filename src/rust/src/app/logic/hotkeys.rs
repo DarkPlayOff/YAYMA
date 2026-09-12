@@ -67,10 +67,9 @@ pub async fn set_hotkey_binding(
     let Some(action_id) = HotkeyAction::from_name(&action) else {
         return reject(None, true);
     };
-    let Some(code) = hotkeys::code_from_usb_hid_usage(usb_hid_usage) else {
+    let Some(key) = hotkeys::key_from_usb_hid_usage(usb_hid_usage) else {
         return reject(None, true);
     };
-    let key = code.to_string();
 
     let mut settings = hotkeys::settings_snapshot();
     if let Some(conflict) = settings.bindings.iter().find(|b| {

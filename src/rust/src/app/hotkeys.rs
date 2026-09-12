@@ -8,20 +8,32 @@
 //! registers anything itself.
 //!
 //! Replaces the `hotkey_manager` Flutter plugin, which had no Wayland backend.
+//!
+//! Global registration is desktop-only: the settings table and its
+//! persistence work on every platform, so the FRB surface stays intact, but
+//! on Android there is no such thing as a system-wide hotkey and the manager
+//! threads are never started.
 
-use super::{AppContext, logic::library};
-use crate::audio::commands::AudioMessage;
+use super::AppContext;
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
-use std::str::FromStr;
-use std::sync::mpsc;
-use std::sync::{LazyLock, OnceLock};
-use std::time::Duration;
-use wayclip_global_hotkey::hotkey::{Code, HotKey, Modifiers};
-use wayclip_global_hotkey::{GlobalHotKeyEvent, GlobalHotKeyManager};
+use std::sync::LazyLock;
 
+#[cfg(not(target_os = "android"))]
+use {
+    super::logic::library,
+    crate::audio::commands::AudioMessage,
+    std::str::FromStr,
+    std::sync::mpsc,
+    std::sync::OnceLock,
+    std::time::Duration,
+    wayclip_global_hotkey::hotkey::{Code, HotKey, Modifiers},
+    wayclip_global_hotkey::{GlobalHotKeyEvent, GlobalHotKeyManager},
+};
 
 const SETTINGS_KEY: &str = "hotkeys";
+
+#[cfg(not(target_os = "android"))]
 /// Manager command poll interval. Also the worst-case latency for WM_HOTKEY
 /// delivery on Windows (the thread must pump the win32 message queue).
 const MANAGER_POLL: Duration = Duration::from_millis(50);
@@ -109,27 +121,108 @@ fn default_settings() -> HotkeySettings {
     }
 }
 
-fn to_hotkey(binding: &HotkeyBinding) -> Option<HotKey> {
-    let code = Code::from_str(&binding.key).ok()?;
-    let mut modifiers = Modifiers::empty();
-    if binding.ctrl {
-        modifiers |= Modifiers::CONTROL;
+static SETTINGS: LazyLock<RwLock<HotkeySettings>> =
+    LazyLock::new(|| RwLock::new(default_settings()));
+
+#[cfg(not(target_os = "android"))]
+/// Hotkey id -> action, mirroring what is currently registered. `HotKey`
+/// events carry the same id.
+static REGISTERED: LazyLock<RwLock<Vec<(u32, HotkeyAction)>>> =
+    LazyLock::new(|| RwLock::new(Vec::new()));
+
+#[cfg(not(target_os = "android"))]
+enum ManagerCmd {
+    Apply(Vec<HotKey>),
+    Shutdown,
+}
+
+#[cfg(not(target_os = "android"))]
+static MANAGER_TX: OnceLock<mpsc::Sender<ManagerCmd>> = OnceLock::new();
+#[cfg(not(target_os = "android"))]
+static CTX: RwLock<Option<AppContext>> = RwLock::new(None);
+#[cfg(not(target_os = "android"))]
+static RUNTIME: OnceLock<tokio::runtime::Handle> = OnceLock::new();
+
+/// Load persisted settings and start the manager + event threads. Call once
+/// after `AppContext` is built; desktop platforms only. On Android global
+/// hotkeys do not exist, so this is a no-op.
+#[cfg(target_os = "android")]
+pub fn init(_ctx: AppContext, _shutdown_rx: tokio::sync::watch::Receiver<bool>) {}
+
+#[cfg(not(target_os = "android"))]
+pub fn init(ctx: AppContext, mut shutdown_rx: tokio::sync::watch::Receiver<bool>) {
+    let _ = RUNTIME.set(tokio::runtime::Handle::current());
+    *CTX.write() = Some(ctx.clone());
+
+    let (tx, rx) = mpsc::channel::<ManagerCmd>();
+    let _ = MANAGER_TX.set(tx);
+
+    std::thread::Builder::new()
+        .name("hotkey-manager".into())
+        .spawn(move || manager_loop(rx))
+        .expect("spawn hotkey manager thread");
+
+    std::thread::Builder::new()
+        .name("hotkey-events".into())
+        .spawn(event_loop)
+        .expect("spawn hotkey event thread");
+
+    // Apply persisted settings once the async context is available.
+    let apply_ctx = ctx.clone();
+    tokio::spawn(async move {
+        let settings = load_settings(&apply_ctx).await;
+        *SETTINGS.write() = settings;
+        apply_current();
+    });
+
+    tokio::spawn(async move {
+        let _ = shutdown_rx.changed().await;
+        if *shutdown_rx.borrow() {
+            if let Some(tx) = MANAGER_TX.get() {
+                let _ = tx.send(ManagerCmd::Shutdown);
+            }
+        }
+    });
+}
+
+#[cfg(not(target_os = "android"))]
+async fn load_settings(ctx: &AppContext) -> HotkeySettings {
+    let mut db = ctx.core.db.lock().await;
+    db.load_setting::<HotkeySettings>(SETTINGS_KEY)
+        .await
+        .ok()
+        .flatten()
+        .unwrap_or_else(default_settings)
+}
+
+async fn persist_settings(ctx: &AppContext, settings: &HotkeySettings) {
+    let mut db = ctx.core.db.lock().await;
+    if let Err(e) = db.save_setting(SETTINGS_KEY, settings).await {
+        tracing::error!("Failed to persist hotkey settings: {:?}", e);
     }
-    if binding.alt {
-        modifiers |= Modifiers::ALT;
-    }
-    if binding.shift {
-        modifiers |= Modifiers::SHIFT;
-    }
-    if binding.meta {
-        modifiers |= Modifiers::META;
-    }
-    Some(HotKey::new(Some(modifiers), code))
+}
+
+/// Persist the given settings and, on desktop, re-register the hotkeys.
+pub async fn apply_settings(ctx: &AppContext, settings: HotkeySettings) {
+    persist_settings(ctx, &settings).await;
+    *SETTINGS.write() = settings;
+    #[cfg(not(target_os = "android"))]
+    apply_current();
+}
+
+pub fn settings_snapshot() -> HotkeySettings {
+    SETTINGS.read().clone()
+}
+
+pub fn default_settings_public() -> HotkeySettings {
+    default_settings()
 }
 
 /// Map a Flutter `PhysicalKeyboardKey.usbHidUsage` (USB HID page << 16 | id)
-/// onto a `keyboard_types::Code`.
-pub fn code_from_usb_hid_usage(usage: u64) -> Option<Code> {
+/// onto a `keyboard_types::Code` variant name. Desktop only: the in-app UI is
+/// the only key source on Android, so no global key names are needed there.
+#[cfg(not(target_os = "android"))]
+pub fn key_from_usb_hid_usage(usage: u64) -> Option<String> {
     if usage >> 16 != 0x07 {
         return None;
     }
@@ -171,84 +264,34 @@ pub fn code_from_usb_hid_usage(usage: u64) -> Option<Code> {
         0x52 => Code::ArrowUp,
         _ => return None,
     };
-    Some(code)
+    Some(code.to_string())
 }
 
-enum ManagerCmd {
-    Apply(Vec<HotKey>),
-    Shutdown,
+#[cfg(target_os = "android")]
+pub fn key_from_usb_hid_usage(_usage: u64) -> Option<String> {
+    None
 }
 
-static MANAGER_TX: OnceLock<mpsc::Sender<ManagerCmd>> = OnceLock::new();
-static CTX: RwLock<Option<AppContext>> = RwLock::new(None);
-static RUNTIME: OnceLock<tokio::runtime::Handle> = OnceLock::new();
-static SETTINGS: LazyLock<RwLock<HotkeySettings>> =
-    LazyLock::new(|| RwLock::new(default_settings()));
-/// Hotkey id -> action, mirroring what is currently registered. `HotKey`
-/// events carry the same id.
-static REGISTERED: LazyLock<RwLock<Vec<(u32, HotkeyAction)>>> =
-    LazyLock::new(|| RwLock::new(Vec::new()));
-
-/// Load persisted settings and start the manager + event threads. Call once
-/// after `AppContext` is built; desktop platforms only.
-pub fn init(ctx: AppContext, mut shutdown_rx: tokio::sync::watch::Receiver<bool>) {
-    let _ = RUNTIME.set(tokio::runtime::Handle::current());
-    *CTX.write() = Some(ctx.clone());
-
-    let (tx, rx) = mpsc::channel::<ManagerCmd>();
-    let _ = MANAGER_TX.set(tx);
-
-    std::thread::Builder::new()
-        .name("hotkey-manager".into())
-        .spawn(move || manager_loop(rx))
-        .expect("spawn hotkey manager thread");
-
-    std::thread::Builder::new()
-        .name("hotkey-events".into())
-        .spawn(event_loop)
-        .expect("spawn hotkey event thread");
-
-    // Apply persisted settings once the async context is available.
-    let apply_ctx = ctx.clone();
-    tokio::spawn(async move {
-        let settings = load_settings(&apply_ctx).await;
-        *SETTINGS.write() = settings;
-        apply_current();
-    });
-
-    tokio::spawn(async move {
-        let _ = shutdown_rx.changed().await;
-        if *shutdown_rx.borrow() {
-            if let Some(tx) = MANAGER_TX.get() {
-                let _ = tx.send(ManagerCmd::Shutdown);
-            }
-        }
-    });
-}
-
-async fn load_settings(ctx: &AppContext) -> HotkeySettings {
-    let mut db = ctx.core.db.lock().await;
-    db.load_setting::<HotkeySettings>(SETTINGS_KEY)
-        .await
-        .ok()
-        .flatten()
-        .unwrap_or_else(default_settings)
-}
-
-async fn persist_settings(ctx: &AppContext, settings: &HotkeySettings) {
-    let mut db = ctx.core.db.lock().await;
-    if let Err(e) = db.save_setting(SETTINGS_KEY, settings).await {
-        tracing::error!("Failed to persist hotkey settings: {:?}", e);
+#[cfg(not(target_os = "android"))]
+fn to_hotkey(binding: &HotkeyBinding) -> Option<HotKey> {
+    let code = Code::from_str(&binding.key).ok()?;
+    let mut modifiers = Modifiers::empty();
+    if binding.ctrl {
+        modifiers |= Modifiers::CONTROL;
     }
+    if binding.alt {
+        modifiers |= Modifiers::ALT;
+    }
+    if binding.shift {
+        modifiers |= Modifiers::SHIFT;
+    }
+    if binding.meta {
+        modifiers |= Modifiers::META;
+    }
+    Some(HotKey::new(Some(modifiers), code))
 }
 
-/// Persist + register the given settings.
-pub async fn apply_settings(ctx: &AppContext, settings: HotkeySettings) {
-    persist_settings(ctx, &settings).await;
-    *SETTINGS.write() = settings;
-    apply_current();
-}
-
+#[cfg(not(target_os = "android"))]
 fn apply_current() {
     let settings = SETTINGS.read().clone();
     let registered: Vec<(u32, HotkeyAction)> = settings
@@ -279,26 +322,25 @@ fn apply_current() {
     send_apply(hotkeys);
 }
 
+#[cfg(not(target_os = "android"))]
 fn send_apply(hotkeys: Vec<HotKey>) {
     if let Some(tx) = MANAGER_TX.get() {
         let _ = tx.send(ManagerCmd::Apply(hotkeys));
     }
 }
 
+/// Stop the manager threads. Desktop only; nothing to stop on Android.
+#[cfg(target_os = "android")]
+pub fn shutdown() {}
+
+#[cfg(not(target_os = "android"))]
 pub fn shutdown() {
     if let Some(tx) = MANAGER_TX.get() {
         let _ = tx.send(ManagerCmd::Shutdown);
     }
 }
 
-pub fn settings_snapshot() -> HotkeySettings {
-    SETTINGS.read().clone()
-}
-
-pub fn default_settings_public() -> HotkeySettings {
-    default_settings()
-}
-
+#[cfg(not(target_os = "android"))]
 fn manager_loop(rx: mpsc::Receiver<ManagerCmd>) {
     // Identify the app to the GlobalShortcuts portal (the Wayland path reads
     // this during D-Bus registration); without it the crate falls back to a
@@ -350,7 +392,7 @@ fn manager_loop(rx: mpsc::Receiver<ManagerCmd>) {
     }
 }
 
-#[cfg(target_os = "windows")]
+#[cfg(all(not(target_os = "android"), target_os = "windows"))]
 fn pump_win32_messages() {
     use windows::Win32::UI::WindowsAndMessaging::{
         DispatchMessageW, MSG, PM_REMOVE, PeekMessageW, TranslateMessage,
@@ -364,6 +406,7 @@ fn pump_win32_messages() {
     }
 }
 
+#[cfg(not(target_os = "android"))]
 fn event_loop() {
     let receiver = GlobalHotKeyEvent::receiver();
     while let Ok(event) = receiver.recv() {
@@ -382,6 +425,7 @@ fn event_loop() {
     }
 }
 
+#[cfg(not(target_os = "android"))]
 fn dispatch_action(action: HotkeyAction) {
     let Some(ctx) = CTX.read().clone() else {
         return;
@@ -419,6 +463,7 @@ fn dispatch_action(action: HotkeyAction) {
     });
 }
 
+#[cfg(not(target_os = "android"))]
 async fn seek_by(ctx: &AppContext, offset_ms: i64) {
     let position = ctx.audio.signals.position_ms.get() as i64;
     let duration = ctx.audio.signals.duration_ms.get() as i64;

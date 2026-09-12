@@ -15,7 +15,9 @@ use parking_lot::RwLock as PRwLock;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
-use tokio::sync::{Mutex, RwLock, mpsc};
+use tokio::sync::{RwLock, mpsc};
+#[cfg(target_os = "windows")]
+use tokio::sync::Mutex;
 use yandex_music::model::track::Track;
 
 pub type EffectHandles =

@@ -85,6 +85,7 @@ pub fn setup_device_config(
             #[cfg(target_os = "windows")]
             let windows_names: Vec<String> = get_windows_full_device_names();
 
+            #[cfg_attr(not(target_os = "windows"), allow(unused_variables))]
             for (i, dev) in cpal_devices.iter().enumerate() {
                 if let Ok(desc) = dev.description() {
                     #[cfg(target_os = "windows")]
