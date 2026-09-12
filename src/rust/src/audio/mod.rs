@@ -21,6 +21,8 @@ pub mod state;
 pub mod stream_manager;
 pub mod system;
 #[cfg(target_os = "windows")]
+pub mod taskbar;
+#[cfg(target_os = "windows")]
 pub mod thumbnail;
 pub mod util;
 pub mod vibe;

@@ -105,6 +105,9 @@ async fn initialize_services(
     workers::spawn_settings_worker(context.clone(), shutdown_rx.clone());
     workers::spawn_cache_worker(context.clone(), shutdown_rx.clone());
 
+    #[cfg(target_os = "windows")]
+    crate::audio::taskbar::init(context.clone(), shutdown_rx.clone());
+
     AUDIO_READY.notify_waiters();
     Ok(context)
 }

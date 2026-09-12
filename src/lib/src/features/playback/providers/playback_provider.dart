@@ -5,7 +5,6 @@ import 'dart:typed_data';
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:signals_flutter/signals_flutter.dart';
-import 'package:windows_taskbar/windows_taskbar.dart';
 import 'package:yayma/src/features/auth/providers/auth_provider.dart';
 import 'package:yayma/src/features/core/providers/notification_provider.dart';
 import 'package:yayma/src/features/core/providers/visual_effects_provider.dart';
@@ -95,16 +94,12 @@ Future<void> initPlayback() async {
   _activateBufferingDelay();
   _activateLyricsOverlayReset();
   _activateWifiLock();
-  if (Platform.isWindows) {
-    _activateTaskbarEffect();
-  }
 }
 
 void _activatePersistentColorScheme() => _persistentColorSchemeEffect;
 void _activateAdjacentCoverPrecache() => _adjacentCoverPrecacheEffect;
 void _activateVibePalette() => _vibePaletteEffect;
 void _activateBufferingDelay() => _bufferingDelayEffect;
-void _activateTaskbarEffect() => _taskbarEffect;
 void _activateLyricsOverlayReset() => _lyricsOverlayResetEffect;
 void _activateWifiLock() => _wifiLockEffect;
 
@@ -484,119 +479,10 @@ final EffectCleanup _bufferingDelayEffect = effect(() {
   });
 });
 
-// Cache last state to avoid redundant system calls
-String? _lastTaskbarTrackId;
-bool? _lastTaskbarIsPlaying;
-bool? _lastTaskbarIsLiked;
-bool? _lastTaskbarIsDisliked;
-bool? _lastTaskbarIsShuffled;
-RepeatModeDto? _lastTaskbarRepeatMode;
-
-// Windows taskbar thumbnail buttons update
-final EffectCleanup _taskbarEffect = effect(() {
-  if (!Platform.isWindows) return;
-
-  final meta = trackMetadataSignal();
-  final isPlaying = isPlayingSignal();
-  final isLiked = isLikedSignal();
-  final isDisliked = isDislikedSignal();
-  final isShuffled = isShuffledSignal();
-  final repeatMode = repeatModeSignal();
-
-  // Update only if track or key status changed
-  if (_lastTaskbarTrackId == meta.id &&
-      _lastTaskbarIsPlaying == isPlaying &&
-      _lastTaskbarIsLiked == isLiked &&
-      _lastTaskbarIsDisliked == isDisliked &&
-      _lastTaskbarIsShuffled == isShuffled &&
-      _lastTaskbarRepeatMode == repeatMode) {
-    return;
-  }
-
-  _lastTaskbarTrackId = meta.id;
-  _lastTaskbarIsPlaying = isPlaying;
-  _lastTaskbarIsLiked = isLiked;
-  _lastTaskbarIsDisliked = isDisliked;
-  _lastTaskbarIsShuffled = isShuffled;
-  _lastTaskbarRepeatMode = repeatMode;
-
-  unawaited(() async {
-    try {
-      await WindowsTaskbar.setThumbnailToolbar([
-        ThumbnailToolbarButton(
-          ThumbnailToolbarAssetIcon(
-            isShuffled
-                ? 'assets/icons/shuffle_on.ico'
-                : 'assets/icons/shuffle.ico',
-          ),
-          isShuffled ? 'Выключить перемешивание' : 'Включить перемешивание',
-          () => unawaited(PlaybackController.toggleShuffle()),
-        ),
-        ThumbnailToolbarButton(
-          ThumbnailToolbarAssetIcon(
-            isDisliked
-                ? 'assets/icons/disliked.ico'
-                : 'assets/icons/dislike.ico',
-          ),
-          isDisliked ? 'Убрать дизлайк' : 'Дизлайк',
-          () {
-            if (meta.id != null) {
-              unawaited(PlaybackController.toggleDislike(trackId: meta.id!));
-            }
-          },
-        ),
-        ThumbnailToolbarButton(
-          ThumbnailToolbarAssetIcon('assets/icons/skip_previous.ico'),
-          'Назад',
-          () => unawaited(PlaybackController.prev()),
-        ),
-        ThumbnailToolbarButton(
-          ThumbnailToolbarAssetIcon(
-            isPlaying ? 'assets/icons/pause.ico' : 'assets/icons/play.ico',
-          ),
-          isPlaying ? 'Пауза' : 'Играть',
-          () => unawaited(PlaybackController.togglePlay()),
-        ),
-        ThumbnailToolbarButton(
-          ThumbnailToolbarAssetIcon('assets/icons/skip_next.ico'),
-          'Вперед',
-          () => unawaited(PlaybackController.next()),
-        ),
-        ThumbnailToolbarButton(
-          ThumbnailToolbarAssetIcon(
-            isLiked ? 'assets/icons/liked.ico' : 'assets/icons/like.ico',
-          ),
-          isLiked ? 'Убрать лайк' : 'Лайк',
-          () {
-            if (meta.id != null) {
-              unawaited(PlaybackController.toggleLike(trackId: meta.id!));
-            }
-          },
-        ),
-        ThumbnailToolbarButton(
-          ThumbnailToolbarAssetIcon(
-            repeatMode == RepeatModeDto.none
-                ? 'assets/icons/repeat.ico'
-                : (repeatMode == RepeatModeDto.single
-                      ? 'assets/icons/repeat_one.ico'
-                      : 'assets/icons/repeat_on.ico'),
-          ),
-          'Повтор',
-          () => unawaited(PlaybackController.toggleRepeat()),
-        ),
-      ]);
-
-      final artistStr = meta.artists.map((a) => a.name).join(', ');
-      var title = meta.title;
-      if (artistStr.isNotEmpty) {
-        title = '$artistStr - $title';
-      }
-      await WindowsTaskbar.setThumbnailTooltip(title);
-    } on Exception catch (_) {
-      // Ignore errors if window is temporarily unavailable
-    }
-  }());
-});
+// Windows taskbar thumbnail toolbar is handled natively in Rust
+// (src/rust/src/audio/taskbar.rs): button state is derived from audio signals
+// there, and WM_COMMAND actions go straight to the audio actor / library
+// logic without crossing the FFI boundary.
 
 // Track position from progress
 final FlutterComputed<double> playerPositionMsSignal = computed(

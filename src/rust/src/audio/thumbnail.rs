@@ -1,26 +1,44 @@
 use parking_lot::Mutex;
 use std::cell::RefCell;
-use std::sync::atomic::{AtomicIsize, Ordering};
-use std::sync::{Arc, LazyLock};
+use std::sync::atomic::{AtomicIsize, AtomicU64, Ordering};
+use std::sync::{Arc, LazyLock, OnceLock};
 use windows::{
     Win32::Foundation::*, Win32::Graphics::Dwm::*, Win32::Graphics::Gdi::*,
-    Win32::Graphics::Imaging::*, Win32::System::Com::*,
-    Win32::System::Threading::GetCurrentProcessId, Win32::UI::Shell::SetWindowSubclass,
-    Win32::UI::Shell::*, Win32::UI::WindowsAndMessaging::*, core::*,
+    Win32::Graphics::Imaging::*, Win32::System::Com::*, Win32::System::Threading::GetCurrentProcessId,
+    Win32::UI::Shell::SetWindowSubclass, Win32::UI::Shell::*, Win32::UI::WindowsAndMessaging::*,
+    core::*,
 };
 
 const SUBCLASS_ID: usize = 1337;
 const WM_APP_REMOTECALL: u32 = WM_APP + 1337;
+/// Posted by `taskbar.rs` with a heap-allocated `taskbar::UiCmd` in LPARAM;
+/// the subclass executes it on the platform thread and frees the box.
+pub const WM_APP_TASKBAR: u32 = WM_APP + 1338;
+
+/// Maximum number of DWM-requested sizes (thumbnail + live preview) tracked
+/// and pre-rendered by the background thread.
+const MAX_READY_BITMAPS: usize = 4;
 
 struct CachedBitmap {
     hbitmap_ptr: isize,
     width: u32,
     height: u32,
-    raw_bytes: Arc<Vec<u8>>,
 }
 
-static CURRENT_BITMAP: LazyLock<Mutex<Option<CachedBitmap>>> = LazyLock::new(|| Mutex::new(None));
-static PENDING_BYTES: LazyLock<Mutex<Option<Arc<Vec<u8>>>>> = LazyLock::new(|| Mutex::new(None));
+struct Cover {
+    hash: u64,
+    bytes: Arc<Vec<u8>>,
+}
+
+static READY_BITMAPS: LazyLock<Mutex<Vec<CachedBitmap>>> = LazyLock::new(|| Mutex::new(Vec::new()));
+static LAST_COVER: LazyLock<Mutex<Option<Cover>>> = LazyLock::new(|| Mutex::new(None));
+/// Sizes DWM has actually requested, newest first. Empty until the first
+/// taskbar hover, so the first render per size stays on the UI thread and
+/// every later cover change is prerendered off it.
+static REQUESTED_SIZES: LazyLock<Mutex<Vec<(u32, u32)>>> = LazyLock::new(|| Mutex::new(Vec::new()));
+/// Hash of the cover currently (or last) shown via DWM, to skip redundant
+/// invalidations when SMTC re-reports the same track's artwork.
+static INVALIDATED_HASH: AtomicU64 = AtomicU64::new(0);
 
 thread_local! {
     static WIC_FACTORY: RefCell<Option<IWICImagingFactory>> = const { RefCell::new(None) };
@@ -63,17 +81,126 @@ impl ThumbnailManager {
     }
 
     pub fn update_cover(&self, img_bytes: Vec<u8>) {
-        let bytes = Arc::new(img_bytes);
-        *PENDING_BYTES.lock() = Some(bytes);
+        let hash = cover_hash(&img_bytes);
+        if INVALIDATED_HASH.load(Ordering::Relaxed) == hash {
+            return;
+        }
 
-        // Don't delete the current bitmap here: subclass_proc deletes the old
-        // bitmap only after the new one is installed, and DWM may still be
-        // reading it. Just invalidate so DWM re-requests.
-        unsafe {
-            let hwnd = HWND(self.hwnd_ptr as *mut _);
-            if IsWindow(Some(hwnd)).as_bool() {
-                let _ = DwmInvalidateIconicBitmaps(hwnd);
+        let bytes = Arc::new(img_bytes);
+        *LAST_COVER.lock() = Some(Cover {
+            hash,
+            bytes: bytes.clone(),
+        });
+
+        // Don't delete the current bitmaps here: they are replaced only after
+        // the prerendered ones are installed, and DWM may still be reading
+        // them. Just invalidate so DWM re-requests.
+        let sizes = REQUESTED_SIZES.lock().clone();
+        if sizes.is_empty() {
+            // DWM has never asked yet; the first request will decode
+            // LAST_COVER synchronously. Nothing to invalidate into.
+            INVALIDATED_HASH.store(hash, Ordering::Relaxed);
+            return;
+        }
+
+        let hwnd = self.hwnd_ptr;
+        prerender_sender().send(PrerenderJob {
+            hash,
+            bytes,
+            hwnd,
+        }).ok();
+    }
+}
+
+struct PrerenderJob {
+    hash: u64,
+    bytes: Arc<Vec<u8>>,
+    hwnd: isize,
+}
+
+fn prerender_sender() -> &'static std::sync::mpsc::Sender<PrerenderJob> {
+    static SENDER: OnceLock<std::sync::mpsc::Sender<PrerenderJob>> = OnceLock::new();
+    SENDER.get_or_init(|| {
+        let (tx, rx) = std::sync::mpsc::channel::<PrerenderJob>();
+        std::thread::Builder::new()
+            .name("thumbnail-prerender".into())
+            .spawn(move || prerender_loop(rx))
+            .expect("spawn thumbnail prerender thread");
+        tx
+    })
+}
+
+/// Decodes covers for the sizes DWM has been asking for, off the platform
+/// thread. The WIC decode of a JPEG cover takes tens of milliseconds; doing
+/// it inside `subclass_proc` used to stall the Flutter platform thread and
+/// starve DWM's iconic-bitmap requests (the "loading" glass in the preview).
+fn prerender_loop(rx: std::sync::mpsc::Receiver<PrerenderJob>) {
+    ensure_com();
+    while let Ok(job) = rx.recv() {
+        // A newer cover arrived while we were queued: drop this one entirely,
+        // the newer job will render it.
+        if LAST_COVER.lock().as_ref().map(|c| c.hash) != Some(job.hash) {
+            continue;
+        }
+
+        let sizes = REQUESTED_SIZES.lock().clone();
+        let mut installed_any = false;
+        for (tw, th) in sizes {
+            if let Some(h) = create_hbitmap_from_wic(&job.bytes, tw, th) {
+                let mut ready = READY_BITMAPS.lock();
+                if LAST_COVER.lock().as_ref().map(|c| c.hash) != Some(job.hash) {
+                    unsafe {
+                        let _ = DeleteObject(HBITMAP(h.0 as *mut _).into());
+                    }
+                    break;
+                }
+                replace_ready_bitmap(&mut ready, tw, th, h);
+                installed_any = true;
             }
+        }
+
+        if installed_any {
+            INVALIDATED_HASH.store(job.hash, Ordering::Relaxed);
+            let hwnd = HWND(job.hwnd as *mut _);
+            unsafe {
+                if IsWindow(Some(hwnd)).as_bool() {
+                    let _ = DwmInvalidateIconicBitmaps(hwnd);
+                }
+            }
+        }
+    }
+}
+
+/// Replace (or add) the cached bitmap for `(tw, th)`, deleting the evicted
+/// HBITMAP. Caller holds `READY_BITMAPS`.
+fn replace_ready_bitmap(ready: &mut Vec<CachedBitmap>, tw: u32, th: u32, h: HBITMAP) {
+    if let Some(pos) = ready
+        .iter()
+        .position(|c| c.width == tw && c.height == th)
+    {
+        let old = ready.remove(pos);
+        unsafe {
+            let _ = DeleteObject(HBITMAP(old.hbitmap_ptr as *mut _).into());
+        }
+    } else if ready.len() >= MAX_READY_BITMAPS {
+        let old = ready.remove(0);
+        unsafe {
+            let _ = DeleteObject(HBITMAP(old.hbitmap_ptr as *mut _).into());
+        }
+    }
+    ready.push(CachedBitmap {
+        hbitmap_ptr: h.0 as isize,
+        width: tw,
+        height: th,
+    });
+}
+
+fn set_iconic_bitmap(hwnd: HWND, msg: u32, h: HBITMAP) {
+    unsafe {
+        if msg == WM_DWMSENDICONICTHUMBNAIL {
+            let _ = DwmSetIconicThumbnail(hwnd, h, 0);
+        } else {
+            let _ = DwmSetIconicLivePreviewBitmap(hwnd, h, None, 0);
         }
     }
 }
@@ -140,6 +267,28 @@ unsafe extern "system" fn subclass_proc(
     _data: usize,
 ) -> LRESULT {
     unsafe {
+        match msg {
+            WM_DWMSENDICONICTHUMBNAIL | WM_DWMSENDICONICLIVEPREVIEWBITMAP => {
+                handle_iconic_request(hwnd, msg, lparam)
+            }
+            _ => {
+                if super::taskbar::handle_window_message(hwnd, msg, wparam, lparam) {
+                    LRESULT(0)
+                } else {
+                    DefSubclassProc(hwnd, msg, wparam, lparam)
+                }
+            }
+        }
+    }
+}
+
+/// Answer a DWM request for the iconic thumbnail / live preview bitmap.
+///
+/// Steady state: the background prerender thread has already built a bitmap
+/// for this size, so this only swaps a pointer. First-ever request for a size
+/// still decodes synchronously (once), then caches.
+unsafe fn handle_iconic_request(hwnd: HWND, msg: u32, lparam: LPARAM) -> LRESULT {
+    unsafe {
         let (tw, th) = match msg {
             WM_DWMSENDICONICTHUMBNAIL => ((lparam.0 >> 16) as u32, (lparam.0 & 0xFFFF) as u32),
             WM_DWMSENDICONICLIVEPREVIEWBITMAP => {
@@ -147,74 +296,68 @@ unsafe extern "system" fn subclass_proc(
                 let _ = GetClientRect(hwnd, &mut rc);
                 ((rc.right - rc.left) as u32, (rc.bottom - rc.top) as u32)
             }
-            _ => return DefSubclassProc(hwnd, msg, wparam, lparam),
+            _ => return DefSubclassProc(hwnd, msg, WPARAM(0), lparam),
         };
 
         if tw == 0 || th == 0 {
-            return DefSubclassProc(hwnd, msg, wparam, lparam);
+            return DefSubclassProc(hwnd, msg, WPARAM(0), lparam);
         }
 
-        let mut hbitmap_ptr_to_set = None;
+        record_requested_size(tw, th);
+
+        let mut ready = READY_BITMAPS.lock();
+        // The lock is held across the DWM call: the prerender thread takes the
+        // same lock to replace bitmaps, so an evicted HBITMAP can't be deleted
+        // while DWM is still reading it.
+        if let Some(cached) = ready.iter().find(|c| c.width == tw && c.height == th) {
+            set_iconic_bitmap(hwnd, msg, HBITMAP(cached.hbitmap_ptr as *mut _));
+            return LRESULT(0);
+        }
+
+        let bytes = LAST_COVER.lock().as_ref().map(|c| c.bytes.clone());
+        if let Some(bytes) = bytes
+            && let Some(h) = create_hbitmap_from_wic(&bytes, tw, th)
         {
-            let mut cache_guard = CURRENT_BITMAP.lock();
-            // A pending cover invalidates the cache even at matching size —
-            // otherwise the old bitmap would be reused until DWM happens to
-            // ask for a different size ("updates every other time").
-            // Consumed via take(): repeat polls then hit the fast cache path
-            // instead of re-running the full WIC decode per request.
-            let pending = PENDING_BYTES.lock().take();
-            if pending.is_none()
-                && let Some(cache) = cache_guard
-                    .as_ref()
-                    .filter(|c| c.width == tw && c.height == th)
-            {
-                hbitmap_ptr_to_set = Some(cache.hbitmap_ptr);
-            }
-
-            if hbitmap_ptr_to_set.is_none() {
-                let bytes_to_use = pending
-                    .or_else(|| cache_guard.as_ref().map(|c| c.raw_bytes.clone()));
-
-                if let Some(bytes) = bytes_to_use
-                    && let Some(h) = create_hbitmap_from_wic(&bytes, tw, th)
-                {
-                    if let Some(old) = cache_guard.take() {
-                        let _ = DeleteObject(HBITMAP(old.hbitmap_ptr as *mut _).into());
-                    }
-                    let ptr = h.0 as isize;
-                    *cache_guard = Some(CachedBitmap {
-                        hbitmap_ptr: ptr,
-                        width: tw,
-                        height: th,
-                        raw_bytes: bytes,
-                    });
-                    hbitmap_ptr_to_set = Some(ptr);
-                }
-            }
+            replace_ready_bitmap(&mut ready, tw, th, h);
+            set_iconic_bitmap(hwnd, msg, h);
         }
 
-        if let Some(ptr) = hbitmap_ptr_to_set {
-            let h = HBITMAP(ptr as *mut _);
-            if msg == WM_DWMSENDICONICTHUMBNAIL {
-                let _ = DwmSetIconicThumbnail(hwnd, h, 0);
-            } else {
-                let _ = DwmSetIconicLivePreviewBitmap(hwnd, h, None, 0);
-            }
-        }
-
+        // Without a bitmap DWM keeps showing its default loading glass and
+        // re-requests later; returning 0 is the documented behavior.
         LRESULT(0)
     }
 }
 
-fn create_hbitmap_from_wic(bytes: &[u8], target_w: u32, target_h: u32) -> Option<HBITMAP> {
-    use std::sync::Once;
-    static COM_INIT: Once = Once::new();
+fn record_requested_size(tw: u32, th: u32) {
+    let mut sizes = REQUESTED_SIZES.lock();
+    if sizes.contains(&(tw, th)) {
+        return;
+    }
+    sizes.insert(0, (tw, th));
+    while sizes.len() > MAX_READY_BITMAPS {
+        sizes.pop();
+        let mut ready = READY_BITMAPS.lock();
+        if let Some(old) = ready.pop() {
+            unsafe {
+                let _ = DeleteObject(HBITMAP(old.hbitmap_ptr as *mut _).into());
+            }
+        }
+    }
+}
+
+fn ensure_com() {
+    // CoInitializeEx is per-thread. The Flutter platform thread already runs
+    // STA, so MTA init there fails with RPC_E_CHANGED_MODE and is ignored;
+    // WIC objects are free-threaded either way. Skipping CoUninitialize is
+    // intentional: it would tear down COM under threads we don't own.
     unsafe {
-        // CoInitializeEx without matching CoUninitialize bumps the COM refcount;
-        // init once per process instead of once per cover.
-        COM_INIT.call_once(|| {
-            let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
-        });
+        let _ = CoInitializeEx(None, COINIT_MULTITHREADED | COINIT_DISABLE_OLE1DDE);
+    }
+}
+
+fn create_hbitmap_from_wic(bytes: &[u8], target_w: u32, target_h: u32) -> Option<HBITMAP> {
+    unsafe {
+        ensure_com();
         let factory = WIC_FACTORY.with(|f| {
             if f.borrow().is_none() {
                 *f.borrow_mut() =
@@ -334,10 +477,18 @@ fn create_hbitmap_from_wic(bytes: &[u8], target_w: u32, target_h: u32) -> Option
     }
 }
 
+fn cover_hash(bytes: &[u8]) -> u64 {
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for &b in bytes {
+        hash ^= b as u64;
+        hash = hash.wrapping_mul(0x1_0000_0001_b3);
+    }
+    hash
+}
+
 #[cfg(not(target_os = "windows"))]
 #[derive(Clone, Copy)]
 pub struct ThumbnailManager;
-
 #[cfg(not(target_os = "windows"))]
 impl ThumbnailManager {
     pub fn new(_h: *mut std::ffi::c_void) -> Option<Self> {
