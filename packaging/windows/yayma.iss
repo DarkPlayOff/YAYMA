@@ -71,8 +71,24 @@ Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExeName}"
 Name: "{group}\{cm:UninstallProgram,{#AppName}}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"; Tasks: desktopicon
 
+[Registry]
+; App identity so the Windows media flyout shows the app name instead of
+; "Unknown app". The subkey MUST match the AUMID passed to
+; SetCurrentProcessExplicitAppUserModelID in src\rust\src\audio\smtc.rs.
+Root: HKCU; Subkey: "Software\Classes\AppUserModelId\com.darkplayoff.yayma"; ValueType: string; ValueName: "DisplayName"; ValueData: "{#AppName}"; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\Classes\AppUserModelId\com.darkplayoff.yayma"; ValueType: string; ValueName: "IconUri"; ValueData: "{code:AppIconUri}"; Flags: uninsdeletekey
+
 [Run]
 Filename: "{app}\{#AppExeName}"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: nowait postinstall skipifsilent
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}"
+
+[Code]
+function AppIconUri(Param: String): String;
+begin
+  Result := ExpandConstant('{app}') + '\{#AppExeName}';
+  StringChange(Result, '\', '/');
+  StringChange(Result, ' ', '%20');
+  Result := 'file:///' + Result;
+end;

@@ -28,7 +28,7 @@ impl SmtcManager {
     ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         #[cfg(target_os = "windows")]
         unsafe {
-            let _ = SetCurrentProcessExplicitAppUserModelID(w!("com.vyfor.yamusic"));
+            let _ = SetCurrentProcessExplicitAppUserModelID(w!("com.darkplayoff.yayma"));
         }
 
         #[cfg(target_os = "windows")]
