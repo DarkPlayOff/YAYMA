@@ -30,6 +30,11 @@ class AppContextMenu<T> extends StatelessWidget {
   final VoidCallback? onClose;
   final BorderRadius borderRadius;
 
+  /// Hover/press backdrop color; null keeps the theme default (nearly
+  /// invisible). Icon triggers pass an M3-style state layer to match
+  /// neighbouring IconButtons.
+  final Color? hoverColor;
+
   const AppContextMenu({
     required this.items,
     required this.onSelected,
@@ -37,6 +42,7 @@ class AppContextMenu<T> extends StatelessWidget {
     this.onOpen,
     this.onClose,
     this.borderRadius = const BorderRadius.all(Radius.circular(100)),
+    this.hoverColor,
     super.key,
   });
 
@@ -67,16 +73,23 @@ class AppContextMenu<T> extends StatelessWidget {
         return _buildItem(context, entry.value, entry.key);
       }).toList(),
       builder: (context, controller, child) {
-        return InkWell(
-          onTap: () {
-            if (controller.isOpen) {
-              controller.close();
-            } else {
-              controller.open();
-            }
-          },
-          borderRadius: borderRadius,
-          child: this.child,
+        // Local Material: ink paints at the trigger itself instead of a
+        // Material buried under opaque backgrounds (e.g. the player backdrop).
+        return Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: () {
+              if (controller.isOpen) {
+                controller.close();
+              } else {
+                controller.open();
+              }
+            },
+            hoverColor: hoverColor,
+            highlightColor: hoverColor,
+            borderRadius: borderRadius,
+            child: this.child,
+          ),
         );
       },
     );

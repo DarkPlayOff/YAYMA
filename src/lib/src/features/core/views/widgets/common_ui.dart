@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:m3e_core/m3e_core.dart';
 import 'package:material_ui/material_ui.dart';
@@ -711,50 +712,61 @@ class _AnimatedLikeButtonState extends State<AnimatedLikeButton>
 
     return MouseRegion(
       cursor: SystemMouseCursors.click,
-      child: GestureDetector(
-        onTap: widget.onTap,
-        behavior: HitTestBehavior.opaque,
-        child: SizedBox(
-          width: hexSize + 12,
-          height: hexSize + 12,
-          child: AnimatedBuilder(
-            animation: _burst,
-            builder: (context, child) {
-              return Stack(
-                alignment: Alignment.center,
-                children: [
-                  if (_burst.isAnimating || _burst.value > 0)
-                    CustomPaint(
-                      size: Size(hexSize * 2.4, hexSize * 2.4),
-                      painter: _BurstPainter(
-                        progress: _ringGrowth.value,
-                        opacity: _ringFade.value,
+      // Local Material: ink paints here, not on a Material buried under the
+      // player backdrop, where the hover layer would be invisible.
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: widget.onTap,
+          // Matches the global iconButtonTheme corner radius so the hover
+          // backdrop looks identical to neighbouring player buttons.
+          borderRadius: BorderRadius.circular(14),
+          // Match the M3 IconButton state layer, otherwise hover is invisible.
+          hoverColor: cs.onSurfaceVariant.withValues(alpha: 0.1),
+          highlightColor: cs.onSurfaceVariant.withValues(alpha: 0.1),
+          child: SizedBox(
+            width: math.max<double>(hexSize + 12, 40),
+            height: math.max<double>(hexSize + 12, 40),
+            child: AnimatedBuilder(
+              animation: _burst,
+              builder: (context, child) {
+                return Stack(
+                  alignment: Alignment.center,
+                  clipBehavior: Clip.none,
+                  children: [
+                    if (_burst.isAnimating || _burst.value > 0)
+                      CustomPaint(
+                        size: Size(hexSize * 2.4, hexSize * 2.4),
+                        painter: _BurstPainter(
+                          progress: _ringGrowth.value,
+                          opacity: _ringFade.value,
+                          color: color,
+                        ),
+                      ),
+                    AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 320),
+                      switchInCurve: Curves.easeOutBack,
+                      switchOutCurve: Curves.easeInCubic,
+                      transitionBuilder: (child, animation) {
+                        return FadeTransition(
+                          opacity: animation,
+                          child: ScaleTransition(
+                            scale: animation,
+                            child: child,
+                          ),
+                        );
+                      },
+                      child: Icon(
+                        widget.isLiked ? Icons.favorite : Icons.favorite_border,
+                        key: ValueKey<bool>(widget.isLiked),
+                        size: hexSize,
                         color: color,
                       ),
                     ),
-                  AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 320),
-                    switchInCurve: Curves.easeOutBack,
-                    switchOutCurve: Curves.easeInCubic,
-                    transitionBuilder: (child, animation) {
-                      return FadeTransition(
-                        opacity: animation,
-                        child: ScaleTransition(
-                          scale: animation,
-                          child: child,
-                        ),
-                      );
-                    },
-                    child: Icon(
-                      widget.isLiked ? Icons.favorite : Icons.favorite_border,
-                      key: ValueKey<bool>(widget.isLiked),
-                      size: hexSize,
-                      color: color,
-                    ),
-                  ),
-                ],
-              );
-            },
+                  ],
+                );
+              },
+            ),
           ),
         ),
       ),

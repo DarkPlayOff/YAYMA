@@ -102,7 +102,7 @@ mimalloc = { version = "0.1.52" }
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(frb_expand)'] }
 
 [profile.release]
-opt-level = "3"
+opt-level = 3
 lto = "thin"
 codegen-units = 1
 panic = "abort"

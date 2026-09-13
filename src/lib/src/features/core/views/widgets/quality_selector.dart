@@ -78,6 +78,12 @@ class CommonQualitySelector extends SignalWidget {
         ]);
 
         return AppContextMenu<dynamic>(
+          hoverColor: Theme.of(
+            context,
+          ).colorScheme.onSurfaceVariant.withValues(alpha: 0.1),
+          // Same rounding as the global iconButtonTheme (14) so the hover
+          // backdrop matches the surrounding player buttons.
+          borderRadius: const BorderRadius.all(Radius.circular(14)),
           onSelected: (val) {
             if (val is AudioQuality) {
               unawaited(PlaybackController.setQuality(val));
@@ -109,11 +115,16 @@ class CommonQualitySelector extends SignalWidget {
             }
           },
           items: items,
-          borderRadius: BorderRadius.circular(AppRadius.xs),
-          child: Icon(
-            Icons.speed_rounded,
-            size: iconSize,
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          child: SizedBox(
+            width: 40,
+            height: 40,
+            child: Center(
+              child: Icon(
+                Icons.speed_rounded,
+                size: iconSize,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
           ),
         );
       },
