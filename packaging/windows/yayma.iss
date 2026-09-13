@@ -8,6 +8,11 @@
 #define AppPublisher "DarkPlayOff"
 #define AppURL "https://github.com/DarkPlayOff/YAYMA"
 #define AppExeName "yayma.exe"
+; Must match the AUMID passed to SetCurrentProcessExplicitAppUserModelID in
+; src\rust\src\audio\smtc.rs. Windows resolves the name shown in the media
+; flyout (SMTC) through this property on the Start Menu shortcut, so it is
+; stamped onto shortcuts by set_shortcut_aumid.ps1 after install.
+#define AppAUMID "com.darkplayoff.yayma"
 #define ReleaseDir "..\..\src\build\windows\x64\runner\Release"
 
 ; Auto-detected from the built exe's version resource; pass /DAppVersion=x.y.z.b
@@ -65,30 +70,22 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 
 [Files]
 Source: "{#ReleaseDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+; Extracted to the installer's temp dir and cleaned up automatically afterwards.
+Source: "set_shortcut_aumid.ps1"; DestDir: "{tmp}"
 
 [Icons]
 Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExeName}"
 Name: "{group}\{cm:UninstallProgram,{#AppName}}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"; Tasks: desktopicon
 
-[Registry]
-; App identity so the Windows media flyout shows the app name instead of
-; "Unknown app". The subkey MUST match the AUMID passed to
-; SetCurrentProcessExplicitAppUserModelID in src\rust\src\audio\smtc.rs.
-Root: HKCU; Subkey: "Software\Classes\AppUserModelId\com.darkplayoff.yayma"; ValueType: string; ValueName: "DisplayName"; ValueData: "{#AppName}"; Flags: uninsdeletekey
-Root: HKCU; Subkey: "Software\Classes\AppUserModelId\com.darkplayoff.yayma"; ValueType: string; ValueName: "IconUri"; ValueData: "{code:AppIconUri}"; Flags: uninsdeletekey
-
 [Run]
+; Stamp System.AppUserModel.ID ({#AppAUMID}) onto the shortcuts so the media
+; flyout shows the app name instead of "Unknown app". The desktop shortcut only
+; exists when the desktopicon task was picked; the script skips missing files.
+Filename: "powershell.exe"; \
+  Parameters: "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File ""{tmp}\set_shortcut_aumid.ps1"" -ShortcutPath ""{group}\{#AppName}.lnk;{autodesktop}\{#AppName}.lnk"" -Aumid ""{#AppAUMID}"""; \
+  Flags: runhidden
 Filename: "{app}\{#AppExeName}"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: nowait postinstall skipifsilent
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}"
-
-[Code]
-function AppIconUri(Param: String): String;
-begin
-  Result := ExpandConstant('{app}') + '\{#AppExeName}';
-  StringChange(Result, '\', '/');
-  StringChange(Result, ' ', '%20');
-  Result := 'file:///' + Result;
-end;
