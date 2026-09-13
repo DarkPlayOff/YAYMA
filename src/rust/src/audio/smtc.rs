@@ -13,6 +13,8 @@ use crate::audio::thumbnail::ThumbnailManager;
 pub struct SmtcManager {
     controls: MediaControls,
     _cmd_tx: mpsc::UnboundedSender<AudioMessage>,
+    // Only read by the Windows thumbnail path; unused on other platforms.
+    #[cfg(target_os = "windows")]
     http_cache: std::sync::Arc<crate::storage::cache::HttpCache>,
     #[cfg(target_os = "windows")]
     thumbnail_manager: Option<ThumbnailManager>,
@@ -21,6 +23,7 @@ pub struct SmtcManager {
 impl SmtcManager {
     pub fn new(
         cmd_tx: mpsc::UnboundedSender<AudioMessage>,
+        #[cfg_attr(not(target_os = "windows"), allow(unused_variables))]
         http_cache: std::sync::Arc<crate::storage::cache::HttpCache>,
     ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         #[cfg(target_os = "windows")]
@@ -85,6 +88,7 @@ impl SmtcManager {
         Ok(Self {
             controls,
             _cmd_tx: cmd_tx,
+            #[cfg(target_os = "windows")]
             http_cache,
             #[cfg(target_os = "windows")]
             thumbnail_manager,

@@ -16,7 +16,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 use tokio::sync::{RwLock, mpsc};
-#[cfg(target_os = "windows")]
+#[cfg(not(any(target_os = "android")))]
 use tokio::sync::Mutex;
 use yandex_music::model::track::Track;
 
