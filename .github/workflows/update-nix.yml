@@ -31,8 +31,16 @@ jobs:
           URL="https://github.com/${REPO}/releases/download/v${VERSION}/yayma-linux-x64-${VERSION}.tar.gz"
           SRC_HASH=$(nix store prefetch-file --json "$URL" | jq -er .hash)
 
-          sed -i "s/^\([[:space:]]*version = \"\)[^\"]*\(\"\)/\1${VERSION}\2/" flake.nix
-          sed -i "s/^\([[:space:]]*srcHash = \"\)[^\"]*\(\"\)/\1${SRC_HASH}\2/" flake.nix
+          python3 - "$VERSION" "$SRC_HASH" <<'EOF'
+          import re, sys
+          from pathlib import Path
+          version, src_hash = sys.argv[1], sys.argv[2]
+          p = Path("flake.nix")
+          s = p.read_text()
+          s = re.sub(r'^(\s*version = ")[^"]*(")', lambda m: m.group(1) + version + m.group(2), s, flags=re.M)
+          s = re.sub(r'^(\s*srcHash = ")[^"]*(")', lambda m: m.group(1) + src_hash + m.group(2), s, flags=re.M)
+          p.write_text(s)
+          EOF
 
           nix flake lock
           nix build .#yayma
