@@ -36,6 +36,10 @@ pub struct EffectParams {
     enabled: AtomicBool,
     values: Vec<AtomicF32>,
     info: Vec<ParamInfo>,
+    /// Bumped on every `set()` so realtime effects can cache derived
+    /// coefficients and recompute them only when a parameter changed.
+    /// Starts at 1 so `0` can serve as the "never computed" sentinel.
+    version: AtomicU32,
 }
 
 unsafe impl Send for EffectParams {}
@@ -47,6 +51,7 @@ impl EffectParams {
             enabled: AtomicBool::new(false),
             values: info.iter().map(|p| AtomicF32::new(p.default)).collect(),
             info: info.to_vec(),
+            version: AtomicU32::new(1),
         }
     }
 
@@ -58,6 +63,17 @@ impl EffectParams {
     #[inline(always)]
     pub fn set_enabled(&self, val: bool) {
         self.enabled.store(val, Ordering::Relaxed);
+    }
+
+    #[inline(always)]
+    pub fn version(&self) -> u32 {
+        self.version.load(Ordering::Relaxed)
+    }
+
+    /// True when every parameter is exactly zero (flat EQ-style bypass).
+    #[inline]
+    pub fn all_zero(&self) -> bool {
+        self.values.iter().all(|v| v.get() == 0.0)
     }
 
     #[inline(always)]
@@ -77,6 +93,7 @@ impl EffectParams {
         if let Some(atomic) = self.values.get(idx) {
             let info = &self.info[idx];
             atomic.set(val.clamp(info.min, info.max));
+            self.version.fetch_add(1, Ordering::Relaxed);
         } else {
             debug_assert!(false, "EffectParams::set OOB index {idx}");
         }

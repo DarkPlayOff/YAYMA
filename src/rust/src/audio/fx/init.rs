@@ -1,4 +1,6 @@
-use crate::audio::fx::{Effect, EffectHandle, FxSource, modules::*, param::EffectParams};
+use crate::audio::fx::{
+    BlockSource, Effect, EffectHandle, FxSource, modules::*, param::EffectParams,
+};
 use foldhash::HashMap;
 use foldhash::HashMapExt;
 use rodio::Source;
@@ -20,7 +22,7 @@ const EFFECT_REGISTRY: &[(&str, &str, EffectFactory)] = &[
     ("overdrive", "Overdrive", overdrive),
 ];
 
-pub fn init_all<T: Source<Item = f32> + Send + 'static>(source: &mut FxSource<T>) {
+pub fn init_all<T: BlockSource + Send + 'static>(source: &mut FxSource<T>) {
     let sr = source.sample_rate().get() as f32;
 
     for &(id, name, factory) in EFFECT_REGISTRY {

@@ -8,6 +8,9 @@ pub struct BiquadEffect {
     filter: StereoBiquad,
     filter_type: FilterType,
     sample_rate: f32,
+    /// EffectParams::version() at which coefficients were last computed;
+    /// 0 = never (params start at version 1).
+    last_version: u32,
 }
 
 impl BiquadEffect {
@@ -17,32 +20,36 @@ impl BiquadEffect {
             filter: StereoBiquad::new(),
             filter_type,
             sample_rate,
+            last_version: 0,
         }
     }
 }
 
 impl Effect for BiquadEffect {
     fn process(&mut self, left: &mut [f32], right: &mut [f32]) {
-        let (freq, q, gain_db) = match self.filter_type {
-            FilterType::LowPass => (self.params.get(0), self.params.get(1), 0.0),
-            FilterType::HighPass => (self.params.get(0), self.params.get(1), 0.0),
-            FilterType::BandPass => (self.params.get(0), self.params.get(1), 0.0),
-            FilterType::Notch => (self.params.get(0), self.params.get(1), 0.0),
-            FilterType::LowShelf => (
-                self.params.get(0),
-                std::f32::consts::FRAC_1_SQRT_2,
-                self.params.get(1),
-            ),
-            FilterType::HighShelf => (
-                self.params.get(0),
-                std::f32::consts::FRAC_1_SQRT_2,
-                self.params.get(1),
-            ),
-            FilterType::Peak => (self.params.get(0), self.params.get(1), self.params.get(2)),
-        };
+        if self.last_version != self.params.version() {
+            self.last_version = self.params.version();
+            let (freq, q, gain_db) = match self.filter_type {
+                FilterType::LowPass => (self.params.get(0), self.params.get(1), 0.0),
+                FilterType::HighPass => (self.params.get(0), self.params.get(1), 0.0),
+                FilterType::BandPass => (self.params.get(0), self.params.get(1), 0.0),
+                FilterType::Notch => (self.params.get(0), self.params.get(1), 0.0),
+                FilterType::LowShelf => (
+                    self.params.get(0),
+                    std::f32::consts::FRAC_1_SQRT_2,
+                    self.params.get(1),
+                ),
+                FilterType::HighShelf => (
+                    self.params.get(0),
+                    std::f32::consts::FRAC_1_SQRT_2,
+                    self.params.get(1),
+                ),
+                FilterType::Peak => (self.params.get(0), self.params.get(1), self.params.get(2)),
+            };
 
-        self.filter
-            .update(self.filter_type, freq, q, gain_db, self.sample_rate);
+            self.filter
+                .update(self.filter_type, freq, q, gain_db, self.sample_rate);
+        }
         self.filter.process_block(left, right);
     }
 
