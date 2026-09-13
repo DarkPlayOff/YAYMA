@@ -540,6 +540,13 @@ class _GlobalHotkeysSettings extends StatefulWidget {
 }
 
 class _GlobalHotkeysSettingsState extends State<_GlobalHotkeysSettings> {
+  @override
+  void initState() {
+    super.initState();
+    // Подтянуть свежее состояние из Rust при каждом открытии настроек.
+    unawaited(GlobalHotkeyService.refresh());
+  }
+
   Future<void> _edit(GlobalHotkeyBinding binding) async {
     final combo = await showDialog<RecordedHotkey>(
       context: context,

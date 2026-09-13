@@ -102,6 +102,23 @@ class GlobalHotkeyService {
   static Future<void> initialize() async {
     if (!isSupported) return;
 
+    // AppInit запускает авторизацию в фоне (unawaited), поэтому к моменту
+    // вызова из main() контекст может быть ещё не готов. Раньше метод молча
+    // выходил с пустым состоянием — после рестарта настройки выглядели
+    // «несохранёнными». Ждём контекст, затем читаем настройки из Rust.
+    for (var i = 0; i < 300 && appContextSignal.value == null; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    }
+
+    await refresh();
+  }
+
+  /// Перечитать настройки из Rust (вызывать при открытии экрана настроек,
+  /// чтобы подтянуть свежее состояние после рестарта).
+  static Future<void> refresh() async {
+    if (!isSupported) return;
+    if (appContextSignal.value == null) return;
+
     final settings =
         await runRustFetch<rust.HotkeySettingsDto?>(
           (ctx) => rust.getHotkeySettings(ctx: ctx),

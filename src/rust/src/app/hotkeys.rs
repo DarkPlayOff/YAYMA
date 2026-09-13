@@ -121,6 +121,26 @@ fn default_settings() -> HotkeySettings {
     }
 }
 
+/// Merge persisted settings with the defaults: keep persisted values, add
+/// any missing actions (e.g. introduced by an update) and drop unknown ones,
+/// so an outdated database can never hide or lose bindings.
+fn merge_with_defaults(mut persisted: HotkeySettings) -> HotkeySettings {
+    let defaults = default_settings();
+    for def in &defaults.bindings {
+        if !persisted.bindings.iter().any(|b| b.action == def.action) {
+            persisted.bindings.push(def.clone());
+        }
+    }
+    let order: Vec<&str> = defaults.bindings.iter().map(|b| b.action.as_str()).collect();
+    persisted
+        .bindings
+        .retain(|b| HotkeyAction::from_name(&b.action).is_some());
+    persisted.bindings.sort_by_key(|b| {
+        order.iter().position(|a| *a == b.action).unwrap_or(usize::MAX)
+    });
+    persisted
+}
+
 static SETTINGS: LazyLock<RwLock<HotkeySettings>> =
     LazyLock::new(|| RwLock::new(default_settings()));
 
@@ -146,13 +166,22 @@ static RUNTIME: OnceLock<tokio::runtime::Handle> = OnceLock::new();
 /// Load persisted settings and start the manager + event threads. Call once
 /// after `AppContext` is built; desktop platforms only. On Android global
 /// hotkeys do not exist, so this is a no-op.
+///
+/// The persisted settings are loaded synchronously (awaited) before
+/// returning, so any later FRB read (`get_hotkey_settings`) already sees the
+/// values from the database. Previously the load ran in a spawned task and
+/// the first Dart fetch could return defaults — a subsequent write would
+/// then clobber the persisted bindings with those defaults.
 #[cfg(target_os = "android")]
-pub fn init(_ctx: AppContext, _shutdown_rx: tokio::sync::watch::Receiver<bool>) {}
+pub async fn init(_ctx: AppContext, _shutdown_rx: tokio::sync::watch::Receiver<bool>) {}
 
 #[cfg(not(target_os = "android"))]
-pub fn init(ctx: AppContext, mut shutdown_rx: tokio::sync::watch::Receiver<bool>) {
+pub async fn init(ctx: AppContext, mut shutdown_rx: tokio::sync::watch::Receiver<bool>) {
     let _ = RUNTIME.set(tokio::runtime::Handle::current());
     *CTX.write() = Some(ctx.clone());
+
+    let settings = load_settings(&ctx).await;
+    *SETTINGS.write() = merge_with_defaults(settings);
 
     let (tx, rx) = mpsc::channel::<ManagerCmd>();
     let _ = MANAGER_TX.set(tx);
@@ -167,13 +196,7 @@ pub fn init(ctx: AppContext, mut shutdown_rx: tokio::sync::watch::Receiver<bool>
         .spawn(event_loop)
         .expect("spawn hotkey event thread");
 
-    // Apply persisted settings once the async context is available.
-    let apply_ctx = ctx.clone();
-    tokio::spawn(async move {
-        let settings = load_settings(&apply_ctx).await;
-        *SETTINGS.write() = settings;
-        apply_current();
-    });
+    apply_current();
 
     tokio::spawn(async move {
         let _ = shutdown_rx.changed().await;

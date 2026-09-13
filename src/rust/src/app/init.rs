@@ -111,7 +111,7 @@ async fn initialize_services(
     // macOS requires the manager to live on the main thread (see
     // app/hotkeys.rs); the app doesn't ship for macOS, so gate it out.
     #[cfg(any(target_os = "windows", target_os = "linux"))]
-    crate::app::hotkeys::init(context.clone(), shutdown_rx.clone());
+    crate::app::hotkeys::init(context.clone(), shutdown_rx.clone()).await;
 
     AUDIO_READY.notify_waiters();
     Ok(context)

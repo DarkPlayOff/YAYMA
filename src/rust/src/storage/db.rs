@@ -386,12 +386,16 @@ impl AppDatabase {
         key: &str,
     ) -> toasty::Result<Option<T>> {
         let val = self.load_app_setting(key).await?;
-        if let Some(v) = val
-            && let Ok(parsed) = serde_json::from_str(&v)
-        {
-            return Ok(Some(parsed));
+        match val {
+            Some(v) => match serde_json::from_str(&v) {
+                Ok(parsed) => Ok(Some(parsed)),
+                Err(e) => {
+                    tracing::warn!("Failed to parse setting '{}': {}", key, e);
+                    Ok(None)
+                }
+            },
+            None => Ok(None),
         }
-        Ok(None)
     }
 
     pub async fn load_all_settings(&mut self) -> toasty::Result<HashMap<String, String>> {
