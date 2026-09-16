@@ -24,6 +24,7 @@ dependencies:
   material_ui: ^1.1.1
   path: ^1.9.1
   path_provider: ^2.1.6
+  screen_retriever: ^0.2.2
   signals_flutter: ^7.1.0
   tray_manager: ^0.5.3
   url_launcher: ^6.3.2

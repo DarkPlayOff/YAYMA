@@ -5,6 +5,7 @@ import 'package:signals_flutter/signals_flutter.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:yayma/src/app/init.dart';
 import 'package:yayma/src/app/system_tray.dart';
+import 'package:yayma/src/app/window_placement.dart';
 import 'package:yayma/src/features/auth/views/auth/auth_screens.dart';
 import 'package:yayma/src/features/core/providers/navigation_provider.dart';
 import 'package:yayma/src/features/core/providers/notification_provider.dart';
@@ -29,17 +30,35 @@ Future<void> main() async {
     final isCustom = customTitlebarSignal.value;
     customTitlebarSignal.value = isCustom;
 
+    final savedBounds = await WindowPlacement.loadBounds();
+    final savedMaximized = await WindowPlacement.loadMaximized();
+    // On Wayland the compositor owns positioning; on other platforms the
+    // saved monitor may be gone — in both cases restore size and center.
+    final restoreBounds =
+        savedBounds != null &&
+            !WindowPlacement.isWayland &&
+            await WindowPlacement.isPositionVisible(savedBounds)
+        ? savedBounds
+        : null;
+
     final windowOptions = WindowOptions(
-      size: const Size(1280, 720),
-      minimumSize: const Size(800, 600),
-      center: true,
+      size: savedBounds?.size ?? WindowPlacement.defaultSize,
+      minimumSize: WindowPlacement.minimumSize,
+      center: restoreBounds == null,
       backgroundColor: Colors.transparent,
       skipTaskbar: false,
       titleBarStyle: isCustom ? TitleBarStyle.hidden : TitleBarStyle.normal,
     );
     windowReady = windowManager.waitUntilReadyToShow(windowOptions, () async {
+      if (restoreBounds != null) {
+        await windowManager.setBounds(restoreBounds);
+      }
+      if (savedMaximized) {
+        await windowManager.maximize();
+      }
       await windowManager.show();
       await windowManager.focus();
+      WindowPlacement.track();
     });
   }
 

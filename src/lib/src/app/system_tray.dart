@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
+import 'package:yayma/src/app/window_placement.dart';
 import 'package:yayma/src/features/core/providers/navigation_provider.dart';
 import 'package:yayma/src/features/core/services/global_hotkey_service.dart';
 import 'package:yayma/src/features/playback/providers/playback_provider.dart';
@@ -78,6 +79,7 @@ class SystemTrayManager with TrayListener, WindowListener {
     _quitting = true;
     _menuEffect?.call();
     _menuEffect = null;
+    await WindowPlacement.saveNow();
     await GlobalHotkeyService.dispose();
     // Allow the window to actually close now that the user asked to quit.
     await windowManager.setPreventClose(false);
@@ -126,7 +128,7 @@ class SystemTrayManager with TrayListener, WindowListener {
 
     if (closeToTraySignal.value) {
       // Hide to tray rather than terminating the process.
-      unawaited(windowManager.hide());
+      unawaited(WindowPlacement.saveNow().then((_) => windowManager.hide()));
     } else {
       unawaited(_quit());
     }
