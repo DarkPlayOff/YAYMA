@@ -55,7 +55,7 @@ serde_json = "1.0.151"
 
 im = "15.1.0"
 arc-swap = "1.9.2"
-toasty = { version = "0.10", features = ["sqlite"] }
+rusqlite = { version = "0.40", features = ["bundled"] }
 
 
 parking_lot = "0.12.5"

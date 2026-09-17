@@ -633,8 +633,8 @@ impl From<yandex_music::error::ClientError> for AppError {
     }
 }
 
-impl From<toasty::Error> for AppError {
-    fn from(err: toasty::Error) -> Self {
+impl From<rusqlite::Error> for AppError {
+    fn from(err: rusqlite::Error) -> Self {
         AppError::DbError(err.to_string())
     }
 }
