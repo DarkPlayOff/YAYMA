@@ -212,3 +212,48 @@ jobs:
         with:
           name: android_release
           path: android_artifacts/yayma-android-*.apk
+
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Rust Cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "src/rust -> src/target"
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Restore Bridge
+        uses: ./.github/actions/restore-bridge
+
+      - name: Build
+        working-directory: ./src
+        run: |
+          flutter config --no-analytics
+          flutter config --enable-macos-desktop
+          flutter pub get
+          flutter build macos --release
+
+      - name: Archive
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          if [ "$VERSION" == "$GITHUB_REF" ]; then VERSION="manual"; fi
+          APP="src/build/macos/Build/Products/Release/yayma.app"
+          test -d "$APP"
+          hdiutil create -volname "YAYMA" -srcfolder "$APP" -ov -format UDZO "yayma-macos-arm64-${VERSION}.dmg"
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos_arm64_release
+          path: yayma-macos-*.dmg

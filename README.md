@@ -3,7 +3,7 @@
 ![License](https://img.shields.io/github/license/DarkPlayOff/YAYMA)
 ![Release](https://img.shields.io/github/v/release/DarkPlayOff/YAYMA)
 ![Downloads](https://img.shields.io/github/downloads/DarkPlayOff/YAYMA/total)
-![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20Android-lightgrey)
+![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS%20%7C%20Android-lightgrey)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/DarkPlayOff/YAYMA)
 
 Альтернативный клиент для Яндекс Музыки. Проект находится в стадии активной разработки.

@@ -55,7 +55,8 @@
             "description": "Choose platform for release",
             "options": [
                 "windows",
-                "linux"
+                "linux",
+                "macos"
             ],
             "default": "windows"
         }

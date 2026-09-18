@@ -50,6 +50,9 @@ flutter_launcher_icons:
   linux:
     generate: true
     image_path: "assets/icons/logo.webp"
+  macos:
+    generate: true
+    image_path: "assets/icons/logo.webp"
 
 flutter:
   uses-material-design: true

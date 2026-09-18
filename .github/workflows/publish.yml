@@ -38,7 +38,7 @@ jobs:
       - name: Download Artifacts
         uses: actions/download-artifact@v4
         with:
-          pattern: '{linux_x64_release,windows_x64_release,windows_x64_installer,android_release}'
+          pattern: '{linux_x64_release,windows_x64_release,windows_x64_installer,android_release,macos_arm64_release}'
           path: release_artifacts
           merge-multiple: true
 

@@ -33,7 +33,7 @@ class AppInit {
       await _initAudioService();
     }
 
-    final appDir = await getApplicationDocumentsDirectory();
+    final appDir = await _resolveDataDir();
     await simple.initAppInfrastructure(basePath: appDir.path);
 
     try {
@@ -47,6 +47,64 @@ class AppInit {
     } on Object catch (_) {}
 
     unawaited(_initializeAuthAndServices());
+  }
+
+  /// Rust backend storage (yamusic_v2.db, http/track caches) lives in the
+  /// platform application-support directory, not Documents. One-time move
+  /// for installs predating this: the auth token is stored inside the DB,
+  /// so moving without migration would log every user out and orphan
+  /// downloaded tracks.
+  static Future<Directory> _resolveDataDir() async {
+    final support = await getApplicationSupportDirectory();
+    await _migrateLegacyDataDir(support);
+    return support;
+  }
+
+  static Future<void> _migrateLegacyDataDir(Directory support) async {
+    try {
+      final docs = await getApplicationDocumentsDirectory();
+      if (docs.path == support.path) return;
+      final legacyDb = File(
+        '${docs.path}${Platform.pathSeparator}yamusic_v2.db',
+      );
+      if (!legacyDb.existsSync()) return;
+      final targetDb = File(
+        '${support.path}${Platform.pathSeparator}yamusic_v2.db',
+      );
+      if (targetDb.existsSync()) return;
+      await support.create(recursive: true);
+      for (final name in [
+        'yamusic_v2.db',
+        'yamusic_v2.db-wal',
+        'yamusic_v2.db-shm',
+        'http_cache',
+        'offline_tracks',
+      ]) {
+        await _moveEntity(docs.path, support.path, name);
+      }
+    } on Object {
+      // Migration is best-effort only; worst case the app starts fresh.
+    }
+  }
+
+  static Future<void> _moveEntity(
+    String fromDir,
+    String toDir,
+    String name,
+  ) async {
+    try {
+      final srcDir = Directory('$fromDir${Platform.pathSeparator}$name');
+      if (srcDir.existsSync()) {
+        await srcDir.rename('$toDir${Platform.pathSeparator}$name');
+        return;
+      }
+      final srcFile = File('$fromDir${Platform.pathSeparator}$name');
+      if (srcFile.existsSync()) {
+        await srcFile.rename('$toDir${Platform.pathSeparator}$name');
+      }
+    } on Object {
+      // Best-effort per entry.
+    }
   }
 
   static Future<void> _initAudioService() async {
