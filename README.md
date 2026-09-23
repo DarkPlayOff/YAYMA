@@ -6,7 +6,7 @@
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS%20%7C%20Android-lightgrey)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/DarkPlayOff/YAYMA)
 
-Альтернативный клиент для Яндекс Музыки. Проект находится в стадии активной разработки.
+Альтернативный клиент для Яндекс Музыки
 
 <table>
   <tr>
@@ -18,7 +18,7 @@
 
 ## Предупреждение
 
-**YAYMA** основан на [Yamusic](https://github.com/yamusic/yamusic) и использует неофициальное API, не предназначенное для публичного использования. Пользуйтесь на свой страх и риск. Проект написан с помощью ИИ.
+**YAYMA** основан на [YaMusic](https://github.com/yamusic/yamusic) и использует неофициальное API, не предназначенное для публичного использования. Проект находится в стадии активной разработки. Пользуйтесь на свой страх и риск. Проект написан с помощью ИИ.
 
 ## Возможности
 
@@ -28,7 +28,7 @@
 
 ## Благодарности ❤️
 
-- [Vyfor](https://github.com/vyfor) — за исходный TUI-клиент [yamusic](https://github.com/yamusic/yamusic) и библиотеку [yandex-music-rs](https://github.com/vyfor/yandex-music-rs) для работы с API Яндекса
+- [Vyfor](https://github.com/vyfor) — за исходный TUI-клиент [YaMusic](https://github.com/yamusic/yamusic) и библиотеку [yandex-music-rs](https://github.com/vyfor/yandex-music-rs) для работы с API Яндекса
 - [LrcLib](https://lrclib.net), [BetterLyrics](https://github.com/better-lyrics/better-lyrics), [YouLyPlus](https://github.com/ibratabian17/YouLyPlus) — за базы текстов песен
 
 ## Лицензия
