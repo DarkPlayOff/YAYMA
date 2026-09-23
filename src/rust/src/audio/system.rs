@@ -1,9 +1,10 @@
 use crate::audio::cache::UrlCache;
 use crate::{
     audio::{
-        commands::AudioMessage, controller::AudioController, playback::PlaybackEngine,
-        progress::TrackProgress, queue::QueueManager, queue::as_wave_seed, signals::AudioSignals,
-        state::SystemState, stream_manager::StreamManager, yandex::YandexProvider,
+        commands::AudioMessage, controller::AudioController,
+        fetcher::is_usable_wave_session, playback::PlaybackEngine, progress::TrackProgress,
+        queue::QueueManager, queue::as_wave_seed, signals::AudioSignals, state::SystemState,
+        stream_manager::StreamManager, yandex::YandexProvider,
     },
     http::{ApiService, SessionExt},
 };
@@ -572,7 +573,8 @@ impl AudioSystem {
                             self.send_wave_like(&track);
                         }
                     } else {
-                        self.send_wave_feedback("like", Some(track_id), None, true);
+                        let batch = self.queue.wave_batch_for_id(&track_id);
+                        self.send_wave_feedback("like", Some(track_id), batch, None);
                     }
                 }
             }
@@ -584,7 +586,8 @@ impl AudioSystem {
                             self.send_wave_unlike(&track);
                         }
                     } else {
-                        self.send_wave_feedback("unlike", Some(track_id), None, true);
+                        let batch = self.queue.wave_batch_for_id(&track_id);
+                        self.send_wave_feedback("unlike", Some(track_id), batch, None);
                     }
                 }
             }
@@ -596,7 +599,8 @@ impl AudioSystem {
                             self.send_wave_dislike_skip(&track).await;
                         }
                     } else {
-                        self.send_wave_feedback("dislike", Some(track_id), None, true);
+                        let batch = self.queue.wave_batch_for_id(&track_id);
+                        self.send_wave_feedback("dislike", Some(track_id), batch, None);
                         self.queue.refresh_wave_queue();
                         self.play_next().await;
                     }
@@ -610,7 +614,8 @@ impl AudioSystem {
                             self.send_wave_undislike(&track);
                         }
                     } else {
-                        self.send_wave_feedback("undislike", Some(track_id), None, true);
+                        let batch = self.queue.wave_batch_for_id(&track_id);
+                        self.send_wave_feedback("undislike", Some(track_id), batch, None);
                         self.queue.refresh_wave_queue();
                     }
                 }
@@ -688,31 +693,60 @@ impl AudioSystem {
         &self,
         feedback_type: &'static str,
         track_id: Option<String>,
+        batch_id: Option<String>,
         total_played: Option<Duration>,
-        include_batch_id: bool,
     ) {
         let session = match self.queue.wave_context() {
             Some(s) => s,
             None => return,
         };
+        // Never send feedback for a dead session: without radio_session_id
+        // the request goes to the user:onyourwave fallback URL with a foreign
+        // batch_id (HTTP 400), and a terminated session is rejected too.
+        // The session is repaired by preservation (fetcher) / recreate (queue).
+        if session.terminated || !is_usable_wave_session(&session) {
+            tracing::error!(
+                feedback_type,
+                track_id = track_id.as_deref().unwrap_or("-"),
+                batch_id = %session.batch_id,
+                radio_session_id = session.radio_session_id.as_deref().unwrap_or("-"),
+                terminated = session.terminated,
+                "wave_feedback_skipped_dead_session"
+            );
+            return;
+        }
         let station_id = session.station_id().to_string();
-        let batch_id = include_batch_id.then(|| session.batch_id.clone());
+        // Per-track batch attribution like the original client; fall back to
+        // the stored session batch for tracks served before per-track
+        // mapping existed. `radioStarted` carries no batch.
+        let batch_id = match (track_id.is_some(), batch_id) {
+            (false, _) => None,
+            (true, Some(batch)) => Some(batch),
+            (true, None) => Some(session.batch_id.clone()),
+        };
         let from = Some(session.source_id().to_string());
 
         let api = self.yandex.api.clone();
         tokio::spawn(async move {
             if let Err(e) = api
                 .send_rotor_feedback(
-                    station_id,
-                    batch_id,
+                    station_id.clone(),
+                    batch_id.clone(),
                     feedback_type,
-                    track_id,
+                    track_id.clone(),
                     from,
                     total_played,
                 )
                 .await
             {
-                tracing::warn!(error = %e, feedback_type, "wave_feedback_failed");
+                tracing::warn!(
+                    error = %e,
+                    feedback_type,
+                    track_id = track_id.as_deref().unwrap_or("-"),
+                    station_id = %station_id,
+                    batch_id = batch_id.as_deref().unwrap_or("-"),
+                    "wave_feedback_failed"
+                );
             } else {
                 tracing::info!(feedback_type, "wave_feedback_sent");
             }
@@ -720,35 +754,40 @@ impl AudioSystem {
     }
 
     pub fn send_wave_started(&self) {
-        self.send_wave_feedback("radioStarted", None, None, false);
+        self.send_wave_feedback("radioStarted", None, None, None);
     }
 
     pub fn send_wave_track_started(&self, track: &Track) {
         let track_id = as_wave_seed(track);
-        self.send_wave_feedback("trackStarted", Some(track_id), None, true);
+        let batch = self.queue.wave_batch_for_track(track);
+        self.send_wave_feedback("trackStarted", Some(track_id), batch, None);
     }
 
     pub fn send_wave_like(&mut self, track: &Track) {
         let track_id = as_wave_seed(track);
+        let batch = self.queue.wave_batch_for_track(track);
         // Like/unlike don't change the queue: only send feedback, keep the
         // 3-track prefetch buffer intact (refresh only on dislike).
-        self.send_wave_feedback("like", Some(track_id), None, true);
+        self.send_wave_feedback("like", Some(track_id), batch, None);
     }
 
     pub fn send_wave_unlike(&mut self, track: &Track) {
         let track_id = as_wave_seed(track);
-        self.send_wave_feedback("unlike", Some(track_id), None, true);
+        let batch = self.queue.wave_batch_for_track(track);
+        self.send_wave_feedback("unlike", Some(track_id), batch, None);
     }
 
     pub fn send_wave_dislike(&mut self, track: &Track) {
         let track_id = as_wave_seed(track);
-        self.send_wave_feedback("dislike", Some(track_id), None, true);
+        let batch = self.queue.wave_batch_for_track(track);
+        self.send_wave_feedback("dislike", Some(track_id), batch, None);
         self.queue.refresh_wave_queue();
     }
 
     pub async fn send_wave_dislike_skip(&mut self, track: &Track) {
         let track_id = as_wave_seed(track);
-        self.send_wave_feedback("dislike", Some(track_id), None, true);
+        let batch = self.queue.wave_batch_for_track(track);
+        self.send_wave_feedback("dislike", Some(track_id), batch, None);
         self.queue.refresh_wave_queue();
 
         self.play_next().await;
@@ -756,7 +795,8 @@ impl AudioSystem {
 
     pub fn send_wave_undislike(&mut self, track: &Track) {
         let track_id = as_wave_seed(track);
-        self.send_wave_feedback("undislike", Some(track_id), None, true);
+        let batch = self.queue.wave_batch_for_track(track);
+        self.send_wave_feedback("undislike", Some(track_id), batch, None);
         self.queue.refresh_wave_queue();
     }
 

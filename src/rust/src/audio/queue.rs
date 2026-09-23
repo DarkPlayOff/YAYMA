@@ -18,6 +18,7 @@ use yandex_music::model::{
 
 use crate::audio::fetcher::{
     FetchState, WAVE_VISIBLE_TRACKS, WaveExtensionHandles, WaveTrackEvent, WaveTrackOutcome,
+    is_usable_wave_session,
 };
 use crate::audio::history::HistoryState;
 use crate::audio::prefetcher::UrlPrefetcher;
@@ -120,6 +121,10 @@ impl QueueSignals {
 
     fn set_wave_seeds(&self, seeds: Vec<String>) {
         self.inner.current_wave_seeds.set(seeds);
+    }
+
+    fn wave_seeds(&self) -> Vec<String> {
+        self.inner.current_wave_seeds.get()
     }
 
     fn raw_queue_handle(&self) -> Signal<Vector<Track>> {
@@ -309,6 +314,7 @@ impl QueueManager {
             queue: self.signals.raw_queue_handle(),
             queue_length: self.signals.raw_queue_length_handle(),
             wave_session: self.fetch.wave_session_arc(),
+            wave_batch_ids: self.fetch.wave_batch_ids_arc(),
             playback_context: self.playback_context.clone(),
             generation,
             generation_ref,
@@ -331,6 +337,14 @@ impl QueueManager {
     pub async fn get_next_track(&mut self) -> Option<Track> {
         if self.signals.queue().is_empty() {
             return None;
+        }
+
+        if self.in_wave()
+            && self
+                .fetch_wave_session_clone()
+                .is_some_and(|s| s.terminated)
+        {
+            self.recreate_wave_session().await;
         }
 
         if self.signals.repeat_mode() == RepeatMode::Single {
@@ -380,13 +394,16 @@ impl QueueManager {
         // On timeout the fetch stays in flight and poll_fetch() reaps it;
         // the caller treats None as queue end for now.
         if self.fetch.is_fetching()
-            && let Some((new_tracks, session)) = self
+            && let Some((new_tracks, session, failed_feedbacks)) = self
                 .fetch
                 .await_task_timeout(std::time::Duration::from_secs(5))
                 .await
         {
+            self.requeue_failed_wave_feedbacks(failed_feedbacks);
             if let Some(session) = session {
-                self.fetch.set_wave_session(session);
+                // Page response: keep the created session stable, only
+                // remember which batch delivered these tracks.
+                self.fetch.remember_wave_batch(&session.batch_id, &new_tracks);
             }
             if !new_tracks.is_empty() {
                 self.wave_append(new_tracks);
@@ -400,10 +417,18 @@ impl QueueManager {
     }
 
     pub async fn skip_wave_track(&mut self) -> Option<Track> {
+        if self.in_wave()
+            && self
+                .fetch_wave_session_clone()
+                .is_some_and(|s| s.terminated)
+        {
+            self.recreate_wave_session().await;
+        }
         if self.in_wave() && !self.wave_feedback_sent {
             if let Some(track) = self.signals.queue().get(self.signals.index()).cloned() {
                 self.wave_feedbacks.push(WaveTrackEvent {
                     track_id: as_wave_seed(&track),
+                    batch_id: self.fetch.wave_batch_for(&track.id),
                     outcome: WaveTrackOutcome::Skipped,
                     total_played: self.track_progress.current_position(),
                     track_length: None,
@@ -432,6 +457,7 @@ impl QueueManager {
             }
             self.wave_feedbacks.push(WaveTrackEvent {
                 track_id: id,
+                batch_id: self.fetch.wave_batch_for(&track.id),
                 outcome: WaveTrackOutcome::Finished,
                 total_played: self.track_progress.current_position(),
                 track_length: track
@@ -577,7 +603,21 @@ impl QueueManager {
             return;
         }
 
-        if self.fetch_wave_session_clone().is_some() {
+        if let Some(session) = self.fetch_wave_session_clone() {
+            if session.terminated {
+                // Dead session: paging/feedback on it is rejected by the
+                // server. Recreate happens in the async next/skip paths
+                // (sync context can't await create_session); don't spam
+                // doomed page requests or lose feedbacks here.
+                return;
+            }
+            if !is_usable_wave_session(&session) {
+                // No radio_session_id (and preservation had nothing to keep):
+                // trigger_wave_batch would just drop our finish/skip events
+                // with MissingWaveSession, so don't take them.
+                error!("wave_fetch_trigger_failed_no_session_id");
+                return;
+            }
             let history_seeds = self.build_wave_history_seeds();
             let pending_feedback = std::mem::take(&mut self.wave_feedbacks);
             if let Err(error) =
@@ -589,18 +629,75 @@ impl QueueManager {
         }
     }
 
+    /// Recreate a terminated wave session with the same seeds so a custom
+    /// station survives instead of falling back to `user:onyourwave`.
+    /// Buffered tracks stay playable; stale finish/skip events belong to the
+    /// dead batch and are dropped so they can't 400 the new session.
+    async fn recreate_wave_session(&mut self) {
+        if self.fetch.is_fetching() {
+            return;
+        }
+        let seeds = self.signals.wave_seeds();
+        let seeds = if seeds.is_empty() {
+            vec!["user:onyourwave".to_string()]
+        } else {
+            seeds
+        };
+        let clean: Vec<String> = seeds.iter().map(|s| clean_wave_seed(s)).collect();
+        match self.api.create_session(clean).await {
+            Ok(session) => {
+                let tracks: Vec<Track> =
+                    session.sequence.iter().map(|s| s.track.clone()).collect();
+                if tracks.is_empty() {
+                    error!("wave_session_recreate_empty");
+                    return;
+                }
+                self.fetch.set_wave_session(session);
+                self.wave_feedbacks.clear();
+                self.wave_append(tracks);
+            }
+            Err(e) => error!(error = %e, "wave_session_recreate_failed"),
+        }
+    }
+
+    /// `queue` for the next `/tracks` page mirrors the original client: the
+    /// played history (oldest → newest, capped) — NOT the upcoming queue or
+    /// the prefetch buffer. Sending future tracks as `queue` confuses the
+    /// recommender and contributes to wave resets.
     fn build_wave_history_seeds(&self) -> Vec<String> {
-        let played = self.history.entries.iter().rev().take(20).map(as_wave_seed);
-
-        let queue = self.signals.queue();
-        let not_yet_played = queue
+        const MAX_HISTORY_SEEDS: usize = 20;
+        let len = self.history.entries.len();
+        self.history
+            .entries
             .iter()
-            .skip(self.signals.index() + 1)
-            .map(as_wave_seed);
+            .skip(len.saturating_sub(MAX_HISTORY_SEEDS))
+            .map(as_wave_seed)
+            .collect()
+    }
 
-        let buffered = self.wave_buffer.iter().map(as_wave_seed);
+    /// Prepend failed page feedbacks so they are retried with the next page.
+    /// Events for tracks that already have a queued event are dropped (the
+    /// original client dedups finish/skip per track the same way).
+    fn requeue_failed_wave_feedbacks(&mut self, failed: Vec<WaveTrackEvent>) {
+        if failed.is_empty() {
+            return;
+        }
+        let mut fresh: Vec<WaveTrackEvent> = failed
+            .into_iter()
+            .filter(|e| !self.wave_feedbacks.iter().any(|q| q.track_id == e.track_id))
+            .collect();
+        fresh.extend(std::mem::take(&mut self.wave_feedbacks));
+        self.wave_feedbacks = fresh;
+    }
 
-        played.chain(not_yet_played).chain(buffered).collect()
+    /// Per-track `batchId` for immediate (`/feedback`) wave feedbacks.
+    pub fn wave_batch_for_track(&self, track: &Track) -> Option<String> {
+        self.fetch.wave_batch_for(&track.id)
+    }
+
+    /// Same as above for call sites that only have a raw track id.
+    pub fn wave_batch_for_id(&self, track_id: &str) -> Option<String> {
+        self.fetch.wave_batch_for(track_id)
     }
 
     pub async fn poll_fetch(&mut self) {
@@ -610,12 +707,15 @@ impl QueueManager {
     }
 
     async fn consume_fetch_result(&mut self) -> bool {
-        let Some((tracks, session)) = self.fetch.await_task().await else {
+        let Some((tracks, session, failed_feedbacks)) = self.fetch.await_task().await else {
             return false;
         };
+        self.requeue_failed_wave_feedbacks(failed_feedbacks);
 
         if let Some(session) = session {
-            self.fetch.set_wave_session(session);
+            // Page response, not a new session: the created session stays
+            // stable, only per-track batch attribution is updated.
+            self.fetch.remember_wave_batch(&session.batch_id, &tracks);
         }
 
         if tracks.is_empty() {
@@ -727,6 +827,16 @@ pub fn as_wave_seed(track: &Track) -> String {
     }
 }
 
+/// Normalize a wave seed for the rotor API: a `track:id:title` UI seed
+/// becomes the `track:id` the API expects; anything else passes through.
+pub(crate) fn clean_wave_seed(seed: &str) -> String {
+    if seed.starts_with("track:") {
+        seed.split(':').take(2).collect::<Vec<_>>().join(":")
+    } else {
+        seed.to_string()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -821,5 +931,64 @@ mod tests {
         q.toggle_shuffle();
         assert_eq!(q.get_next_track().await.unwrap().id, "t1");
         assert_eq!(q.get_next_track().await.unwrap().id, "t2");
+    }
+
+    #[tokio::test]
+    async fn wave_history_seeds_are_played_in_order() {
+        let mut q = manager().await;
+        for i in 0..5 {
+            q.history.push(test_track(&format!("t{i}")));
+        }
+        // Playback order (oldest -> newest), no future/buffered tracks.
+        let seeds = q.build_wave_history_seeds();
+        assert_eq!(seeds, vec!["t0", "t1", "t2", "t3", "t4"]);
+    }
+
+    #[tokio::test]
+    async fn wave_history_seeds_cap_at_20_newest() {
+        let mut q = manager().await;
+        for i in 0..25 {
+            q.history.push(test_track(&format!("t{i}")));
+        }
+        let seeds = q.build_wave_history_seeds();
+        assert_eq!(seeds.len(), 20);
+        assert_eq!(seeds[0], "t5");
+        assert_eq!(seeds[19], "t24");
+    }
+
+    #[tokio::test]
+    async fn failed_wave_feedbacks_requeue_without_duplicates() {
+        use crate::audio::fetcher::{WaveTrackEvent, WaveTrackOutcome};
+        use std::time::Duration;
+
+        let mut q = manager().await;
+        let event = |id: &str| WaveTrackEvent {
+            track_id: id.to_string(),
+            batch_id: Some("b1".to_string()),
+            total_played: Duration::ZERO,
+            track_length: None,
+            outcome: WaveTrackOutcome::Finished,
+        };
+        q.wave_feedbacks.push(event("t1"));
+        // t1 already queued -> dropped; t2 prepended for retry.
+        q.requeue_failed_wave_feedbacks(vec![event("t1"), event("t2")]);
+        let ids: Vec<_> = q
+            .wave_feedbacks
+            .iter()
+            .map(|e| e.track_id.as_str())
+            .collect();
+        assert_eq!(ids, vec!["t2", "t1"]);
+    }
+
+    #[tokio::test]
+    async fn wave_batch_attribution_prefers_serving_page() {
+        let q = manager().await;
+        // Session batch fallback for never-served tracks tested in fetcher;
+        // here a serving page overrides it per track.
+        q.fetch.remember_wave_batch("page-2", &[test_track("t1")]);
+        assert_eq!(
+            q.wave_batch_for_track(&test_track("t1")).as_deref(),
+            Some("page-2")
+        );
     }
 }
