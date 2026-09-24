@@ -1,5 +1,5 @@
 import 'package:signals_flutter/signals_flutter.dart';
-import 'package:yayma/src/features/auth/providers/auth_provider.dart';
+import 'package:yayma/src/features/core/services/rust_bridge.dart';
 import 'package:yayma/src/rust/api/content.dart';
 import 'package:yayma/src/rust/api/models.dart';
 

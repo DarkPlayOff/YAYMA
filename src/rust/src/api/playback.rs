@@ -177,3 +177,49 @@ pub async fn play_liked_track(ctx: &AppContext, track_id: String) {
 pub async fn start_wave(ctx: &AppContext, seeds: Vec<String>) {
     let _ = ctx.audio.tx.send(AudioMessage::StartWave(seeds)).await;
 }
+
+/// Seed used when no specific wave station is selected.
+pub const DEFAULT_WAVE_SEED: &str = "user:onyourwave";
+
+/// Station category: the part of a seed before the first ':'.
+/// Seeds without ':' form a category of their own.
+fn wave_seed_category(seed: &str) -> &str {
+    match seed.find(':') {
+        Some(idx) => &seed[..idx],
+        None => seed,
+    }
+}
+
+/// Toggle a wave station, owning the full seed policy that used to live in
+/// Dart (`WaveController.toggleStation`):
+/// - if `seed` is active, remove it;
+/// - otherwise drop the default seed plus every seed of the same category,
+///   then add `seed`;
+/// - if nothing is left, fall back to the default seed.
+/// Afterwards a wave is (re)started with the resulting seeds.
+pub async fn toggle_wave_station(ctx: &AppContext, seed: String) {
+    let mut seeds = ctx.audio.signals.current_wave_seeds.get();
+    if seeds.iter().any(|s| *s == seed) {
+        seeds.retain(|s| *s != seed);
+    } else {
+        let prefix = format!("{}:", wave_seed_category(&seed));
+        seeds.retain(|s| *s != DEFAULT_WAVE_SEED && !s.starts_with(&prefix));
+        seeds.push(seed);
+    }
+    if seeds.is_empty() {
+        seeds.push(DEFAULT_WAVE_SEED.to_string());
+    }
+    let _ = ctx.audio.tx.send(AudioMessage::StartWave(seeds)).await;
+}
+
+/// (Re)start "My wave": keep the current seeds, defaulting to the
+/// `user:onyourwave` seed when nothing is selected.
+pub async fn start_my_wave(ctx: &AppContext) {
+    let seeds = ctx.audio.signals.current_wave_seeds.get();
+    let seeds = if seeds.is_empty() {
+        vec![DEFAULT_WAVE_SEED.to_string()]
+    } else {
+        seeds
+    };
+    let _ = ctx.audio.tx.send(AudioMessage::StartWave(seeds)).await;
+}

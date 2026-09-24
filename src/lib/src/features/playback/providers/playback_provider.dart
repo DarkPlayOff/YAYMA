@@ -8,6 +8,7 @@ import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/features/auth/providers/auth_provider.dart';
 import 'package:yayma/src/features/core/providers/notification_provider.dart';
 import 'package:yayma/src/features/core/providers/visual_effects_provider.dart';
+import 'package:yayma/src/features/core/services/rust_bridge.dart';
 import 'package:yayma/src/features/library/providers/library_provider.dart';
 import 'package:yayma/src/rust/api/audio_fx.dart' as rust;
 import 'package:yayma/src/rust/api/library.dart' as rust;

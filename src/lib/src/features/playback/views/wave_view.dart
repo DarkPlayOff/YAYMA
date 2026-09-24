@@ -5,7 +5,6 @@ import 'package:m3e_core/m3e_core.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/features/core/views/widgets/responsive.dart';
-import 'package:yayma/src/features/home/providers/home_provider.dart';
 import 'package:yayma/src/features/playback/providers/playback_provider.dart';
 import 'package:yayma/src/features/playback/providers/wave_provider.dart';
 import 'package:yayma/src/rust/api/models.dart';
@@ -195,7 +194,7 @@ class WaveSettingsPanel extends StatelessWidget {
                   bottom: 32,
                   child: FloatingActionButton(
                     onPressed: () {
-                      unawaited(HomeController.startMyWave());
+                      unawaited(WaveController.startMyWave());
                       onSelected();
                     },
                     backgroundColor: Theme.of(context).colorScheme.primary,
@@ -243,9 +242,12 @@ class WaveSettingsPanel extends StatelessWidget {
             var label = seed;
 
             if (seed.startsWith('track:')) {
-              final parts = seed.split(':');
-              if (parts.length >= 3) {
-                label = parts.sublist(2).join(':');
+              // Display hint is everything after the second ':'.
+              // indexOf-based so titles containing ':' don't break parsing.
+              final first = seed.indexOf(':');
+              final second = first >= 0 ? seed.indexOf(':', first + 1) : -1;
+              if (second >= 0 && second + 1 < seed.length) {
+                label = seed.substring(second + 1);
               }
             }
 

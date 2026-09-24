@@ -1,10 +1,9 @@
 import 'package:signals_flutter/signals_flutter.dart';
-import 'package:yayma/src/features/auth/providers/auth_provider.dart';
 import 'package:yayma/src/features/core/providers/navigation_provider.dart';
-import 'package:yayma/src/features/playback/providers/playback_provider.dart';
+import 'package:yayma/src/features/core/services/rust_bridge.dart';
 import 'package:yayma/src/rust/api/content.dart';
 import 'package:yayma/src/rust/api/models.dart';
-import 'package:yayma/src/rust/api/playback.dart';
+import 'package:yayma/src/rust/api/playback.dart' as rust_playback;
 
 final FutureSignal<List<StationCategoryDto>> waveStationsSignal =
     futureSignal<List<StationCategoryDto>>(
@@ -14,34 +13,33 @@ final FutureSignal<List<StationCategoryDto>> waveStationsSignal =
 
 class WaveController {
   static Future<void> playStation(String seed) async {
-    await runRustAction((ctx) => startWave(ctx: ctx, seeds: [seed]));
+    await runRustAction(
+      (ctx) => rust_playback.startWave(ctx: ctx, seeds: [seed]),
+    );
     setSection(AppSection.home);
   }
 
+  /// Toggle is fully owned by Rust (`toggle_wave_station`): no seed
+  /// splitting/filtering in Dart.
   static Future<void> toggleStation(String seed) async {
-    final currentSeeds = List<String>.from(currentWaveSeedsSignal());
-
-    if (currentSeeds.contains(seed)) {
-      currentSeeds.remove(seed);
-    } else {
-      final category = seed.split(':').first;
-      currentSeeds
-        ..remove('user:onyourwave')
-        ..removeWhere((s) => s.startsWith('$category:'))
-        ..add(seed);
-    }
-
-    // If no specific seeds are left, return to the default wave
-    if (currentSeeds.isEmpty) {
-      currentSeeds.add('user:onyourwave');
-    }
-
-    await runRustAction((ctx) => startWave(ctx: ctx, seeds: currentSeeds));
+    await runRustAction(
+      (ctx) => rust_playback.toggleWaveStation(ctx: ctx, seed: seed),
+    );
   }
 
+  /// "My wave": keeps current seeds, falls back to `user:onyourwave`
+  /// when empty. Fully owned by Rust ([startMyWave]).
+  static Future<void> startMyWave() async {
+    await runRustAction((ctx) => rust_playback.startMyWave(ctx: ctx));
+    setSection(AppSection.home);
+  }
+
+  /// Reset to the default wave with a single Rust call.
+  /// No manual seed manipulation in Dart.
   static Future<void> resetStations() async {
-    final seeds = ['user:onyourwave'];
-    await runRustAction((ctx) => startWave(ctx: ctx, seeds: seeds));
+    await runRustAction(
+      (ctx) => rust_playback.startWave(ctx: ctx, seeds: ['user:onyourwave']),
+    );
   }
 
   static Future<void> refresh() async {
