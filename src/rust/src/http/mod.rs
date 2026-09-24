@@ -26,10 +26,12 @@ use yandex_music::{
             remove_liked_artist::RemoveLikedArtistOptions,
         },
         playlist::{
+            add_liked_playlist::AddLikedPlaylistOptions,
             change_playlist_visibility::ChangePlaylistVisibilityOptions,
             create_playlist::CreatePlaylistOptions, delete_playlist::DeletePlaylistOptions,
             get_all_playlists::GetAllPlaylistsOptions, get_playlists::GetPlaylistsOptions,
-            modify_playlist::ModifyPlaylistOptions, rename_playlist::RenamePlaylistOptions,
+            modify_playlist::ModifyPlaylistOptions, remove_liked_playlist::RemoveLikedPlaylistOptions,
+            rename_playlist::RenamePlaylistOptions,
         },
         rotor::{
             create_session::CreateSessionOptions, get_session_tracks::GetSessionTracksOptions,
@@ -76,6 +78,38 @@ const MAX_REQUEST_ATTEMPTS: usize = 3;
 
 fn retryable_status(status: reqwest::StatusCode) -> bool {
     matches!(status.as_u16(), 408 | 429 | 500..=504)
+}
+
+/// True if the error chain carries HTTP 412 Precondition Failed.
+///
+/// `yandex-music 0.7.0` surfaces a non-2xx from `change-relative` as
+/// `ClientError::YandexMusicError { message: "Request failed with status code: 412 ..." }`
+/// (see `client/request.rs::send_request`), and transport-level failures as
+/// `ClientError::RequestError { reqwest::Error }`. Our API surface boxes everything
+/// into `Box<dyn Error>`, so match structurally where possible and fall back to
+/// substring search on the whole cause chain.
+fn is_precondition_failed(err: &(dyn std::error::Error + Send + Sync + 'static)) -> bool {
+    let mut cur: Option<&(dyn std::error::Error + 'static)> = Some(err);
+    while let Some(e) = cur {
+        if let Some(client_err) = e.downcast_ref::<yandex_music::error::ClientError>() {
+            if let yandex_music::error::ClientError::RequestError { error } = client_err {
+                if error.status().is_some_and(|s| s.as_u16() == 412) {
+                    return true;
+                }
+            }
+        }
+        if let Some(req_err) = e.downcast_ref::<reqwest::Error>() {
+            if req_err.status().is_some_and(|s| s.as_u16() == 412) {
+                return true;
+            }
+        }
+        let msg = e.to_string();
+        if msg.contains("status code: 412") || msg.contains("412 Precondition") {
+            return true;
+        }
+        cur = e.source();
+    }
+    false
 }
 
 /// Execute a raw request with the same bounded retry policy as the desktop client.
@@ -681,25 +715,30 @@ impl ApiService {
 
     pub async fn add_like_track(&self, track_id: String) -> Result<()> {
         let opts = AddLikedTracksOptions::new(self.user_id, vec![track_id]);
-        self.client.add_liked_tracks(&opts).await?;
+        // yandex_music crate returns Err if the response JSON has no `revision`
+        // (InvalidValue), so `?` here rejects non-OK responses without revision.
+        let _revision: u64 = self.client.add_liked_tracks(&opts).await?;
         Ok(())
     }
 
     pub async fn remove_like_track(&self, track_id: String) -> Result<()> {
         let opts = RemoveLikedTracksOptions::new(self.user_id, vec![track_id]);
-        self.client.remove_liked_tracks(&opts).await?;
+        // Same revision check as above: Err if no `revision` in response.
+        let _revision: u64 = self.client.remove_liked_tracks(&opts).await?;
         Ok(())
     }
 
     pub async fn add_dislike_track(&self, track_id: String) -> Result<()> {
         let opts = AddDislikedTracksOptions::new(self.user_id, vec![track_id]);
-        self.client.add_disliked_tracks(&opts).await?;
+        // Same revision check as above: Err if no `revision` in response.
+        let _revision: u64 = self.client.add_disliked_tracks(&opts).await?;
         Ok(())
     }
 
     pub async fn remove_dislike_track(&self, track_id: String) -> Result<()> {
         let opts = RemoveDislikedTracksOptions::new(self.user_id, vec![track_id]);
-        self.client.remove_disliked_tracks(&opts).await?;
+        // Same revision check as above: Err if no `revision` in response.
+        let _revision: u64 = self.client.remove_disliked_tracks(&opts).await?;
         Ok(())
     }
 
@@ -721,17 +760,13 @@ impl ApiService {
         track_id: String,
         album_id: String,
     ) -> Result<()> {
-        let playlist = self.fetch_playlist_bare(kind).await?;
-        let revision = playlist.revision;
-
         let track = TrackShort {
             id: track_id,
             album_id: Some(album_id),
         };
 
         let diff = Diff::new(DiffOp::insert(0), vec![track]);
-        let opts = ModifyPlaylistOptions::new(self.user_id, kind, diff, revision);
-        self.client.modify_playlist(&opts).await?;
+        self.modify_playlist_with_revision_retry(kind, diff).await?;
         Ok(())
     }
 
@@ -741,17 +776,13 @@ impl ApiService {
         track_id: String,
         album_id: String,
     ) -> Result<()> {
-        let playlist = self.fetch_playlist_bare(kind).await?;
-        let revision = playlist.revision;
-
         let track = TrackShort {
             id: track_id,
             album_id: Some(album_id),
         };
 
         let diff = Diff::new(DiffOp::delete(0, 1), vec![track]);
-        let opts = ModifyPlaylistOptions::new(self.user_id, kind, diff, revision);
-        self.client.modify_playlist(&opts).await?;
+        self.modify_playlist_with_revision_retry(kind, diff).await?;
         Ok(())
     }
 
@@ -763,31 +794,46 @@ impl ApiService {
         track_id: String,
         album_id: String,
     ) -> Result<()> {
-        let playlist = self.fetch_playlist_bare(kind).await?;
-        let revision = playlist.revision;
-
         let track = TrackShort {
             id: track_id,
             album_id: Some(album_id),
         };
 
-        // In Yandex Music, moving a track is done by deleting it from the old position and inserting it into the new one
+        // NOTE: yandex-music 0.7.0 DiffOp supports only Insert/Delete (no atomic
+        // move/reorder op), so a move stays a delete+insert pair. Each step goes
+        // through with_revision_retry (one refetch + one retry max per step);
+        // the second step fetches a fresh revision after the first completes.
         let diff_delete = Diff::new(
             DiffOp::delete(from_index, from_index + 1),
             vec![track.clone()],
         );
         let diff_insert = Diff::new(DiffOp::insert(to_index), vec![track]);
 
-        let opts1 = ModifyPlaylistOptions::new(self.user_id, kind, diff_delete, revision);
-        self.client.modify_playlist(&opts1).await?;
-
-        // Get the updated revision after the first step
-        let playlist_updated = self.fetch_playlist_bare(kind).await?;
-        let opts2 =
-            ModifyPlaylistOptions::new(self.user_id, kind, diff_insert, playlist_updated.revision);
-        self.client.modify_playlist(&opts2).await?;
+        self.modify_playlist_with_revision_retry(kind, diff_delete)
+            .await?;
+        self.modify_playlist_with_revision_retry(kind, diff_insert)
+            .await?;
 
         Ok(())
+    }
+
+    /// Run one `change-relative` diff against the current revision; on HTTP 412
+    /// Precondition Failed do a single `fetch_playlist_bare` refetch and one retry.
+    /// A second 412 (or any other error) is returned to the caller (RELOAD semantics
+    /// are decided upstream). At most 1 retry per call.
+    async fn modify_playlist_with_revision_retry(&self, kind: u32, diff: Diff) -> Result<Playlist> {
+        let playlist = self.fetch_playlist_bare(kind).await?;
+        let opts = ModifyPlaylistOptions::new(self.user_id, kind, diff.clone(), playlist.revision);
+        match self.client.modify_playlist(&opts).await {
+            Ok(updated) => Ok(updated),
+            Err(e) if is_precondition_failed(&e) => {
+                let fresh = self.fetch_playlist_bare(kind).await?;
+                let retry_opts =
+                    ModifyPlaylistOptions::new(self.user_id, kind, diff, fresh.revision);
+                Ok(self.client.modify_playlist(&retry_opts).await?)
+            }
+            Err(e) => Err(e.into()),
+        }
     }
 
     pub async fn create_playlist(&self, title: String, is_public: bool) -> Result<()> {
@@ -837,6 +883,18 @@ impl ApiService {
     pub async fn remove_dislike_artist(&self, artist_id: String) -> Result<()> {
         let opts = RemoveDislikedArtistOptions::new(self.user_id, artist_id);
         self.client.remove_disliked_artist(&opts).await?;
+        Ok(())
+    }
+
+    pub async fn add_like_playlist(&self, owner_uid: u64, kind: u32) -> Result<()> {
+        let opts = AddLikedPlaylistOptions::new(self.user_id, owner_uid, kind);
+        self.client.add_liked_playlist(&opts).await?;
+        Ok(())
+    }
+
+    pub async fn remove_like_playlist(&self, owner_uid: u64, kind: u32) -> Result<()> {
+        let opts = RemoveLikedPlaylistOptions::new(self.user_id, owner_uid, kind);
+        self.client.remove_liked_playlist(&opts).await?;
         Ok(())
     }
 

@@ -1,15 +1,19 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 
 import 'package:m3e_core/m3e_core.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/features/auth/providers/auth_provider.dart';
 import 'package:yayma/src/features/core/providers/navigation_provider.dart';
+import 'package:yayma/src/features/core/providers/notification_provider.dart';
 import 'package:yayma/src/features/core/views/widgets/common_ui.dart';
+import 'package:yayma/src/features/core/views/widgets/horizontal_shelf.dart';
 import 'package:yayma/src/features/core/views/widgets/media_card.dart';
 import 'package:yayma/src/features/core/views/widgets/responsive.dart';
 import 'package:yayma/src/features/core/views/widgets/track_elements.dart';
 import 'package:yayma/src/features/core/views/widgets/track_tile.dart';
+import 'package:yayma/src/features/library/providers/library_provider.dart';
 import 'package:yayma/src/features/playback/providers/playback_provider.dart';
 import 'package:yayma/src/rust/api/content.dart' as rust;
 import 'package:yayma/src/rust/api/models.dart';
@@ -43,6 +47,7 @@ class _ArtistViewState extends State<ArtistView> {
     super.initState();
     _scrollController = ScrollController()..addListener(_onScroll);
     unawaited(_loadInitial());
+    unawaited(refreshLikedArtists());
   }
 
   @override
@@ -118,6 +123,37 @@ class _ArtistViewState extends State<ArtistView> {
     }
   }
 
+  Future<void> _toggleArtistLike(SimpleArtistDto artist, bool isLiked) async {
+    final success = isLiked
+        ? await removeLikedArtistAction(artist.id)
+        : await addLikedArtistAction(artist.id);
+
+    if (!mounted) return;
+    if (success) {
+      final current = likedArtistsSignal.value;
+      if (isLiked) {
+        likedArtistsSignal.value = current
+            .where((a) => a.id != artist.id)
+            .toList();
+      } else if (!current.any((a) => a.id == artist.id)) {
+        likedArtistsSignal.value = [
+          SimpleArtistDto(
+            id: artist.id,
+            name: artist.name,
+            coverUrl: artist.coverUrl,
+          ),
+          ...current,
+        ];
+      }
+
+      showAppSuccess(
+        isLiked ? 'Исполнитель удалён из любимых' : 'Исполнитель добавлен в любимые',
+      );
+    } else {
+      showAppError('Ошибка при обновлении любимых исполнителей');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (widget.artistId == null) {
@@ -142,6 +178,10 @@ class _ArtistViewState extends State<ArtistView> {
 
         final tracks = _tracks.value;
         final albums = _albums.value;
+        final isLiked = likedArtistsSignal.value.any(
+          (likedArtist) => likedArtist.id == artist.id,
+        );
+        final isAndroid = Platform.isAndroid;
 
         return CommonDetailSliverLayout(
           controller: _scrollController,
@@ -151,34 +191,88 @@ class _ArtistViewState extends State<ArtistView> {
             coverUrl: artist.coverUrl,
             coverSize: 200,
             isCircle: true,
+            actions: [
+              if (isAndroid)
+                IconButton(
+                  onPressed: () => unawaited(
+                    _toggleArtistLike(artist, isLiked),
+                  ),
+                  tooltip: isLiked ? 'В любимых' : 'В любимые',
+                  icon: Icon(
+                    isLiked
+                        ? Icons.favorite_rounded
+                        : Icons.favorite_border_rounded,
+                  ),
+                  style: IconButton.styleFrom(
+                    minimumSize: const Size(64, 56),
+                    iconSize: 26,
+                    backgroundColor: isLiked
+                        ? cs.primary
+                        : cs.onSurface.withValues(alpha: 0.1),
+                    foregroundColor: isLiked ? cs.onPrimary : cs.onSurface,
+                    side: isLiked
+                        ? null
+                        : BorderSide(color: cs.outlineVariant),
+                  ),
+                )
+              else
+                M3EButton.icon(
+                  onPressed: () => unawaited(
+                    _toggleArtistLike(artist, isLiked),
+                  ),
+                  icon: Icon(
+                    isLiked
+                        ? Icons.favorite_rounded
+                        : Icons.favorite_border_rounded,
+                  ),
+                  label: Text(isLiked ? 'В любимых' : 'В любимые'),
+                  style: isLiked
+                      ? M3EButtonStyle.filled
+                      : M3EButtonStyle.outlined,
+                  size: M3EButtonSize.md,
+                  decoration: isLiked
+                      ? null
+                      : M3EButtonDecoration.styleFrom(
+                          backgroundColor: cs.onSurface.withValues(
+                            alpha: 0.1,
+                          ),
+                          foregroundColor: cs.onSurface,
+                        ),
+                ),
+            ],
           ),
           slivers: [
             if (albums.isNotEmpty) ...[
-              const SliverToBoxAdapter(
+              SliverToBoxAdapter(
                 child: CommonSectionTitle(
                   title: 'Альбомы',
-                  padding: EdgeInsets.fromLTRB(40, 24, 40, 16),
+                  padding: EdgeInsets.fromLTRB(
+                    context.isNarrow ? 16 : 40,
+                    24,
+                    context.isNarrow ? 16 : 40,
+                    16,
+                  ),
                 ),
               ),
               SliverToBoxAdapter(
-                child: SizedBox(
-                  height: 240,
-                  child: ListView.builder(
-                    scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 32,
-                    ), // 32 + 8 (internal card padding) = 40
-                    itemCount: albums.length,
-                    itemBuilder: (context, i) {
-                      final album = albums[i];
-                      return CommonMediaCard(
-                        title: album.title,
-                        subtitle: album.year?.toString(),
-                        coverUrl: album.coverUrl,
-                        onTap: () => navigateTo(AppSection.album, album.id),
-                      );
-                    },
+                child: HorizontalShelf(
+                  // cover + title + subtitle + card paddings
+                  height: (context.isNarrow ? 132.0 : 160.0) + 80,
+                  padding: EdgeInsets.symmetric(
+                    // 4/32 + 8 (internal card padding)
+                    horizontal: context.isNarrow ? 4 : 32,
                   ),
+                  itemCount: albums.length,
+                  itemBuilder: (context, i) {
+                    final album = albums[i];
+                    return CommonMediaCard(
+                      title: album.title,
+                      subtitle: album.year?.toString(),
+                      coverUrl: album.coverUrl,
+                      size: context.isNarrow ? 132 : 160,
+                      onTap: () => navigateTo(AppSection.album, album.id),
+                    );
+                  },
                 ),
               ),
             ],

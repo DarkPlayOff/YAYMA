@@ -64,6 +64,13 @@ pub async fn get_playlist_details(
     logic::get_playlist_details(ctx, uid, kind, query).await
 }
 
+pub async fn get_favorite_playlist_details(
+    ctx: &AppContext,
+    query: Option<String>,
+) -> Option<PlaylistDetailsDto> {
+    crate::app::logic::library::get_favorite_playlist_details(ctx, query).await
+}
+
 pub async fn fetch_wave_stations(ctx: &AppContext) -> Vec<StationCategoryDto> {
     logic::fetch_wave_stations(ctx).await
 }

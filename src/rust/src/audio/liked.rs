@@ -108,6 +108,52 @@ impl LikedCache {
         }
     }
 
+    pub fn set_artist_like_status(&mut self, artist_id: &str, liked: bool) {
+        if liked {
+            self.liked_artists_ids.insert(artist_id.to_string());
+        } else {
+            self.liked_artists_ids.remove(artist_id);
+        }
+    }
+
+    pub fn set_artist_dislike_status(&mut self, artist_id: &str, disliked: bool) {
+        if disliked {
+            self.disliked_artists_ids.insert(artist_id.to_string());
+        } else {
+            self.disliked_artists_ids.remove(artist_id);
+        }
+    }
+
+    pub fn playlist_key(owner_uid: u64, kind: u32) -> String {
+        format!("{}:{}", owner_uid, kind)
+    }
+
+    pub fn set_playlist_like_status(&mut self, owner_uid: u64, kind: u32, liked: bool) {
+        let key = Self::playlist_key(owner_uid, kind);
+        if liked {
+            self.liked_playlists_ids.insert(key);
+        } else {
+            self.liked_playlists_ids.remove(&key);
+        }
+    }
+
+    pub fn is_album_liked(&self, album_id: u32) -> bool {
+        self.liked_albums_ids.contains(&album_id)
+    }
+
+    pub fn is_artist_liked(&self, artist_id: &str) -> bool {
+        self.liked_artists_ids.contains(artist_id)
+    }
+
+    pub fn is_artist_disliked(&self, artist_id: &str) -> bool {
+        self.disliked_artists_ids.contains(artist_id)
+    }
+
+    pub fn is_playlist_liked(&self, owner_uid: u64, kind: u32) -> bool {
+        self.liked_playlists_ids
+            .contains(&Self::playlist_key(owner_uid, kind))
+    }
+
     pub fn is_liked(&self, track_id: &str) -> bool {
         self.liked_ids_set.contains(track_id.to_base_id())
     }

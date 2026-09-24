@@ -82,6 +82,62 @@ Future<bool> removeLikedAlbumAction(String albumId) async {
   return success;
 }
 
+Future<bool> addLikedArtistAction(String artistId) async {
+  if (artistId.isEmpty) return false;
+
+  final success = await runRustAction(
+    (ctx) => addLikedArtist(ctx: ctx, artistId: artistId),
+  );
+  return success;
+}
+
+Future<bool> removeLikedArtistAction(String artistId) async {
+  if (artistId.isEmpty) return false;
+
+  final success = await runRustAction(
+    (ctx) => removeLikedArtist(ctx: ctx, artistId: artistId),
+  );
+  return success;
+}
+
+Future<bool> addDislikedArtistAction(String artistId) async {
+  if (artistId.isEmpty) return false;
+
+  final success = await runRustAction(
+    (ctx) => addDislikedArtist(ctx: ctx, artistId: artistId),
+  );
+  return success;
+}
+
+Future<bool> removeDislikedArtistAction(String artistId) async {
+  if (artistId.isEmpty) return false;
+
+  final success = await runRustAction(
+    (ctx) => removeDislikedArtist(ctx: ctx, artistId: artistId),
+  );
+  return success;
+}
+
+Future<bool> addLikedPlaylistAction(String ownerUid, int kind) async {
+  final uid = BigInt.tryParse(ownerUid);
+  if (uid == null) return false;
+
+  final success = await runRustAction(
+    (ctx) => addLikedPlaylist(ctx: ctx, ownerUid: uid, kind: kind),
+  );
+  return success;
+}
+
+Future<bool> removeLikedPlaylistAction(String ownerUid, int kind) async {
+  final uid = BigInt.tryParse(ownerUid);
+  if (uid == null) return false;
+
+  final success = await runRustAction(
+    (ctx) => removeLikedPlaylist(ctx: ctx, ownerUid: uid, kind: kind),
+  );
+  return success;
+}
+
 Future<void> refreshLikedTracks({String? query, bool force = false}) async {
   if (!force &&
       query == null &&
@@ -188,27 +244,35 @@ Future<bool> addTrackToPlaylistAction(
   int kind,
   String trackId,
   String? albumId,
-) => runRustAction(
-  (ctx) => addTrackToPlaylist(
-    ctx: ctx,
-    kind: kind,
-    trackId: trackId,
-    albumId: albumId,
-  ),
-);
+) async {
+  final success = await runRustAction(
+    (ctx) => addTrackToPlaylist(
+      ctx: ctx,
+      kind: kind,
+      trackId: trackId,
+      albumId: albumId,
+    ),
+  );
+  if (success) await refreshPlaylists();
+  return success;
+}
 
 Future<bool> removeTrackFromPlaylistAction(
   int kind,
   String trackId,
   String? albumId,
-) => runRustAction(
-  (ctx) => removeTrackFromPlaylist(
-    ctx: ctx,
-    kind: kind,
-    trackId: trackId,
-    albumId: albumId,
-  ),
-);
+) async {
+  final success = await runRustAction(
+    (ctx) => removeTrackFromPlaylist(
+      ctx: ctx,
+      kind: kind,
+      trackId: trackId,
+      albumId: albumId,
+    ),
+  );
+  if (success) await refreshPlaylists();
+  return success;
+}
 
 Future<bool> moveTrackInPlaylistAction(
   int kind,
@@ -216,16 +280,20 @@ Future<bool> moveTrackInPlaylistAction(
   int toIndex,
   String trackId,
   String? albumId,
-) => runRustAction(
-  (ctx) => moveTrackInPlaylist(
-    ctx: ctx,
-    kind: kind,
-    fromIndex: fromIndex,
-    toIndex: toIndex,
-    trackId: trackId,
-    albumId: albumId ?? '',
-  ),
-);
+) async {
+  final success = await runRustAction(
+    (ctx) => moveTrackInPlaylist(
+      ctx: ctx,
+      kind: kind,
+      fromIndex: fromIndex,
+      toIndex: toIndex,
+      trackId: trackId,
+      albumId: albumId ?? '',
+    ),
+  );
+  if (success) await refreshPlaylists();
+  return success;
+}
 
 Future<bool> createPlaylistAction(
   String title, {

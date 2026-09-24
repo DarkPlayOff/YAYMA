@@ -39,6 +39,30 @@ pub async fn remove_liked_album(ctx: &AppContext, album_id: u32) -> bool {
     logic::remove_liked_album(ctx, album_id).await
 }
 
+pub async fn add_liked_artist(ctx: &AppContext, artist_id: String) -> bool {
+    logic::add_liked_artist(ctx, artist_id).await
+}
+
+pub async fn remove_liked_artist(ctx: &AppContext, artist_id: String) -> bool {
+    logic::remove_liked_artist(ctx, artist_id).await
+}
+
+pub async fn add_disliked_artist(ctx: &AppContext, artist_id: String) -> bool {
+    logic::add_disliked_artist(ctx, artist_id).await
+}
+
+pub async fn remove_disliked_artist(ctx: &AppContext, artist_id: String) -> bool {
+    logic::remove_disliked_artist(ctx, artist_id).await
+}
+
+pub async fn add_liked_playlist(ctx: &AppContext, owner_uid: u64, kind: u32) -> bool {
+    logic::add_liked_playlist(ctx, owner_uid, kind).await
+}
+
+pub async fn remove_liked_playlist(ctx: &AppContext, owner_uid: u64, kind: u32) -> bool {
+    logic::remove_liked_playlist(ctx, owner_uid, kind).await
+}
+
 pub async fn add_track_to_playlist(
     ctx: &AppContext,
     kind: u32,

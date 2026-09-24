@@ -530,32 +530,26 @@ pub async fn get_playlist_details(
     kind: u32,
     query: Option<String>,
 ) -> Option<PlaylistDetailsDto> {
-    let (liked, disliked) = get_liked_snapshot(ctx).await;
     let mut playlist = ctx.core.api.fetch_playlist(kind).await.ok()?;
     let tracks_enum = playlist
         .tracks
         .take()
         .unwrap_or_else(|| yandex_music::model::playlist::PlaylistTracks::Full(vec![]));
+    // Server order is preserved: ids are taken in payload order, DTOs are
+    // built by the unified helper (DB metadata + fetch_tracks(50) top-up +
+    // LikedCache snapshot — same source as liked_tracks_stream).
     let tracks_vec = crate::util::track::fetch_full_tracks(&ctx.core.api, tracks_enum).await;
+    let mut mapped_tracks =
+        super::library::build_track_dtos_from_server_tracks(ctx, tracks_vec).await;
 
-    let query_lower = query.map(|q| q.to_lowercase());
-    let mapped_tracks: Vec<SimpleTrackDto> = tracks_vec
-        .into_iter()
-        .filter(|t| {
-            let q = query_lower.as_ref();
-            q.is_none_or(|query| {
-                t.title
-                    .as_ref()
-                    .is_some_and(|title| title.to_lowercase().contains(query))
-                    || t.artists.iter().any(|a| {
-                        a.name
-                            .as_ref()
-                            .is_some_and(|n| n.to_lowercase().contains(query))
-                    })
-            })
-        })
-        .map(|t| SimpleTrackDto::from_yandex(&t, &liked, &disliked))
-        .collect();
+    // Same lowercase-contains title/artists/album filter as the liked stream.
+    if let Some(q) = query
+        .as_ref()
+        .filter(|q| !q.trim().is_empty())
+        .map(|q| q.to_lowercase())
+    {
+        mapped_tracks.retain(|d| super::library::track_dto_matches_query(d, &q));
+    }
 
     let mut dto = PlaylistDetailsDto::from_yandex(playlist);
     dto.tracks = mapped_tracks;

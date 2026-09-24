@@ -686,6 +686,22 @@ class _LikedAlbumsTab extends StatelessWidget {
 class _LikedArtistsTab extends StatelessWidget {
   const _LikedArtistsTab();
 
+  static Future<void> _removeLikedArtist(
+    BuildContext context,
+    String artistId,
+  ) async {
+    final success = await removeLikedArtistAction(artistId);
+    if (!context.mounted) return;
+    if (success) {
+      likedArtistsSignal.value = likedArtistsSignal.value
+          .where((a) => a.id != artistId)
+          .toList();
+      showAppSuccess('Исполнитель удалён из любимых');
+    } else {
+      showAppError('Ошибка при обновлении любимых исполнителей');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.sizeOf(context).width;
@@ -724,12 +740,35 @@ class _LikedArtistsTab extends StatelessWidget {
           itemCount: artists.length,
           itemBuilder: (context, index) {
             final artist = artists[index];
-            return CommonMediaCard(
-              title: artist.name,
-              coverUrl: artist.coverUrl,
-              isCircle: true,
-              size: 140,
-              onTap: () => navigateTo(AppSection.artist, artist.id),
+            return Stack(
+              children: [
+                CommonMediaCard(
+                  title: artist.name,
+                  coverUrl: artist.coverUrl,
+                  isCircle: true,
+                  size: 140,
+                  onTap: () => navigateTo(AppSection.artist, artist.id),
+                ),
+                Positioned(
+                  top: 4,
+                  right: 4,
+                  child: IconButton(
+                    onPressed: () => unawaited(
+                      _removeLikedArtist(context, artist.id),
+                    ),
+                    tooltip: 'Убрать из любимых',
+                    icon: const Icon(Icons.favorite_rounded, size: 18),
+                    style: IconButton.styleFrom(
+                      minimumSize: const Size(36, 36),
+                      iconSize: 18,
+                      backgroundColor: Theme.of(
+                        context,
+                      ).colorScheme.surface.withValues(alpha: 0.85),
+                      foregroundColor: Theme.of(context).colorScheme.primary,
+                    ),
+                  ),
+                ),
+              ],
             );
           },
         );

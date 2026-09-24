@@ -107,6 +107,23 @@ impl CleanId for str {
     }
 }
 
+/// Builds the `track-ids` entity id for like/unlike HTTP requests.
+///
+/// Mirrors the original web client (`toggleTrackLike`: `albumId ? "id:albumId" : id`):
+/// the backend keys album versions separately, so the full `"id:album"` pair must
+/// go over HTTP, while the local [`LikedCache`](crate::audio::liked::LikedCache)/DB
+/// keep keying by base id via [`CleanId::to_base_id`].
+pub fn like_entity_id(track_id: &str, album_id: Option<&str>) -> String {
+    // Already a composite entity id — send as is, never double-append.
+    if track_id.contains(':') {
+        return track_id.to_string();
+    }
+    match album_id.map(str::trim).filter(|a| !a.is_empty()) {
+        Some(album) => format!("{}:{}", track_id.to_base_id(), album),
+        None => track_id.to_string(),
+    }
+}
+
 pub fn extract_ids(playlist_tracks: &PlaylistTracks) -> Vec<String> {
     match playlist_tracks {
         PlaylistTracks::Full(tracks) => tracks
@@ -188,4 +205,28 @@ pub async fn fetch_full_tracks(
 pub fn test_track(id: &str) -> Track {
     serde_json::from_value(serde_json::json!({ "id": id, "realId": id }))
         .expect("test track JSON must deserialize")
+}
+
+#[cfg(test)]
+mod like_entity_id_tests {
+    use super::*;
+
+    #[test]
+    fn appends_album_when_missing() {
+        assert_eq!(like_entity_id("123", Some("456")), "123:456");
+    }
+
+    #[test]
+    fn keeps_bare_id_without_album() {
+        assert_eq!(like_entity_id("123", None), "123");
+        assert_eq!(like_entity_id("123", Some("")), "123");
+        assert_eq!(like_entity_id("123", Some("   ")), "123");
+    }
+
+    #[test]
+    fn never_double_appends_suffix() {
+        assert_eq!(like_entity_id("123:456", Some("456")), "123:456");
+        assert_eq!(like_entity_id("123:456", Some("789")), "123:456");
+        assert_eq!(like_entity_id("123:456", None), "123:456");
+    }
 }
