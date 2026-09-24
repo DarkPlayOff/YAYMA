@@ -666,7 +666,7 @@ impl AudioSystem {
         let next = if self.queue.in_wave() {
             self.queue.skip_wave_track().await
         } else {
-            self.queue.get_next_track().await
+            self.queue.skip_track().await
         };
 
         if let Some(next_track) = next {

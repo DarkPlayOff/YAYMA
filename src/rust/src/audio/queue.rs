@@ -334,7 +334,19 @@ impl QueueManager {
         });
     }
 
+    /// Next track after a natural end: under `RepeatMode::Single` the
+    /// current track is returned again so it replays from the start.
     pub async fn get_next_track(&mut self) -> Option<Track> {
+        self.next_track(false).await
+    }
+
+    /// Next track for a user-initiated skip: advances past the current
+    /// track even when `RepeatMode::Single` is active.
+    pub async fn skip_track(&mut self) -> Option<Track> {
+        self.next_track(true).await
+    }
+
+    async fn next_track(&mut self, user_skip: bool) -> Option<Track> {
         if self.signals.queue().is_empty() {
             return None;
         }
@@ -347,7 +359,7 @@ impl QueueManager {
             self.recreate_wave_session().await;
         }
 
-        if self.signals.repeat_mode() == RepeatMode::Single {
+        if !user_skip && self.signals.repeat_mode() == RepeatMode::Single {
             return self.signals.queue().get(self.signals.index()).cloned();
         }
 
@@ -901,6 +913,33 @@ mod tests {
         q.load(PlaybackContext::Standalone, standalone(2), 1).await;
         q.toggle_repeat_mode(); // None -> All
         assert_eq!(q.get_next_track().await.unwrap().id, "t0");
+    }
+
+    #[tokio::test]
+    async fn repeat_single_replays_on_natural_end() {
+        let mut q = manager().await;
+        q.load(PlaybackContext::Standalone, standalone(3), 1).await;
+        q.toggle_repeat_mode(); // None -> All
+        q.toggle_repeat_mode(); // All -> Single
+        assert_eq!(q.get_next_track().await.unwrap().id, "t1");
+    }
+
+    #[tokio::test]
+    async fn skip_advances_under_repeat_single() {
+        let mut q = manager().await;
+        q.load(PlaybackContext::Standalone, standalone(3), 1).await;
+        q.toggle_repeat_mode(); // None -> All
+        q.toggle_repeat_mode(); // All -> Single
+        assert_eq!(q.skip_track().await.unwrap().id, "t2");
+    }
+
+    #[tokio::test]
+    async fn skip_at_tail_under_repeat_single_ends_queue() {
+        let mut q = manager().await;
+        q.load(PlaybackContext::Standalone, standalone(2), 1).await;
+        q.toggle_repeat_mode(); // None -> All
+        q.toggle_repeat_mode(); // All -> Single
+        assert!(q.skip_track().await.is_none());
     }
 
     #[tokio::test]
