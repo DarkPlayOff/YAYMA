@@ -19,14 +19,20 @@ use crate::audio::{
     stream_manager::StreamManager,
 };
 
-#[derive(Clone)]
 pub struct AudioController {
     engine: Arc<PlaybackEngine>,
     stream_manager: Arc<StreamManager>,
     tx: tokio::sync::mpsc::Sender<AudioMessage>,
     error_sink: Arc<dyn Fn(String) + Send + Sync>,
+    // Compat handle, always points at `progress_clock`, never swapped.
     pub track_progress: Arc<RwLock<Arc<TrackProgress>>>,
+    // Stable PositionClock: the same instance QueueManager holds; never replaced.
+    progress_clock: Arc<TrackProgress>,
+    // Current stream-written per-track progress, mirrored into the clock.
+    progress_source: Arc<parking_lot::Mutex<Option<Arc<TrackProgress>>>>,
     current_playback_task: Arc<Mutex<Option<tokio::task::JoinHandle<()>>>>,
+    // Monitor loop owned by this instance; aborted in shutdown()/Drop.
+    monitor_task: parking_lot::Mutex<Option<tokio::task::JoinHandle<()>>>,
     // Bumped on every stop()/play_track() call so an in-flight playback task that has
     // already passed its last `.await` (and so can no longer be cancelled by `task.abort()`)
     // can still detect it's been superseded and skip touching the engine/signals.
@@ -41,6 +47,39 @@ pub struct AudioController {
     effect_handles: Arc<RwLock<HashMap<String, EffectHandle>>>,
 }
 
+// Shares everything except monitor ownership: only the instance built by
+// new() owns (and aborts) the monitor loop; clones hold no handle.
+impl Clone for AudioController {
+    fn clone(&self) -> Self {
+        Self {
+            engine: self.engine.clone(),
+            stream_manager: self.stream_manager.clone(),
+            tx: self.tx.clone(),
+            error_sink: self.error_sink.clone(),
+            track_progress: self.track_progress.clone(),
+            progress_clock: self.progress_clock.clone(),
+            progress_source: self.progress_source.clone(),
+            current_playback_task: self.current_playback_task.clone(),
+            monitor_task: parking_lot::Mutex::new(None),
+            playback_generation: self.playback_generation.clone(),
+            stream_error_retries: self.stream_error_retries.clone(),
+            reload_in_flight: self.reload_in_flight.clone(),
+            transient_volume_gain: self.transient_volume_gain.clone(),
+            signals: self.signals.clone(),
+            effect_handles: self.effect_handles.clone(),
+        }
+    }
+}
+
+impl Drop for AudioController {
+    fn drop(&mut self) {
+        // Owner-only: clones hold None. Abort is idempotent.
+        if let Some(handle) = self.monitor_task.lock().take() {
+            handle.abort();
+        }
+    }
+}
+
 impl AudioController {
     pub fn new(
         engine: PlaybackEngine,
@@ -51,13 +90,18 @@ impl AudioController {
         track_progress: Arc<RwLock<Arc<TrackProgress>>>,
     ) -> Self {
         let effect_handles = crate::audio::fx::init::create_templates();
+        // Same instance QueueManager holds (built in AudioSystem::spawn).
+        let progress_clock = track_progress.read().clone();
         let controller = Self {
             engine: Arc::new(engine),
             stream_manager,
             tx,
             error_sink,
             track_progress,
+            progress_clock,
+            progress_source: Arc::new(parking_lot::Mutex::new(None)),
             current_playback_task: Arc::new(Mutex::new(None)),
+            monitor_task: parking_lot::Mutex::new(None),
             playback_generation: Arc::new(AtomicU64::new(0)),
             stream_error_retries: Arc::new(AtomicU8::new(0)),
             reload_in_flight: Arc::new(AtomicU8::new(0)),
@@ -72,7 +116,8 @@ impl AudioController {
 
     fn start_monitor(&self) {
         let engine = self.engine.clone();
-        let progress = self.track_progress.clone();
+        let progress_clock = self.progress_clock.clone();
+        let progress_source = self.progress_source.clone();
         let signals = self.signals.clone();
         let tx = self.tx.clone();
         let error_sink = self.error_sink.clone();
@@ -80,7 +125,7 @@ impl AudioController {
         let stream_error_retries = self.stream_error_retries.clone();
         let reload_in_flight = self.reload_in_flight.clone();
 
-        tokio::spawn(async move {
+        let handle = tokio::spawn(async move {
             let mut buffering_duration = std::time::Duration::ZERO;
             let check_interval = std::time::Duration::from_millis(125);
 
@@ -103,6 +148,11 @@ impl AudioController {
                 }
 
                 if is_playing && !is_buffering {
+                    // Mirror stream-written counters into the stable clock.
+                    if let Some(src) = progress_source.lock().as_ref().cloned() {
+                        progress_clock.sync_stream_state(&src);
+                    }
+
                     if engine.is_empty() {
                         let position = engine.pos();
                         let duration_ms = signals.duration_ms.get();
@@ -130,15 +180,16 @@ impl AudioController {
                         continue;
                     }
 
+                    // engine.pos() is the single source of position here;
+                    // position_ms (signals) and TrackProgress (clock) are mirrors of it.
                     if signals.monitor.is_focused() {
                         let pos = engine.pos();
                         let dur = signals.duration_ms.get();
 
                         signals.update_progress(pos.as_millis() as u64, dur);
 
-                        let guard = progress.read();
-                        guard.set_current_position(pos);
-                        let buffered = guard.get_buffered_ratio() as f32;
+                        progress_clock.set_current_position(pos);
+                        let buffered = progress_clock.get_buffered_ratio() as f32;
                         signals.update_buffered_ratio(buffered);
 
                         let amp = signals.monitor.combined_amplitude();
@@ -149,11 +200,23 @@ impl AudioController {
                         // (amplitude/buffered) stay gated.
                         let pos = engine.pos();
                         signals.update_progress(pos.as_millis() as u64, signals.duration_ms.get());
-                        progress.read().set_current_position(pos);
+                        progress_clock.set_current_position(pos);
                     }
                 }
             }
         });
+        *self.monitor_task.lock() = Some(handle);
+    }
+
+    /// Abort the monitor loop and any in-flight playback task. Idempotent.
+    pub async fn shutdown(&self) {
+        if let Some(handle) = self.monitor_task.lock().take() {
+            handle.abort();
+        }
+        let mut task_guard = self.current_playback_task.lock().await;
+        if let Some(task) = task_guard.take() {
+            task.abort();
+        }
     }
 
     pub async fn replace_track(&self, track: Track, position_ms: u64) {
@@ -184,12 +247,13 @@ impl AudioController {
         if !soft_reload {
             self.stop().await;
         } else {
-            // Only stop current task and clear engine, without resetting UI signals
+            // Only stop current task and clear engine, without resetting UI signals.
+            // No generation bump here: the single claim below invalidates the
+            // aborted task and identifies this call in one step.
             let mut task_guard = self.current_playback_task.lock().await;
             if let Some(task) = task_guard.take() {
                 task.abort();
             }
-            self.playback_generation.fetch_add(1, Ordering::SeqCst);
             self.engine.stop();
         }
 
@@ -209,7 +273,8 @@ impl AudioController {
 
         let engine = self.engine.clone();
         let stream_manager = self.stream_manager.clone();
-        let progress = self.track_progress.clone();
+        let progress_clock = self.progress_clock.clone();
+        let progress_source = self.progress_source.clone();
         let error_sink = self.error_sink.clone();
         let signals = self.signals.clone();
         let track_clone = track.clone();
@@ -275,20 +340,30 @@ impl AudioController {
 
                     crate::audio::fx::init::init_all(&mut source);
 
-                    {
+                    // Migrate user-tunable FX state old -> new. UI writers take
+                    // only the registry read lock + atomic set_param, so a write
+                    // lock can't exclude them; snapshot-then-verify via
+                    // version() closes the lost-update window instead. New
+                    // handles are still task-private here.
+                    let pending_handles = source.get_effect_handles();
+                    let mut migrated: Vec<(EffectHandle, EffectHandle, Vec<f32>, bool)> = {
                         let old_store = effect_handles_store.read();
-                        let new_handles = source.get_effect_handles();
-                        for (name, new_handle) in new_handles.iter() {
+                        let mut migrated = Vec::new();
+                        for (name, new_handle) in pending_handles.iter() {
                             if let Some(old_handle) = old_store.get(name) {
-                                new_handle.set_enabled(old_handle.is_enabled());
-                                for i in 0..old_handle.param_count().min(new_handle.param_count()) {
-                                    new_handle.set_param(i, old_handle.get_param(i));
-                                }
+                                let enabled = old_handle.is_enabled();
+                                new_handle.set_enabled(enabled);
+                                let applied = copy_fx_params(old_handle, new_handle);
+                                migrated.push((
+                                    old_handle.clone(),
+                                    new_handle.clone(),
+                                    applied,
+                                    enabled,
+                                ));
                             }
                         }
-                    }
-
-                    let handles = source.get_effect_handles();
+                        migrated
+                    };
 
                     // Re-check right before the first engine mutation: building the source
                     // above takes long enough for a concurrent play_track()/stop() to have
@@ -300,13 +375,47 @@ impl AudioController {
                         return;
                     }
 
-                    {
-                        let mut guard = progress.write();
-                        *guard = new_progress;
-                    }
+                    // Publish into the stable clock (never swapped): reset, seed
+                    // stream counters, remember the stream-written source for
+                    // the monitor mirror. The compat wrapper keeps pointing
+                    // at the same clock instance.
+                    progress_clock.reset();
+                    progress_clock.sync_stream_state(&new_progress);
+                    *progress_source.lock() = Some(new_progress);
                     {
                         let mut store = effect_handles_store.write();
-                        *store = handles;
+                        *store = pending_handles;
+                    }
+
+                    // Re-verify: a UI write that landed on an old handle
+                    // between our snapshot and the publish is re-applied to
+                    // the now-visible new handle. Bounded: only already
+                    // in-flight UI calls can still target old handles.
+                    for _ in 0..4 {
+                        if generation.load(Ordering::SeqCst) != my_generation {
+                            break;
+                        }
+                        let mut stable = true;
+                        for (old_handle, new_handle, applied, enabled) in migrated.iter_mut() {
+                            let cur_enabled = old_handle.is_enabled();
+                            if new_handle.is_enabled() != cur_enabled {
+                                new_handle.set_enabled(cur_enabled);
+                                *enabled = cur_enabled;
+                                stable = false;
+                            }
+                            let (_, current) = old_handle.snapshot();
+                            let n = current.len().min(new_handle.param_count());
+                            if current[..n] != applied[..] {
+                                for (i, &val) in current[..n].iter().enumerate() {
+                                    new_handle.set_param(i, val);
+                                }
+                                *applied = current[..n].to_vec();
+                                stable = false;
+                            }
+                        }
+                        if stable {
+                            break;
+                        }
                     }
 
                     // From here on this session is the one being played, so let it drive
@@ -329,8 +438,7 @@ impl AudioController {
 
                     if start_pos.as_millis() > 0 {
                         let _ = engine.try_seek(start_pos);
-                        let guard = progress.write();
-                        guard.set_current_position(start_pos);
+                        progress_clock.set_current_position(start_pos);
                     }
 
                     signals.set_buffering(false);
@@ -385,7 +493,8 @@ impl AudioController {
         }
         self.playback_generation.fetch_add(1, Ordering::SeqCst);
         self.engine.stop();
-        self.track_progress.read().reset();
+        self.progress_clock.reset();
+        *self.progress_source.lock() = None;
 
         self.signals.set_playing(false);
         self.signals.set_current_track(None);
@@ -412,10 +521,10 @@ impl AudioController {
         if self.engine.try_seek(pos).is_err() {
             // Unsupported seek: keep UI and engine in sync at zero instead of
             // showing `pos` while audio restarts from the beginning.
-            self.track_progress.read().set_current_position(std::time::Duration::ZERO);
+            self.progress_clock.set_current_position(std::time::Duration::ZERO);
             self.signals.update_progress(0, self.signals.duration_ms.get());
         } else {
-            self.track_progress.read().set_current_position(pos);
+            self.progress_clock.set_current_position(pos);
         }
     }
 
@@ -453,4 +562,19 @@ impl AudioController {
         };
         self.engine.set_volume(volume);
     }
+}
+
+/// Copy FX params old -> new, returning values written. Versioned snapshot
+/// when arities match, plain prefix copy otherwise (new handle is private).
+fn copy_fx_params(old: &EffectHandle, new: &EffectHandle) -> Vec<f32> {
+    let (_, old_values) = old.snapshot();
+    let n = old_values.len().min(new.param_count());
+    let (new_version, _) = new.snapshot();
+    if old_values.len() == new.param_count() && new.apply_snapshot(new_version, &old_values) {
+        return old_values;
+    }
+    for (i, &val) in old_values[..n].iter().enumerate() {
+        new.set_param(i, val);
+    }
+    old_values[..n].to_vec()
 }

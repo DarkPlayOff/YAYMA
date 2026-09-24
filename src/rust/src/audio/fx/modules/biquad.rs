@@ -3,6 +3,8 @@ use crate::audio::fx::biquad::{FilterType, StereoBiquad};
 use crate::audio::fx::param::EffectParams;
 use std::sync::Arc;
 
+/// Adapter: polls `EffectParams::version()` and drives the `StereoBiquad`
+/// primitive (coefficient cache; 0 = never computed).
 pub struct BiquadEffect {
     params: Arc<EffectParams>,
     filter: StereoBiquad,

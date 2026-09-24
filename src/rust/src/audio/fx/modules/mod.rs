@@ -1,3 +1,6 @@
+//! Effect adapters: `Effect` impls wiring shared `EffectParams` to the DSP
+//! primitives in `super::{biquad, delay}`. Factories below build (effect, params).
+
 pub mod biquad;
 pub mod chorus;
 pub mod compressor;

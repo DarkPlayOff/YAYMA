@@ -31,6 +31,109 @@ const URL_PREFETCH_WINDOW: usize = 5;
 // loading wait for the whole playlist.
 const FETCH_THRESHOLD: usize = 10;
 
+/// Constructors for wave finish/skip feedback events.
+/// `skip_wave_track` and `wave_finish_track` differed only in
+/// `outcome`/`track_length`; both delegate here now.
+mod wave_feedback {
+    use super::Track;
+    use super::WaveTrackEvent;
+    use super::WaveTrackOutcome;
+
+    pub(super) fn build_event(
+        track: &Track,
+        outcome: WaveTrackOutcome,
+        batch_id: Option<String>,
+        total_played: std::time::Duration,
+        track_length: Option<std::time::Duration>,
+    ) -> WaveTrackEvent {
+        WaveTrackEvent {
+            track_id: super::as_wave_seed(track),
+            batch_id,
+            outcome,
+            total_played,
+            track_length,
+        }
+    }
+}
+
+/// Pure fetch/prewarm decisions for `QueueManager`.
+/// Orchestration (locks, signals, network triggers) stays in the thin
+/// methods below; only branch conditions and window math live here so
+/// they are testable without signals/streaming state.
+mod fetch_policy {
+    use super::HistoryState;
+    use super::Track;
+    use super::Vector;
+    use super::WaveTrackEvent;
+    use super::as_wave_seed;
+
+    pub(super) const MAX_HISTORY_SEEDS: usize = 20;
+
+    pub(super) fn history_seeds(history: &HistoryState) -> Vec<String> {
+        let len = history.entries.len();
+        history
+            .entries
+            .iter()
+            .skip(len.saturating_sub(MAX_HISTORY_SEEDS))
+            .map(as_wave_seed)
+            .collect()
+    }
+
+    pub(super) fn playlist_needs_topup(
+        is_wave: bool,
+        current: usize,
+        queue_len: usize,
+        threshold: usize,
+    ) -> bool {
+        !is_wave && current + 1 + threshold >= queue_len
+    }
+
+    pub(super) fn advance_needs_playlist_topup(
+        is_wave: bool,
+        index: usize,
+        queue_len: usize,
+        threshold: usize,
+        is_fetching: bool,
+    ) -> bool {
+        !is_wave && index + threshold + 1 >= queue_len && !is_fetching
+    }
+
+    pub(super) fn wave_buffer_needs_topup(remaining: usize, is_fetching: bool) -> bool {
+        remaining <= 1 && !is_fetching
+    }
+
+    // Pure split of `update_prefetch_interest`: window ids + next track.
+    // Filtering against ready prewarm sessions stays with the caller
+    // because it needs `StreamManager`.
+    pub(super) fn prefetch_window(
+        queue: &Vector<Track>,
+        index: usize,
+        window: usize,
+    ) -> (Option<String>, Vec<String>, Option<Track>) {
+        let current_id = queue.get(index).map(|t| t.id.clone());
+        let next = queue.get(index + 1).cloned();
+        let ids = (0..window)
+            .filter_map(|i| queue.get(index + i))
+            .map(|t| t.id.clone())
+            .collect();
+        (current_id, ids, next)
+    }
+
+    // Pure merge for failed page feedbacks: drop retries for tracks that
+    // already have a queued event, prepend the rest.
+    pub(super) fn merge_failed_feedbacks(
+        pending: Vec<WaveTrackEvent>,
+        failed: Vec<WaveTrackEvent>,
+    ) -> Vec<WaveTrackEvent> {
+        let mut fresh: Vec<WaveTrackEvent> = failed
+            .into_iter()
+            .filter(|e| !pending.iter().any(|q| q.track_id == e.track_id))
+            .collect();
+        fresh.extend(pending);
+        fresh
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum PlaybackContext {
     Playlist(Playlist),
@@ -369,7 +472,7 @@ impl QueueManager {
         let queue_len = self.signals.queue().len();
         let is_wave = self.in_wave();
 
-        if !is_wave && current + 1 + FETCH_THRESHOLD >= queue_len {
+        if fetch_policy::playlist_needs_topup(is_wave, current, queue_len, FETCH_THRESHOLD) {
             self.trigger_fetch();
         }
 
@@ -438,13 +541,13 @@ impl QueueManager {
         }
         if self.in_wave() && !self.wave_feedback_sent {
             if let Some(track) = self.signals.queue().get(self.signals.index()).cloned() {
-                self.wave_feedbacks.push(WaveTrackEvent {
-                    track_id: as_wave_seed(&track),
-                    batch_id: self.fetch.wave_batch_for(&track.id),
-                    outcome: WaveTrackOutcome::Skipped,
-                    total_played: self.track_progress.current_position(),
-                    track_length: None,
-                });
+                self.wave_feedbacks.push(wave_feedback::build_event(
+                    &track,
+                    WaveTrackOutcome::Skipped,
+                    self.fetch.wave_batch_for(&track.id),
+                    self.track_progress.current_position(),
+                    None,
+                ));
                 self.wave_feedback_sent = true;
             }
             self.wave_buffer.clear();
@@ -467,15 +570,15 @@ impl QueueManager {
                 self.wave_feedback_sent = true;
                 return;
             }
-            self.wave_feedbacks.push(WaveTrackEvent {
-                track_id: id,
-                batch_id: self.fetch.wave_batch_for(&track.id),
-                outcome: WaveTrackOutcome::Finished,
-                total_played: self.track_progress.current_position(),
-                track_length: track
+            self.wave_feedbacks.push(wave_feedback::build_event(
+                &track,
+                WaveTrackOutcome::Finished,
+                self.fetch.wave_batch_for(&track.id),
+                self.track_progress.current_position(),
+                track
                     .duration
                     .or_else(|| Some(self.track_progress.total_duration())),
-            });
+            ));
             self.wave_feedback_sent = true;
         }
     }
@@ -512,7 +615,7 @@ impl QueueManager {
             }
 
             let remaining = self.wave_buffer.len();
-            if remaining <= 1 && !self.fetch.is_fetching() {
+            if fetch_policy::wave_buffer_needs_topup(remaining, self.fetch.is_fetching()) {
                 self.trigger_fetch();
             }
         }
@@ -520,10 +623,13 @@ impl QueueManager {
         // `advance_to` is also used by direct queue controls (for example
         // shuffle/next), not only by `get_next_track`.  Keep the lazy playlist
         // window topped up for those paths as well.
-        if !self.in_wave()
-            && index + FETCH_THRESHOLD + 1 >= self.signals.queue().len()
-            && !self.fetch.is_fetching()
-        {
+        if fetch_policy::advance_needs_playlist_topup(
+            self.in_wave(),
+            index,
+            self.signals.queue().len(),
+            FETCH_THRESHOLD,
+            self.fetch.is_fetching(),
+        ) {
             self.trigger_fetch();
         }
 
@@ -677,14 +783,7 @@ impl QueueManager {
     /// the prefetch buffer. Sending future tracks as `queue` confuses the
     /// recommender and contributes to wave resets.
     fn build_wave_history_seeds(&self) -> Vec<String> {
-        const MAX_HISTORY_SEEDS: usize = 20;
-        let len = self.history.entries.len();
-        self.history
-            .entries
-            .iter()
-            .skip(len.saturating_sub(MAX_HISTORY_SEEDS))
-            .map(as_wave_seed)
-            .collect()
+        fetch_policy::history_seeds(&self.history)
     }
 
     /// Prepend failed page feedbacks so they are retried with the next page.
@@ -694,12 +793,10 @@ impl QueueManager {
         if failed.is_empty() {
             return;
         }
-        let mut fresh: Vec<WaveTrackEvent> = failed
-            .into_iter()
-            .filter(|e| !self.wave_feedbacks.iter().any(|q| q.track_id == e.track_id))
-            .collect();
-        fresh.extend(std::mem::take(&mut self.wave_feedbacks));
-        self.wave_feedbacks = fresh;
+        self.wave_feedbacks = fetch_policy::merge_failed_feedbacks(
+            std::mem::take(&mut self.wave_feedbacks),
+            failed,
+        );
     }
 
     /// Per-track `batchId` for immediate (`/feedback`) wave feedbacks.
@@ -776,19 +873,19 @@ impl QueueManager {
         }
 
         let current_index = self.signals.index();
-        let current_id = queue.get(current_index).map(|t| t.id.clone());
+        let (current_id, candidate_ids, next_track) =
+            fetch_policy::prefetch_window(&queue, current_index, URL_PREFETCH_WINDOW);
 
-        if let Some(next_track) = queue.get(current_index + 1) {
-            self.stream_manager.prewarm(next_track.clone());
+        if let Some(next_track) = next_track {
+            self.stream_manager.prewarm(next_track);
         }
 
         // Division of labor with prewarm above: a ready decode session
         // already resolved + cached this track's URL, so don't spend a URL
         // batch slot on it. (In-flight prewarm is NOT excluded: if it fails,
         // the URL prefetch is the fallback that keeps the start fast.)
-        let needed: Vec<String> = (0..URL_PREFETCH_WINDOW)
-            .filter_map(|i| queue.get(current_index + i))
-            .map(|t| t.id.clone())
+        let needed: Vec<String> = candidate_ids
+            .into_iter()
             .filter(|id| !self.stream_manager.has_prewarm_ready(id))
             .collect();
 

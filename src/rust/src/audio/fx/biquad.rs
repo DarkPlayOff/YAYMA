@@ -1,3 +1,6 @@
+//! DSP primitive: stereo biquad filter math. Not an `Effect` — the
+//! `modules::BiquadEffect` adapter wires it to `EffectParams`.
+
 use std::f32::consts::PI;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

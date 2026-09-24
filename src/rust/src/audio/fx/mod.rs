@@ -1,3 +1,8 @@
+//! Layers (not duplicates): DSP primitives (`biquad`/`delay`) <- effect
+//! adapters (`modules::*`, wire `EffectParams` to primitives) <- registry and
+//! RT slots (`chain`) <- UI views (`param::EffectHandle`). `init` registers
+//! the default set; `MonitorEffect` stays separate (owned by controller).
+
 use rodio::Source;
 
 use foldhash::HashMap;

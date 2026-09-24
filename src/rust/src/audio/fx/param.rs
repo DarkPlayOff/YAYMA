@@ -32,6 +32,8 @@ pub struct ParamInfo {
     pub unit: &'static str,
 }
 
+/// Shared RT-safe param store (atomics + version). DSP adapters read it via
+/// `version()` polling; UI writes via `EffectHandle` (lock-free view, below).
 pub struct EffectParams {
     enabled: AtomicBool,
     values: Vec<AtomicF32>,
@@ -103,6 +105,38 @@ impl EffectParams {
         self.values.len()
     }
 
+    /// Versioned snapshot for read-modify-write: returns current version plus
+    /// a copy of all values. Pair with `apply_snapshot` to avoid lost updates
+    /// during handle migration.
+    pub fn snapshot(&self) -> (u32, Vec<f32>) {
+        let version = self.version.load(Ordering::Relaxed);
+        let values = (0..self.values.len()).map(|i| self.get(i)).collect();
+        (version, values)
+    }
+
+    /// Restore a snapshot only if `version()` still equals `expected_version`.
+    /// Single version bump on success; length mismatch or version conflict
+    /// returns false. Best-effort guard (not strict CAS) — concurrent plain
+    /// `set()` calls still apply.
+    pub fn apply_snapshot(&self, expected_version: u32, values: &[f32]) -> bool {
+        if values.len() != self.values.len() {
+            return false;
+        }
+        if self.version.load(Ordering::Relaxed) != expected_version {
+            return false;
+        }
+        for (i, atomic) in self.values.iter().enumerate() {
+            let val = values[i];
+            if !val.is_finite() {
+                continue;
+            }
+            let info = &self.info[i];
+            atomic.set(val.clamp(info.min, info.max));
+        }
+        self.version.fetch_add(1, Ordering::Relaxed);
+        true
+    }
+
     pub fn info(&self) -> &[ParamInfo] {
         &self.info
     }
@@ -156,6 +190,8 @@ mod tests {
     }
 }
 
+/// UI-facing view: id/name for lookup plus a shared `Arc<EffectParams>`.
+/// Lives in the `EffectChain` HashMap registry; never owns DSP state.
 #[derive(Clone)]
 pub struct EffectHandle {
     pub id: String,
@@ -182,5 +218,15 @@ impl EffectHandle {
 
     pub fn param_count(&self) -> usize {
         self.params.param_count()
+    }
+
+    /// See `EffectParams::snapshot`.
+    pub fn snapshot(&self) -> (u32, Vec<f32>) {
+        self.params.snapshot()
+    }
+
+    /// See `EffectParams::apply_snapshot`.
+    pub fn apply_snapshot(&self, expected_version: u32, values: &[f32]) -> bool {
+        self.params.apply_snapshot(expected_version, values)
     }
 }

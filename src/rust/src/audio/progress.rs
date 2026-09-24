@@ -2,6 +2,8 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
+/// Per-track playback counters, all atomics: sharing one instance across
+/// threads needs no replacement, mutation suffices.
 #[derive(Default, Debug)]
 pub struct TrackProgress {
     current_position_millis: Arc<AtomicU64>,
@@ -83,5 +85,14 @@ impl TrackProgress {
         self.set_current_position(Duration::ZERO);
         self.set_total_duration(Duration::ZERO);
         self.set_total_bytes(0);
+    }
+
+    /// Copy stream-written counters (bytes, duration) from a per-track
+    /// source into the shared clock. Position excluded: engine.pos()
+    /// is the single source for it (see controller monitor loop).
+    pub fn sync_stream_state(&self, other: &Self) {
+        self.set_total_bytes(other.get_total_bytes());
+        self.set_buffered_bytes(other.get_buffered_bytes());
+        self.set_total_duration(other.total_duration());
     }
 }

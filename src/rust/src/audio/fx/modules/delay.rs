@@ -3,6 +3,8 @@ use crate::audio::fx::delay::DelayLine;
 use crate::audio::fx::param::EffectParams;
 use std::sync::Arc;
 
+/// Adapter: stereo delay `Effect` built on the `DelayLine` primitive;
+/// params are read live every block (no coefficient cache).
 pub struct StereoDelayEffect {
     params: Arc<EffectParams>,
     delay_l: DelayLine,

@@ -1,3 +1,6 @@
+//! DSP primitives: delay lines / filters shared by time-based adapters
+//! (e.g. `modules::StereoDelayEffect`). Not `Effect`s themselves.
+
 pub struct DelayLine {
     buffer: Vec<f32>,
     pos: usize,

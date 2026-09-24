@@ -6,11 +6,16 @@ use std::time::Duration;
 use super::Effect;
 use super::param::{EffectHandle, EffectParams};
 
+/// RT slot: DSP effect plus its shared params. The audio thread touches only
+/// this; `process_block` must never block or allocate (scratch lives in
+/// `EffectChain`, preallocated via `new`/`ensure_capacity`).
 struct EffectSlot {
     effect: Box<dyn Effect>,
     params: Arc<EffectParams>,
 }
 
+/// Registry + slots layer: owns DSP slots and the id->`EffectHandle` map.
+/// Adapters (`modules::*`) do DSP; primitives (`super::biquad/delay`) do math.
 pub struct EffectChain {
     slots: Vec<EffectSlot>,
     handles: HashMap<String, EffectHandle>,

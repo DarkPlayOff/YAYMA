@@ -29,6 +29,39 @@ pub fn is_usable_wave_session(session: &Session) -> bool {
         .is_some_and(|id| !id.is_empty())
 }
 
+/// Single map-insertion point for per-track `batchId` attribution.
+/// All wave serving paths (`remember_wave_batch`, session creation,
+/// background extension) funnel here so the key/value shape can't drift.
+fn insert_batch_ids_into(
+    map: &Mutex<HashMap<String, String>>,
+    batch_id: &str,
+    ids: impl IntoIterator<Item = String>,
+) {
+    let mut guard = map.lock();
+    for id in ids {
+        guard.insert(id, batch_id.to_string());
+    }
+}
+
+/// Shared repair for stored wave sessions: keep the stable
+/// `radio_session_id` and the last known `wave` descriptor when a
+/// response comes back without them. Logging stays at the call sites
+/// (different contexts log different fields); only the assignment is shared.
+fn preserve_session_identity(session: &mut Session, prev: Option<&Session>) {
+    if session
+        .radio_session_id
+        .as_deref()
+        .is_none_or(|id| id.is_empty())
+    {
+        session.radio_session_id = prev.and_then(|s| s.radio_session_id.clone());
+    }
+    if session.wave.is_none()
+        && let Some(prev_wave) = prev.and_then(|s| s.wave.clone())
+    {
+        session.wave = Some(prev_wave);
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FetchError {
     AlreadyFetching,
@@ -149,9 +182,6 @@ impl FetchState {
                 sequence_len = session.sequence.len(),
                 "wave_session_missing_radio_id_keep_previous"
             );
-            session.radio_session_id = guard
-                .as_ref()
-                .and_then(|s| s.radio_session_id.clone());
         }
         if session.terminated {
             error!(
@@ -160,11 +190,7 @@ impl FetchState {
                 "wave_session_terminated"
             );
         }
-        if session.wave.is_none()
-            && let Some(prev_wave) = guard.as_ref().and_then(|s| s.wave.clone())
-        {
-            session.wave = Some(prev_wave);
-        }
+        preserve_session_identity(&mut session, guard.as_ref());
         self.remember_wave_batch_locked(&session.batch_id, &session.sequence);
         *guard = Some(session);
     }
@@ -172,10 +198,11 @@ impl FetchState {
     /// Record which `batchId` delivered each track of a `/tracks` page
     /// response. Deliberately does NOT touch the stored session.
     pub fn remember_wave_batch(&self, batch_id: &str, tracks: &[Track]) {
-        let mut guard = self.wave_batch_ids.lock();
-        for track in tracks {
-            guard.insert(track.id.clone(), batch_id.to_string());
-        }
+        insert_batch_ids_into(
+            &self.wave_batch_ids,
+            batch_id,
+            tracks.iter().map(|t| t.id.clone()),
+        );
     }
 
     fn remember_wave_batch_locked(
@@ -183,10 +210,11 @@ impl FetchState {
         batch_id: &str,
         sequence: &[yandex_music::model::rotor::session::SequenceItem],
     ) {
-        let mut guard = self.wave_batch_ids.lock();
-        for item in sequence {
-            guard.insert(item.track.id.clone(), batch_id.to_string());
-        }
+        insert_batch_ids_into(
+            &self.wave_batch_ids,
+            batch_id,
+            sequence.iter().map(|item| item.track.id.clone()),
+        );
     }
 
     /// Per-track `batchId` for feedback attribution (`track.id` key).
@@ -449,23 +477,15 @@ impl WaveExtensionHandles {
                     terminated = session.terminated,
                     "wave_session_missing_radio_id_keep_previous"
                 );
-                session.radio_session_id = guard
-                    .as_ref()
-                    .and_then(|s| s.radio_session_id.clone());
             }
-            if session.wave.is_none()
-                && let Some(prev_wave) = guard.as_ref().and_then(|s| s.wave.clone())
-            {
-                session.wave = Some(prev_wave);
-            }
+            preserve_session_identity(&mut session, guard.as_ref());
         }
         *self.wave_session.lock() = Some(session.clone());
-        {
-            let mut batches = self.wave_batch_ids.lock();
-            for track in additional.iter() {
-                batches.insert(track.id.clone(), session.batch_id.clone());
-            }
-        }
+        insert_batch_ids_into(
+            &self.wave_batch_ids,
+            &session.batch_id,
+            additional.iter().map(|track| track.id.clone()),
+        );
         *self.playback_context.lock() = crate::audio::queue::PlaybackContext::Wave(session);
 
         let visible: Vector<Track> = additional

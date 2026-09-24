@@ -17,6 +17,7 @@ pub struct AudioSignals {
     pub current_track_id: Signal<Option<String>>,
     pub title: Signal<Option<String>>,
     pub artists: Signal<Option<String>>,
+    // Mirror of engine.pos(), published alongside TrackProgress.
     pub position_ms: Signal<u64>,
     pub duration_ms: Signal<u64>,
     pub progress_ratio: Signal<f32>,
