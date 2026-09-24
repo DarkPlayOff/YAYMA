@@ -1,6 +1,7 @@
 use super::commands::AudioMessage;
 use super::thumbnail::{self, WM_APP_TASKBAR};
-use crate::app::{AppContext, logic::library};
+use crate::api::library;
+use crate::app::AppContext;
 use parking_lot::{Mutex, RwLock};
 use std::sync::{LazyLock, OnceLock};
 use tokio::sync::watch;

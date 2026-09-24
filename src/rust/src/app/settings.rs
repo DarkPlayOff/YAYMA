@@ -2,7 +2,7 @@ use crate::app::AppContext;
 use crate::audio::commands::AudioMessage;
 use std::collections::HashMap;
 
-fn parse_setting<T: serde::de::DeserializeOwned>(
+pub(crate) fn parse_setting<T: serde::de::DeserializeOwned>(
     settings: &HashMap<String, String>,
     key: &str,
 ) -> Option<T> {

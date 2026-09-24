@@ -3,7 +3,6 @@ use tokio::sync::Notify;
 pub mod context;
 pub mod hotkeys;
 pub mod init;
-pub mod logic;
 pub mod settings;
 pub mod workers;
 

@@ -2,8 +2,9 @@ use crate::api::models::{
     InitialSettingsDto, PlaybackProgressDto, PlaybackState, SimpleTrackDto, UserAccountDto,
 };
 use crate::app::AppContext;
-use crate::app::logic::simple as logic;
+use crate::app::settings::parse_setting;
 use crate::frb_generated::StreamSink;
+use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
 pub enum AppEvent {
@@ -25,97 +26,227 @@ pub fn init_app_infrastructure(base_path: Option<String>) {
 }
 
 pub fn get_app_version() -> String {
-    logic::get_app_version()
+    env!("PUBSPEC_VERSION").to_string()
 }
 
 pub fn app_event_stream(ctx: &AppContext, sink: StreamSink<AppEvent>) {
-    logic::app_event_stream(ctx, sink)
+    let _ = ctx.system.event_sink.set(sink);
 }
 
 pub async fn get_cached_image_path(ctx: &AppContext, url: String) -> Option<String> {
-    logic::get_cached_image_path(ctx, url).await
+    if let Some(path) = ctx.core.track_cache.get_cover(&url).await {
+        return Some(path.to_string_lossy().into_owned());
+    }
+    let cache = &ctx.core.http_cache;
+    cache
+        .get_file(&url)
+        .await
+        .ok()
+        .map(|p| p.to_string_lossy().into_owned())
 }
 
 pub async fn prune_expired_cache(ctx: &AppContext) {
-    logic::prune_expired_cache(ctx).await
+    let cache = &ctx.core.http_cache;
+    let _ = cache.prune_expired().await;
 }
 
 pub async fn get_cache_size(ctx: &AppContext) -> i64 {
-    logic::get_cache_size(ctx).await
+    let cache = &ctx.core.http_cache;
+    cache.get_size().await.unwrap_or(0)
 }
 
 pub async fn clear_cache(ctx: &AppContext) {
-    logic::clear_cache(ctx).await
+    let cache = &ctx.core.http_cache;
+    let _ = cache.clear().await;
 }
 
 pub async fn get_track_cache_size(ctx: &AppContext) -> i64 {
-    logic::get_track_cache_size(ctx).await
+    ctx.core.track_cache.get_size().await.unwrap_or(0)
 }
 
 pub async fn clear_track_cache(ctx: &AppContext) {
-    logic::clear_track_cache(ctx).await
+    let _ = ctx.core.track_cache.clear().await;
 }
 
 pub async fn get_initial_settings() -> InitialSettingsDto {
-    logic::get_initial_settings().await
+    let Ok(database) = crate::app::get_database().await else {
+        return InitialSettingsDto::default();
+    };
+    let mut db = database.lock().await;
+    let settings = db.load_all_settings().await.unwrap_or_default();
+    InitialSettingsDto {
+        custom_titlebar: parse_setting(&settings, "custom_titlebar").unwrap_or(true),
+        auto_hide_navbar: parse_setting(&settings, "auto_hide_navbar").unwrap_or(false),
+        close_to_tray: parse_setting(&settings, "close_to_tray").unwrap_or(true),
+        vibe_animation_enabled: parse_setting(&settings, "vibe_animation_enabled").unwrap_or(true),
+        vibe_render_scale: parse_setting::<f64>(&settings, "vibe_render_scale")
+            .unwrap_or(0.50)
+            .clamp(0.25, 0.50),
+        blur_effects_enabled: parse_setting(&settings, "blur_effects_enabled").unwrap_or(true),
+    }
 }
 
 pub fn is_discord_rpc_enabled(ctx: &AppContext) -> bool {
-    logic::is_discord_rpc_enabled(ctx)
+    ctx.audio.signals.discord_rpc.get()
 }
 
 pub async fn set_discord_rpc_enabled(ctx: &AppContext, enabled: bool) {
-    logic::set_discord_rpc_enabled(ctx, enabled).await;
+    ctx.audio.signals.discord_rpc.set(enabled);
+    let mut db = ctx.core.db.lock().await;
+    if let Err(e) = db.save_setting("discord_rpc", &enabled).await {
+        tracing::error!("Failed to save discord_rpc setting: {:?}", e);
+    }
 }
 
 pub async fn is_custom_titlebar_enabled(ctx: &AppContext) -> bool {
-    logic::is_custom_titlebar_enabled(ctx).await
+    let mut db = ctx.core.db.lock().await;
+    db.load_setting("custom_titlebar")
+        .await
+        .unwrap_or(Some(true))
+        .unwrap_or(true)
 }
 
 pub async fn set_custom_titlebar_enabled(ctx: &AppContext, enabled: bool) {
-    logic::set_custom_titlebar_enabled(ctx, enabled).await;
+    let mut db = ctx.core.db.lock().await;
+    if let Err(e) = db.save_setting("custom_titlebar", &enabled).await {
+        tracing::error!("Failed to save custom_titlebar setting: {:?}", e);
+    }
 }
 
 pub async fn is_auto_hide_navbar_enabled(ctx: &AppContext) -> bool {
-    logic::is_auto_hide_navbar_enabled(ctx).await
+    let mut db = ctx.core.db.lock().await;
+    db.load_setting("auto_hide_navbar")
+        .await
+        .unwrap_or(Some(false))
+        .unwrap_or(false)
 }
 
 pub async fn set_auto_hide_navbar_enabled(ctx: &AppContext, enabled: bool) {
-    logic::set_auto_hide_navbar_enabled(ctx, enabled).await;
+    let mut db = ctx.core.db.lock().await;
+    if let Err(e) = db.save_setting("auto_hide_navbar", &enabled).await {
+        tracing::error!("Failed to save auto_hide_navbar setting: {:?}", e);
+    }
 }
 
 pub async fn is_close_to_tray_enabled(ctx: &AppContext) -> bool {
-    logic::is_close_to_tray_enabled(ctx).await
+    let mut db = ctx.core.db.lock().await;
+    db.load_setting("close_to_tray")
+        .await
+        .unwrap_or(Some(true))
+        .unwrap_or(true)
 }
 
 pub async fn set_close_to_tray_enabled(ctx: &AppContext, enabled: bool) {
-    logic::set_close_to_tray_enabled(ctx, enabled).await;
+    let mut db = ctx.core.db.lock().await;
+    if let Err(e) = db.save_setting("close_to_tray", &enabled).await {
+        tracing::error!("Failed to save close_to_tray setting: {:?}", e);
+    }
 }
 
-pub fn get_audio_devices(ctx: &AppContext) -> Vec<String> {
-    logic::get_audio_devices(ctx)
+fn extract_display_name(raw: &str) -> String {
+    if let Some(pos) = raw.find(" (") {
+        let inner = &raw[pos + 2..];
+        if let Some(stripped) = inner.strip_suffix(')') {
+            return stripped.to_string();
+        }
+    }
+    raw.to_string()
+}
+
+pub fn get_audio_devices(_ctx: &AppContext) -> Vec<String> {
+    #[cfg(target_os = "windows")]
+    let raw_names: Vec<String> = crate::audio::util::get_windows_full_device_names();
+
+    #[cfg(not(target_os = "windows"))]
+    let raw_names: Vec<String> = {
+        use rodio::DeviceTrait;
+        use rodio::cpal::traits::HostTrait;
+        let host = rodio::cpal::default_host();
+        host.output_devices()
+            .map(|devs| {
+                devs.filter_map(|d| d.description().ok().map(|desc| desc.name().to_string()))
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
+
+    let mut display_names: Vec<String> =
+        raw_names.iter().map(|n| extract_display_name(n)).collect();
+    display_names.sort();
+
+    let mut counts: HashMap<String, usize> = HashMap::default();
+    for name in &display_names {
+        *counts.entry(name.clone()).or_insert(0) += 1;
+    }
+    let mut seen: HashMap<String, usize> = HashMap::default();
+    let mut result = Vec::with_capacity(display_names.len());
+    for name in display_names {
+        let total = counts.get(&name).copied().unwrap_or(1);
+        let idx = seen.entry(name.clone()).or_insert(0);
+        *idx += 1;
+        if total > 1 {
+            result.push(format!("{} ({})", name, idx));
+        } else {
+            result.push(name);
+        }
+    }
+    result
 }
 
 pub async fn set_audio_device(ctx: &AppContext, device_name: String) {
-    logic::set_audio_device(ctx, device_name).await;
+    let device = if device_name.is_empty() {
+        None
+    } else {
+        Some(device_name)
+    };
+    let tx = ctx.audio.tx.clone();
+    let _ = tx
+        .send(crate::audio::commands::AudioMessage::SetAudioDevice(device))
+        .await;
 }
 
 pub async fn is_update_check_enabled(ctx: &AppContext) -> bool {
-    logic::is_update_check_enabled(ctx).await
+    let mut db = ctx.core.db.lock().await;
+    db.load_setting("update_check")
+        .await
+        .unwrap_or(Some(true))
+        .unwrap_or(true)
 }
 
 pub async fn set_update_check_enabled(ctx: &AppContext, enabled: bool) {
-    logic::set_update_check_enabled(ctx, enabled).await;
+    let mut db = ctx.core.db.lock().await;
+    if let Err(e) = db.save_setting("update_check", &enabled).await {
+        tracing::error!("Failed to save update_check setting: {:?}", e);
+    }
 }
 
 pub async fn set_vibe_animation_enabled(ctx: &AppContext, enabled: bool) {
-    logic::set_vibe_animation_enabled(ctx, enabled).await;
+    let _ = ctx
+        .core
+        .db
+        .lock()
+        .await
+        .save_setting("vibe_animation_enabled", &enabled)
+        .await;
 }
 
 pub async fn set_vibe_render_scale(ctx: &AppContext, scale: f64) {
-    logic::set_vibe_render_scale(ctx, scale).await;
+    let scale = scale.clamp(0.25, 0.50);
+    let _ = ctx
+        .core
+        .db
+        .lock()
+        .await
+        .save_setting("vibe_render_scale", &scale)
+        .await;
 }
 
 pub async fn set_blur_effects_enabled(ctx: &AppContext, enabled: bool) {
-    logic::set_blur_effects_enabled(ctx, enabled).await;
+    let _ = ctx
+        .core
+        .db
+        .lock()
+        .await
+        .save_setting("blur_effects_enabled", &enabled)
+        .await;
 }

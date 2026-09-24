@@ -21,7 +21,7 @@ use std::sync::LazyLock;
 
 #[cfg(not(target_os = "android"))]
 use {
-    super::logic::library,
+    crate::api::library,
     crate::audio::commands::AudioMessage,
     std::str::FromStr,
     std::sync::mpsc,

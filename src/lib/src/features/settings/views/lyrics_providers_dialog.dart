@@ -70,7 +70,7 @@ class _LyricsProvidersDialogState extends State<LyricsProvidersDialog> {
     await rust.setLyricsProviderEnabled(
       ctx: ctx,
       id: provider.id,
-      enabled: enabled,
+      isEnabledFlag: enabled,
     );
     clearLyricsCache();
   }
