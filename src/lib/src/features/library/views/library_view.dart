@@ -744,6 +744,10 @@ class _LikedArtistsTab extends StatelessWidget {
               children: [
                 CommonMediaCard(
                   title: artist.name,
+                  subtitle: formatArtistCardSubtitle(
+                    monthlyListeners: artist.monthlyListeners,
+                    likesCount: artist.likesCount,
+                  ),
                   coverUrl: artist.coverUrl,
                   isCircle: true,
                   size: 140,

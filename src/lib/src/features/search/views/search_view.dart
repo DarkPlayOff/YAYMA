@@ -182,7 +182,7 @@ class _SearchResults extends StatelessWidget {
           const SliverToBoxAdapter(child: CommonSectionTitle(title: 'Артисты')),
           SliverToBoxAdapter(
             child: HorizontalShelf(
-              height: 180,
+              height: 210,
               padding: const EdgeInsets.symmetric(
                 horizontal: 32,
               ), // 32 + 8 (internal card padding) = 40
@@ -292,6 +292,10 @@ class _ArtistSearchCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return CommonMediaCard(
       title: artist.name,
+      subtitle: formatArtistCardSubtitle(
+        monthlyListeners: artist.monthlyListeners,
+        likesCount: artist.likesCount,
+      ),
       coverUrl: artist.coverUrl,
       isCircle: true,
       size: 140,

@@ -352,6 +352,8 @@ pub struct ArtistDetailsDto {
     pub tracks: Vec<SimpleTrackDto>,
     pub total_tracks: u32,
     pub albums: Vec<SimpleAlbumDto>,
+    pub likes_count: Option<u32>,
+    pub monthly_listeners: Option<u32>,
 }
 
 #[flutter_rust_bridge::frb(unignore)]
@@ -387,6 +389,8 @@ pub struct SimpleArtistDto {
     pub id: String,
     pub name: String,
     pub cover_url: Option<String>,
+    pub likes_count: Option<u32>,
+    pub monthly_listeners: Option<u32>,
 }
 
 #[flutter_rust_bridge::frb(ignore)]
@@ -396,6 +400,8 @@ impl SimpleArtistDto {
             id: artist.id.take().unwrap_or_default(),
             name: artist.name.take().unwrap_or_default(),
             cover_url: format_cover(artist.cover.and_then(|mut c| c.uri.take()), "600x600"),
+            likes_count: artist.likes_count,
+            monthly_listeners: artist.ratings.map(|r| r.month),
         }
     }
 }

@@ -17,6 +17,50 @@ String formatDuration(int ms) {
   return "${d.inMinutes}:${(d.inSeconds % 60).toString().padLeft(2, '0')}";
 }
 
+/// Groups thousands with spaces: 1234567 -> "1 234 567".
+String formatCount(int value) {
+  final digits = value.toString();
+  final buffer = StringBuffer();
+  final offset = digits.length % 3;
+  if (offset > 0) buffer.write(digits.substring(0, offset));
+  for (var i = offset; i < digits.length; i += 3) {
+    if (buffer.isNotEmpty) buffer.write(' ');
+    buffer.write(digits.substring(i, i + 3));
+  }
+  return buffer.toString();
+}
+
+String _plural(int n, String one, String few, String many) {
+  final mod100 = n % 100;
+  if (mod100 >= 11 && mod100 <= 14) return many;
+  switch (n % 10) {
+    case 1:
+      return one;
+    case 2:
+    case 3:
+    case 4:
+      return few;
+    default:
+      return many;
+  }
+}
+
+/// "1 234 567 слушателей за месяц", or null when there is no data.
+String? formatMonthlyListeners(int? value) {
+  if (value == null) return null;
+  return '${formatCount(value)} ${_plural(value, 'слушатель', 'слушателя', 'слушателей')} за месяц';
+}
+
+/// Compact subtitle for artist cards: monthly listeners, falling back to likes.
+String? formatArtistCardSubtitle({int? monthlyListeners, int? likesCount}) {
+  final monthly = formatMonthlyListeners(monthlyListeners);
+  if (monthly != null) return monthly;
+  if (likesCount != null) {
+    return '${formatCount(likesCount)} ${_plural(likesCount, 'слушатель', 'слушателя', 'слушателей')}';
+  }
+  return null;
+}
+
 class CommonLoadingWidget extends StatelessWidget {
   const CommonLoadingWidget({super.key});
   @override

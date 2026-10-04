@@ -532,6 +532,8 @@ pub async fn get_artist_details(
         tracks: mapped_tracks,
         total_tracks: pager.total,
         albums,
+        likes_count: artist.likes_count,
+        monthly_listeners: artist.ratings.map(|r| r.month),
     })
 }
 

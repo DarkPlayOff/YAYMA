@@ -84,6 +84,8 @@ class _ArtistViewState extends State<ArtistView> {
           id: details.id,
           name: details.name,
           coverUrl: details.coverUrl,
+          likesCount: details.likesCount,
+          monthlyListeners: details.monthlyListeners,
         );
         _tracks.value = details.tracks;
         _albums.value = details.albums;
@@ -141,6 +143,8 @@ class _ArtistViewState extends State<ArtistView> {
             id: artist.id,
             name: artist.name,
             coverUrl: artist.coverUrl,
+            likesCount: artist.likesCount,
+            monthlyListeners: artist.monthlyListeners,
           ),
           ...current,
         ];
@@ -182,12 +186,18 @@ class _ArtistViewState extends State<ArtistView> {
           (likedArtist) => likedArtist.id == artist.id,
         );
         final isAndroid = Platform.isAndroid;
+        final monthlyText = formatMonthlyListeners(artist.monthlyListeners);
+        final likesText = artist.likesCount != null
+            ? '${formatCount(artist.likesCount!)} в любимых'
+            : null;
 
         return CommonDetailSliverLayout(
           controller: _scrollController,
           header: CommonDetailHeader(
             type: 'Артист',
             title: artist.name,
+            subtitle: monthlyText ?? likesText,
+            secondarySubtitle: monthlyText != null ? likesText : null,
             coverUrl: artist.coverUrl,
             coverSize: 200,
             isCircle: true,
