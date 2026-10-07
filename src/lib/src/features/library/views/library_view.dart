@@ -119,9 +119,7 @@ class _LibraryViewState extends State<LibraryView>
                       if (!success) {
                         showAppError('Ошибка при создании плейлиста');
                       } else {
-                        showAppSuccess(
-                          'Плейлист "${controller.text}" создан',
-                        );
+                        showAppSuccess('Плейлист "${controller.text}" создан');
                       }
                     }
                   },
@@ -155,16 +153,13 @@ class _LibraryViewState extends State<LibraryView>
               Expanded(
                 child: Text(
                   'Библиотека',
-                  style:
-                      Theme.of(
-                        context,
-                      ).textTheme.displayMedium?.copyWith(
-                        fontSize: isNarrow ? 24 : 48,
-                        fontWeight: FontWeight.w900,
-                        color: Theme.of(context).colorScheme.onSurface,
-                        letterSpacing: -1.5,
-                        height: 1.05,
-                      ),
+                  style: Theme.of(context).textTheme.displayMedium?.copyWith(
+                    fontSize: isNarrow ? 24 : 48,
+                    fontWeight: FontWeight.w900,
+                    color: Theme.of(context).colorScheme.onSurface,
+                    letterSpacing: -1.5,
+                    height: 1.05,
+                  ),
                 ),
               ),
               const SizedBox(width: 16),
@@ -235,10 +230,55 @@ class _LikedTracksTab extends StatefulWidget {
 }
 
 class _LikedTracksTabState extends State<_LikedTracksTab> {
+  static const _bulkDownloadConfirmThreshold = 20;
+  static String _estimateDownloadSize(List<SimpleTrackDto> tracks) {
+    var totalMs = 0;
+    for (final t in tracks) {
+      totalMs += t.durationMs;
+    }
+    final bytes = totalMs ~/ 1000 * 20000;
+    if (bytes >= 1073741824) {
+      return '${(bytes / 1073741824).toStringAsFixed(1)} ГБ';
+    }
+    return '${(bytes / 1048576).toStringAsFixed(0)} МБ';
+  }
+
+  Future<bool> _confirmBulkDownload(
+    BuildContext context,
+    List<SimpleTrackDto> tracks,
+  ) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        final cs = Theme.of(context).colorScheme;
+        return AppDialog(
+          title: 'Скачать ${tracks.length} треков?',
+          content: Text(
+            'Примерный размер — ${_estimateDownloadSize(tracks)}.',
+            style: TextStyle(color: cs.onSurfaceVariant),
+          ),
+          actions: [
+            AppDialog.cancelButton(context),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Скачать'),
+            ),
+          ],
+        );
+      },
+    );
+    return result ?? false;
+  }
+
   Future<void> _downloadLikedTracks(
+    BuildContext context,
     List<SimpleTrackDto> tracks,
     DownloadMode mode,
   ) async {
+    if (tracks.length > _bulkDownloadConfirmThreshold) {
+      final confirmed = await _confirmBulkDownload(context, tracks);
+      if (!mounted || !confirmed) return;
+    }
     showAppSuccess('Скачивание ${tracks.length} треков началось...');
     try {
       final paths = await downloadLikedTracksAction(
@@ -315,6 +355,9 @@ class _LikedTracksTabState extends State<_LikedTracksTab> {
         final cs = Theme.of(context).colorScheme;
         final tracks = likedTracksSignal.value;
         final query = librarySearchQuerySignal.value;
+        final isLoading = isLibraryLoadingSignal.value;
+        final loaded = likedTracksLoadedSignal.value;
+        final expected = likedTracksExpectedSignal.value;
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -332,10 +375,7 @@ class _LikedTracksTabState extends State<_LikedTracksTab> {
                     child: TextField(
                       controller: widget.searchController,
                       onChanged: setLibrarySearchQuery,
-                      style: TextStyle(
-                        color: cs.onSurface,
-                        fontSize: 14,
-                      ),
+                      style: TextStyle(color: cs.onSurface, fontSize: 14),
                       decoration: InputDecoration(
                         hintText: 'Поиск в любимых треках...',
                         hintStyle: TextStyle(
@@ -386,7 +426,7 @@ class _LikedTracksTabState extends State<_LikedTracksTab> {
                       if (allDownloaded) {
                         return _LikedTracksCompletedActions(
                           onSelected: (mode) => unawaited(
-                            _downloadLikedTracks(tracks, mode),
+                            _downloadLikedTracks(context, tracks, mode),
                           ),
                           onPressed: () =>
                               _showDeleteAllConfirmation(context, tracks),
@@ -403,7 +443,7 @@ class _LikedTracksTabState extends State<_LikedTracksTab> {
 
                       return _LikedTracksDownloadButton(
                         onSelected: (mode) => unawaited(
-                          _downloadLikedTracks(tracks, mode),
+                          _downloadLikedTracks(context, tracks, mode),
                         ),
                         onPressed: isDownloading || tracks.isEmpty
                             ? null
@@ -427,11 +467,30 @@ class _LikedTracksTabState extends State<_LikedTracksTab> {
                 ],
               ),
             ),
+
+            if (isLoading && tracks.isNotEmpty)
+              Padding(
+                padding: EdgeInsets.fromLTRB(
+                  isNarrow ? 20 : 40,
+                  0,
+                  isNarrow ? 20 : 40,
+                  8,
+                ),
+                child: Text(
+                  'Загрузка… $loaded${expected > 0 ? ' / $expected' : ''}',
+                  style: TextStyle(
+                    color: cs.onSurface.withValues(alpha: 0.38),
+                    fontSize: 12,
+                  ),
+                ),
+              ),
             Expanded(
               child: tracks.isEmpty
                   ? Center(
                       child: Text(
-                        query.isEmpty
+                        isLoading
+                            ? 'Загрузка… $loaded${expected > 0 ? ' / $expected' : ''}'
+                            : query.isEmpty
                             ? 'Нет любимых треков'
                             : 'Ничего не найдено',
                         style: TextStyle(
@@ -597,9 +656,9 @@ class _PlaylistsTab extends StatelessWidget {
             child: Text(
               'Нет плейлистов',
               style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurface.withValues(
-                  alpha: 0.38,
-                ),
+                color: Theme.of(
+                  context,
+                ).colorScheme.onSurface.withValues(alpha: 0.38),
               ),
             ),
           );
@@ -646,9 +705,9 @@ class _LikedAlbumsTab extends StatelessWidget {
             child: Text(
               'Нет любимых альбомов',
               style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurface.withValues(
-                  alpha: 0.38,
-                ),
+                color: Theme.of(
+                  context,
+                ).colorScheme.onSurface.withValues(alpha: 0.38),
               ),
             ),
           );
@@ -716,9 +775,9 @@ class _LikedArtistsTab extends StatelessWidget {
             child: Text(
               'Нет любимых исполнителей',
               style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurface.withValues(
-                  alpha: 0.38,
-                ),
+                color: Theme.of(
+                  context,
+                ).colorScheme.onSurface.withValues(alpha: 0.38),
               ),
             ),
           );
@@ -757,9 +816,8 @@ class _LikedArtistsTab extends StatelessWidget {
                   top: 4,
                   right: 4,
                   child: IconButton(
-                    onPressed: () => unawaited(
-                      _removeLikedArtist(context, artist.id),
-                    ),
+                    onPressed: () =>
+                        unawaited(_removeLikedArtist(context, artist.id)),
                     tooltip: 'Убрать из любимых',
                     icon: const Icon(Icons.favorite_rounded, size: 18),
                     style: IconButton.styleFrom(
@@ -882,9 +940,9 @@ class _PlaylistCardState extends State<_PlaylistCard> {
                 Text(
                   '${playlist.trackCount} треков',
                   style: TextStyle(
-                    color: Theme.of(context).colorScheme.onSurface.withValues(
-                      alpha: 0.38,
-                    ),
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.onSurface.withValues(alpha: 0.38),
                     fontSize: 13,
                   ),
                 ),

@@ -824,20 +824,55 @@ pub async fn liked_tracks_stream(
         .filter(|q| !q.trim().is_empty())
         .map(|q| q.to_lowercase());
 
+    // Last sequence actually sent (unfiltered path only). `library_changed`
+    // fires on any library mutation (playlists, albums, ...), so skip the
+    // full DTO rebuild when the liked set itself is untouched — same idea
+    // as the original client's revision-gated `collection/sync`.
+    // Trade-off: metadata-only changes (e.g. a cover refresh with identical
+    // ids) don't resend until the next liked-set change.
+    let mut last_sent_ids: Vec<String> = Vec::new();
+    let mut last_sent_disliked: foldhash::HashSet<String> = foldhash::HashSet::default();
+    let mut last_sent_count: usize = 0;
+    let mut first_run = true;
+
     loop {
+        let (liked_ids, disliked_ids_set) =
+            ctx.audio.state.read().await.liked.ordered_snapshot();
+
+        // If the previous sequence had ids but sent zero DTOs (metadata was
+        // missing from DB/network at the time), don't skip: a later
+        // `library_changed` (e.g. playlist rename, SyncLiked completion) is
+        // the only chance to resend once metadata becomes available.
+        let prev_starved = !last_sent_ids.is_empty() && last_sent_count == 0;
+
+        if !first_run
+            && !prev_starved
+            && query_lower.is_none()
+            && liked_ids == last_sent_ids
+            && disliked_ids_set == last_sent_disliked
+        {
+            // Unrelated library change — keep the current UI list as is.
+            if changed_rx.changed().await.is_err() {
+                break;
+            }
+            continue;
+        }
+        last_sent_ids = liked_ids.clone();
+        last_sent_disliked = disliked_ids_set.clone();
+        first_run = false;
+
         // ALWAYS send an empty vec to signal a new data sequence (for reset/replacement)
         // This ensures the frontend knows that a new sequence of chunks is starting.
         if sink.add(vec![]).is_err() {
             return;
         }
 
-        let (liked_ids, _disliked_ids_set) = ctx.audio.state.read().await.liked.ordered_snapshot();
-
         if liked_ids.is_empty() {
             // If the list is truly empty, we send another empty vec as the data itself.
             if sink.add(vec![]).is_err() {
                 return;
             }
+            last_sent_count = 0;
 
             // If local is empty and not searching, might need sync
             if query_lower.is_none() {
@@ -854,7 +889,7 @@ pub async fn liked_tracks_stream(
 
             // 3. Filter and stream DTOs in chunks
             let mut dtos = Vec::with_capacity(50);
-            let mut sent_any = false;
+            let mut sent_count: usize = 0;
 
             for dto in all_dtos.into_iter().filter(|d| {
                 query_lower
@@ -864,25 +899,31 @@ pub async fn liked_tracks_stream(
                 dtos.push(dto);
 
                 if dtos.len() >= 50 {
+                    sent_count += dtos.len();
                     if sink
                         .add(std::mem::replace(&mut dtos, Vec::with_capacity(50)))
                         .is_err()
                     {
                         return;
                     }
-                    sent_any = true;
                 }
             }
 
             if !dtos.is_empty() {
+                sent_count += dtos.len();
                 if sink.add(dtos).is_err() {
                     return;
                 }
-                sent_any = true;
+            }
+            // Unfiltered path only: remember how many DTOs were actually
+            // sent so a starved (0-DTO) sequence is retried on the next
+            // `library_changed` instead of being skipped forever.
+            if query_lower.is_none() {
+                last_sent_count = sent_count;
             }
 
             // If we were searching but found nothing, send empty list to show "No results"
-            if !sent_any && query_lower.is_some() && sink.add(vec![]).is_err() {
+            if sent_count == 0 && query_lower.is_some() && sink.add(vec![]).is_err() {
                 return;
             }
         }
