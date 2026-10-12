@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:m3e_core/m3e_core.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:signals_flutter/signals_flutter.dart';
@@ -22,15 +24,26 @@ class SearchView extends StatefulWidget {
 
 class _SearchViewState extends State<SearchView> {
   final TextEditingController _controller = TextEditingController();
+  EffectCleanup? _refreshSub;
+  var _lastRefreshSeen = 0;
 
   @override
   void initState() {
     super.initState();
     _controller.text = searchQuerySignal.value;
+    _lastRefreshSeen = refreshRequestSignal.peek();
+    _refreshSub = refreshRequestSignal.subscribe((count) {
+      if (count == _lastRefreshSeen) return;
+      _lastRefreshSeen = count;
+      if (currentNavStateSignal.peek().section == AppSection.search) {
+        unawaited(searchResultsSignal.refresh());
+      }
+    });
   }
 
   @override
   void dispose() {
+    _refreshSub?.call();
     _controller.dispose();
     super.dispose();
   }
@@ -55,16 +68,13 @@ class _SearchViewState extends State<SearchView> {
                 children: [
                   Text(
                     'Поиск',
-                    style:
-                        Theme.of(
-                          context,
-                        ).textTheme.displayMedium?.copyWith(
-                          fontSize: isNarrow ? 24 : 48,
-                          fontWeight: FontWeight.w900,
-                          color: Theme.of(context).colorScheme.onSurface,
-                          letterSpacing: -1.5,
-                          height: 1.05,
-                        ),
+                    style: Theme.of(context).textTheme.displayMedium?.copyWith(
+                      fontSize: isNarrow ? 24 : 48,
+                      fontWeight: FontWeight.w900,
+                      color: Theme.of(context).colorScheme.onSurface,
+                      letterSpacing: -1.5,
+                      height: 1.05,
+                    ),
                   ),
                   if (!isNarrow) const SizedBox(height: 24),
                   if (isNarrow) const SizedBox(height: 8),
@@ -116,13 +126,26 @@ class _SearchViewState extends State<SearchView> {
                   if (results.tracks.isEmpty &&
                       results.albums.isEmpty &&
                       results.artists.isEmpty) {
-                    return Center(
-                      child: Text(
-                        'Ничего не найдено',
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                          fontSize: 18,
-                        ),
+                    return AppRefreshIndicator(
+                      onRefresh: searchResultsSignal.refresh,
+                      child: CustomScrollView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        slivers: [
+                          SliverFillRemaining(
+                            hasScrollBody: false,
+                            child: Center(
+                              child: Text(
+                                'Ничего не найдено',
+                                style: TextStyle(
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurfaceVariant,
+                                  fontSize: 18,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     );
                   }
@@ -176,53 +199,61 @@ class _SearchResults extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return CustomScrollView(
-      slivers: [
-        if (results.artists.isNotEmpty) ...[
-          const SliverToBoxAdapter(child: CommonSectionTitle(title: 'Артисты')),
-          SliverToBoxAdapter(
-            child: HorizontalShelf(
-              height: 210,
-              padding: const EdgeInsets.symmetric(
-                horizontal: 32,
-              ), // 32 + 8 (internal card padding) = 40
-              itemCount: results.artists.length,
+    return AppRefreshIndicator(
+      onRefresh: searchResultsSignal.refresh,
+      child: CustomScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        slivers: [
+          if (results.artists.isNotEmpty) ...[
+            const SliverToBoxAdapter(
+              child: CommonSectionTitle(title: 'Артисты'),
+            ),
+            SliverToBoxAdapter(
+              child: HorizontalShelf(
+                height: 210,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 32,
+                ), // 32 + 8 (internal card padding) = 40
+                itemCount: results.artists.length,
+                itemBuilder: (context, i) =>
+                    _ArtistSearchCard(artist: results.artists[i]),
+              ),
+            ),
+          ],
+          if (results.albums.isNotEmpty) ...[
+            const SliverToBoxAdapter(
+              child: CommonSectionTitle(title: 'Альбомы'),
+            ),
+            SliverToBoxAdapter(
+              child: HorizontalShelf(
+                height: 240,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 32,
+                ), // 32 + 8 = 40
+                itemCount: results.albums.length,
+                itemBuilder: (context, i) =>
+                    _AlbumSearchCard(album: results.albums[i]),
+              ),
+            ),
+          ],
+          if (results.tracks.isNotEmpty) ...[
+            const SliverToBoxAdapter(child: CommonSectionTitle(title: 'Треки')),
+            SliverM3ESegmentedList(
+              haptic: M3EHapticFeedback.light,
+              itemCount: results.tracks.length,
+              color: Colors.transparent,
+              padding: EdgeInsets.symmetric(
+                horizontal: context.isNarrow ? 0 : 32,
+                vertical: 4,
+              ),
               itemBuilder: (context, i) =>
-                  _ArtistSearchCard(artist: results.artists[i]),
+                  _TrackSearchTile(track: results.tracks[i]),
             ),
-          ),
+            const SliverToBoxAdapter(child: SizedBox(height: 40)),
+          ],
+          const SliverPadding(padding: EdgeInsets.only(bottom: 140)),
         ],
-        if (results.albums.isNotEmpty) ...[
-          const SliverToBoxAdapter(child: CommonSectionTitle(title: 'Альбомы')),
-          SliverToBoxAdapter(
-            child: HorizontalShelf(
-              height: 240,
-              padding: const EdgeInsets.symmetric(
-                horizontal: 32,
-              ), // 32 + 8 = 40
-              itemCount: results.albums.length,
-              itemBuilder: (context, i) =>
-                  _AlbumSearchCard(album: results.albums[i]),
-            ),
-          ),
-        ],
-        if (results.tracks.isNotEmpty) ...[
-          const SliverToBoxAdapter(child: CommonSectionTitle(title: 'Треки')),
-          SliverM3ESegmentedList(
-            haptic: M3EHapticFeedback.light,
-            itemCount: results.tracks.length,
-            color: Colors.transparent,
-            padding: EdgeInsets.symmetric(
-              horizontal: context.isNarrow ? 0 : 32,
-              vertical: 4,
-            ),
-            itemBuilder: (context, i) =>
-                _TrackSearchTile(track: results.tracks[i]),
-          ),
-          const SliverToBoxAdapter(child: SizedBox(height: 40)),
-        ],
-        const SliverPadding(padding: EdgeInsets.only(bottom: 140)),
-      ],
+      ),
     );
   }
 }
@@ -243,9 +274,7 @@ class _TrackSearchTile extends StatelessWidget {
       leading: AppCover(coverUrl: track.coverUrl),
       trailing: Text(
         formatDuration(track.durationMs),
-        style: TextStyle(
-          color: Theme.of(context).colorScheme.onSurfaceVariant,
-        ),
+        style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
       ),
       hoverActions: [
         IconButton(

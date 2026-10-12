@@ -36,6 +36,8 @@ class _PlaylistViewState extends State<PlaylistView> {
       signal<PlaylistDetailsDto?>(null);
   final FlutterSignal<String> _searchQuery = signal('');
   final _searchController = TextEditingController();
+  EffectCleanup? _refreshSub;
+  var _lastRefreshSeen = 0;
 
   @override
   void initState() {
@@ -74,10 +76,22 @@ class _PlaylistViewState extends State<PlaylistView> {
     _searchController.addListener(() {
       _searchQuery.value = _searchController.text;
     });
+
+    _lastRefreshSeen = refreshRequestSignal.peek();
+    _refreshSub = refreshRequestSignal.subscribe((count) {
+      if (count == _lastRefreshSeen) return;
+      _lastRefreshSeen = count;
+      final nav = currentNavStateSignal.peek();
+      if (nav.section == AppSection.playlist &&
+          nav.id == '${widget.uid}:${widget.kind}') {
+        unawaited(_playlistAsync.refresh());
+      }
+    });
   }
 
   @override
   void dispose() {
+    _refreshSub?.call();
     _searchController.dispose();
     super.dispose();
   }
@@ -124,7 +138,7 @@ class _PlaylistContent extends StatefulWidget {
   final PlaylistDetailsDto playlist;
   final List<SimpleTrackDto> tracks;
   final bool isLoading;
-  final VoidCallback refresh;
+  final Future<void> Function() refresh;
   final TextEditingController searchController;
 
   const _PlaylistContent({
@@ -180,7 +194,7 @@ class _PlaylistContentState extends State<_PlaylistContent> {
     if (context.mounted) {
       if (success) {
         showAppSuccess('Трек успешно загружен');
-        widget.refresh();
+        unawaited(widget.refresh());
       } else {
         showAppError('Ошибка при загрузке трека');
       }
@@ -239,6 +253,7 @@ class _PlaylistContentState extends State<_PlaylistContent> {
     final isAndroid = Platform.isAndroid;
 
     return CommonDetailSliverLayout(
+      onRefresh: widget.refresh,
       header: CommonDetailHeader(
         type: 'Плейлист',
         title: widget.playlist.title,
@@ -253,7 +268,7 @@ class _PlaylistContentState extends State<_PlaylistContent> {
                   widget.playlist.kind,
                   isPublic: !widget.playlist.isPublic,
                 );
-                widget.refresh();
+                unawaited(widget.refresh());
               case 'delete':
                 await _showDeleteConfirm(context, widget.playlist);
             }
@@ -414,9 +429,7 @@ class _PlaylistContentState extends State<_PlaylistContent> {
             child: Center(
               child: Text(
                 'Ничего не найдено',
-                style: TextStyle(
-                  color: cs.onSurface.withValues(alpha: 0.38),
-                ),
+                style: TextStyle(color: cs.onSurface.withValues(alpha: 0.38)),
               ),
             ),
           )
@@ -441,7 +454,7 @@ class _PlaylistContentState extends State<_PlaylistContent> {
                     track.id,
                     track.albumId,
                   );
-                  if (success) widget.refresh();
+                  if (success) unawaited(widget.refresh());
                 },
               );
             },
@@ -463,7 +476,7 @@ class _PlaylistContentState extends State<_PlaylistContent> {
                       track.id,
                       track.albumId,
                     );
-                    if (success) widget.refresh();
+                    if (success) unawaited(widget.refresh());
                   },
                 ),
               );
@@ -487,7 +500,7 @@ class _PlaylistContentState extends State<_PlaylistContent> {
               );
 
               if (!success) {
-                widget.refresh();
+                unawaited(widget.refresh());
               }
             },
           ),
@@ -526,7 +539,7 @@ class _PlaylistContentState extends State<_PlaylistContent> {
                 onPressed: () async {
                   if (controller.text.isNotEmpty) {
                     await renamePlaylistAction(playlist.kind, controller.text);
-                    widget.refresh();
+                    unawaited(widget.refresh());
                     if (context.mounted) Navigator.pop(context);
                   }
                 },
@@ -599,10 +612,7 @@ class _TrackTile extends StatelessWidget {
       size: 20,
     );
     final dragHandle = dragEnabled
-        ? ReorderableDragStartListener(
-            index: index,
-            child: dragIndicator,
-          )
+        ? ReorderableDragStartListener(index: index, child: dragIndicator)
         : dragIndicator;
     return CommonTrackTile(
       trackId: track.id,
@@ -625,10 +635,7 @@ class _TrackTile extends StatelessWidget {
       ),
       hoverActions: [
         IconButton(
-          icon: Icon(
-            Icons.playlist_remove_rounded,
-            color: cs.error,
-          ),
+          icon: Icon(Icons.playlist_remove_rounded, color: cs.error),
           onPressed: onRemove,
           tooltip: 'Удалить из плейлиста',
         ),

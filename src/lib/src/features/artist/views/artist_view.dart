@@ -41,6 +41,8 @@ class _ArtistViewState extends State<ArtistView> {
   static const _pageSize = 30;
 
   late final ScrollController _scrollController;
+  EffectCleanup? _refreshSub;
+  var _lastRefreshSeen = 0;
 
   @override
   void initState() {
@@ -48,10 +50,20 @@ class _ArtistViewState extends State<ArtistView> {
     _scrollController = ScrollController()..addListener(_onScroll);
     unawaited(_loadInitial());
     unawaited(refreshLikedArtists());
+    _lastRefreshSeen = refreshRequestSignal.peek();
+    _refreshSub = refreshRequestSignal.subscribe((count) {
+      if (count == _lastRefreshSeen) return;
+      _lastRefreshSeen = count;
+      final nav = currentNavStateSignal.peek();
+      if (nav.section == AppSection.artist && nav.id == widget.artistId) {
+        unawaited(_handleRefresh());
+      }
+    });
   }
 
   @override
   void dispose() {
+    _refreshSub?.call();
     _scrollController.dispose();
     super.dispose();
   }
@@ -99,6 +111,10 @@ class _ArtistViewState extends State<ArtistView> {
     } finally {
       _isLoading.value = false;
     }
+  }
+
+  Future<void> _handleRefresh() async {
+    await Future.wait([_loadInitial(), refreshLikedArtists()]);
   }
 
   Future<void> _loadMore() async {
@@ -151,7 +167,9 @@ class _ArtistViewState extends State<ArtistView> {
       }
 
       showAppSuccess(
-        isLiked ? 'Исполнитель удалён из любимых' : 'Исполнитель добавлен в любимые',
+        isLiked
+            ? 'Исполнитель удалён из любимых'
+            : 'Исполнитель добавлен в любимые',
       );
     } else {
       showAppError('Ошибка при обновлении любимых исполнителей');
@@ -193,6 +211,7 @@ class _ArtistViewState extends State<ArtistView> {
 
         return CommonDetailSliverLayout(
           controller: _scrollController,
+          onRefresh: _handleRefresh,
           header: CommonDetailHeader(
             type: 'Артист',
             title: artist.name,
@@ -204,9 +223,8 @@ class _ArtistViewState extends State<ArtistView> {
             actions: [
               if (isAndroid)
                 IconButton(
-                  onPressed: () => unawaited(
-                    _toggleArtistLike(artist, isLiked),
-                  ),
+                  onPressed: () =>
+                      unawaited(_toggleArtistLike(artist, isLiked)),
                   tooltip: isLiked ? 'В любимых' : 'В любимые',
                   icon: Icon(
                     isLiked
@@ -220,16 +238,13 @@ class _ArtistViewState extends State<ArtistView> {
                         ? cs.primary
                         : cs.onSurface.withValues(alpha: 0.1),
                     foregroundColor: isLiked ? cs.onPrimary : cs.onSurface,
-                    side: isLiked
-                        ? null
-                        : BorderSide(color: cs.outlineVariant),
+                    side: isLiked ? null : BorderSide(color: cs.outlineVariant),
                   ),
                 )
               else
                 M3EButton.icon(
-                  onPressed: () => unawaited(
-                    _toggleArtistLike(artist, isLiked),
-                  ),
+                  onPressed: () =>
+                      unawaited(_toggleArtistLike(artist, isLiked)),
                   icon: Icon(
                     isLiked
                         ? Icons.favorite_rounded
@@ -243,9 +258,7 @@ class _ArtistViewState extends State<ArtistView> {
                   decoration: isLiked
                       ? null
                       : M3EButtonDecoration.styleFrom(
-                          backgroundColor: cs.onSurface.withValues(
-                            alpha: 0.1,
-                          ),
+                          backgroundColor: cs.onSurface.withValues(alpha: 0.1),
                           foregroundColor: cs.onSurface,
                         ),
                 ),

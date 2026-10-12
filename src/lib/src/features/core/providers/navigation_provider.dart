@@ -54,19 +54,13 @@ final FlutterSignal<Map<AppSection, List<NavState>>> rootStacksSignal =
     });
 
 /// Navbar auto-hide setting
-final FlutterSignal<bool> autoHideNavbarSignal = signal<bool>(
-  false,
-);
+final FlutterSignal<bool> autoHideNavbarSignal = signal<bool>(false);
 
 /// Custom titlebar setting
-final FlutterSignal<bool> customTitlebarSignal = signal<bool>(
-  true,
-);
+final FlutterSignal<bool> customTitlebarSignal = signal<bool>(true);
 
 /// Close to tray setting
-final FlutterSignal<bool> closeToTraySignal = signal<bool>(
-  true,
-);
+final FlutterSignal<bool> closeToTraySignal = signal<bool>(true);
 
 /// Computed current navigation stack
 final FlutterComputed<List<NavState>> navStackSignal = computed(
@@ -136,3 +130,10 @@ void goBack() {
 }
 
 void setSection(AppSection section) => navigateTo(section);
+
+/// Counter of refresh requests for the current screen. The desktop
+/// refresh button (below the back button) only increments it — each
+/// screen subscribes on its own and reloads itself when visible.
+final FlutterSignal<int> refreshRequestSignal = signal<int>(0);
+
+void requestGlobalRefresh() => refreshRequestSignal.value++;

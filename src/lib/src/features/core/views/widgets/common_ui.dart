@@ -45,7 +45,7 @@ String _plural(int n, String one, String few, String many) {
   }
 }
 
-/// "1 234 567 слушателей за месяц", or null when there is no data.
+/// "1 234 567 monthly listeners", or null when there is no data.
 String? formatMonthlyListeners(int? value) {
   if (value == null) return null;
   return '${formatCount(value)} ${_plural(value, 'слушатель', 'слушателя', 'слушателей')} за месяц';
@@ -92,11 +92,7 @@ class CommonSectionTitle extends StatelessWidget {
   final String title;
   final EdgeInsets? padding;
 
-  const CommonSectionTitle({
-    required this.title,
-    super.key,
-    this.padding,
-  });
+  const CommonSectionTitle({required this.title, super.key, this.padding});
 
   @override
   Widget build(BuildContext context) {
@@ -230,9 +226,7 @@ class CommonDetailHeader extends StatelessWidget {
           Text(
             secondarySubtitle!,
             textAlign: isNarrow ? TextAlign.center : TextAlign.start,
-            style: TextStyle(
-              color: onSurfaceVariant.withValues(alpha: 0.6),
-            ),
+            style: TextStyle(color: onSurfaceVariant.withValues(alpha: 0.6)),
           ),
         ],
         if (actions != null) ...[
@@ -288,11 +282,7 @@ class CommonDetailHeader extends StatelessWidget {
 class CommonVolumeSlider extends StatefulWidget {
   final double width;
   final Color? activeColor;
-  const CommonVolumeSlider({
-    super.key,
-    this.width = 120,
-    this.activeColor,
-  });
+  const CommonVolumeSlider({super.key, this.width = 120, this.activeColor});
 
   @override
   State<CommonVolumeSlider> createState() => _CommonVolumeSliderState();
@@ -454,23 +444,56 @@ class CommonDetailSliverLayout extends StatelessWidget {
   final Widget header;
   final List<Widget> slivers;
   final ScrollController? controller;
+  final Future<void> Function()? onRefresh;
 
   const CommonDetailSliverLayout({
     required this.header,
     required this.slivers,
     super.key,
     this.controller,
+    this.onRefresh,
   });
 
   @override
   Widget build(BuildContext context) {
-    return CustomScrollView(
+    final scrollView = CustomScrollView(
       controller: controller,
+      physics: onRefresh != null ? const AlwaysScrollableScrollPhysics() : null,
       slivers: [
         SliverToBoxAdapter(child: header),
         ...slivers,
         const SliverToBoxAdapter(child: SizedBox(height: 140)),
       ],
+    );
+    final refresh = onRefresh;
+    if (refresh == null) return scrollView;
+    return AppRefreshIndicator(onRefresh: refresh, child: scrollView);
+  }
+}
+
+/// Shared pull-to-refresh for the whole app: branded colors,
+/// triggers on the top edge only.
+class AppRefreshIndicator extends StatelessWidget {
+  final Future<void> Function() onRefresh;
+  final Widget child;
+  final double displacement;
+
+  const AppRefreshIndicator({
+    required this.onRefresh,
+    required this.child,
+    super.key,
+    this.displacement = 40,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return RefreshIndicator(
+      onRefresh: onRefresh,
+      color: cs.primary,
+      backgroundColor: cs.surfaceContainerHighest,
+      displacement: displacement,
+      child: child,
     );
   }
 }
@@ -534,9 +557,7 @@ class _CommonProgressSliderState extends State<CommonProgressSlider> {
     // playerProgressSignal confirms the new position.
     _confirmTimer?.cancel();
     _confirmTimer = Timer(const Duration(seconds: 2), _clearDrag);
-    unawaited(
-      PlaybackController.seekTo(Duration(milliseconds: val.toInt())),
-    );
+    unawaited(PlaybackController.seekTo(Duration(milliseconds: val.toInt())));
   }
 
   @override
@@ -848,11 +869,7 @@ class _BurstPainter extends CustomPainter {
       ..strokeWidth = 2.2
       ..color = color.withValues(alpha: opacity);
     final center = size.center(Offset.zero);
-    canvas.drawCircle(
-      center,
-      (size.shortestSide / 2) * progress,
-      paint,
-    );
+    canvas.drawCircle(center, (size.shortestSide / 2) * progress, paint);
   }
 
   @override

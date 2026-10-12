@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:io';
 
+import 'package:m3e_core/m3e_core.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:window_manager/window_manager.dart';
@@ -156,6 +158,11 @@ class _AppLayoutState extends State<AppLayout> {
 
                           // 5. Back button
                           _FloatingBackButton(),
+
+                          // 5b. Refresh button (desktop: pull-to-refresh
+                          // is not reachable with a mouse, hence a dedicated
+                          // button below the back button)
+                          const _FloatingRefreshButton(),
 
                           // 6. Custom Titlebar
                           if (isCustomTitlebar)
@@ -429,6 +436,89 @@ class _FloatingBackButton extends StatelessWidget {
               color: Theme.of(context).colorScheme.onSurfaceVariant,
               size: 24,
             ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _FloatingRefreshButton extends StatefulWidget {
+  const _FloatingRefreshButton();
+
+  @override
+  State<_FloatingRefreshButton> createState() => _FloatingRefreshButtonState();
+}
+
+class _FloatingRefreshButtonState extends State<_FloatingRefreshButton> {
+  static const Set<AppSection> _refreshable = {
+    AppSection.liked,
+    AppSection.playlists,
+    AppSection.album,
+    AppSection.artist,
+    AppSection.playlist,
+    AppSection.search,
+  };
+
+  bool _spinning = false;
+
+  Future<void> _onRefresh() async {
+    if (_spinning) return;
+    setState(() => _spinning = true);
+    try {
+      requestGlobalRefresh();
+      // Minimum spinner time: the views themselves show
+      // their own loading indicators.
+      await Future<void>.delayed(const Duration(milliseconds: 1000));
+    } finally {
+      if (mounted) setState(() => _spinning = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Mobile has pull-to-refresh, so the button is not needed there.
+    if (Platform.isAndroid) return const SizedBox.shrink();
+    return SignalBuilder(
+      builder: (context) {
+        if (!_refreshable.contains(currentNavStateSignal.value.section)) {
+          return const SizedBox.shrink();
+        }
+        // Without the back button take its place, otherwise sit below it.
+        final top = canGoBackSignal.value ? 120.0 : 60.0;
+        return Positioned(
+          top: top,
+          left: 24,
+          child: IconButton(
+            onPressed: _spinning ? null : _onRefresh,
+            tooltip: 'Обновить',
+            style: IconButton.styleFrom(
+              backgroundColor: Color.lerp(
+                Theme.of(context).colorScheme.surfaceContainerHighest,
+                Colors.black,
+                0.4,
+              ),
+              hoverColor: Theme.of(
+                context,
+              ).colorScheme.onSurface.withValues(alpha: 0.1),
+              padding: const EdgeInsets.all(12),
+              side: BorderSide(
+                color: Theme.of(
+                  context,
+                ).colorScheme.onSurface.withValues(alpha: 0.1),
+              ),
+            ),
+            icon: _spinning
+                ? M3ECircularWavyProgressIndicator(
+                    size: 24,
+                    strokeWidth: 2.5,
+                    color: Theme.of(context).colorScheme.primary,
+                  )
+                : Icon(
+                    Icons.refresh_rounded,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    size: 24,
+                  ),
           ),
         );
       },

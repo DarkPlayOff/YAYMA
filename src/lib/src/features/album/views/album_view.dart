@@ -28,6 +28,8 @@ class AlbumView extends StatefulWidget {
 class _AlbumViewState extends State<AlbumView> {
   late final FutureSignal<AlbumDetailsDto?> _albumAsync;
   final FlutterSignal<bool> _isDownloadingAlbum = signal(false);
+  EffectCleanup? _refreshSub;
+  var _lastRefreshSeen = 0;
 
   @override
   void initState() {
@@ -42,6 +44,25 @@ class _AlbumViewState extends State<AlbumView> {
       return await rust.getAlbumDetails(albumId: id, ctx: ctx);
     });
     unawaited(refreshLikedAlbums());
+    _lastRefreshSeen = refreshRequestSignal.peek();
+    _refreshSub = refreshRequestSignal.subscribe((count) {
+      if (count == _lastRefreshSeen) return;
+      _lastRefreshSeen = count;
+      final nav = currentNavStateSignal.peek();
+      if (nav.section == AppSection.album && nav.id == widget.albumId) {
+        unawaited(_handleRefresh());
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _refreshSub?.call();
+    super.dispose();
+  }
+
+  Future<void> _handleRefresh() async {
+    await Future.wait([_albumAsync.refresh(), refreshLikedAlbums()]);
   }
 
   Future<void> _toggleAlbumLike(AlbumDetailsDto album, bool isLiked) async {
@@ -157,9 +178,8 @@ class _AlbumViewState extends State<AlbumView> {
 
                 final albumActions = [
                   M3EButton.icon(
-                    onPressed: () => unawaited(
-                      _toggleAlbumLike(albumData, isLiked),
-                    ),
+                    onPressed: () =>
+                        unawaited(_toggleAlbumLike(albumData, isLiked)),
                     icon: Icon(
                       isLiked
                           ? Icons.favorite_rounded
@@ -203,9 +223,8 @@ class _AlbumViewState extends State<AlbumView> {
                 ];
                 final androidAlbumActions = [
                   IconButton(
-                    onPressed: () => unawaited(
-                      _toggleAlbumLike(albumData, isLiked),
-                    ),
+                    onPressed: () =>
+                        unawaited(_toggleAlbumLike(albumData, isLiked)),
                     tooltip: isLiked ? 'В любимых' : 'В любимые',
                     icon: Icon(
                       isLiked
@@ -245,6 +264,7 @@ class _AlbumViewState extends State<AlbumView> {
                 ];
 
                 return CommonDetailSliverLayout(
+                  onRefresh: _handleRefresh,
                   header: CommonDetailHeader(
                     type: 'Альбом',
                     title: albumData.title,

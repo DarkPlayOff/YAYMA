@@ -27,12 +27,46 @@ class _LibraryViewState extends State<LibraryView>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final TextEditingController _searchController = TextEditingController();
+  late AppSection _root;
+  bool _refreshBusy = false;
+  EffectCleanup? _refreshSub;
+  var _lastRefreshSeen = 0;
+
+  Future<void> _refreshCurrentTab() async {
+    if (_refreshBusy) return;
+    _refreshBusy = true;
+    try {
+      switch (_tabController.index) {
+        case 0:
+          final query = librarySearchQuerySignal.value;
+          await refreshLikedTracks(
+            query: query.isEmpty ? null : query,
+            force: true,
+          );
+          // refreshLikedTracks only subscribes to the stream, so wait for
+          // the actual load to finish.
+          for (var i = 0; i < 50; i++) {
+            await Future<void>.delayed(const Duration(milliseconds: 100));
+            if (!isLibraryLoadingSignal.value) break;
+          }
+        case 1:
+          await refreshPlaylists();
+        case 2:
+          await refreshLikedAlbums();
+        case 3:
+          await refreshLikedArtists();
+      }
+    } finally {
+      _refreshBusy = false;
+    }
+  }
 
   @override
   void initState() {
     super.initState();
     final currentSection = navStackSignal.value.last.section;
     final initialIndex = currentSection == AppSection.playlists ? 1 : 0;
+    _root = currentRootSignal.value;
     _tabController = TabController(
       length: 4,
       vsync: this,
@@ -53,10 +87,22 @@ class _LibraryViewState extends State<LibraryView>
     unawaited(refreshPlaylists());
     unawaited(refreshLikedAlbums());
     unawaited(refreshLikedArtists());
+    _lastRefreshSeen = refreshRequestSignal.peek();
+    _refreshSub = refreshRequestSignal.subscribe((count) {
+      if (count == _lastRefreshSeen) return;
+      _lastRefreshSeen = count;
+      if (currentRootSignal.peek() != _root) return;
+      final nav = currentNavStateSignal.peek();
+      if (nav.section == AppSection.liked ||
+          nav.section == AppSection.playlists) {
+        unawaited(_refreshCurrentTab());
+      }
+    });
   }
 
   @override
   void dispose() {
+    _refreshSub?.call();
     _tabController.dispose();
     _searchController.dispose();
     super.dispose();
@@ -345,6 +391,17 @@ class _LikedTracksTabState extends State<_LikedTracksTab> {
     );
   }
 
+  Future<void> _handleRefresh() async {
+    final query = librarySearchQuerySignal.value;
+    await refreshLikedTracks(query: query.isEmpty ? null : query, force: true);
+    // refreshLikedTracks only subscribes to the stream, so wait for
+    // the actual load to finish to keep the spinner visible.
+    for (var i = 0; i < 50; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      if (!isLibraryLoadingSignal.value) break;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.sizeOf(context).width;
@@ -485,57 +542,69 @@ class _LikedTracksTabState extends State<_LikedTracksTab> {
                 ),
               ),
             Expanded(
-              child: tracks.isEmpty
-                  ? Center(
-                      child: Text(
-                        isLoading
-                            ? 'Загрузка… $loaded${expected > 0 ? ' / $expected' : ''}'
-                            : query.isEmpty
-                            ? 'Нет любимых треков'
-                            : 'Ничего не найдено',
-                        style: TextStyle(
-                          color: cs.onSurface.withValues(alpha: 0.38),
-                        ),
-                      ),
-                    )
-                  : M3ESegmentedList.builder(
-                      haptic: M3EHapticFeedback.light,
-                      itemCount: tracks.length,
-                      listPadding: const EdgeInsets.only(bottom: 140),
-                      margin: EdgeInsets.symmetric(
-                        horizontal: isNarrow ? 0 : 40,
-                      ),
-                      color: Colors.transparent,
-                      padding: EdgeInsets.symmetric(
-                        horizontal: isNarrow ? 0 : 40,
-                        vertical: 8,
-                      ),
-                      itemBuilder: (context, index) {
-                        final track = tracks[index];
-                        return CommonTrackTile(
-                          trackId: track.id,
-                          title: track.title,
-                          version: track.version,
-                          artists: track.artists,
-                          albumId: track.albumId,
-                          leading: AppCover(coverUrl: track.coverUrl),
-                          trailing: Text(
-                            formatDuration(track.durationMs),
-                            style: TextStyle(
-                              color: cs.onSurface.withValues(alpha: 0.38),
+              child: AppRefreshIndicator(
+                onRefresh: _handleRefresh,
+                child: tracks.isEmpty
+                    ? CustomScrollView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        slivers: [
+                          SliverFillRemaining(
+                            hasScrollBody: false,
+                            child: Center(
+                              child: Text(
+                                isLoading
+                                    ? 'Загрузка… $loaded${expected > 0 ? ' / $expected' : ''}'
+                                    : query.isEmpty
+                                    ? 'Нет любимых треков'
+                                    : 'Ничего не найдено',
+                                style: TextStyle(
+                                  color: cs.onSurface.withValues(alpha: 0.38),
+                                ),
+                              ),
                             ),
                           ),
-                          onTap: () => unawaited(
-                            PlaybackController.playLikedTrack(track.id),
-                          ),
-                          onTitleTap: () {
-                            if (track.albumId != null) {
-                              navigateTo(AppSection.album, track.albumId);
-                            }
-                          },
-                        );
-                      },
-                    ),
+                        ],
+                      )
+                    : M3ESegmentedList.builder(
+                        haptic: M3EHapticFeedback.light,
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        itemCount: tracks.length,
+                        listPadding: const EdgeInsets.only(bottom: 140),
+                        margin: EdgeInsets.symmetric(
+                          horizontal: isNarrow ? 0 : 40,
+                        ),
+                        color: Colors.transparent,
+                        padding: EdgeInsets.symmetric(
+                          horizontal: isNarrow ? 0 : 40,
+                          vertical: 8,
+                        ),
+                        itemBuilder: (context, index) {
+                          final track = tracks[index];
+                          return CommonTrackTile(
+                            trackId: track.id,
+                            title: track.title,
+                            version: track.version,
+                            artists: track.artists,
+                            albumId: track.albumId,
+                            leading: AppCover(coverUrl: track.coverUrl),
+                            trailing: Text(
+                              formatDuration(track.durationMs),
+                              style: TextStyle(
+                                color: cs.onSurface.withValues(alpha: 0.38),
+                              ),
+                            ),
+                            onTap: () => unawaited(
+                              PlaybackController.playLikedTrack(track.id),
+                            ),
+                            onTitleTap: () {
+                              if (track.albumId != null) {
+                                navigateTo(AppSection.album, track.albumId);
+                              }
+                            },
+                          );
+                        },
+                      ),
+              ),
             ),
           ],
         );
@@ -652,36 +721,51 @@ class _PlaylistsTab extends StatelessWidget {
         final playlists = playlistsSignal.value;
 
         if (playlists.isEmpty) {
-          return Center(
-            child: Text(
-              'Нет плейлистов',
-              style: TextStyle(
-                color: Theme.of(
-                  context,
-                ).colorScheme.onSurface.withValues(alpha: 0.38),
-              ),
+          return AppRefreshIndicator(
+            onRefresh: refreshPlaylists,
+            child: CustomScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: [
+                SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: Center(
+                    child: Text(
+                      'Нет плейлистов',
+                      style: TextStyle(
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.onSurface.withValues(alpha: 0.38),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           );
         }
 
-        return GridView.builder(
-          padding: EdgeInsets.fromLTRB(
-            isNarrow ? 20 : 40,
-            isNarrow ? 20 : 40,
-            isNarrow ? 20 : 40,
-            140,
+        return AppRefreshIndicator(
+          onRefresh: refreshPlaylists,
+          child: GridView.builder(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: EdgeInsets.fromLTRB(
+              isNarrow ? 20 : 40,
+              isNarrow ? 20 : 40,
+              isNarrow ? 20 : 40,
+              140,
+            ),
+            gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+              maxCrossAxisExtent: isNarrow ? 180 : 200,
+              mainAxisSpacing: isNarrow ? 16 : 24,
+              crossAxisSpacing: isNarrow ? 16 : 24,
+              childAspectRatio: isNarrow ? 0.7 : 0.75,
+            ),
+            itemCount: playlists.length,
+            itemBuilder: (context, index) {
+              final playlist = playlists[index];
+              return _PlaylistCard(playlist: playlist);
+            },
           ),
-          gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-            maxCrossAxisExtent: isNarrow ? 180 : 200,
-            mainAxisSpacing: isNarrow ? 16 : 24,
-            crossAxisSpacing: isNarrow ? 16 : 24,
-            childAspectRatio: isNarrow ? 0.7 : 0.75,
-          ),
-          itemCount: playlists.length,
-          itemBuilder: (context, index) {
-            final playlist = playlists[index];
-            return _PlaylistCard(playlist: playlist);
-          },
         );
       },
     );
@@ -701,41 +785,56 @@ class _LikedAlbumsTab extends StatelessWidget {
         final albums = likedAlbumsSignal.value;
 
         if (albums.isEmpty) {
-          return Center(
-            child: Text(
-              'Нет любимых альбомов',
-              style: TextStyle(
-                color: Theme.of(
-                  context,
-                ).colorScheme.onSurface.withValues(alpha: 0.38),
-              ),
+          return AppRefreshIndicator(
+            onRefresh: refreshLikedAlbums,
+            child: CustomScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: [
+                SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: Center(
+                    child: Text(
+                      'Нет любимых альбомов',
+                      style: TextStyle(
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.onSurface.withValues(alpha: 0.38),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           );
         }
 
-        return GridView.builder(
-          padding: EdgeInsets.fromLTRB(
-            isNarrow ? 12 : 32,
-            isNarrow ? 12 : 24,
-            isNarrow ? 12 : 32,
-            140,
+        return AppRefreshIndicator(
+          onRefresh: refreshLikedAlbums,
+          child: GridView.builder(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: EdgeInsets.fromLTRB(
+              isNarrow ? 12 : 32,
+              isNarrow ? 12 : 24,
+              isNarrow ? 12 : 32,
+              140,
+            ),
+            gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+              maxCrossAxisExtent: isNarrow ? 160 : 200,
+              mainAxisSpacing: 16,
+              crossAxisSpacing: 16,
+              childAspectRatio: 0.75,
+            ),
+            itemCount: albums.length,
+            itemBuilder: (context, index) {
+              final album = albums[index];
+              return CommonMediaCard(
+                title: album.title,
+                artists: album.artists,
+                coverUrl: album.coverUrl,
+                onTap: () => navigateTo(AppSection.album, album.id),
+              );
+            },
           ),
-          gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-            maxCrossAxisExtent: isNarrow ? 160 : 200,
-            mainAxisSpacing: 16,
-            crossAxisSpacing: 16,
-            childAspectRatio: 0.75,
-          ),
-          itemCount: albums.length,
-          itemBuilder: (context, index) {
-            final album = albums[index];
-            return CommonMediaCard(
-              title: album.title,
-              artists: album.artists,
-              coverUrl: album.coverUrl,
-              onTap: () => navigateTo(AppSection.album, album.id),
-            );
-          },
         );
       },
     );
@@ -771,68 +870,83 @@ class _LikedArtistsTab extends StatelessWidget {
         final artists = likedArtistsSignal.value;
 
         if (artists.isEmpty) {
-          return Center(
-            child: Text(
-              'Нет любимых исполнителей',
-              style: TextStyle(
-                color: Theme.of(
-                  context,
-                ).colorScheme.onSurface.withValues(alpha: 0.38),
-              ),
-            ),
-          );
-        }
-
-        return GridView.builder(
-          padding: EdgeInsets.fromLTRB(
-            isNarrow ? 12 : 32,
-            isNarrow ? 12 : 24,
-            isNarrow ? 12 : 32,
-            140,
-          ),
-          gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-            maxCrossAxisExtent: isNarrow ? 160 : 200,
-            mainAxisSpacing: 16,
-            crossAxisSpacing: 16,
-            childAspectRatio: 0.75,
-          ),
-          itemCount: artists.length,
-          itemBuilder: (context, index) {
-            final artist = artists[index];
-            return Stack(
-              children: [
-                CommonMediaCard(
-                  title: artist.name,
-                  subtitle: formatArtistCardSubtitle(
-                    monthlyListeners: artist.monthlyListeners,
-                    likesCount: artist.likesCount,
-                  ),
-                  coverUrl: artist.coverUrl,
-                  isCircle: true,
-                  size: 140,
-                  onTap: () => navigateTo(AppSection.artist, artist.id),
-                ),
-                Positioned(
-                  top: 4,
-                  right: 4,
-                  child: IconButton(
-                    onPressed: () =>
-                        unawaited(_removeLikedArtist(context, artist.id)),
-                    tooltip: 'Убрать из любимых',
-                    icon: const Icon(Icons.favorite_rounded, size: 18),
-                    style: IconButton.styleFrom(
-                      minimumSize: const Size(36, 36),
-                      iconSize: 18,
-                      backgroundColor: Theme.of(
-                        context,
-                      ).colorScheme.surface.withValues(alpha: 0.85),
-                      foregroundColor: Theme.of(context).colorScheme.primary,
+          return AppRefreshIndicator(
+            onRefresh: refreshLikedArtists,
+            child: CustomScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: [
+                SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: Center(
+                    child: Text(
+                      'Нет любимых исполнителей',
+                      style: TextStyle(
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.onSurface.withValues(alpha: 0.38),
+                      ),
                     ),
                   ),
                 ),
               ],
-            );
-          },
+            ),
+          );
+        }
+
+        return AppRefreshIndicator(
+          onRefresh: refreshLikedArtists,
+          child: GridView.builder(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: EdgeInsets.fromLTRB(
+              isNarrow ? 12 : 32,
+              isNarrow ? 12 : 24,
+              isNarrow ? 12 : 32,
+              140,
+            ),
+            gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+              maxCrossAxisExtent: isNarrow ? 160 : 200,
+              mainAxisSpacing: 16,
+              crossAxisSpacing: 16,
+              childAspectRatio: 0.75,
+            ),
+            itemCount: artists.length,
+            itemBuilder: (context, index) {
+              final artist = artists[index];
+              return Stack(
+                children: [
+                  CommonMediaCard(
+                    title: artist.name,
+                    subtitle: formatArtistCardSubtitle(
+                      monthlyListeners: artist.monthlyListeners,
+                      likesCount: artist.likesCount,
+                    ),
+                    coverUrl: artist.coverUrl,
+                    isCircle: true,
+                    size: 140,
+                    onTap: () => navigateTo(AppSection.artist, artist.id),
+                  ),
+                  Positioned(
+                    top: 4,
+                    right: 4,
+                    child: IconButton(
+                      onPressed: () =>
+                          unawaited(_removeLikedArtist(context, artist.id)),
+                      tooltip: 'Убрать из любимых',
+                      icon: const Icon(Icons.favorite_rounded, size: 18),
+                      style: IconButton.styleFrom(
+                        minimumSize: const Size(36, 36),
+                        iconSize: 18,
+                        backgroundColor: Theme.of(
+                          context,
+                        ).colorScheme.surface.withValues(alpha: 0.85),
+                        foregroundColor: Theme.of(context).colorScheme.primary,
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
         );
       },
     );
