@@ -11,6 +11,7 @@ import 'package:yayma/src/features/core/providers/notification_provider.dart';
 import 'package:yayma/src/features/core/views/widgets/common_ui.dart';
 import 'package:yayma/src/features/core/views/widgets/download_menu.dart';
 import 'package:yayma/src/features/core/views/widgets/responsive.dart';
+import 'package:yayma/src/features/core/views/widgets/tab_visibility.dart';
 import 'package:yayma/src/features/core/views/widgets/track_tile.dart';
 import 'package:yayma/src/features/library/providers/library_provider.dart';
 import 'package:yayma/src/features/playback/providers/playback_provider.dart';
@@ -161,8 +162,9 @@ class _AlbumViewState extends State<AlbumView> {
 
     return SignalBuilder(
       builder: (context) {
+        // No subscription while the screen is hidden.
         return CommonAsyncView<AlbumDetailsDto?>(
-          state: _albumAsync.value,
+          state: visibleSignal(context, _albumAsync),
           isEmpty: (album) => album == null,
           empty: const Center(child: Text('Альбом не найден')),
           builder: (context, album) {
@@ -170,10 +172,15 @@ class _AlbumViewState extends State<AlbumView> {
             return SignalBuilder(
               builder: (context) {
                 final cs = Theme.of(context).colorScheme;
-                final isLiked = likedAlbumsSignal.value.any(
-                  (likedAlbum) => likedAlbum.id == albumData.id,
+                // No subscriptions while the screen is hidden.
+                final isLiked = visibleSignal(
+                  context,
+                  likedAlbumsSignal,
+                ).any((likedAlbum) => likedAlbum.id == albumData.id);
+                final isDownloading = visibleSignal(
+                  context,
+                  _isDownloadingAlbum,
                 );
-                final isDownloading = _isDownloadingAlbum.value;
                 final isAndroid = Platform.isAndroid;
 
                 final albumActions = [

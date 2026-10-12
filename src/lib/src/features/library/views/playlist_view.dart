@@ -14,6 +14,7 @@ import 'package:yayma/src/features/core/views/widgets/app_cover.dart';
 import 'package:yayma/src/features/core/views/widgets/common_ui.dart';
 import 'package:yayma/src/features/core/views/widgets/download_menu.dart';
 import 'package:yayma/src/features/core/views/widgets/responsive.dart';
+import 'package:yayma/src/features/core/views/widgets/tab_visibility.dart';
 import 'package:yayma/src/features/core/views/widgets/track_tile.dart';
 import 'package:yayma/src/features/library/providers/library_provider.dart';
 import 'package:yayma/src/features/playback/providers/playback_provider.dart';
@@ -104,8 +105,10 @@ class _PlaylistViewState extends State<PlaylistView> {
 
     return SignalBuilder(
       builder: (context) {
-        final meta = _playlistMetadata.value;
-        final state = _playlistAsync.value;
+        // No subscriptions while the screen is hidden (local signals keep
+        // loading in the background, the UI just doesn't rebuild for it).
+        final meta = visibleSignal(context, _playlistMetadata);
+        final state = visibleSignal(context, _playlistAsync);
 
         // Show full loader only if we have NO data yet
         if (meta == null && state.isLoading) {

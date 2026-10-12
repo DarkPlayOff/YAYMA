@@ -9,6 +9,7 @@ import 'package:yayma/src/features/core/views/widgets/common_ui.dart';
 import 'package:yayma/src/features/core/views/widgets/horizontal_shelf.dart';
 import 'package:yayma/src/features/core/views/widgets/media_card.dart';
 import 'package:yayma/src/features/core/views/widgets/responsive.dart';
+import 'package:yayma/src/features/core/views/widgets/tab_visibility.dart';
 import 'package:yayma/src/features/core/views/widgets/track_tile.dart';
 import 'package:yayma/src/features/library/views/add_to_playlist_dialog.dart';
 import 'package:yayma/src/features/playback/providers/playback_provider.dart';
@@ -52,7 +53,9 @@ class _SearchViewState extends State<SearchView> {
   Widget build(BuildContext context) {
     return SignalBuilder(
       builder: (context) {
-        final searchResultsAsync = searchResultsSignal.value;
+        // No subscription while the tab is hidden; results arriving in
+        // the background don't rebuild it, they are picked up on open.
+        final searchResultsAsync = visibleSignal(context, searchResultsSignal);
         final screenWidth = MediaQuery.sizeOf(context).width;
         final isNarrow = screenWidth < 600;
 

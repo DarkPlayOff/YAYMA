@@ -11,6 +11,7 @@ import 'package:yayma/src/features/core/views/widgets/app_cover.dart';
 import 'package:yayma/src/features/core/views/widgets/common_ui.dart';
 import 'package:yayma/src/features/core/views/widgets/download_menu.dart';
 import 'package:yayma/src/features/core/views/widgets/media_card.dart';
+import 'package:yayma/src/features/core/views/widgets/tab_visibility.dart';
 import 'package:yayma/src/features/core/views/widgets/track_tile.dart';
 import 'package:yayma/src/features/library/providers/library_provider.dart';
 import 'package:yayma/src/features/playback/providers/playback_provider.dart';
@@ -410,11 +411,12 @@ class _LikedTracksTabState extends State<_LikedTracksTab> {
     return SignalBuilder(
       builder: (context) {
         final cs = Theme.of(context).colorScheme;
-        final tracks = likedTracksSignal.value;
-        final query = librarySearchQuerySignal.value;
-        final isLoading = isLibraryLoadingSignal.value;
-        final loaded = likedTracksLoadedSignal.value;
-        final expected = likedTracksExpectedSignal.value;
+        // No subscriptions while the tab is hidden.
+        final tracks = visibleSignal(context, likedTracksSignal);
+        final query = visibleSignal(context, librarySearchQuerySignal);
+        final isLoading = visibleSignal(context, isLibraryLoadingSignal);
+        final loaded = visibleSignal(context, likedTracksLoadedSignal);
+        final expected = visibleSignal(context, likedTracksExpectedSignal);
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -473,9 +475,15 @@ class _LikedTracksTabState extends State<_LikedTracksTab> {
                   const SizedBox(width: 12),
                   SignalBuilder(
                     builder: (context) {
-                      final isDownloading =
-                          isDownloadingAllLikedTracksSignal.value;
-                      final downloadedTracks = downloadedTracksSignal.value;
+                      // No subscriptions while the tab is hidden.
+                      final isDownloading = visibleSignal(
+                        context,
+                        isDownloadingAllLikedTracksSignal,
+                      );
+                      final downloadedTracks = visibleSignal(
+                        context,
+                        downloadedTracksSignal,
+                      );
                       final allDownloaded =
                           tracks.isNotEmpty &&
                           tracks.every((t) => downloadedTracks.contains(t.id));
@@ -718,7 +726,8 @@ class _PlaylistsTab extends StatelessWidget {
 
     return SignalBuilder(
       builder: (context) {
-        final playlists = playlistsSignal.value;
+        // No subscription while the tab is hidden.
+        final playlists = visibleSignal(context, playlistsSignal);
 
         if (playlists.isEmpty) {
           return AppRefreshIndicator(
@@ -782,7 +791,8 @@ class _LikedAlbumsTab extends StatelessWidget {
 
     return SignalBuilder(
       builder: (context) {
-        final albums = likedAlbumsSignal.value;
+        // No subscription while the tab is hidden.
+        final albums = visibleSignal(context, likedAlbumsSignal);
 
         if (albums.isEmpty) {
           return AppRefreshIndicator(
@@ -867,7 +877,8 @@ class _LikedArtistsTab extends StatelessWidget {
 
     return SignalBuilder(
       builder: (context) {
-        final artists = likedArtistsSignal.value;
+        // No subscription while the tab is hidden.
+        final artists = visibleSignal(context, likedArtistsSignal);
 
         if (artists.isEmpty) {
           return AppRefreshIndicator(

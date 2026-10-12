@@ -9,6 +9,7 @@ import 'package:yayma/src/features/core/views/widgets/home_cover_widget.dart';
 import 'package:yayma/src/features/core/views/widgets/lyrics_view.dart';
 import 'package:yayma/src/features/core/views/widgets/quality_selector.dart';
 import 'package:yayma/src/features/core/views/widgets/responsive.dart';
+import 'package:yayma/src/features/core/views/widgets/tab_visibility.dart';
 import 'package:yayma/src/features/core/views/widgets/track_elements.dart';
 import 'package:yayma/src/features/playback/providers/playback_provider.dart';
 import 'package:yayma/src/features/playback/views/wave_view.dart';
@@ -25,7 +26,8 @@ class HomeView extends StatelessWidget {
           builder: (context) {
             final height = constraints.maxHeight;
             final width = constraints.maxWidth;
-            final showLyrics = showLyricsSignal.value;
+            // No subscription while the tab is hidden.
+            final showLyrics = visibleSignal(context, showLyricsSignal);
 
             var verticalSpacing = 40.0;
             var trackHeaderSpacing = 32.0;
@@ -152,7 +154,10 @@ class HomeView extends StatelessWidget {
                               Positioned.fill(
                                 child: SignalBuilder(
                                   builder: (context) {
-                                    final trackId = trackMetadataSignal().id;
+                                    final trackId = visibleSignal(
+                                      context,
+                                      trackMetadataSignal,
+                                    ).id;
                                     if (trackId == null) {
                                       return Center(
                                         child: Text(
@@ -234,7 +239,8 @@ class _HomeTrackHeaderState extends State<_HomeTrackHeader> {
   Widget build(BuildContext context) {
     return SignalBuilder(
       builder: (context) {
-        final meta = trackMetadataSignal();
+        // No subscription while the tab is hidden.
+        final meta = visibleSignal(context, trackMetadataSignal);
 
         return Column(
           crossAxisAlignment: widget.isNarrow
@@ -352,13 +358,17 @@ class _HomeMainControls extends StatelessWidget {
   Widget build(BuildContext context) {
     return SignalBuilder(
       builder: (context) {
-        final trackId = trackMetadataSignal().id;
-        final isPlaying = isPlayingSignal();
-        final isLiked = isLikedSignal();
-        final isDisliked = isDislikedSignal();
-        final isShuffled = isShuffledSignal();
-        final repeatMode = repeatModeSignal();
-        final accentColor = accentColorSignal.value;
+        // No subscriptions while the tab is hidden; fresh values are
+        // picked up by the single rebuild when the tab opens.
+        final trackId = visibleSignal(context, trackMetadataSignal).id;
+        final isPlaying = visibleSignal(context, isPlayingSignal);
+        final isLiked = visibleSignal(context, isLikedSignal);
+        final isDisliked = visibleSignal(context, isDislikedSignal);
+        final isShuffled = visibleSignal(context, isShuffledSignal);
+        final repeatMode = visibleSignal(context, repeatModeSignal);
+        // Frozen tab: no accent subscription while hidden, so track/color
+        // changes don't rebuild it. The fresh value is picked up on open.
+        final accentColor = visibleSignal<Color>(context, accentColorSignal);
         final scheme = Theme.of(context).colorScheme;
         final onSurface = scheme.onSurface;
         final onSurfaceVariant = scheme.onSurfaceVariant;

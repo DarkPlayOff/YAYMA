@@ -7,6 +7,7 @@ import 'package:yayma/src/features/core/providers/navigation_provider.dart';
 import 'package:yayma/src/features/core/theme/app_tokens.dart';
 import 'package:yayma/src/features/core/views/widgets/app_cover.dart';
 import 'package:yayma/src/features/core/views/widgets/hover_scale.dart';
+import 'package:yayma/src/features/core/views/widgets/tab_visibility.dart';
 import 'package:yayma/src/features/playback/providers/playback_provider.dart';
 import 'package:yayma/src/rust/api/models.dart';
 
@@ -22,9 +23,10 @@ class _HomeCoverWidgetState extends State<HomeCoverWidget> {
   Widget build(BuildContext context) {
     return SignalBuilder(
       builder: (context) {
-        final meta = trackMetadataSignal();
-        final showLyrics = showLyricsSignal.value;
-        final isPlaying = isPlayingSignal();
+        // No subscriptions while the tab is hidden.
+        final meta = visibleSignal(context, trackMetadataSignal);
+        final showLyrics = visibleSignal(context, showLyricsSignal);
+        final isPlaying = visibleSignal(context, isPlayingSignal);
         final height = MediaQuery.of(context).size.height;
         final width = MediaQuery.of(context).size.width;
         final isNarrow = width < 600;

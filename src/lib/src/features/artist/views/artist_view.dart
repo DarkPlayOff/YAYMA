@@ -12,6 +12,7 @@ import 'package:yayma/src/features/core/views/widgets/common_ui.dart';
 import 'package:yayma/src/features/core/views/widgets/horizontal_shelf.dart';
 import 'package:yayma/src/features/core/views/widgets/media_card.dart';
 import 'package:yayma/src/features/core/views/widgets/responsive.dart';
+import 'package:yayma/src/features/core/views/widgets/tab_visibility.dart';
 import 'package:yayma/src/features/core/views/widgets/track_tile.dart';
 import 'package:yayma/src/features/library/providers/library_provider.dart';
 import 'package:yayma/src/features/playback/providers/playback_provider.dart';
@@ -185,12 +186,14 @@ class _ArtistViewState extends State<ArtistView> {
     return SignalBuilder(
       builder: (context) {
         final cs = Theme.of(context).colorScheme;
-        if (_isError.value != null) {
-          return CommonErrorWidget(error: _isError.value!);
+        // No subscriptions while the screen is hidden (local signals keep
+        // loading in the background, the UI just doesn't rebuild for it).
+        if (visibleSignal(context, _isError) != null) {
+          return CommonErrorWidget(error: visibleSignal(context, _isError)!);
         }
 
-        final artist = _artist.value;
-        if (artist == null && _isLoading.value) {
+        final artist = visibleSignal(context, _artist);
+        if (artist == null && visibleSignal(context, _isLoading)) {
           return const CommonLoadingWidget();
         }
 
@@ -198,11 +201,12 @@ class _ArtistViewState extends State<ArtistView> {
           return const Center(child: Text('Артист не найден'));
         }
 
-        final tracks = _tracks.value;
-        final albums = _albums.value;
-        final isLiked = likedArtistsSignal.value.any(
-          (likedArtist) => likedArtist.id == artist.id,
-        );
+        final tracks = visibleSignal(context, _tracks);
+        final albums = visibleSignal(context, _albums);
+        final isLiked = visibleSignal(
+          context,
+          likedArtistsSignal,
+        ).any((likedArtist) => likedArtist.id == artist.id);
         final isAndroid = Platform.isAndroid;
         final monthlyText = formatMonthlyListeners(artist.monthlyListeners);
         final likesText = artist.likesCount != null

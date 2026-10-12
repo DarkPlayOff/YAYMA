@@ -14,6 +14,7 @@ import 'package:yayma/src/features/core/views/widgets/app_cover.dart';
 import 'package:yayma/src/features/core/views/widgets/download_menu.dart';
 import 'package:yayma/src/features/core/views/widgets/lyrics_view.dart';
 import 'package:yayma/src/features/core/views/widgets/responsive.dart';
+import 'package:yayma/src/features/core/views/widgets/tab_visibility.dart';
 import 'package:yayma/src/features/core/views/widgets/track_details_dialog.dart';
 import 'package:yayma/src/features/core/views/widgets/track_elements.dart';
 import 'package:yayma/src/features/library/providers/library_provider.dart';
@@ -147,7 +148,9 @@ class _CommonTrackTileState extends State<CommonTrackTile> {
         Widget buildContextMenu() {
           return SignalBuilder(
             builder: (watchContext) {
-              final playlists = playlistsSignal.value;
+              // Menu content is built lazily here; no subscription while
+              // the hosting tab is hidden.
+              final playlists = visibleSignal(watchContext, playlistsSignal);
               return AppContextMenu<String>(
                 onOpen: () => _isMenuOpen.value = true,
                 onClose: () {
@@ -292,7 +295,10 @@ class _CommonTrackTileState extends State<CommonTrackTile> {
                       ),
                     ],
                   ),
-                  if (downloadedTracksSignal.value.contains(widget.trackId))
+                  if (visibleSignal(
+                    watchContext,
+                    downloadedTracksSignal,
+                  ).contains(widget.trackId))
                     const AppContextMenuItem(
                       value: 'delete_downloaded',
                       label: 'Удалить из загрузок',
@@ -395,9 +401,12 @@ class _CommonTrackTileState extends State<CommonTrackTile> {
                                                 onTap: widget.onTitleTap,
                                                 child: SignalBuilder(
                                                   builder: (context) {
+                                                    // No subscription while the hosting tab is hidden.
                                                     final isCurrent =
-                                                        currentTrackIdSignal
-                                                                .value ==
+                                                        visibleSignal(
+                                                              context,
+                                                              currentTrackIdSignal,
+                                                            ) ==
                                                             widget.trackId;
 
                                                     return ValueListenableBuilder<
@@ -452,12 +461,17 @@ class _CommonTrackTileState extends State<CommonTrackTile> {
                                           ),
                                           SignalBuilder(
                                             builder: (context) {
+                                              // No subscriptions while the hosting tab is hidden.
                                               final isDownloading =
-                                                  downloadingTracksSignal.value
-                                                      .contains(widget.trackId);
+                                                  visibleSignal(
+                                                    context,
+                                                    downloadingTracksSignal,
+                                                  ).contains(widget.trackId);
                                               final isDownloaded =
-                                                  downloadedTracksSignal.value
-                                                      .contains(widget.trackId);
+                                                  visibleSignal(
+                                                    context,
+                                                    downloadedTracksSignal,
+                                                  ).contains(widget.trackId);
 
                                               if (!isDownloading &&
                                                   !isDownloaded) {
@@ -549,9 +563,11 @@ class _LeadingPlayingBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     return SignalBuilder(
       builder: (context) {
-        final isCurrent = currentTrackIdSignal.value == trackId;
+        // No subscriptions while the hosting tab is hidden.
+        final isCurrent =
+            visibleSignal(context, currentTrackIdSignal) == trackId;
         if (!isCurrent) return child;
-        final isPlaying = isPlayingSignal.value;
+        final isPlaying = visibleSignal(context, isPlayingSignal);
         final scheme = Theme.of(context).colorScheme;
         return Stack(
           clipBehavior: Clip.none,

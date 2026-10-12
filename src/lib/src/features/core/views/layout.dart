@@ -12,6 +12,7 @@ import 'package:yayma/src/features/core/providers/navigation_provider.dart';
 import 'package:yayma/src/features/core/views/layout/background.dart';
 import 'package:yayma/src/features/core/views/layout/navigation_bar.dart';
 import 'package:yayma/src/features/core/views/layout/player_bar.dart';
+import 'package:yayma/src/features/core/views/widgets/tab_visibility.dart';
 import 'package:yayma/src/features/home/views/home_view.dart';
 import 'package:yayma/src/features/library/views/library_view.dart';
 import 'package:yayma/src/features/library/views/playlist_view.dart';
@@ -209,11 +210,14 @@ class _RootBucket extends StatelessWidget {
           return const SizedBox.shrink();
         }
 
-        return Offstage(
-          offstage: !isVisible,
-          child: TickerMode(
-            enabled: isVisible,
-            child: Stack(children: _buildWindowStack(stack)),
+        return TabVisibility(
+          isVisible: isVisible,
+          child: Offstage(
+            offstage: !isVisible,
+            child: TickerMode(
+              enabled: isVisible,
+              child: Stack(children: _buildWindowStack(stack)),
+            ),
           ),
         );
       },

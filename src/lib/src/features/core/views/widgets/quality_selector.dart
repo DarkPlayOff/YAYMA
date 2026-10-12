@@ -6,6 +6,7 @@ import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/features/core/theme/app_tokens.dart';
 import 'package:yayma/src/features/core/views/widgets/app_context_menu.dart';
 import 'package:yayma/src/features/core/views/widgets/audio_settings.dart';
+import 'package:yayma/src/features/core/views/widgets/tab_visibility.dart';
 import 'package:yayma/src/features/playback/providers/playback_provider.dart';
 import 'package:yayma/src/rust/api/models.dart';
 
@@ -25,7 +26,9 @@ class CommonQualitySelector extends SignalWidget {
       builder: (context) {
         final quality = audioQualitySignal.value;
         final meta = trackMetadataSignal.value;
-        final accentColor = this.accentColor ?? accentColorSignal.value;
+        // No accent subscription while the hosting tab is hidden.
+        final accentColor =
+            this.accentColor ?? visibleSignal<Color>(context, accentColorSignal);
 
         final items = <AppContextMenuItem<dynamic>>[];
 
