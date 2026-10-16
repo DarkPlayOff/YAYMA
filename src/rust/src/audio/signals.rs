@@ -35,6 +35,9 @@ pub struct AudioSignals {
     pub codec: Signal<Option<String>>,
     pub discord_rpc: Signal<bool>,
     pub selected_device: Signal<Option<String>>,
+    /// False when the wave shader is disabled in settings — the bridge worker
+    /// skips VibeTick computation entirely (see workers.rs).
+    pub vibe_enabled: Signal<bool>,
     pub monitor: Arc<Monitor>,
     // Channel for notification of any signal change (except progress)
     pub changed: watch::Sender<()>,
@@ -77,6 +80,7 @@ impl AudioSignals {
             codec: Signal::new(None),
             discord_rpc: Signal::new(false),
             selected_device: Signal::new(None),
+            vibe_enabled: Signal::new(true),
             monitor: Arc::new(Monitor::new(1024)),
             changed: changed_tx,
             changed_rx,

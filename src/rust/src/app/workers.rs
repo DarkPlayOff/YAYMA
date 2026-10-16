@@ -82,11 +82,17 @@ pub fn spawn_bridge_worker(ctx: AppContext, mut shutdown_rx: watch::Receiver<boo
                     }));
                 }
                 _ = vibe_interval.tick() => {
+                    // Shader is disabled — skip tick computation entirely
+                    // (VibeEngine::tick + event dispatch), instead of merely
+                    // dropping it on the Dart side.
+                    if !audio_signals.vibe_enabled.get() {
+                        continue;
+                    }
                     let is_playing = audio_signals.is_playing.get();
                     if let Ok(mut vibe) = audio_signals.monitor.vibe.try_lock() {
-                        // Fetch bands only once the lock is held: vibe_bands()
-                        // swaps the peaks to zero, so reading it before a failed
-                        // try_lock would silently discard them.
+                        // Fetch bands only once the lock is held. vibe_bands()
+                        // is a non-destructive max-hold read, so a failed
+                        // try_lock here just skips this frame without loss.
                         let bands = audio_signals.monitor.vibe_bands();
                         vibe.set_playing(is_playing);
                         let uniforms = vibe.tick(bands);

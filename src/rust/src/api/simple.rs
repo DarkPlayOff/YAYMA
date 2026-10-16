@@ -221,6 +221,9 @@ pub async fn set_update_check_enabled(ctx: &AppContext, enabled: bool) {
 }
 
 pub async fn set_vibe_animation_enabled(ctx: &AppContext, enabled: bool) {
+    // Read by the bridge worker: when the shader is disabled, VibeTick
+    // computation is skipped entirely rather than just dropped on the Dart side.
+    ctx.audio.signals.vibe_enabled.set(enabled);
     let _ = ctx
         .core
         .db
