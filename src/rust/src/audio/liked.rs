@@ -1,8 +1,6 @@
 use crate::util::track::CleanId;
 use foldhash::HashSet;
 
-use yandex_music::model::collection::Collection;
-
 pub type LikedSnapshot = (HashSet<String>, HashSet<String>);
 pub type OrderedLikedSnapshot = (Vec<String>, HashSet<String>);
 
@@ -19,48 +17,20 @@ pub struct LikedCache {
 }
 
 impl LikedCache {
-    pub fn apply_collection(&mut self, collection: Collection) {
-        if let Some(tracks) = collection.liked_tracks {
-            self.liked_ids = tracks
-                .liked
-                .into_iter()
-                .map(|t| t.track_id.to_base_id().to_string())
-                .collect();
-            self.liked_ids_set = self.liked_ids.iter().cloned().collect();
-
-            self.disliked_ids = tracks
-                .disliked
-                .into_iter()
-                .map(|t| t.track_id.to_base_id().to_string())
-                .collect();
-            self.revision = Some(tracks.info.revision);
-        }
-        if let Some(albums) = collection.liked_albums {
-            self.liked_albums_ids = albums
-                .liked
-                .into_iter()
-                .map(|a| a.album_id as u32)
-                .collect();
-        }
-        if let Some(artists) = collection.liked_artists {
-            self.liked_artists_ids = artists
-                .liked
-                .into_iter()
-                .map(|a| a.artist_id.to_string())
-                .collect();
-            self.disliked_artists_ids = artists
-                .disliked
-                .into_iter()
-                .map(|a| a.artist_id.to_string())
-                .collect();
-        }
-        if let Some(playlists) = collection.liked_playlists {
-            self.liked_playlists_ids = playlists
-                .liked
-                .into_iter()
-                .map(|p| format!("{}:{}", p.composite_data.uid, p.composite_data.kind))
-                .collect();
-        }
+    /// Applies a full-pull `collection/sync` snapshot (only the liked-tracks
+    /// section is requested from the server, so that is all we handle).
+    pub fn apply_liked_tracks(
+        &mut self,
+        revision: u64,
+        liked_track_ids: Vec<String>,
+        disliked_track_ids: Vec<String>,
+    ) {
+        self.revision = Some(revision);
+        self.set_liked_ids(liked_track_ids);
+        self.disliked_ids = disliked_track_ids
+            .into_iter()
+            .map(|id| id.to_base_id().to_string())
+            .collect();
     }
 
     pub fn set_liked_ids(&mut self, ids: Vec<String>) {

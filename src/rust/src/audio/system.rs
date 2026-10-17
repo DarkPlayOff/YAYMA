@@ -6,7 +6,7 @@ use crate::{
         queue::QueueManager, queue::as_wave_seed, signals::AudioSignals, state::SystemState,
         stream_manager::StreamManager, yandex::YandexProvider,
     },
-    http::{ApiService, SessionExt},
+    http::{ApiService, LikedTracksSync, SessionExt},
 };
 
 #[cfg(not(any(target_os = "android")))]
@@ -794,28 +794,40 @@ impl AudioSystem {
         signals: AudioSignals,
         db_arc: Arc<tokio::sync::Mutex<crate::db::AppDatabase>>,
     ) {
-        // Revision-gated sync (official-client style): the server omits the
-        // section when our revision is current → skip DB + rebuild entirely.
+        // Revision-gated sync (official-client style): when our revision is
+        // current the server answers `likedTracks: {info}` with no `values`
+        // → skip DB + rebuild entirely.
         let revision = state.read().await.liked.revision;
         match api.sync_liked_tracks_collection(revision).await {
-            Ok(collection) => {
-                let Some(tracks) = &collection.liked_tracks else {
-                    // Section omitted: nothing changed since `revision`.
-                    tracing::debug!("Liked tracks unchanged (revision {:?})", revision);
-                    return;
+            Ok(outcome) => {
+                let (new_revision, count, ids) = match outcome {
+                    LikedTracksSync::Unchanged => {
+                        tracing::debug!("Liked tracks unchanged (revision {:?})", revision);
+                        return;
+                    }
+                    LikedTracksSync::Changed {
+                        revision: new_revision,
+                        liked_track_ids,
+                        disliked_track_ids,
+                    } => {
+                        // Belt and suspenders (the server should send no
+                        // `values` instead when unchanged).
+                        if Some(new_revision) == revision {
+                            return;
+                        }
+                        let count = liked_track_ids.len();
+                        {
+                            let mut state = state.write().await;
+                            state.liked.apply_liked_tracks(
+                                new_revision,
+                                liked_track_ids,
+                                disliked_track_ids,
+                            );
+                        }
+                        let ids = state.read().await.liked.ordered_snapshot().0;
+                        (new_revision, count, ids)
+                    }
                 };
-                // Belt and suspenders (the server should omit instead).
-                if Some(tracks.info.revision) == revision {
-                    return;
-                }
-                let new_revision = tracks.info.revision;
-                let count = tracks.liked.len();
-
-                {
-                    let mut state = state.write().await;
-                    state.liked.apply_collection(collection);
-                }
-                let ids = state.read().await.liked.ordered_snapshot().0;
 
                 let mut db = db_arc.lock().await;
                 let _ = db.save_liked_tracks(&ids).await;
