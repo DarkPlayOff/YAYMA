@@ -244,6 +244,7 @@ class _SearchResults extends StatelessWidget {
             SliverM3ESegmentedList(
               haptic: M3EHapticFeedback.light,
               itemCount: results.tracks.length,
+              addAutomaticKeepAlives: false,
               color: Colors.transparent,
               padding: EdgeInsets.symmetric(
                 horizontal: context.isNarrow ? 0 : 32,

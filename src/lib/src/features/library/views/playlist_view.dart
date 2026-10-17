@@ -440,6 +440,7 @@ class _PlaylistContentState extends State<_PlaylistContent> {
           SliverM3ESegmentedList(
             haptic: M3EHapticFeedback.light,
             itemCount: _localTracks.length,
+            addAutomaticKeepAlives: false,
             color: Colors.transparent,
             padding: EdgeInsets.symmetric(
               horizontal: context.isNarrow ? 0 : 40,

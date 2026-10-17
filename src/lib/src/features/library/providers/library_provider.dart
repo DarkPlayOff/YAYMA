@@ -246,7 +246,11 @@ Future<void> refreshLikedTracks({String? query, bool force = false}) async {
 
   void scheduleFlush() {
     if (_likedFlushTimer != null) return;
-    _likedFlushTimer = Timer(const Duration(milliseconds: 250), () {
+    // Huge lists: throttle UI rebuilds (each publish re-renders the list).
+    final delay = _likedAccum.length > 1000
+        ? const Duration(milliseconds: 1000)
+        : const Duration(milliseconds: 250);
+    _likedFlushTimer = Timer(delay, () {
       _likedFlushTimer = null;
       if (sub != _likedSub || !_likedFlushPending) return;
       publishAccum();
@@ -258,7 +262,13 @@ Future<void> refreshLikedTracks({String? query, bool force = false}) async {
   // loading flag and remember the count as the expected total.
   void restartIdleTimer() {
     _likedIdleTimer?.cancel();
-    _likedIdleTimer = Timer(const Duration(milliseconds: 500), () {
+    // Huge lists stream hundreds of chunks with slow gaps (parallel
+    // fetch_tracks still round-trips): don't declare "done" on a 500ms
+    // pause mid-load.
+    final idle = _likedAccum.length > 500
+        ? const Duration(milliseconds: 2000)
+        : const Duration(milliseconds: 500);
+    _likedIdleTimer = Timer(idle, () {
       _likedIdleTimer = null;
       if (sub != _likedSub) return;
       isLibraryLoadingSignal.value = false;

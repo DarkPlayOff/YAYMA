@@ -312,6 +312,7 @@ class _ArtistViewState extends State<ArtistView> {
             SliverM3ESegmentedList(
               haptic: M3EHapticFeedback.light,
               itemCount: tracks.length,
+              addAutomaticKeepAlives: false,
               color: Colors.transparent,
               padding: EdgeInsets.symmetric(
                 horizontal: context.isNarrow ? 0 : 16,

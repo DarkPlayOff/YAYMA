@@ -309,6 +309,7 @@ class _AlbumViewState extends State<AlbumView> {
                     SliverM3ESegmentedList(
                       haptic: M3EHapticFeedback.light,
                       itemCount: albumData.tracks.length,
+                      addAutomaticKeepAlives: false,
                       color: Colors.transparent,
                       padding: EdgeInsets.symmetric(
                         horizontal: context.isNarrow ? 0 : 16,
