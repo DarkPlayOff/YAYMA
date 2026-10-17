@@ -6,6 +6,7 @@ use crate::app::AppContext;
 use crate::frb_generated::StreamSink;
 use crate::util::track::{CleanId, like_entity_id};
 use foldhash::HashMapExt;
+use futures::StreamExt;
 
 /// Resolves the full `"id:album"` entity id for like/unlike HTTP requests.
 ///
@@ -644,16 +645,28 @@ async fn fetch_and_save_missing_metadata(
         return;
     }
 
-    for chunk in missing_ids.chunks(50) {
-        if let Ok(tracks) = ctx.core.api.fetch_tracks(chunk.to_vec()).await {
-            let mut db = ctx.core.db.lock().await;
-            for t in tracks {
-                let metadata_to_save = yandex_track_to_metadata(t);
-                if let Err(e) = db.upsert_track_metadata(metadata_to_save.clone()).await {
-                    tracing::error!("Failed to upsert track metadata in DB: {:?}", e);
-                }
-                metadata_map.insert(metadata_to_save.id.clone(), metadata_to_save);
+    // Huge libraries can miss thousands of metadata rows (cold DB after
+    // reinstall): fetch 50-chunks concurrently instead of one round-trip
+    // at a time. DB writes stay sequential under a single lock hold.
+    let api = ctx.core.api.clone();
+    let chunks: Vec<Vec<String>> = missing_ids.chunks(50).map(|c| c.to_vec()).collect();
+    let fetched: Vec<Vec<yandex_music::model::track::Track>> =
+        futures::stream::iter(chunks.into_iter().map(|chunk| {
+            let api = api.clone();
+            async move { api.fetch_tracks(chunk).await.ok().unwrap_or_default() }
+        }))
+        .buffer_unordered(4)
+        .collect()
+        .await;
+
+    let mut db = ctx.core.db.lock().await;
+    for tracks in fetched {
+        for t in tracks {
+            let metadata_to_save = yandex_track_to_metadata(t);
+            if let Err(e) = db.upsert_track_metadata(metadata_to_save.clone()).await {
+                tracing::error!("Failed to upsert track metadata in DB: {:?}", e);
             }
+            metadata_map.insert(metadata_to_save.id.clone(), metadata_to_save);
         }
     }
 }
