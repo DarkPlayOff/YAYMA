@@ -212,6 +212,10 @@ Future<void> refreshLikedTracks({String? query, bool force = false}) async {
   final ctx = appContextSignal.value;
   if (ctx == null) return;
 
+  // The unfiltered stream performs a server sync inline on (re)subscribe
+  // (see `liked_tracks_stream` in the Rust layer), so syncing again here is
+  // redundant and doubles the network round-trips on pull-to-refresh.
+
   // Cancel previous subscription immediately
   final oldSub = _likedSub;
   _likedSub = null;
@@ -337,6 +341,69 @@ Future<void> refreshLikedTracks({String? query, bool force = false}) async {
     },
   );
   _likedSub = sub;
+}
+
+/// Finds a cached DTO for optimistic like handling (full cache first).
+SimpleTrackDto? findLikedDto(String baseId) {
+  for (final t in _likedFullCache) {
+    if (t.id == baseId) return t;
+  }
+  for (final t in _likedAccum) {
+    if (t.id == baseId) return t;
+  }
+  return null;
+}
+
+/// Optimistic like/unlike for instant list feedback (mirrors the official
+/// client): mutates the visible list + full cache immediately; the Rust
+/// stream reconciles via reset shortly after, so a wrong guess is silently
+/// corrected. Removal needs only the id; insertion needs the DTO (without
+/// it the stream brings the track).
+void applyLikeOptimistic({required String trackId, SimpleTrackDto? track}) {
+  final baseId = trackId.split(':').first;
+  // Prefer the source DTO's authoritative flag (the queue DTO reflects the
+  // server's liked state); fall back to the local caches. Without this, a
+  // track liked server-side but absent from the not-yet-loaded liked caches
+  // would optimistically *insert* on an unlike toggle.
+  final liked =
+      (track?.isLiked ?? false) ||
+      _likedAccumIds.contains(baseId) ||
+      _likedFullCache.any((t) => t.id == baseId);
+  if (liked) {
+    _likedAccumIds.remove(baseId);
+    _likedAccum.removeWhere((t) => t.id == baseId);
+    _likedFullCache.removeWhere((t) => t.id == baseId);
+    likedTracksSignal.value = likedTracksSignal.value
+        .where((t) => t.id != baseId)
+        .toList();
+    return;
+  }
+  final dto = track;
+  if (dto == null) return;
+  // The source DTO (e.g. from the queue) may carry a composite id — normalize
+  // it to the base id the liked list keys by.
+  final normalized = SimpleTrackDto(
+    id: baseId,
+    title: dto.title,
+    version: dto.version,
+    artists: dto.artists,
+    album: dto.album,
+    albumId: dto.albumId,
+    durationMs: dto.durationMs,
+    coverUrl: dto.coverUrl,
+    isLiked: true,
+    isDisliked: dto.isDisliked,
+  );
+  if (_likedAccumIds.add(baseId)) _likedAccum.insert(0, normalized);
+  _likedFullCache.insert(0, normalized);
+  // Respect an active search filter: don't leak non-matching tracks into it.
+  final query = librarySearchQuerySignal.value.trim().toLowerCase();
+  if (query.isEmpty || _likedTrackMatchesQuery(normalized, query)) {
+    likedTracksSignal.value = [
+      normalized,
+      ...likedTracksSignal.value.where((t) => t.id != baseId),
+    ];
+  }
 }
 
 /// Local equivalent of Rust `track_dto_matches_query` (title/artists/album,

@@ -607,8 +607,25 @@ class PlaybackController {
   static Future<void> toggleRepeat() =>
       runRustAction((ctx) => rust.toggleRepeatMode(ctx: ctx));
   static Future<void> stop() => runRustAction((ctx) => rust.stop(ctx: ctx));
-  static Future<void> toggleLike({required String trackId}) =>
-      runRustAction((ctx) => rust.toggleLike(ctx: ctx, trackId: trackId));
+  static Future<void> toggleLike({required String trackId}) {
+    // Optimistic list update (instant); the Rust stream reconciles after.
+    // Unlike works by id; insertion needs the DTO: current queue first,
+    // then the liked cache (re-like).
+    final baseId = trackId.split(':').first;
+    SimpleTrackDto? dto;
+    try {
+      final queue = queueTracksSignal.value.value ?? const <SimpleTrackDto>[];
+      for (final t in queue) {
+        if (t.id.split(':').first == baseId) {
+          dto = t;
+          break;
+        }
+      }
+    } on Object catch (_) {}
+    dto ??= findLikedDto(baseId);
+    applyLikeOptimistic(trackId: trackId, track: dto);
+    return runRustAction((ctx) => rust.toggleLike(ctx: ctx, trackId: trackId));
+  }
   static Future<void> toggleDislike({required String trackId}) =>
       runRustAction((ctx) => rust.toggleDislike(ctx: ctx, trackId: trackId));
 
