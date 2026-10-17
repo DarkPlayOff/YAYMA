@@ -218,6 +218,12 @@ impl AppDatabase {
         Ok(())
     }
 
+    pub async fn delete_setting(&mut self, key: &str) -> DbResult<()> {
+        self.conn
+            .execute("DELETE FROM app_settings WHERE key = ?1", params![key])?;
+        Ok(())
+    }
+
     pub async fn update_cache_metadata(
         &mut self,
         url: &str,

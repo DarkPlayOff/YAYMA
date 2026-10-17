@@ -26,6 +26,14 @@ pub async fn clear_token() {
     if let Err(e) = TokenProvider::delete().await {
         tracing::error!("Failed to delete auth token: {:?}", e);
     }
+    // Drop the persisted liked-tracks revision so the next account starts
+    // with a full snapshot instead of someone else's revision.
+    if let Ok(database) = crate::app::get_database().await {
+        let mut db = database.lock().await;
+        if let Err(e) = db.delete_setting("liked_tracks_revision").await {
+            tracing::error!("Failed to delete liked revision: {:?}", e);
+        }
+    }
 }
 
 pub async fn login_with_token(token: String) -> Result<AppContext, AppError> {

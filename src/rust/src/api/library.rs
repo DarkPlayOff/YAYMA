@@ -85,6 +85,12 @@ pub async fn toggle_like(ctx: &AppContext, track_id: String) {
                     crate::audio::commands::AudioMessage::WaveLike(track_id)
                 };
                 let _ = audio_tx.send(msg).await;
+                // Reconcile the optimistic cache with server truth (concurrent
+                // edits from another client, partial failures). Cheap when in
+                // sync: the stream dedups identical id sets and skips rebuild.
+                let _ = audio_tx
+                    .send(crate::audio::commands::AudioMessage::SyncLiked)
+                    .await;
             }
             Err(e) => {
                 tracing::warn!("toggle_like API failed, rolling back: {:?}", e);
@@ -834,6 +840,22 @@ pub async fn liked_tracks_stream(
     let mut last_sent_disliked: foldhash::HashSet<String> = foldhash::HashSet::default();
     let mut last_sent_count: usize = 0;
     let mut first_run = true;
+
+    // Pull-to-refresh resubscribes: without a fresh server snapshot the
+    // rebuild below would just re-emit the stale LikedCache (likes added
+    // in another client appear only after restart / the 300s worker sync).
+    // Freshen inline; on failure sync keeps the cached snapshot, so this
+    // stays offline-safe. Filtered (search) subscriptions skip the network
+    // round-trip and read the snapshot.
+    if query_lower.is_none() {
+        crate::audio::system::AudioSystem::sync_liked_collection_with(
+            ctx.core.api.clone(),
+            ctx.audio.state.clone(),
+            ctx.audio.signals.clone(),
+            ctx.core.db.clone(),
+        )
+        .await;
+    }
 
     loop {
         let (liked_ids, disliked_ids_set) =

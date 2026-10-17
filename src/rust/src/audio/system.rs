@@ -138,8 +138,11 @@ impl AudioSystem {
         {
             let mut db = db.lock().await;
             if let Ok(ids) = db.load_liked_tracks().await {
+                let revision: Option<u64> =
+                    db.load_setting("liked_tracks_revision").await.ok().flatten();
                 let mut state = state.write().await;
                 state.liked.set_liked_ids(ids);
+                state.liked.revision = revision;
                 signals.library_changed.send_replace(());
             }
         }
@@ -791,21 +794,66 @@ impl AudioSystem {
         signals: AudioSignals,
         db_arc: Arc<tokio::sync::Mutex<crate::db::AppDatabase>>,
     ) {
-        if let Ok(ids) = api.fetch_liked_ids().await {
-            let count = ids.len();
+        // Revision-gated sync (official-client style): the server omits the
+        // section when our revision is current → skip DB + rebuild entirely.
+        let revision = state.read().await.liked.revision;
+        match api.sync_liked_tracks_collection(revision).await {
+            Ok(collection) => {
+                let Some(tracks) = &collection.liked_tracks else {
+                    // Section omitted: nothing changed since `revision`.
+                    tracing::debug!("Liked tracks unchanged (revision {:?})", revision);
+                    return;
+                };
+                // Belt and suspenders (the server should omit instead).
+                if Some(tracks.info.revision) == revision {
+                    return;
+                }
+                let new_revision = tracks.info.revision;
+                let count = tracks.liked.len();
 
-            let mut db = db_arc.lock().await;
-            let _ = db.save_liked_tracks(&ids).await;
+                {
+                    let mut state = state.write().await;
+                    state.liked.apply_collection(collection);
+                }
+                let ids = state.read().await.liked.ordered_snapshot().0;
 
-            {
-                let mut state = state.write().await;
-                state.liked.set_liked_ids(ids);
+                let mut db = db_arc.lock().await;
+                let _ = db.save_liked_tracks(&ids).await;
+                let _ = db.save_setting("liked_tracks_revision", &new_revision).await;
+                drop(db);
+
+                signals.library_changed.send_replace(());
+
+                tracing::info!(
+                    "Synced {} liked track IDs (revision {:?} -> {})",
+                    count,
+                    revision,
+                    new_revision
+                );
             }
-            signals.library_changed.send_replace(());
-
-            tracing::info!("Synced {} liked track IDs directly from API", count);
-        } else {
-            tracing::warn!("Failed to fetch liked track IDs");
+            Err(e) => {
+                tracing::warn!("Liked collection sync failed: {:?}", e);
+                // Legacy fallback (servers without collection/sync): full pull.
+                // No revision comes back, so the next sync retries the gated path.
+                match api.fetch_liked_ids().await {
+                    Ok(ids) => {
+                        let count = ids.len();
+                        {
+                            let mut state = state.write().await;
+                            state.liked.set_liked_ids(ids);
+                        }
+                        let liked_ids = state.read().await.liked.ordered_snapshot().0;
+                        let mut db = db_arc.lock().await;
+                        let _ = db.save_liked_tracks(&liked_ids).await;
+                        drop(db);
+                        signals.library_changed.send_replace(());
+                        tracing::info!("Synced {} liked track IDs (fallback full pull)", count);
+                    }
+                    Err(e) => {
+                        tracing::warn!("Liked fallback pull failed, keeping cache: {:?}", e);
+                    }
+                }
+            }
         }
     }
 }

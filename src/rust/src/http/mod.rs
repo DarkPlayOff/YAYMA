@@ -25,6 +25,7 @@ use yandex_music::{
             remove_disliked_artist::RemoveDislikedArtistOptions,
             remove_liked_artist::RemoveLikedArtistOptions,
         },
+        collection::sync::{CollectionSyncOption, CollectionSyncOptions},
         playlist::{
             add_liked_playlist::AddLikedPlaylistOptions,
             change_playlist_visibility::ChangePlaylistVisibilityOptions,
@@ -49,6 +50,7 @@ use yandex_music::{
     model::{
         album::Album,
         artist::Artist,
+        collection::Collection,
         info::{
             file_info::{Codec, Quality, TrackFileInfo},
             lyrics::LyricsFormat,
@@ -928,6 +930,21 @@ impl ApiService {
         let library = self.client.get_liked_tracks(&opts).await?;
 
         Ok(library.tracks.into_iter().map(|t| t.id).collect())
+    }
+
+    /// Revision-gated collection sync for liked tracks (mirrors the official
+    /// client): with a known `revision` the server omits the section when
+    /// unchanged; with `None` it returns the full snapshot.
+    pub async fn sync_liked_tracks_collection(
+        &self,
+        revision: Option<u64>,
+    ) -> Result<Collection> {
+        let option = match revision {
+            Some(rev) => CollectionSyncOption::new().revision(rev),
+            None => CollectionSyncOption::new().all_values_required(true),
+        };
+        let opts = CollectionSyncOptions::new().liked_tracks(option);
+        Ok(self.client.collection_sync(&opts).await?)
     }
 }
 
