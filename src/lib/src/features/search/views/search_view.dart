@@ -72,16 +72,7 @@ class _SearchViewState extends State<SearchView> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'Поиск',
-                    style: Theme.of(context).textTheme.displayMedium?.copyWith(
-                      fontSize: isNarrow ? 24 : 48,
-                      fontWeight: FontWeight.w900,
-                      color: Theme.of(context).colorScheme.onSurface,
-                      letterSpacing: -1.5,
-                      height: 1.05,
-                    ),
-                  ),
+                  const CommonPageTitle(title: 'Поиск'),
                   if (!isNarrow) const SizedBox(height: 24),
                   if (isNarrow) const SizedBox(height: 8),
                   TextField(

@@ -199,17 +199,8 @@ class _LibraryViewState extends State<LibraryView>
           ),
           child: Row(
             children: [
-              Expanded(
-                child: Text(
-                  'Библиотека',
-                  style: Theme.of(context).textTheme.displayMedium?.copyWith(
-                    fontSize: isNarrow ? 24 : 48,
-                    fontWeight: FontWeight.w900,
-                    color: Theme.of(context).colorScheme.onSurface,
-                    letterSpacing: -1.5,
-                    height: 1.05,
-                  ),
-                ),
+              const Expanded(
+                child: CommonPageTitle(title: 'Библиотека'),
               ),
               const SizedBox(width: 16),
               M3EButton.icon(

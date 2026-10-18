@@ -202,7 +202,6 @@ class _SettingsViewState extends State<SettingsView> {
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.sizeOf(context).width;
     final isNarrow = screenWidth < 600;
-    final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -217,15 +216,7 @@ class _SettingsViewState extends State<SettingsView> {
                 isNarrow ? 20 : 40,
                 isNarrow ? 20 : 40,
               ),
-              child: Text(
-                'Настройки',
-                style: Theme.of(context).textTheme.displayMedium?.copyWith(
-                  fontSize: isNarrow ? 28 : 48,
-                  fontWeight: FontWeight.w900,
-                  color: cs.onSurface,
-                  letterSpacing: -1,
-                ),
-              ),
+              child: const CommonPageTitle(title: 'Настройки'),
             ),
           ),
           SliverToBoxAdapter(

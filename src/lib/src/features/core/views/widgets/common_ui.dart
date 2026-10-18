@@ -90,6 +90,31 @@ class CommonErrorWidget extends StatelessWidget {
   }
 }
 
+/// Page-level title shown at the top of a root tab (Библиотека, Поиск,
+/// Настройки …). Single source of truth so every tab header renders at the
+/// same size.
+class CommonPageTitle extends StatelessWidget {
+  final String title;
+
+  const CommonPageTitle({required this.title, super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final isNarrow = context.isNarrow;
+
+    return Text(
+      title,
+      style: Theme.of(context).textTheme.displayMedium?.copyWith(
+        fontSize: isNarrow ? 24 : 48,
+        fontWeight: FontWeight.w900,
+        color: Theme.of(context).colorScheme.onSurface,
+        letterSpacing: -1.5,
+        height: 1.05,
+      ),
+    );
+  }
+}
+
 class CommonSectionTitle extends StatelessWidget {
   final String title;
   final EdgeInsets? padding;
