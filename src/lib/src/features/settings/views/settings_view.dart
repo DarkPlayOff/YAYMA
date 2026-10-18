@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:signals_flutter/signals_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:yayma/src/app/session.dart';
 import 'package:yayma/src/features/core/providers/navigation_provider.dart';
 import 'package:yayma/src/features/core/providers/notification_provider.dart';
@@ -131,10 +133,7 @@ class _SettingsViewState extends State<SettingsView> {
   }
 
   Future<void> _saveVibeRenderScale(double scale) async {
-    final normalized = scale.clamp(
-      minVibeRenderScale,
-      maxVibeRenderScale,
-    );
+    final normalized = scale.clamp(minVibeRenderScale, maxVibeRenderScale);
     vibeRenderScaleSignal.value = normalized;
     final ctx = appContextSignal.value;
     if (ctx != null) {
@@ -251,14 +250,11 @@ class _SettingsViewState extends State<SettingsView> {
                         title: 'Показывать волну',
                         subtitle: 'Динамический фон, реагирующий на музыку',
                         icon: Icons.waves_rounded,
-                        onTap: () => unawaited(
-                          _toggleVibeVisibility(!enabled),
-                        ),
+                        onTap: () => unawaited(_toggleVibeVisibility(!enabled)),
                         trailing: Switch(
                           value: enabled,
-                          onChanged: (value) => unawaited(
-                            _toggleVibeVisibility(value),
-                          ),
+                          onChanged: (value) =>
+                              unawaited(_toggleVibeVisibility(value)),
                         ),
                       );
                     },
@@ -286,9 +282,8 @@ class _SettingsViewState extends State<SettingsView> {
                                     vibeRenderScaleSignal.value = value;
                                   }
                                 : null,
-                            onChangeEnd: (value) => unawaited(
-                              _saveVibeRenderScale(value),
-                            ),
+                            onChangeEnd: (value) =>
+                                unawaited(_saveVibeRenderScale(value)),
                           ),
                         ),
                       );
@@ -302,14 +297,11 @@ class _SettingsViewState extends State<SettingsView> {
                         title: 'Размытие интерфейса',
                         subtitle: 'Размывать фон под панелями управления',
                         icon: Icons.blur_on_rounded,
-                        onTap: () => unawaited(
-                          _toggleBlurEffects(!enabled),
-                        ),
+                        onTap: () => unawaited(_toggleBlurEffects(!enabled)),
                         trailing: Switch(
                           value: enabled,
-                          onChanged: (value) => unawaited(
-                            _toggleBlurEffects(value),
-                          ),
+                          onChanged: (value) =>
+                              unawaited(_toggleBlurEffects(value)),
                         ),
                       );
                     },
@@ -466,42 +458,7 @@ class _SettingsViewState extends State<SettingsView> {
                   const SizedBox(height: 32),
                   const _SectionTitle(title: 'О приложении'),
                   const SizedBox(height: 20),
-                  Container(
-                    padding: EdgeInsets.all(isNarrow ? 18 : 24),
-                    decoration: BoxDecoration(
-                      color: cs.onSurface.withValues(alpha: 0.05),
-                      borderRadius: BorderRadius.circular(AppRadius.lg),
-                      border: Border.all(
-                        color: cs.onSurface.withValues(alpha: 0.1),
-                      ),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'YAYMA',
-                          style: TextStyle(
-                            color: cs.onSurface,
-                            fontSize: isNarrow ? 18 : 20,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        SignalBuilder(
-                          builder: (context) {
-                            final version = _versionSignal.value;
-                            return Text(
-                              'Альтернативный клиент для Яндекс Музыки.\nВерсия ${version.value ?? '...'}',
-                              style: TextStyle(
-                                color: cs.onSurfaceVariant,
-                                fontSize: isNarrow ? 14 : 16,
-                              ),
-                            );
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
+                  _AboutAppCard(versionSignal: _versionSignal),
                   const SizedBox(height: 8),
                   SignalBuilder(
                     builder: (context) {
@@ -554,7 +511,10 @@ class _GlobalHotkeysSettingsState extends State<_GlobalHotkeysSettings> {
     );
     if (!mounted || combo == null) return;
 
-    final error = await GlobalHotkeyService.updateBinding(binding.action, combo);
+    final error = await GlobalHotkeyService.updateBinding(
+      binding.action,
+      combo,
+    );
     if (!mounted || error == null) return;
     showAppError(error);
   }
@@ -635,13 +595,8 @@ class _GlobalHotkeysDialogState extends State<_GlobalHotkeysDialog> {
     return AppDialog(
       title: 'Горячие клавиши',
       content: ConstrainedBox(
-        constraints: BoxConstraints(
-          maxWidth: 560,
-          maxHeight: maxContentHeight,
-        ),
-        child: const SingleChildScrollView(
-          child: _GlobalHotkeysSettings(),
-        ),
+        constraints: BoxConstraints(maxWidth: 560, maxHeight: maxContentHeight),
+        child: const SingleChildScrollView(child: _GlobalHotkeysSettings()),
       ),
       actions: [
         SizedBox(
@@ -941,7 +896,9 @@ class _HotkeyRecorderState extends State<_HotkeyRecorder> {
                 : cs.onSurface.withValues(alpha: 0.06),
             borderRadius: BorderRadius.circular(AppRadius.sm),
             border: Border.all(
-              color: _focused ? cs.primary : cs.onSurface.withValues(alpha: 0.2),
+              color: _focused
+                  ? cs.primary
+                  : cs.onSurface.withValues(alpha: 0.2),
             ),
           ),
           child: Text(
@@ -994,6 +951,221 @@ class _SectionTitle extends StatelessWidget {
         color: Theme.of(context).colorScheme.primary,
         fontSize: isNarrow ? 20 : 24,
         fontWeight: FontWeight.w800,
+      ),
+    );
+  }
+}
+
+class _AboutAppCard extends StatelessWidget {
+  static const String _repoUrl = 'https://github.com/DarkPlayOff/YAYMA';
+
+  final FutureSignal<String> versionSignal;
+
+  const _AboutAppCard({required this.versionSignal});
+
+  Future<void> _openRepo() async {
+    final uri = Uri.parse(_repoUrl);
+    try {
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+        return;
+      }
+    } on Object catch (e) {
+      debugPrint('Error opening repository page: $e');
+    }
+    showAppError('Не удалось открыть страницу проекта');
+  }
+
+  String get _platform {
+    switch (Platform.operatingSystem) {
+      case 'windows':
+        return 'Windows';
+      case 'macos':
+        return 'macOS';
+      case 'linux':
+        return 'Linux';
+      case 'android':
+        return 'Android';
+      default:
+        return Platform.operatingSystem;
+    }
+  }
+
+  Widget _chip(
+    BuildContext context, {
+    required IconData icon,
+    required String label,
+    required Color foreground,
+    required Color background,
+    required Color border,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(AppRadius.full),
+        border: Border.all(color: border),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: foreground),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: TextStyle(
+              color: foreground,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isNarrow = context.isNarrow;
+    final logoSize = isNarrow ? 56.0 : 68.0;
+
+    return SizedBox(
+      width: double.infinity,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(7),
+                decoration: BoxDecoration(
+                  color: cs.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(AppRadius.md),
+                  border: Border.all(
+                    color: cs.onSurface.withValues(alpha: 0.08),
+                  ),
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(AppRadius.sm),
+                  child: Image.asset(
+                    'assets/icons/logo.webp',
+                    width: logoSize,
+                    height: logoSize,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) => SizedBox(
+                      width: logoSize,
+                      height: logoSize,
+                      child: Icon(
+                        Icons.graphic_eq_rounded,
+                        size: logoSize * 0.6,
+                        color: cs.primary,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              SizedBox(width: isNarrow ? 12 : 20),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'YAYMA',
+                      style: TextStyle(
+                        color: cs.onSurface,
+                        fontSize: isNarrow ? 24 : 30,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: -1,
+                        height: 1.05,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Yet Another Yandex Music App',
+                      style: TextStyle(
+                        color: cs.onSurfaceVariant,
+                        fontSize: isNarrow ? 13 : 14,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        SignalBuilder(
+                          builder: (context) {
+                            return _chip(
+                              context,
+                              icon: Icons.verified_rounded,
+                              label: versionSignal.value.map(
+                                data: (v) => 'Версия $v',
+                                error: (e, s) => 'Версия неизвестна',
+                                loading: () => 'Версия…',
+                              ),
+                              foreground: cs.primary,
+                              background: cs.primary.withValues(alpha: 0.14),
+                              border: cs.primary.withValues(alpha: 0.30),
+                            );
+                          },
+                        ),
+                        _chip(
+                          context,
+                          icon: Icons.devices_rounded,
+                          label: _platform,
+                          foreground: cs.onSurface,
+                          background: cs.onSurface.withValues(alpha: 0.06),
+                          border: cs.onSurface.withValues(alpha: 0.12),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              SizedBox(width: isNarrow ? 4 : 16),
+              if (isNarrow)
+                IconButton.filledTonal(
+                  onPressed: () => unawaited(_openRepo()),
+                  tooltip: 'Страница проекта на GitHub',
+                  icon: const Icon(Icons.code_rounded, size: 20),
+                )
+              else
+                OutlinedButton.icon(
+                  onPressed: () => unawaited(_openRepo()),
+                  icon: const Icon(Icons.code_rounded, size: 18),
+                  label: const Text('GitHub'),
+                ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          Divider(height: 1, color: cs.onSurface.withValues(alpha: 0.08)),
+          const SizedBox(height: 12),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                Icons.info_outline_rounded,
+                size: 16,
+                color: cs.onSurfaceVariant,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'YAYMA — независимый проект с открытым исходным кодом и не '
+                  'связан с Яндексом.',
+                  style: TextStyle(
+                    color: cs.onSurfaceVariant.withValues(alpha: 0.8),
+                    fontSize: 12,
+                    height: 1.4,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
