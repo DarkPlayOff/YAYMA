@@ -14,6 +14,7 @@ import 'package:yayma/src/features/playback/providers/audio_handler.dart';
 import 'package:yayma/src/features/playback/providers/lyrics_provider.dart';
 import 'package:yayma/src/features/playback/providers/playback_provider.dart';
 import 'package:yayma/src/features/search/providers/search_provider.dart';
+import 'package:yayma/src/features/settings/services/update_service.dart';
 import 'package:yayma/src/rust/api/auth.dart';
 import 'package:yayma/src/rust/api/simple.dart' as simple;
 import 'package:yayma/src/rust/app/context.dart';
@@ -25,6 +26,8 @@ class AppInit {
     SignalsObserver.instance = null;
 
     await RustLib.init();
+
+    unawaited(UpdateService.cleanupDownloadedApk());
 
     if (Platform.isAndroid) {
       await _initAudioService();

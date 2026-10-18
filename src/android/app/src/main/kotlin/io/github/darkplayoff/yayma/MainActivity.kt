@@ -1,6 +1,7 @@
 package io.github.darkplayoff.yayma
 
 import android.os.Bundle
+import androidx.core.content.FileProvider
 import com.ryanheise.audioservice.AudioServiceActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -10,9 +11,11 @@ import android.os.PowerManager
 import android.content.Context
 import android.content.Intent
 import android.provider.Settings
+import java.io.File
 
 class MainActivity : AudioServiceActivity() {
     private val CHANNEL = "io.github.darkplayoff.yayma/wifilock"
+    private val UPDATER_CHANNEL = "io.github.darkplayoff.yayma/updater"
     private var wifiLock: WifiManager.WifiLock? = null
     private var wakeLock: PowerManager.WakeLock? = null
 
@@ -42,6 +45,58 @@ class MainActivity : AudioServiceActivity() {
                 }
             }
         }
+
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, UPDATER_CHANNEL).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "getSupportedAbis" -> result.success(android.os.Build.SUPPORTED_ABIS.toList())
+                "canInstallPackages" -> result.success(canInstallPackages())
+                "requestInstallPermission" -> {
+                    requestInstallPermission()
+                    result.success(null)
+                }
+                "installApk" -> {
+                    val path = call.argument<String>("path")
+                    if (path == null) {
+                        result.error("invalid_args", "Missing APK path", null)
+                    } else {
+                        try {
+                            installApk(path)
+                            result.success(null)
+                        } catch (e: Exception) {
+                            result.error("install_failed", e.message, null)
+                        }
+                    }
+                }
+                else -> result.notImplemented()
+            }
+        }
+    }
+
+    private fun canInstallPackages(): Boolean =
+        packageManager.canRequestPackageInstalls()
+
+    private fun requestInstallPermission() {
+        if (canInstallPackages()) return
+        try {
+            val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
+                data = Uri.parse("package:$packageName")
+            }
+            startActivity(intent)
+        } catch (e: Exception) {
+            // Some ROMs may not expose this settings screen; ignore.
+        }
+    }
+
+    private fun installApk(path: String) {
+        val file = File(path)
+        require(file.exists()) { "APK not found: $path" }
+        val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, "application/vnd.android.package-archive")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        startActivity(intent)
     }
 
     private fun requestIgnoreBatteryOptimizations() {
