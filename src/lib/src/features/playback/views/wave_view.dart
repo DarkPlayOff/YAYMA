@@ -5,6 +5,7 @@ import 'package:m3e_core/m3e_core.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/features/core/views/widgets/responsive.dart';
+import 'package:yayma/src/features/core/views/widgets/smooth_scroll.dart';
 import 'package:yayma/src/features/playback/providers/playback_provider.dart';
 import 'package:yayma/src/features/playback/providers/wave_provider.dart';
 import 'package:yayma/src/rust/api/models.dart';
@@ -568,7 +569,7 @@ class _AllStationsSheet extends StatefulWidget {
 class _AllStationsSheetState extends State<_AllStationsSheet> {
   final FlutterSignal<String> _searchQuery = signal('');
   final _controller = TextEditingController();
-  final _scrollController = ScrollController();
+  final _scrollController = SmoothScrollController(debugLabel: 'stations');
 
   @override
   void dispose() {

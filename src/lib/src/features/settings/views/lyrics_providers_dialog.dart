@@ -5,6 +5,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:yayma/src/app/session.dart';
 import 'package:yayma/src/features/core/theme/app_tokens.dart';
 import 'package:yayma/src/features/core/views/widgets/common_ui.dart';
+import 'package:yayma/src/features/core/views/widgets/smooth_scroll.dart';
 import 'package:yayma/src/features/playback/providers/lyrics_provider.dart';
 import 'package:yayma/src/rust/api/content.dart' as rust;
 import 'package:yayma/src/rust/api/models.dart';
@@ -80,7 +81,7 @@ class _LyricsProvidersDialogState extends State<LyricsProvidersDialog> {
     final cs = Theme.of(context).colorScheme;
     final primaryColor = cs.primary;
 
-    return AppDialog(
+    final dialog = AppDialog(
       title: 'Источники текста песен',
       titleIcon: Icons.lyrics_rounded,
       titleStyle: TextStyle(
@@ -159,5 +160,6 @@ class _LyricsProvidersDialogState extends State<LyricsProvidersDialog> {
         AppDialog.closeButton(context),
       ],
     );
+    return SmoothScroll(child: dialog);
   }
 }

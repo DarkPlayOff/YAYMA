@@ -8,6 +8,7 @@ import 'package:yayma/src/features/core/theme/app_tokens.dart';
 import 'package:yayma/src/features/core/views/widgets/app_context_menu.dart';
 import 'package:yayma/src/features/core/views/widgets/app_cover.dart';
 import 'package:yayma/src/features/core/views/widgets/responsive.dart';
+import 'package:yayma/src/features/core/views/widgets/smooth_scroll.dart';
 import 'package:yayma/src/features/core/views/widgets/tab_visibility.dart';
 import 'package:yayma/src/features/core/views/widgets/track_elements.dart';
 import 'package:yayma/src/features/playback/providers/playback_provider.dart';
@@ -458,14 +459,16 @@ class CommonDetailSliverLayout extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scrollView = CustomScrollView(
-      controller: controller,
-      physics: onRefresh != null ? const AlwaysScrollableScrollPhysics() : null,
-      slivers: [
-        SliverToBoxAdapter(child: header),
-        ...slivers,
-        const SliverToBoxAdapter(child: SizedBox(height: 140)),
-      ],
+    final scrollView = SmoothScroll(
+      child: CustomScrollView(
+        controller: controller,
+        physics: onRefresh != null ? const AlwaysScrollableScrollPhysics() : null,
+        slivers: [
+          SliverToBoxAdapter(child: header),
+          ...slivers,
+          const SliverToBoxAdapter(child: SizedBox(height: 140)),
+        ],
+      ),
     );
     final refresh = onRefresh;
     if (refresh == null) return scrollView;

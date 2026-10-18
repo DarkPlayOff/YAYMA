@@ -12,6 +12,7 @@ import 'package:yayma/src/features/core/views/widgets/common_ui.dart';
 import 'package:yayma/src/features/core/views/widgets/horizontal_shelf.dart';
 import 'package:yayma/src/features/core/views/widgets/media_card.dart';
 import 'package:yayma/src/features/core/views/widgets/responsive.dart';
+import 'package:yayma/src/features/core/views/widgets/smooth_scroll.dart';
 import 'package:yayma/src/features/core/views/widgets/tab_visibility.dart';
 import 'package:yayma/src/features/core/views/widgets/track_tile.dart';
 import 'package:yayma/src/features/library/providers/library_provider.dart';
@@ -41,14 +42,15 @@ class _ArtistViewState extends State<ArtistView> {
   int _currentPage = 0;
   static const _pageSize = 30;
 
-  late final ScrollController _scrollController;
+  late final SmoothScrollController _scrollController;
   EffectCleanup? _refreshSub;
   var _lastRefreshSeen = 0;
 
   @override
   void initState() {
     super.initState();
-    _scrollController = ScrollController()..addListener(_onScroll);
+    _scrollController = SmoothScrollController(debugLabel: 'artist')
+      ..addListener(_onScroll);
     unawaited(_loadInitial());
     unawaited(refreshLikedArtists());
     _lastRefreshSeen = refreshRequestSignal.peek();

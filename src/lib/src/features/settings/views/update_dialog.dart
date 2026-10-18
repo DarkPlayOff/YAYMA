@@ -6,6 +6,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:yayma/src/features/core/theme/app_tokens.dart';
 import 'package:yayma/src/features/core/views/widgets/common_ui.dart';
+import 'package:yayma/src/features/core/views/widgets/smooth_scroll.dart';
 import 'package:yayma/src/features/settings/services/update_service.dart';
 
 class UpdateDialog extends StatefulWidget {
@@ -49,6 +50,7 @@ class _UpdateDialogState extends State<UpdateDialog> {
   bool _isLoading = false;
   String? _error;
   AppUpdateInfo? _info;
+  final _scrollController = SmoothScrollController(debugLabel: 'changelog');
 
   @override
   void initState() {
@@ -58,6 +60,12 @@ class _UpdateDialogState extends State<UpdateDialog> {
     } else {
       unawaited(_checkUpdates());
     }
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
   }
 
   Future<void> _checkUpdates() async {
@@ -250,6 +258,7 @@ class _UpdateDialogState extends State<UpdateDialog> {
                     ),
                   ),
                   child: SingleChildScrollView(
+                    controller: _scrollController,
                     child: _buildChangelog(context, info.changelog),
                   ),
                 ),

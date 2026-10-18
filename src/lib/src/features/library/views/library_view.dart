@@ -12,6 +12,7 @@ import 'package:yayma/src/features/core/views/widgets/app_cover.dart';
 import 'package:yayma/src/features/core/views/widgets/common_ui.dart';
 import 'package:yayma/src/features/core/views/widgets/download_menu.dart';
 import 'package:yayma/src/features/core/views/widgets/media_card.dart';
+import 'package:yayma/src/features/core/views/widgets/smooth_scroll.dart';
 import 'package:yayma/src/features/core/views/widgets/tab_visibility.dart';
 import 'package:yayma/src/features/core/views/widgets/track_tile.dart';
 import 'package:yayma/src/features/library/providers/library_provider.dart';
@@ -410,7 +411,7 @@ class _LikedTracksTabState extends State<_LikedTracksTab> {
     final screenWidth = MediaQuery.sizeOf(context).width;
     final isNarrow = screenWidth < 600;
 
-    return SignalBuilder(
+    final body = SignalBuilder(
       builder: (context) {
         final cs = Theme.of(context).colorScheme;
         // No subscriptions while the tab is hidden.
@@ -622,6 +623,7 @@ class _LikedTracksTabState extends State<_LikedTracksTab> {
         );
       },
     );
+    return SmoothScroll(child: body);
   }
 }
 
@@ -728,7 +730,7 @@ class _PlaylistsTab extends StatelessWidget {
     final screenWidth = MediaQuery.sizeOf(context).width;
     final isNarrow = screenWidth < 600;
 
-    return SignalBuilder(
+    final body = SignalBuilder(
       builder: (context) {
         // No subscription while the tab is hidden.
         final playlists = visibleSignal(context, playlistsSignal);
@@ -784,6 +786,7 @@ class _PlaylistsTab extends StatelessWidget {
         );
       },
     );
+    return SmoothScroll(child: body);
   }
 }
 
@@ -795,7 +798,7 @@ class _LikedAlbumsTab extends StatelessWidget {
     final screenWidth = MediaQuery.sizeOf(context).width;
     final isNarrow = screenWidth < 600;
 
-    return SignalBuilder(
+    final body = SignalBuilder(
       builder: (context) {
         // No subscription while the tab is hidden.
         final albums = visibleSignal(context, likedAlbumsSignal);
@@ -856,6 +859,7 @@ class _LikedAlbumsTab extends StatelessWidget {
         );
       },
     );
+    return SmoothScroll(child: body);
   }
 }
 
@@ -883,7 +887,7 @@ class _LikedArtistsTab extends StatelessWidget {
     final screenWidth = MediaQuery.sizeOf(context).width;
     final isNarrow = screenWidth < 600;
 
-    return SignalBuilder(
+    final body = SignalBuilder(
       builder: (context) {
         // No subscription while the tab is hidden.
         final artists = visibleSignal(context, likedArtistsSignal);
@@ -971,6 +975,7 @@ class _LikedArtistsTab extends StatelessWidget {
         );
       },
     );
+    return SmoothScroll(child: body);
   }
 }
 

@@ -4,6 +4,7 @@ import 'package:yayma/src/features/core/providers/notification_provider.dart';
 import 'package:yayma/src/features/core/theme/app_tokens.dart';
 import 'package:yayma/src/features/core/views/widgets/common_ui.dart';
 import 'package:yayma/src/features/core/views/widgets/rust_cached_image.dart';
+import 'package:yayma/src/features/core/views/widgets/smooth_scroll.dart';
 import 'package:yayma/src/features/library/providers/library_provider.dart';
 import 'package:yayma/src/rust/api/models.dart';
 
@@ -24,7 +25,7 @@ class AddToPlaylistDialog extends SignalWidget {
     final cs = Theme.of(context).colorScheme;
     final playlists = playlistsSignal.value;
 
-    return AppDialog(
+    final dialog = AppDialog(
       title: 'Добавить в плейлист',
       content: SizedBox(
         width: 400,
@@ -94,5 +95,6 @@ class AddToPlaylistDialog extends SignalWidget {
       ),
       actions: [AppDialog.closeButton(context, 'Отмена')],
     );
+    return SmoothScroll(child: dialog);
   }
 }

@@ -14,6 +14,7 @@ import 'package:yayma/src/features/core/services/global_hotkey_service.dart';
 import 'package:yayma/src/features/core/theme/app_tokens.dart';
 import 'package:yayma/src/features/core/views/widgets/common_ui.dart';
 import 'package:yayma/src/features/core/views/widgets/responsive.dart';
+import 'package:yayma/src/features/core/views/widgets/smooth_scroll.dart';
 import 'package:yayma/src/features/library/providers/library_provider.dart';
 import 'package:yayma/src/features/settings/views/lyrics_providers_dialog.dart';
 import 'package:yayma/src/rust/api/content.dart' as rust;
@@ -36,6 +37,13 @@ class _SettingsViewState extends State<SettingsView> {
   late final FutureSignal<bool> _autoHideNavbarSignal;
   late final FutureSignal<bool> _closeToTraySignal;
   late final FutureSignal<bool> _updateCheckSignal;
+  final _scrollController = SmoothScrollController(debugLabel: 'settings');
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -199,6 +207,7 @@ class _SettingsViewState extends State<SettingsView> {
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: CustomScrollView(
+        controller: _scrollController,
         slivers: [
           SliverToBoxAdapter(
             child: Padding(
@@ -582,6 +591,14 @@ class _GlobalHotkeysDialog extends StatefulWidget {
 }
 
 class _GlobalHotkeysDialogState extends State<_GlobalHotkeysDialog> {
+  final _scrollController = SmoothScrollController(debugLabel: 'hotkeys');
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
   Future<void> _reset() async {
     await GlobalHotkeyService.resetDefaults();
     if (mounted) showAppSuccess('Горячие клавиши сброшены по умолчанию');
@@ -596,7 +613,10 @@ class _GlobalHotkeysDialogState extends State<_GlobalHotkeysDialog> {
       title: 'Горячие клавиши',
       content: ConstrainedBox(
         constraints: BoxConstraints(maxWidth: 560, maxHeight: maxContentHeight),
-        child: const SingleChildScrollView(child: _GlobalHotkeysSettings()),
+        child: SingleChildScrollView(
+          controller: _scrollController,
+          child: const _GlobalHotkeysSettings(),
+        ),
       ),
       actions: [
         SizedBox(

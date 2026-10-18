@@ -9,6 +9,7 @@ import 'package:yayma/src/features/core/views/widgets/common_ui.dart';
 import 'package:yayma/src/features/core/views/widgets/horizontal_shelf.dart';
 import 'package:yayma/src/features/core/views/widgets/media_card.dart';
 import 'package:yayma/src/features/core/views/widgets/responsive.dart';
+import 'package:yayma/src/features/core/views/widgets/smooth_scroll.dart';
 import 'package:yayma/src/features/core/views/widgets/tab_visibility.dart';
 import 'package:yayma/src/features/core/views/widgets/track_tile.dart';
 import 'package:yayma/src/features/library/views/add_to_playlist_dialog.dart';
@@ -25,6 +26,7 @@ class SearchView extends StatefulWidget {
 
 class _SearchViewState extends State<SearchView> {
   final TextEditingController _controller = TextEditingController();
+  final _scrollController = SmoothScrollController(debugLabel: 'search');
   EffectCleanup? _refreshSub;
   var _lastRefreshSeen = 0;
 
@@ -46,6 +48,7 @@ class _SearchViewState extends State<SearchView> {
   void dispose() {
     _refreshSub?.call();
     _controller.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -132,6 +135,7 @@ class _SearchViewState extends State<SearchView> {
                     return AppRefreshIndicator(
                       onRefresh: searchResultsSignal.refresh,
                       child: CustomScrollView(
+                        controller: _scrollController,
                         physics: const AlwaysScrollableScrollPhysics(),
                         slivers: [
                           SliverFillRemaining(
@@ -152,7 +156,10 @@ class _SearchViewState extends State<SearchView> {
                       ),
                     );
                   }
-                  return _SearchResults(results: results);
+                  return _SearchResults(
+                    results: results,
+                    controller: _scrollController,
+                  );
                 },
                 loading: () => const CommonLoadingWidget(),
                 error: (Object e, StackTrace? _) =>
@@ -197,14 +204,16 @@ class _EmptySearchState extends StatelessWidget {
 
 class _SearchResults extends StatelessWidget {
   final SearchResultsDto results;
+  final ScrollController controller;
 
-  const _SearchResults({required this.results});
+  const _SearchResults({required this.results, required this.controller});
 
   @override
   Widget build(BuildContext context) {
     return AppRefreshIndicator(
       onRefresh: searchResultsSignal.refresh,
       child: CustomScrollView(
+        controller: controller,
         physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
           if (results.artists.isNotEmpty) ...[

@@ -13,6 +13,7 @@ import 'package:yayma/src/app/init.dart';
 import 'package:yayma/src/app/session.dart';
 import 'package:yayma/src/features/core/providers/navigation_provider.dart';
 import 'package:yayma/src/features/core/views/layout.dart';
+import 'package:yayma/src/features/core/views/widgets/smooth_scroll.dart';
 import 'package:yayma/src/features/settings/services/update_service.dart';
 import 'package:yayma/src/features/settings/views/update_dialog.dart';
 import 'package:yayma/src/rust/api/auth.dart' as rust;
@@ -534,6 +535,7 @@ class _YandexDeviceLoginDialogState extends State<YandexDeviceLoginDialog> {
   bool _isLoading = true;
   String? _error;
   bool _isFinalized = false;
+  final _scrollController = SmoothScrollController(debugLabel: 'device-login');
 
   @override
   void initState() {
@@ -544,6 +546,7 @@ class _YandexDeviceLoginDialogState extends State<YandexDeviceLoginDialog> {
   @override
   void dispose() {
     _timer?.cancel();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -797,6 +800,7 @@ class _YandexDeviceLoginDialogState extends State<YandexDeviceLoginDialog> {
         ),
         body: Center(
           child: SingleChildScrollView(
+            controller: _scrollController,
             padding: const EdgeInsets.all(32),
             child: Column(
               mainAxisSize: MainAxisSize.min,
