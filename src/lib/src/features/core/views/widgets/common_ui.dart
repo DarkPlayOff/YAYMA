@@ -560,10 +560,15 @@ class _CommonProgressSliderState extends State<CommonProgressSlider> {
 
   void _onDragEnd(double val) {
     _isDragging = false;
-    setState(() {
-      _dragValue = val;
-      _dragTrackId = currentTrackIdSignal.peek();
-    });
+    _dragTrackId = currentTrackIdSignal.peek();
+    // M3ESlider reports widget.value here, which can be one frame stale: a
+    // fast press+release can complete within a single frame, so no rebuild
+    // happens between onTapDown and onTapUp and widget.value is still the
+    // pre-tap position — committing it makes the thumb snap back to where
+    // it was and the seek looks lost. onChanged already ran with the fresh
+    // tapped value and it is held in _dragValue, so prefer our own state;
+    // never overwrite it with val.
+    final commitValue = _dragValue ?? val;
     // M3ESlider emits onChangeEnd not only on release. When a press loses
     // the gesture arena to a drag (the user starts moving without having
     // released), flutter resolves the arena in favor of the drag by
@@ -575,7 +580,7 @@ class _CommonProgressSliderState extends State<CommonProgressSlider> {
     // timer — nothing is seeked mid-drag. On a real release no further
     // callbacks fire and the seek proceeds as usual.
     _confirmTimer?.cancel();
-    _confirmTimer = Timer(Duration.zero, () => _commitSeek(val));
+    _confirmTimer = Timer(Duration.zero, () => _commitSeek(commitValue));
   }
 
   void _commitSeek(double val) {

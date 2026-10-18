@@ -491,7 +491,12 @@ class _MiniProgressBarState extends State<_MiniProgressBar> {
                 },
                 onChangeEnd: (val) {
                   _isDragging = false;
-                  setState(() => _dragValueMs = val);
+                  // Keep the freshest held value: M3ESlider passes
+                  // widget.value here, which can be one frame stale — a
+                  // fast press+release completes within a single frame, so
+                  // widget.value is still the pre-tap position. onChanged
+                  // already held the fresh tapped value in _dragValueMs.
+                  final commitValue = _dragValueMs ?? val;
                   // M3ESlider also emits onChangeEnd mid-gesture when a
                   // press loses the arena to a drag (its onTapCancel path
                   // rejects before the drag accepts), committing a seek
@@ -503,7 +508,7 @@ class _MiniProgressBarState extends State<_MiniProgressBar> {
                     if (!mounted || _isDragging) return; // preview only
                     unawaited(
                       PlaybackController.seekTo(
-                        Duration(milliseconds: val.toInt()),
+                        Duration(milliseconds: commitValue.toInt()),
                       ),
                     );
                     // Free the held value (and the tooltip) shortly after
