@@ -147,11 +147,16 @@ class _MobileMiniPlayerState extends State<MobileMiniPlayer> {
         // the app shell (Positioned bottom offset in layout.dart), so it
         // must not be added here a second time.
         const bottomPadding = 8.0;
+        // Plate height (was 80 before the 8dp reduction).
+        const barHeight = 72.0;
+        // Horizontal inset of the progress bar so it clears the rounded
+        // bottom corners of the plate instead of hugging them.
+        const progressInset = 16.0;
 
         return Padding(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, bottomPadding),
           child: SizedBox(
-            height: 80,
+            height: barHeight,
             width: defaultWidth,
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
@@ -167,17 +172,17 @@ class _MobileMiniPlayerState extends State<MobileMiniPlayer> {
                     curve: Curves.easeOutCubic,
                     left: slideTranslation,
                     width: slideWidth,
-                    height: 80,
+                    height: barHeight,
                     child: Container(
                       decoration: BoxDecoration(
                         color: barColor.withValues(alpha: alpha),
-                        borderRadius: BorderRadius.circular(AppRadius.xl),
+                        borderRadius: BorderRadius.circular(AppRadius.xxxl),
                         border: Border.all(
                           color: colorScheme.onSurface.withValues(alpha: 0.08),
                         ),
                       ),
                       child: ClipRRect(
-                        borderRadius: BorderRadius.circular(AppRadius.xl),
+                        borderRadius: BorderRadius.circular(AppRadius.xxxl),
                         child: BackdropFilter(
                           enabled: blurEffectsEnabledSignal.value && blur > 0,
                           filter: ui.ImageFilter.blur(
@@ -210,13 +215,15 @@ class _MobileMiniPlayerState extends State<MobileMiniPlayer> {
                               ),
                               Positioned(
                                 bottom: 0,
-                                left: 0,
-                                right: 0,
+                                left: progressInset,
+                                right: progressInset,
                                 child: AnimatedOpacity(
                                   duration: _animationDuration,
                                   curve: Curves.easeOutCubic,
                                   opacity: buttonOpacity,
-                                  child: _MiniProgressBar(width: slideWidth),
+                                  child: _MiniProgressBar(
+                                    width: defaultWidth - progressInset * 2,
+                                  ),
                                 ),
                               ),
                             ],
@@ -305,7 +312,8 @@ class _MobileCover extends StatelessWidget {
             child: AppCover(
               coverUrl: meta.coverUrl,
               size: coverSize,
-              radius: AppRadius.sm,
+              circle: true,
+              placeholderIcon: Icons.music_note,
             ),
           ),
         );

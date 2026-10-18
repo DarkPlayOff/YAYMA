@@ -31,10 +31,10 @@ class _HomeCoverWidgetState extends State<HomeCoverWidget> {
         final width = MediaQuery.of(context).size.width;
         final isNarrow = width < 600;
 
-        var size = showLyrics ? 280.0 : 360.0;
-        if (height < 800) size = showLyrics ? 240.0 : 300.0;
-        if (height < 650) size = showLyrics ? 180.0 : 220.0;
-        if (isNarrow && !showLyrics) size = width * 0.75;
+        var size = showLyrics ? 320.0 : 420.0;
+        if (height < 800) size = showLyrics ? 280.0 : 360.0;
+        if (height < 650) size = showLyrics ? 200.0 : 260.0;
+        if (isNarrow && !showLyrics) size = width * 0.8;
 
         if (Platform.isAndroid) {
           return _AndroidCarousel(size: size);
@@ -59,7 +59,7 @@ class _HomeCoverWidgetState extends State<HomeCoverWidget> {
               width: size,
               height: size,
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(AppRadius.xxxl),
+                borderRadius: BorderRadius.circular(AppRadius.md),
               ),
               child: AnimatedSwitcher(
                 duration: const Duration(milliseconds: 500),
@@ -79,7 +79,7 @@ class _HomeCoverWidgetState extends State<HomeCoverWidget> {
                   key: ValueKey(meta.coverUrl),
                   coverUrl: meta.coverUrl,
                   size: size,
-                  radius: AppRadius.xxxl,
+                  radius: AppRadius.md,
                 ),
               ),
             ),
@@ -403,7 +403,7 @@ class _CarouselCard extends StatelessWidget {
         width: size,
         height: size,
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(size * (32 / 360)),
+          borderRadius: BorderRadius.circular(size * (AppRadius.md / 360)),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.25),
@@ -416,7 +416,7 @@ class _CarouselCard extends StatelessWidget {
           key: ValueKey(track.coverUrl),
           coverUrl: track.coverUrl,
           size: size,
-          radius: size * (32 / 360),
+          radius: size * (AppRadius.md / 360),
         ),
       ),
     );
