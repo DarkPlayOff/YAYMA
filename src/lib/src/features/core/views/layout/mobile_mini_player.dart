@@ -415,10 +415,13 @@ class _MiniProgressBar extends StatefulWidget {
 
 class _MiniProgressBarState extends State<_MiniProgressBar> {
   double? _dragValueMs;
+  bool _isDragging = false;
+  Timer? _commitTimer;
   Timer? _dragEndTimer;
 
   @override
   void dispose() {
+    _commitTimer?.cancel();
     _dragEndTimer?.cancel();
     super.dispose();
   }
@@ -475,24 +478,41 @@ class _MiniProgressBarState extends State<_MiniProgressBar> {
                   thumbHeight: 10,
                 ),
                 onChangeStart: (val) {
+                  // Abort a pending deferred commit: a new drag took over
+                  // the gesture, so the press jump must not seek (see
+                  // onChangeEnd below).
+                  _commitTimer?.cancel();
+                  _dragEndTimer?.cancel();
+                  _isDragging = true;
                   setState(() => _dragValueMs = val);
                 },
                 onChanged: (val) {
                   setState(() => _dragValueMs = val);
                 },
                 onChangeEnd: (val) {
+                  _isDragging = false;
                   setState(() => _dragValueMs = val);
-                  _dragEndTimer?.cancel();
-                  _dragEndTimer = Timer(const Duration(milliseconds: 500), () {
-                    if (mounted) {
-                      setState(() => _dragValueMs = null);
-                    }
+                  // M3ESlider also emits onChangeEnd mid-gesture when a
+                  // press loses the arena to a drag (its onTapCancel path
+                  // rejects before the drag accepts), committing a seek
+                  // while the finger is still down. Defer the actual seek
+                  // one event-loop turn: if the drag took over,
+                  // onChangeStart cancels this timer in the same dispatch.
+                  _commitTimer?.cancel();
+                  _commitTimer = Timer(Duration.zero, () {
+                    if (!mounted || _isDragging) return; // preview only
+                    unawaited(
+                      PlaybackController.seekTo(
+                        Duration(milliseconds: val.toInt()),
+                      ),
+                    );
+                    // Free the held value (and the tooltip) shortly after
+                    // the seek echo.
+                    _dragEndTimer?.cancel();
+                    _dragEndTimer = Timer(const Duration(milliseconds: 500), () {
+                      if (mounted) setState(() => _dragValueMs = null);
+                    });
                   });
-                  unawaited(
-                    PlaybackController.seekTo(
-                      Duration(milliseconds: val.toInt()),
-                    ),
-                  );
                 },
               ),
               if (_dragValueMs != null)

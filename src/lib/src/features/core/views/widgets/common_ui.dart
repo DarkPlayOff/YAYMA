@@ -518,6 +518,8 @@ class CommonProgressSlider extends StatefulWidget {
 class _CommonProgressSliderState extends State<CommonProgressSlider> {
   double? _dragValue;
   String? _dragTrackId;
+  bool _isDragging = false;
+  int _holdSeq = 0;
   Timer? _confirmTimer;
 
   @override
@@ -526,10 +528,13 @@ class _CommonProgressSliderState extends State<CommonProgressSlider> {
     super.dispose();
   }
 
+  /// Drops the held drag value. Never runs while the user is actively
+  /// dragging, so a late seek completion or fallback timer can't yank the
+  /// thumb out from under the finger.
   void _clearDrag() {
     _confirmTimer?.cancel();
     _confirmTimer = null;
-    if (mounted && _dragValue != null) {
+    if (mounted && !_isDragging && _dragValue != null) {
       setState(() {
         _dragValue = null;
         _dragTrackId = null;
@@ -538,7 +543,11 @@ class _CommonProgressSliderState extends State<CommonProgressSlider> {
   }
 
   void _onDragStart(double val) {
+    _holdSeq++; // invalidate pending seek-completion callbacks
+    // Also aborts a pending deferred commit (see _onDragEnd): if a new
+    // drag took over the gesture, the thumb jump must not seek.
     _confirmTimer?.cancel();
+    _isDragging = true;
     setState(() {
       _dragValue = val;
       _dragTrackId = currentTrackIdSignal.peek();
@@ -550,16 +559,41 @@ class _CommonProgressSliderState extends State<CommonProgressSlider> {
   }
 
   void _onDragEnd(double val) {
+    _isDragging = false;
     setState(() {
       _dragValue = val;
       _dragTrackId = currentTrackIdSignal.peek();
     });
-    // Fallback: don't stick forever if the seek echo never arrives
-    // (e.g. seek failed). The drag is normally cleared earlier once
-    // playerProgressSignal confirms the new position.
+    // M3ESlider emits onChangeEnd not only on release. When a press loses
+    // the gesture arena to a drag (the user starts moving without having
+    // released), flutter resolves the arena in favor of the drag by
+    // rejecting the tap first (GestureArenaManager._resolveInFavorOf), so
+    // M3ESlider's onTapCancel path commits onChangeEnd mid-gesture while
+    // the finger is still down. Defer the actual seek by one event-loop
+    // turn: if the drag took over, onChangeStart arrives within the same
+    // dispatch, _onDragStart flips _isDragging back and cancels this
+    // timer — nothing is seeked mid-drag. On a real release no further
+    // callbacks fire and the seek proceeds as usual.
     _confirmTimer?.cancel();
+    _confirmTimer = Timer(Duration.zero, () => _commitSeek(val));
+  }
+
+  void _commitSeek(double val) {
+    if (!mounted || _isDragging) return; // gesture kept running — preview only
+    // Fallback: don't stick forever if the seek never completes at all
+    // (e.g. a hung backend). The hold is normally dropped right after the
+    // seek call below returns: on success the new position has been
+    // applied, on failure the backend resets the position and publishes a
+    // correction — so no positional heuristic is needed here.
     _confirmTimer = Timer(const Duration(seconds: 2), _clearDrag);
-    unawaited(PlaybackController.seekTo(Duration(milliseconds: val.toInt())));
+    final seq = ++_holdSeq;
+    unawaited(
+      PlaybackController.seekTo(
+        Duration(milliseconds: val.toInt()),
+      ).whenComplete(() {
+        if (_holdSeq == seq) _clearDrag();
+      }),
+    );
   }
 
   @override
@@ -570,16 +604,16 @@ class _CommonProgressSliderState extends State<CommonProgressSlider> {
         builder: (context) {
           final progress = trackProgressSignal();
           final trackId = currentTrackIdSignal();
-          // Seek confirmed: backend echoed the new position (or track changed)
-          // — drop the held drag value so the live signal takes over.
-          if (_dragValue != null) {
-            final confirmed =
-                trackId != _dragTrackId ||
-                (progress.positionMs - _dragValue!).abs() < 1000;
-            if (confirmed) {
-              WidgetsBinding.instance.addPostFrameCallback((_) => _clearDrag());
-            }
+          // A seek hold that is no longer anchored to the current track
+          // (the track changed after the drag ended) is stale — drop it so
+          // the live position of the new track takes over.
+          if (_dragValue != null && !_isDragging && trackId != _dragTrackId) {
+            WidgetsBinding.instance.addPostFrameCallback((_) => _clearDrag());
           }
+          // Guard against a zero/unknown duration (e.g. streams). The
+          // non-compact branch used to pass a raw 0 max while the compact
+          // branch clamped to 1.0 — use the same guard for both.
+          final maxDur = progress.durationMs > 0 ? progress.durationMs : 1.0;
           final dur = progress.durationMs;
           final displayPosition = _dragValue ?? progress.positionMs;
           final trackHeight = widget.compact ? 4.0 : 6.0;
@@ -613,11 +647,8 @@ class _CommonProgressSliderState extends State<CommonProgressSlider> {
                         child: SizedBox(
                           height: 28,
                           child: M3ESlider(
-                            value: displayPosition.clamp(
-                              0,
-                              dur > 0 ? dur : 1.0,
-                            ),
-                            max: dur > 0 ? dur : 1.0,
+                            value: displayPosition.clamp(0, maxDur),
+                            max: maxDur,
                             decoration: expressSliderDecoration(
                               activeColor: accentColor,
                               trackHeight: trackHeight,
@@ -652,8 +683,8 @@ class _CommonProgressSliderState extends State<CommonProgressSlider> {
               : Column(
                   children: [
                     M3ESlider(
-                      value: displayPosition.clamp(0.0, dur),
-                      max: dur,
+                      value: displayPosition.clamp(0.0, maxDur),
+                      max: maxDur,
                       decoration: expressSliderDecoration(
                         activeColor: accentColor,
                         trackHeight: trackHeight,
