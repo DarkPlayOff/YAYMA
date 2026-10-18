@@ -6,7 +6,7 @@ analyzer:
   errors:
     lines_longer_than_80_chars: ignore
   exclude:
-    - "lib/src/rust/**" # Игнорируем автосгенерированный код Rust bridge
+    - "lib/src/rust/**" # Ignore auto-generated Rust bridge code
     - "test/**"
     - "build/**"
     - android/**
@@ -18,17 +18,17 @@ analyzer:
 
 linter:
   rules:
-    # Отключаем обязательное комментирование каждого метода (избыточно для приложения)
+    # Disable mandatory documentation for every method (redundant for an app)
     public_member_api_docs: false
     
-    # Сортировка конструкторов первыми — на любителя, отключим для гибкости
+    # Sorting constructors first is a matter of taste, disabling for flexibility
     sort_constructors_first: false
 
-    # Разрешим использовать print (хотя в проде лучше логгер)
+    # Allow using print (though a logger is better in production)
     avoid_print: false
 
-    # Предпочитаем одинарные кавычки, но strict lints иногда требуют двойные
+    # Prefer single quotes, but strict lints sometimes require double quotes
     prefer_single_quotes: true
     
-    # Не требуем явного типа везде, где он выводится (Dart 3+ отлично справляется)
+    # Don't require explicit types where they are inferred (Dart 3+ handles this well)
     always_specify_types: false

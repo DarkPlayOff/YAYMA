@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/app/session.dart';
+import 'package:yayma/src/features/core/providers/notification_provider.dart';
 import 'package:yayma/src/features/core/services/debouncer.dart';
 import 'package:yayma/src/features/core/services/rust_bridge.dart';
 import 'package:yayma/src/rust/api/content.dart';
@@ -20,7 +21,7 @@ final FlutterSignal<bool> isLibraryLoadingSignal = signal<bool>(false);
 final FlutterSignal<String> librarySearchQuerySignal = signal<String>('');
 
 /// Number of liked tracks received in the active unfiltered sequence.
-/// Drives the "Загружено N…" progress indicator.
+/// Drives the "Loaded N…" progress indicator.
 final FlutterSignal<int> likedTracksLoadedSignal = signal<int>(0);
 
 /// Last known full liked-tracks count (0 = unknown yet). Shown as "N / M".
@@ -35,6 +36,68 @@ final FlutterSignal<Set<String>> downloadedTracksSignal = signal<Set<String>>(
 final FlutterSignal<Set<String>> downloadingTracksSignal = signal<Set<String>>(
   {},
 );
+
+/// Cache of track membership in playlists: trackId -> set of kind.
+/// Populated on demand (track context menus).
+final FlutterSignal<Map<String, Set<int>>> trackPlaylistMembershipSignal =
+    signal<Map<String, Set<int>>>({});
+
+final Set<String> _membershipFetching = {};
+
+/// Max number of track ids kept in the membership cache. Dart maps are
+/// insertion-ordered, so the oldest entries get evicted first.
+const int _membershipCacheCap = 128;
+
+/// Writes [kinds] for [trackId] into the membership cache, capping its size.
+void _cacheMembership(String trackId, Set<int> kinds) {
+  final map = {...trackPlaylistMembershipSignal.value, trackId: kinds};
+  while (map.length > _membershipCacheCap) {
+    map.remove(map.keys.first);
+  }
+  trackPlaylistMembershipSignal.value = map;
+}
+
+/// Checks which playlists track [trackId] is already in
+/// (by fetching each playlist's details) and updates
+/// [trackPlaylistMembershipSignal].
+Future<void> refreshTrackPlaylistMembership(String trackId) async {
+  final ctx = appContextSignal.value;
+  if (ctx == null) return;
+  if (!_membershipFetching.add(trackId)) return;
+
+  try {
+    // Snapshot the playlist list once: `refreshPlaylists()` may complete
+    // concurrently (mutating the signal), and re-reading it after the
+    // await would desync indices from the details list (TOCTOU).
+    final playlists = playlistsSignal.value;
+    var failedFetches = 0;
+    final kinds = <int>{};
+    final detailsList = await Future.wait(
+      playlists.map((p) async {
+        final details = await runRustFetch(
+          (c) => getPlaylistDetails(ctx: c, uid: p.uid, kind: p.kind),
+          notifyErrors: false,
+        );
+        if (details == null) failedFetches++;
+        return details;
+      }),
+    );
+    for (final (index, details) in detailsList.indexed) {
+      if (details == null) continue;
+      if (details.tracks.any((t) => t.id == trackId)) {
+        kinds.add(playlists[index].kind);
+      }
+    }
+
+    // One aggregated notification instead of one per failed fetch.
+    if (failedFetches > 0) {
+      showAppError('Не удалось проверить плейлисты');
+    }
+    _cacheMembership(trackId, kinds);
+  } finally {
+    _membershipFetching.remove(trackId);
+  }
+}
 
 StreamSubscription<List<SimpleTrackDto>>? _likedSub;
 final Debouncer _librarySearchDebouncer = Debouncer();
@@ -473,6 +536,40 @@ void setLibrarySearchQuery(String query) {
   }, const Duration(milliseconds: 300));
 }
 
+/// Updates the membership cache: track added/removed from playlist [kind].
+/// [present] = true when adding, false when removing. No-op when the track
+/// has no cached entry yet (the next [refreshTrackPlaylistMembership] call
+/// will fill it in).
+void _updateTrackMembership(String trackId, int kind, {required bool present}) {
+  final setOf = trackPlaylistMembershipSignal.value[trackId];
+  if (setOf == null) return;
+  final updated = {...setOf};
+  if (present) {
+    updated.add(kind);
+  } else {
+    updated.remove(kind);
+  }
+  _cacheMembership(trackId, updated);
+}
+
+/// Drops [kind] from every cached membership set after its playlist
+/// was deleted, so stale checkmarks never resurface.
+void _pruneMembershipKind(int kind) {
+  final map = trackPlaylistMembershipSignal.value;
+  var changed = false;
+  final updatedMap = <String, Set<int>>{};
+  map.forEach((trackId, kinds) {
+    if (kinds.contains(kind)) {
+      updatedMap[trackId] = {...kinds}..remove(kind);
+      changed = true;
+    } else {
+      updatedMap[trackId] = kinds;
+    }
+  });
+  if (changed) trackPlaylistMembershipSignal.value = updatedMap;
+}
+
+/// [kind] — unique playlist identifier, [trackId] — the track.
 Future<bool> addTrackToPlaylistAction(
   int kind,
   String trackId,
@@ -486,7 +583,11 @@ Future<bool> addTrackToPlaylistAction(
       albumId: albumId,
     ),
   );
-  if (success) await refreshPlaylists();
+  if (success) {
+    // Refresh first: it must not clobber the membership update below.
+    await refreshPlaylists();
+    _updateTrackMembership(trackId, kind, present: true);
+  }
   return success;
 }
 
@@ -503,7 +604,11 @@ Future<bool> removeTrackFromPlaylistAction(
       albumId: albumId,
     ),
   );
-  if (success) await refreshPlaylists();
+  if (success) {
+    // Keep the cached checkmarks in sync with the removal.
+    _updateTrackMembership(trackId, kind, present: false);
+    await refreshPlaylists();
+  }
   return success;
 }
 
@@ -540,10 +645,11 @@ Future<bool> createPlaylistAction(
 }
 
 Future<bool> deletePlaylistAction(int kind) async {
-  final success = await runRustAction(
-    (ctx) => deletePlaylist(ctx: ctx, kind: kind),
-  );
-  if (success) await refreshPlaylists();
+  final success = await runRustAction((ctx) => deletePlaylist(ctx: ctx, kind: kind));
+  if (success) {
+    _pruneMembershipKind(kind);
+    await refreshPlaylists();
+  }
   return success;
 }
 

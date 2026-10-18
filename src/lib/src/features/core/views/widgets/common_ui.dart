@@ -90,8 +90,8 @@ class CommonErrorWidget extends StatelessWidget {
   }
 }
 
-/// Page-level title shown at the top of a root tab (Библиотека, Поиск,
-/// Настройки …). Single source of truth so every tab header renders at the
+/// Page-level title shown at the top of a root tab (Library, Search,
+/// Settings …). Single source of truth so every tab header renders at the
 /// same size.
 class CommonPageTitle extends StatelessWidget {
   final String title;

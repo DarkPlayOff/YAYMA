@@ -17,31 +17,37 @@ Future<bool> runRustAction(
     if (result is bool) return result;
     return true;
   } on Object catch (e) {
-    _handleRustError(e);
+    _handleRustError(e, true);
     return false;
   }
 }
 
 /// Safely fetches data from Rust.
 /// Returns null if there is no context or on error.
-Future<T?> runRustFetch<T>(Future<T> Function(AppContext ctx) fetcher) async {
+/// Set [notifyErrors] to false when the caller aggregates failures
+/// itself (e.g. fan-out fetches) to avoid one alert per call.
+Future<T?> runRustFetch<T>(
+  Future<T> Function(AppContext ctx) fetcher, {
+  bool notifyErrors = true,
+}) async {
   final ctx = appContextSignal.value;
   if (ctx == null) return null;
   try {
     return await fetcher(ctx);
   } on Object catch (e) {
-    _handleRustError(e);
+    _handleRustError(e, notifyErrors);
     return null;
   }
 }
 
-void _handleRustError(Object e) {
+void _handleRustError(Object e, bool notifyErrors) {
   final errorStr = e.toString();
   if (errorStr.contains('Invalid token or session expired') ||
       errorStr.contains('Unauthorized')) {
+    // Auth failures are always surfaced: the session must be re-established.
     showAppError('Сессия истекла. Пожалуйста, войдите снова.');
     unawaited(app_init.AppInit.logout());
-  } else {
+  } else if (notifyErrors) {
     showAppError(errorStr);
   }
 }

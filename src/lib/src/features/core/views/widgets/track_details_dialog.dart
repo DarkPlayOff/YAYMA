@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:material_ui/material_ui.dart';
 import 'package:signals_flutter/signals_flutter.dart';
@@ -10,13 +11,31 @@ import 'package:yayma/src/rust/api/models.dart';
 
 class TrackDetailsDialog extends StatefulWidget {
   final String trackId;
+  final bool asSheet;
 
-  const TrackDetailsDialog({required this.trackId, super.key});
+  const TrackDetailsDialog({
+    required this.trackId,
+    this.asSheet = false,
+    super.key,
+  });
 
   @override
   State<TrackDetailsDialog> createState() => _TrackDetailsDialogState();
 
   static void show(BuildContext context, String trackId) {
+    if (Platform.isAndroid) {
+      unawaited(
+        showModalBottomSheet<void>(
+          context: context,
+          useSafeArea: true,
+          isScrollControlled: true,
+          showDragHandle: true,
+          builder: (context) =>
+              TrackDetailsDialog(trackId: trackId, asSheet: true),
+        ),
+      );
+      return;
+    }
     unawaited(
       showDialog<void>(
         context: context,
@@ -45,31 +64,40 @@ class _TrackDetailsDialogState extends State<TrackDetailsDialog> {
       builder: (context) {
         final result = _detailsAsync.value;
         return result.map(
-          loading: () => const Dialog(
-            backgroundColor: Colors.transparent,
-            elevation: 0,
-            child: SizedBox(
-              width: 72,
-              height: 72,
-              child: CommonLoadingWidget(),
-            ),
-          ),
-          data: (details) => _buildDialog(
+          loading: () => widget.asSheet
+              ? _buildSheetBody(
+                  context,
+                  const SizedBox(
+                    height: 120,
+                    child: Center(child: CommonLoadingWidget()),
+                  ),
+                )
+              : const Dialog(
+                  backgroundColor: Colors.transparent,
+                  elevation: 0,
+                  child: SizedBox(
+                    width: 72,
+                    height: 72,
+                    child: CommonLoadingWidget(),
+                  ),
+                ),
+          data: (details) => _buildSurface(
             context,
             details == null
                 ? const Center(child: Text('Загрузка...'))
                 : _buildDetails(context, details),
           ),
-          error: (Object e, _) => _buildDialog(
-            context,
-            CommonErrorWidget(error: e.toString()),
-          ),
+          error: (Object e, _) =>
+              _buildSurface(context, CommonErrorWidget(error: e.toString())),
         );
       },
     );
   }
 
-  Widget _buildDialog(BuildContext context, Widget content) {
+  Widget _buildSurface(BuildContext context, Widget content) {
+    if (widget.asSheet) {
+      return _buildSheetBody(context, content);
+    }
     final cs = Theme.of(context).colorScheme;
     return AppDialog(
       title: 'О треке',
@@ -80,12 +108,41 @@ class _TrackDetailsDialogState extends State<TrackDetailsDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: Text(
-            'Закрыть',
-            style: TextStyle(color: cs.primary),
-          ),
+          child: Text('Закрыть', style: TextStyle(color: cs.primary)),
         ),
       ],
+    );
+  }
+
+  /// Container for the sheet mode: scrolling + padding, the drag handle
+  /// is drawn by showModalBottomSheet itself (showDragHandle).
+  Widget _buildSheetBody(BuildContext context, Widget content) {
+    final cs = Theme.of(context).colorScheme;
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'О треке',
+              style: TextStyle(
+                color: cs.onSurface,
+                fontWeight: FontWeight.bold,
+                fontSize: 18,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Flexible(
+              child: SingleChildScrollView(
+                child: SizedBox(width: double.infinity, child: content),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -119,11 +176,7 @@ class _TrackDetailsDialogState extends State<TrackDetailsDialog> {
         if (lyrics.isNotEmpty)
           _buildInfoRow(context, 'Автор текста', lyrics.join(', ')),
         if (platforms.isNotEmpty)
-          _buildInfoRow(
-            context,
-            'Источник фонограммы',
-            platforms.join(', '),
-          ),
+          _buildInfoRow(context, 'Источник фонограммы', platforms.join(', ')),
       ],
     );
   }
@@ -145,10 +198,7 @@ class _TrackDetailsDialogState extends State<TrackDetailsDialog> {
             ),
           ),
           const SizedBox(height: 4),
-          Text(
-            value,
-            style: TextStyle(color: cs.onSurface, fontSize: 16),
-          ),
+          Text(value, style: TextStyle(color: cs.onSurface, fontSize: 16)),
         ],
       ),
     );

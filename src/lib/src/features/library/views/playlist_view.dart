@@ -624,6 +624,7 @@ class _TrackTile extends StatelessWidget {
       version: track.version,
       artists: track.artists,
       albumId: track.albumId,
+      sheetCoverUrl: track.coverUrl,
       leading: SizedBox(
         width: 84,
         child: Row(

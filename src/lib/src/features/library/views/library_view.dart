@@ -128,7 +128,6 @@ class _LibraryViewState extends State<LibraryView>
                 children: [
                   TextField(
                     controller: controller,
-                    autofocus: true,
                     style: TextStyle(color: cs.onSurface),
                     decoration: InputDecoration(
                       hintText: 'Название',

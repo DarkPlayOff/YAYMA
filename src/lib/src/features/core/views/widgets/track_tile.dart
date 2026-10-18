@@ -15,6 +15,7 @@ import 'package:yayma/src/features/core/views/widgets/download_menu.dart';
 import 'package:yayma/src/features/core/views/widgets/lyrics_view.dart';
 import 'package:yayma/src/features/core/views/widgets/responsive.dart';
 import 'package:yayma/src/features/core/views/widgets/tab_visibility.dart';
+import 'package:yayma/src/features/core/views/widgets/track_context_sheet.dart';
 import 'package:yayma/src/features/core/views/widgets/track_details_dialog.dart';
 import 'package:yayma/src/features/core/views/widgets/track_elements.dart';
 import 'package:yayma/src/features/library/providers/library_provider.dart';
@@ -35,6 +36,10 @@ class CommonTrackTile extends StatefulWidget {
   final EdgeInsetsGeometry? contentPadding;
   final String? albumId;
 
+  /// Cover for the sheet menu header on Android, when [leading] is
+  /// not a cover (e.g. the track number in an album).
+  final String? sheetCoverUrl;
+
   const CommonTrackTile({
     required this.trackId,
     required this.title,
@@ -48,17 +53,34 @@ class CommonTrackTile extends StatefulWidget {
     this.onTitleTap,
     this.contentPadding,
     this.albumId,
+    this.sheetCoverUrl,
   });
 
   @override
   State<CommonTrackTile> createState() => _CommonTrackTileState();
 }
 
+const List<TrackSheetAction> _downloadSubActions = [
+  TrackSheetAction(
+    value: 'download_cache',
+    label: 'В кэш приложения',
+    icon: Icons.offline_bolt_rounded,
+  ),
+  TrackSheetAction(
+    value: 'download_files',
+    label: 'В отдельный файл',
+    icon: Icons.file_download_rounded,
+  ),
+];
+
+List<TrackSheetAction> _downloadSubActionsGetter() => _downloadSubActions;
+
 class _CommonTrackTileState extends State<CommonTrackTile> {
   final ValueNotifier<bool> _isHovered = ValueNotifier(false);
   final ValueNotifier<bool> _isPressed = ValueNotifier(false);
   final ValueNotifier<bool> _isTitleHovered = ValueNotifier(false);
   final ValueNotifier<bool> _isMenuOpen = ValueNotifier(false);
+  final ValueNotifier<int> _membershipVersion = ValueNotifier(0);
 
   @override
   void dispose() {
@@ -66,6 +88,7 @@ class _CommonTrackTileState extends State<CommonTrackTile> {
     _isPressed.dispose();
     _isTitleHovered.dispose();
     _isMenuOpen.dispose();
+    _membershipVersion.dispose();
     super.dispose();
   }
 
@@ -95,6 +118,230 @@ class _CommonTrackTileState extends State<CommonTrackTile> {
       );
     }
     return leading;
+  }
+
+  /// Open the bottom menu (sheet) with actions on a track.
+  Future<void> _showTrackBottomSheet() async {
+    final leading = widget.leading;
+    final cover = leading is AppCover ? leading : null;
+
+    final header = TrackContextSheetHeader(
+      title: widget.title,
+      version: widget.version,
+      artists: widget.artists,
+      coverUrl: cover?.coverUrl ?? cover?.url ?? widget.sheetCoverUrl,
+      localCoverUri: cover?.localUri,
+    );
+    final downloaded = downloadedTracksSignal.value;
+
+    Future<void> refreshMembership() {
+      // Refresh the cache in the background; increment the version on
+      // completion so the open sub-sheet redraws with up-to-date checkmarks.
+      return refreshTrackPlaylistMembership(widget.trackId).then((_) {
+        if (mounted) _membershipVersion.value++;
+      });
+    }
+
+    List<TrackSheetAction> buildPlaylistSubActions() {
+      final membershipKinds =
+          trackPlaylistMembershipSignal.value[widget.trackId] ?? const <int>{};
+      return [
+        ...playlistsSignal.value.map(
+          (p) => TrackSheetAction(
+            value: 'add_to_${p.kind}',
+            label: p.title,
+            icon: Icons.library_music_rounded,
+            isSelected: membershipKinds.contains(p.kind),
+            leading: p.coverUrl == null
+                ? null
+                : AppCover(coverUrl: p.coverUrl, url: p.coverUrl, size: 48),
+          ),
+        ),
+        const TrackSheetAction(
+          value: 'create_playlist',
+          label: 'Создать новый плейлист',
+          icon: Icons.add_rounded,
+        ),
+      ];
+    }
+
+    await showTrackContextSheet(
+      context,
+      header: header,
+      subSheetRebuildOn: _membershipVersion,
+      onSelected: (value) {
+        if (!mounted) return;
+        unawaited(_handleMenuAction(value));
+      },
+      actions: [
+        if (playlistsSignal.value.isNotEmpty)
+          TrackSheetAction(
+            label: 'Добавить в плейлист',
+            icon: Icons.playlist_add_rounded,
+            subSheetTitle: 'Добавить в плейлист',
+            onSubSheetOpen: refreshMembership,
+            subActions: buildPlaylistSubActions,
+          ),
+        if (widget.albumId != null)
+          const TrackSheetAction(
+            value: 'go_to_album',
+            label: 'Перейти к альбому',
+            icon: Icons.album_rounded,
+          ),
+        const TrackSheetAction(
+          value: 'lyrics',
+          label: 'Открыть текст',
+          icon: Icons.lyrics_rounded,
+        ),
+        const TrackSheetAction(
+          value: 'copy_link',
+          label: 'Скопировать ссылку',
+          icon: Icons.link_rounded,
+        ),
+        const TrackSheetAction(
+          value: 'wave',
+          label: 'Моя волна по треку',
+          icon: Icons.waves_rounded,
+        ),
+        const TrackSheetAction(
+          value: 'about',
+          label: 'О треке',
+          icon: Icons.info_outline_rounded,
+        ),
+        if (downloaded.contains(widget.trackId))
+          const TrackSheetAction(
+            value: 'delete_downloaded',
+            label: 'Удалить из загрузок',
+            icon: Icons.remove_circle_outline_rounded,
+            color: Color(0xFFE57373),
+          )
+        else
+          const TrackSheetAction(
+            label: 'Скачать',
+            icon: Icons.download_rounded,
+            subSheetTitle: 'Скачать',
+            subActions: _downloadSubActionsGetter,
+          ),
+      ],
+    );
+  }
+
+  Future<void> _handleMenuAction(String value) async {
+    if (!mounted) return;
+    _isHovered.value = false;
+
+    if (value.startsWith('add_to_')) {
+      final kindStr = value.substring(7);
+      final kind = int.tryParse(kindStr);
+      if (kind != null) {
+        final success = await addTrackToPlaylistAction(
+          kind,
+          widget.trackId,
+          widget.albumId,
+        );
+        if (success) {
+          showAppSuccess('Добавлено в плейлист');
+        } else {
+          showAppError('Ошибка при добавлении');
+        }
+      }
+      return;
+    }
+
+    switch (value) {
+      case 'go_to_album':
+        if (widget.albumId != null) {
+          navigateTo(AppSection.album, widget.albumId);
+        }
+      case 'lyrics':
+        LyricsReaderDialog.show(context, widget.trackId, widget.title);
+      case 'wave':
+        unawaited(
+          PlaybackController.startTrackWave(widget.trackId, widget.title),
+        );
+      case 'create_playlist':
+        await _createPlaylistAndAddTrack();
+      case 'about':
+        TrackDetailsDialog.show(context, widget.trackId);
+      case 'copy_link':
+        final link = widget.albumId != null
+            ? 'https://music.yandex.ru/album/${widget.albumId}/track/${widget.trackId}'
+            : 'https://music.yandex.ru/track/${widget.trackId}';
+        await Clipboard.setData(ClipboardData(text: link));
+        showAppSuccess('Ссылка скопирована');
+      case 'download_cache':
+        await _downloadTrack(DownloadMode.cache);
+      case 'delete_downloaded':
+        final ctx = appContextSignal.value;
+        if (ctx != null) {
+          try {
+            await rust.deleteDownloadedTrack(ctx: ctx, trackId: widget.trackId);
+            showAppSuccess('Трек удален из загрузок');
+            unawaited(refreshDownloadedTracks());
+          } on Object catch (e) {
+            showAppError('Ошибка: $e');
+          }
+        }
+      case 'download_files':
+        await _downloadTrack(DownloadMode.files);
+    }
+  }
+
+  Future<String?> _promptPlaylistTitle() {
+    final controller = TextEditingController();
+    Future<void> close([String? value]) async {
+      Navigator.of(context, rootNavigator: true).pop<String>(value);
+    }
+
+    return showDialog<String>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Новый плейлист'),
+          content: TextField(
+            controller: controller,
+            maxLength: 64,
+            decoration: const InputDecoration(hintText: 'Название'),
+            onSubmitted: close,
+          ),
+          actions: [
+            TextButton(onPressed: close, child: const Text('Отмена')),
+            FilledButton(
+              onPressed: () => close(controller.text),
+              child: const Text('Создать'),
+            ),
+          ],
+        );
+      },
+    ).whenComplete(controller.dispose);
+  }
+
+  /// Creates a private playlist with the entered name and immediately adds
+  /// the current track to it.
+  Future<void> _createPlaylistAndAddTrack() async {
+    final title = await _promptPlaylistTitle();
+    final trimmed = title?.trim();
+    if (trimmed == null || trimmed.isEmpty || !mounted) return;
+
+    final existingKinds = playlistsSignal.value.map((p) => p.kind).toSet();
+    final success = await createPlaylistAction(trimmed, isPublic: false);
+    if (!mounted) return;
+    if (!success) {
+      showAppError('Ошибка при создании плейлиста');
+      return;
+    }
+
+    final created = playlistsSignal.value
+        .where((p) => !existingKinds.contains(p.kind))
+        .toList();
+    if (created.isNotEmpty) {
+      await addTrackToPlaylistAction(
+        created.first.kind,
+        widget.trackId,
+        widget.albumId,
+      );
+      if (mounted) showAppSuccess("Создан плейлист '$trimmed'");
+    }
   }
 
   Future<void> _downloadTrack(DownloadMode mode) async {
@@ -151,107 +398,51 @@ class _CommonTrackTileState extends State<CommonTrackTile> {
               // Menu content is built lazily here; no subscription while
               // the hosting tab is hidden.
               final playlists = visibleSignal(watchContext, playlistsSignal);
+              final membershipKinds =
+                  visibleSignal(
+                    watchContext,
+                    trackPlaylistMembershipSignal,
+                  )[widget.trackId] ??
+                  const <int>{};
               return AppContextMenu<String>(
-                onOpen: () => _isMenuOpen.value = true,
+                onOpen: () {
+                  _isMenuOpen.value = true;
+                  unawaited(refreshTrackPlaylistMembership(widget.trackId));
+                },
                 onClose: () {
                   _isMenuOpen.value = false;
                   _isHovered.value = false;
                 },
                 onSelected: (value) async {
                   if (!mounted) return;
-                  _isHovered.value = false;
-
-                  if (value.startsWith('add_to_')) {
-                    final kindStr = value.substring(7);
-                    final kind = int.tryParse(kindStr);
-                    if (kind != null) {
-                      final success = await addTrackToPlaylistAction(
-                        kind,
-                        widget.trackId,
-                        widget.albumId,
-                      );
-                      if (success) {
-                        showAppSuccess(
-                          'Добавлено в плейлист',
-                        );
-                      } else {
-                        showAppError(
-                          'Ошибка при добавлении',
-                        );
-                      }
-                    }
-                    return;
-                  }
-
-                  switch (value) {
-                    case 'go_to_album':
-                      if (widget.albumId != null) {
-                        navigateTo(
-                          AppSection.album,
-                          widget.albumId,
-                        );
-                      }
-                    case 'lyrics':
-                      LyricsReaderDialog.show(
-                        context,
-                        widget.trackId,
-                        widget.title,
-                      );
-                    case 'wave':
-                      unawaited(
-                        PlaybackController.startTrackWave(
-                          widget.trackId,
-                          widget.title,
-                        ),
-                      );
-                    case 'about':
-                      TrackDetailsDialog.show(
-                        context,
-                        widget.trackId,
-                      );
-                    case 'copy_link':
-                      final link = widget.albumId != null
-                          ? 'https://music.yandex.ru/album/${widget.albumId}/track/${widget.trackId}'
-                          : 'https://music.yandex.ru/track/${widget.trackId}';
-                      await Clipboard.setData(
-                        ClipboardData(text: link),
-                      );
-                      showAppSuccess(
-                        'Ссылка скопирована',
-                      );
-                    case 'download_cache':
-                      await _downloadTrack(DownloadMode.cache);
-                    case 'delete_downloaded':
-                      final ctx = appContextSignal.value;
-                      if (ctx != null) {
-                        try {
-                          await rust.deleteDownloadedTrack(
-                            ctx: ctx,
-                            trackId: widget.trackId,
-                          );
-                          showAppSuccess('Трек удален из загрузок');
-                          unawaited(refreshDownloadedTracks());
-                        } on Object catch (e) {
-                          showAppError('Ошибка: $e');
-                        }
-                      }
-                    case 'download_files':
-                      await _downloadTrack(DownloadMode.files);
-                  }
+                  await _handleMenuAction(value);
                 },
                 items: [
                   AppContextMenuItem(
                     label: 'Добавить в плейлист',
                     icon: Icons.playlist_add_rounded,
-                    subItems: playlists
-                        .map(
-                          (p) => AppContextMenuItem(
-                            value: 'add_to_${p.kind}',
-                            label: p.title,
-                            icon: Icons.library_music_rounded,
-                          ),
-                        )
-                        .toList(),
+                    subItems: [
+                      ...playlists.map(
+                        (p) => AppContextMenuItem(
+                          value: 'add_to_${p.kind}',
+                          label: p.title,
+                          icon: Icons.library_music_rounded,
+                          isSelected: membershipKinds.contains(p.kind),
+                          leading: p.coverUrl == null
+                              ? null
+                              : AppCover(
+                                  coverUrl: p.coverUrl,
+                                  url: p.coverUrl,
+                                  size: 40,
+                                ),
+                        ),
+                      ),
+                      const AppContextMenuItem(
+                        value: 'create_playlist',
+                        label: 'Создать новый плейлист',
+                        icon: Icons.add_rounded,
+                      ),
+                    ],
                   ),
                   if (widget.albumId != null)
                     const AppContextMenuItem(
@@ -356,15 +547,10 @@ class _CommonTrackTileState extends State<CommonTrackTile> {
                             padding: effectivePadding,
                             decoration: BoxDecoration(
                               color: isMenuOpen
-                                  ? Theme.of(
-                                      context,
-                                    ).colorScheme.onSurface.withValues(
-                                      alpha: 0.08,
-                                    )
+                                  ? Theme.of(context).colorScheme.onSurface
+                                        .withValues(alpha: 0.08)
                                   : Colors.transparent,
-                              borderRadius: BorderRadius.circular(
-                                AppRadius.sm,
-                              ),
+                              borderRadius: BorderRadius.circular(AppRadius.sm),
                             ),
                             child: Row(
                               children: [
@@ -404,10 +590,10 @@ class _CommonTrackTileState extends State<CommonTrackTile> {
                                                     // No subscription while the hosting tab is hidden.
                                                     final isCurrent =
                                                         visibleSignal(
-                                                              context,
-                                                              currentTrackIdSignal,
-                                                            ) ==
-                                                            widget.trackId;
+                                                          context,
+                                                          currentTrackIdSignal,
+                                                        ) ==
+                                                        widget.trackId;
 
                                                     return ValueListenableBuilder<
                                                       bool
@@ -430,7 +616,8 @@ class _CommonTrackTileState extends State<CommonTrackTile> {
                                                                     : Theme.of(
                                                                         context,
                                                                       ).colorScheme.onSurface,
-                                                                fontWeight: isCurrent
+                                                                fontWeight:
+                                                                    isCurrent
                                                                     ? FontWeight
                                                                           .bold
                                                                     : FontWeight
@@ -521,7 +708,16 @@ class _CommonTrackTileState extends State<CommonTrackTile> {
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     if (Platform.isAndroid)
-                                      buildContextMenu()
+                                      IconButton(
+                                        icon: Icon(
+                                          Icons.more_horiz_rounded,
+                                          color: Theme.of(
+                                            context,
+                                          ).colorScheme.onSurfaceVariant,
+                                        ),
+                                        tooltip: 'Действия',
+                                        onPressed: _showTrackBottomSheet,
+                                      )
                                     else ...[
                                       if (!showHighlighted &&
                                           widget.trailing != null)
@@ -585,10 +781,7 @@ class _LeadingPlayingBadge extends StatelessWidget {
                   decoration: BoxDecoration(
                     color: scheme.primary,
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
-                      color: scheme.surface,
-                      width: 2,
-                    ),
+                    border: Border.all(color: scheme.surface, width: 2),
                     boxShadow: [
                       BoxShadow(
                         color: Colors.black.withValues(alpha: 0.3),

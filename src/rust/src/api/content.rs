@@ -626,7 +626,7 @@ pub async fn fetch_wave_stations(ctx: &AppContext) -> Vec<StationCategoryDto> {
 const ENABLED_KEY: &str = "lyrics_provider_enabled";
 
 /// Hard ceiling on a single provider's lookup, so one slow/hanging source
-/// can't stall the whole fallback chain (and the "Текст отсутствует" empty
+/// can't stall the whole fallback chain (and the "Текст отсутствует" (no lyrics) empty
 /// state in the UI) indefinitely.
 const PROVIDER_TIMEOUT: Duration = Duration::from_secs(10);
 

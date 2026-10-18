@@ -77,3 +77,5 @@ src/rust/target/
 src/lib/src/rust/app/context.dart
 src/lib/src/rust/audio/signals.dart
 src/lib/src/rust/lib.dart
+decompile/
+src/yandex/
