@@ -602,12 +602,17 @@ class PlaybackController {
   static Future<void> pause() => runRustAction((ctx) => rust.pause(ctx: ctx));
   static Future<void> next() => runRustAction((ctx) => rust.playNext(ctx: ctx));
   static Future<void> prev() => runRustAction((ctx) => rust.playPrev(ctx: ctx));
+
+  /// Always moves to the previous queue track, unlike [prev] which restarts
+  /// the current track once it has been playing for a while.
+  static Future<void> previousTrack() =>
+      runRustAction((ctx) => rust.playPreviousTrack(ctx: ctx));
   static Future<void> toggleShuffle() =>
       runRustAction((ctx) => rust.toggleShuffle(ctx: ctx));
   static Future<void> toggleRepeat() =>
       runRustAction((ctx) => rust.toggleRepeatMode(ctx: ctx));
   static Future<void> stop() => runRustAction((ctx) => rust.stop(ctx: ctx));
-  static Future<void> toggleLike({required String trackId}) {
+  static Future<bool> toggleLike({required String trackId}) async {
     // Optimistic list update (instant); the Rust stream reconciles after.
     // Unlike works by id; insertion needs the DTO: current queue first,
     // then the liked cache (re-like).
@@ -623,8 +628,16 @@ class PlaybackController {
       }
     } on Object catch (_) {}
     dto ??= findLikedDto(baseId);
-    applyLikeOptimistic(trackId: trackId, track: dto);
-    return runRustAction((ctx) => rust.toggleLike(ctx: ctx, trackId: trackId));
+    final applied = applyLikeOptimistic(trackId: trackId, track: dto);
+    final confirmed = await runRustAction(
+      (ctx) => rust.toggleLike(ctx: ctx, trackId: trackId),
+    );
+    // Rust rolled its state back; undo the optimistic list edit as well so
+    // both sides show the same (server) truth.
+    if (!confirmed) {
+      applyLikeOptimistic(trackId: trackId, track: dto, liked: !applied);
+    }
+    return confirmed;
   }
   static Future<void> toggleDislike({required String trackId}) =>
       runRustAction((ctx) => rust.toggleDislike(ctx: ctx, trackId: trackId));

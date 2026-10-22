@@ -16,6 +16,9 @@ pub enum AudioMessage {
     Stop,
     Next,
     Prev,
+    /// Unconditional previous-track skip: unlike `Prev`, it does not restart
+    /// the current track when the playhead is past the restart threshold.
+    PreviousTrack,
     Seek(Duration),
     SetVolume(u8),
     /// Applies a transient gain on top of the user volume without changing

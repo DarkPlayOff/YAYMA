@@ -5,6 +5,7 @@ import 'dart:ui' as ui;
 import 'package:m3e_core/m3e_core.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:signals_flutter/signals_flutter.dart';
+import 'package:yayma/src/features/core/theme/app_tokens.dart';
 import 'package:yayma/src/features/core/views/widgets/common_ui.dart';
 import 'package:yayma/src/features/core/views/widgets/tab_visibility.dart';
 import 'package:yayma/src/features/playback/providers/lyrics_provider.dart';
@@ -765,13 +766,48 @@ class LyricsReaderDialog extends StatefulWidget {
   final String trackId;
   final String title;
 
+  /// Mobile layout: rendered inside a modal bottom sheet instead of a dialog.
+  final bool bottomSheet;
+  final ScrollController? scrollController;
+
   const LyricsReaderDialog({
     required this.trackId,
     required this.title,
+    this.bottomSheet = false,
+    this.scrollController,
     super.key,
   });
 
   static void show(BuildContext context, String trackId, String title) {
+    if (Platform.isAndroid) {
+      unawaited(
+        showModalBottomSheet<void>(
+          context: context,
+          useSafeArea: true,
+          isScrollControlled: true,
+          showDragHandle: true,
+          shape: const RoundedRectangleBorder(
+            borderRadius: BorderRadius.vertical(
+              top: Radius.circular(AppRadius.xl),
+            ),
+          ),
+          builder: (context) => DraggableScrollableSheet(
+            expand: false,
+            initialChildSize: 0.85,
+            minChildSize: 0.5,
+            maxChildSize: 0.95,
+            builder: (context, scrollController) => LyricsReaderDialog(
+              trackId: trackId,
+              title: title,
+              bottomSheet: true,
+              scrollController: scrollController,
+            ),
+          ),
+        ),
+      );
+      return;
+    }
+
     unawaited(
       showDialog<void>(
         context: context,
@@ -792,6 +828,76 @@ class _LyricsReaderDialogState extends State<LyricsReaderDialog> {
       builder: (context) {
         final cs = Theme.of(context).colorScheme;
         final lyricsAsync = lyricsSignal(widget.trackId).value;
+
+        Widget buildLyrics() {
+          return lyricsAsync.map(
+            data: (result) {
+              final lines = result.items.whereType<LyricLine>().toList();
+              if (lines.isEmpty) {
+                return Center(
+                  child: Text(
+                    'Текст отсутствует',
+                    style: TextStyle(
+                      color: cs.onSurface.withValues(alpha: 0.24),
+                      fontSize: 18,
+                    ),
+                  ),
+                );
+              }
+              return ListView.builder(
+                controller: widget.scrollController,
+                itemCount: lines.length,
+                itemBuilder: (context, index) => Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 18),
+                  child: Text(
+                    lines[index].text,
+                    style: TextStyle(
+                      color: cs.onSurface,
+                      fontSize: 26,
+                      fontWeight: FontWeight.w800,
+                      height: 1.3,
+                      letterSpacing: -0.5,
+                    ),
+                  ),
+                ),
+              );
+            },
+            loading: () => const CommonLoadingWidget(),
+            error: (Object e, _) => CommonErrorWidget(error: e.toString()),
+          );
+        }
+
+        if (widget.bottomSheet) {
+          return SafeArea(
+            top: false,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
+                  child: Text(
+                    widget.title,
+                    style: TextStyle(
+                      color: cs.onSurface,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: -0.6,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: buildLyrics(),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+
         return AppDialog(
           surfaceTintColor: Colors.transparent,
           titleWidget: Row(
@@ -819,40 +925,7 @@ class _LyricsReaderDialogState extends State<LyricsReaderDialog> {
             width: 650,
             height: 800,
             padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: lyricsAsync.map(
-              data: (result) {
-                final lines = result.items.whereType<LyricLine>().toList();
-                if (lines.isEmpty) {
-                  return Center(
-                    child: Text(
-                      'Текст отсутствует',
-                      style: TextStyle(
-                        color: cs.onSurface.withValues(alpha: 0.24),
-                        fontSize: 18,
-                      ),
-                    ),
-                  );
-                }
-                return ListView.builder(
-                  itemCount: lines.length,
-                  itemBuilder: (context, index) => Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 18),
-                    child: Text(
-                      lines[index].text,
-                      style: TextStyle(
-                        color: cs.onSurface,
-                        fontSize: 26,
-                        fontWeight: FontWeight.w800,
-                        height: 1.3,
-                        letterSpacing: -0.5,
-                      ),
-                    ),
-                  ),
-                );
-              },
-              loading: () => const CommonLoadingWidget(),
-              error: (Object e, _) => CommonErrorWidget(error: e.toString()),
-            ),
+            child: buildLyrics(),
           ),
         );
       },

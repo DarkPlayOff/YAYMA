@@ -10,6 +10,29 @@ import 'package:yayma/src/features/playback/providers/playback_provider.dart';
 import 'package:yayma/src/features/playback/providers/wave_provider.dart';
 import 'package:yayma/src/rust/api/models.dart';
 
+/// Opens the "Моя волна" settings sheet (stations, moods, seeds).
+Future<void> showWaveSettingsSheet(BuildContext context) {
+  return showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    showDragHandle: true,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+    ),
+    builder: (context) => DraggableScrollableSheet(
+      initialChildSize: 0.6,
+      minChildSize: 0.4,
+      maxChildSize: 0.9,
+      expand: false,
+      snap: true,
+      builder: (context, scrollController) => WaveSettingsPanel(
+        onSelected: () => Navigator.pop(context),
+        scrollController: scrollController,
+      ),
+    ),
+  );
+}
+
 class WaveSettingsPanel extends StatelessWidget {
   final VoidCallback onSelected;
   final ScrollController? scrollController;

@@ -10,6 +10,7 @@ import 'package:yayma/src/features/artist/views/artist_view.dart';
 import 'package:yayma/src/features/auth/views/yandex_id_view.dart';
 import 'package:yayma/src/features/core/providers/navigation_provider.dart';
 import 'package:yayma/src/features/core/views/layout/background.dart';
+import 'package:yayma/src/features/core/views/layout/mobile_full_player.dart';
 import 'package:yayma/src/features/core/views/layout/navigation_bar.dart';
 import 'package:yayma/src/features/core/views/layout/player_bar.dart';
 import 'package:yayma/src/features/core/views/widgets/tab_visibility.dart';
@@ -152,7 +153,23 @@ class _AppLayoutState extends State<AppLayout> {
                                     MediaQuery.sizeOf(context).width < 600
                                     ? Alignment.bottomCenter
                                     : Alignment.centerLeft,
-                                child: const FloatingNavBar(),
+                                child: ValueListenableBuilder<double>(
+                                  valueListenable: mobileFullPlayerProgress,
+                                  builder: (context, progress, child) {
+                                    final hiddenAt = progress.clamp(0.0, 1.0);
+                                    return IgnorePointer(
+                                      ignoring: hiddenAt > 0,
+                                      child: Opacity(
+                                        opacity: 1 - hiddenAt,
+                                        child: Transform.translate(
+                                          offset: Offset(0, 120 * hiddenAt),
+                                          child: child,
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                  child: const FloatingNavBar(),
+                                ),
                               );
                             },
                           ),
@@ -181,6 +198,23 @@ class _AppLayoutState extends State<AppLayout> {
                             ),
                         ],
                       ),
+                    ),
+                  ),
+
+                  Positioned.fill(
+                    child: SignalBuilder(
+                      builder: (context) {
+                        if (!mobileFullPlayerOpenSignal.value) {
+                          return const SizedBox.shrink();
+                        }
+                        final origin = mobileFullPlayerOrigin.value;
+                        if (origin == null) return const SizedBox.shrink();
+                        return MobileFullPlayer(
+                          plateRect: origin.plateRect,
+                          coverRect: origin.coverRect,
+                          controller: mobileFullPlayerController,
+                        );
+                      },
                     ),
                   ),
                 ],

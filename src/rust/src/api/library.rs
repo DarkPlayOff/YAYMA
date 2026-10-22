@@ -32,7 +32,14 @@ async fn resolve_like_entity_id(ctx: &AppContext, track_id: &str) -> String {
     like_entity_id(&base_id, album_id.as_deref())
 }
 
-pub async fn toggle_like(ctx: &AppContext, track_id: String) {
+pub async fn track_is_liked(ctx: &AppContext, track_id: String) -> bool {
+    ctx.audio.state.read().await.liked.is_liked(&track_id)
+}
+
+/// Returns `true` when the server confirmed the like change. On failure the
+/// optimistic state is rolled back and `false` is returned so the caller can
+/// revert its own optimistic UI.
+pub async fn toggle_like(ctx: &AppContext, track_id: String) -> bool {
     let is_liked = {
         let state = ctx.audio.state.read().await;
         state.liked.is_liked(&track_id)
@@ -63,7 +70,9 @@ pub async fn toggle_like(ctx: &AppContext, track_id: String) {
         }
     }
 
-    // Perform API request in background (with optimistic-UI rollback on error)
+    // Perform the API request before returning so the caller learns whether
+    // the server accepted the change. The optimistic state above keeps the UI
+    // instant; this await only delays the result, not the visual feedback.
     // HTTP needs the full "id:album" entity id; cache/DB/Wave keep base id.
     let api = ctx.core.api.clone();
     let audio_tx = ctx.audio.tx.clone();
@@ -72,63 +81,65 @@ pub async fn toggle_like(ctx: &AppContext, track_id: String) {
     let db = ctx.core.db.clone();
     let expected = !is_liked;
     let entity_id = resolve_like_entity_id(ctx, &track_id).await;
-    tokio::spawn(async move {
-        let api_result = if is_liked {
-            api.remove_like_track(entity_id.clone()).await
-        } else {
-            api.add_like_track(entity_id.clone()).await
-        };
-        match api_result {
-            Ok(_) => {
-                let msg = if is_liked {
-                    crate::audio::commands::AudioMessage::WaveUnlike(track_id)
-                } else {
-                    crate::audio::commands::AudioMessage::WaveLike(track_id)
-                };
-                let _ = audio_tx.send(msg).await;
-                // Reconcile the optimistic cache with server truth (concurrent
-                // edits from another client, partial failures). Cheap when in
-                // sync: the stream dedups identical id sets and skips rebuild.
-                let _ = audio_tx
-                    .send(crate::audio::commands::AudioMessage::SyncLiked)
-                    .await;
-            }
-            Err(e) => {
-                tracing::warn!("toggle_like API failed, rolling back: {:?}", e);
-                // Don't overwrite a newer user action: roll back only if the
-                // current status still equals the optimistic value.
-                let should_rollback = {
-                    let s = state.read().await;
-                    s.liked.is_liked(&track_id) == expected
-                };
-                if should_rollback {
-                    {
-                        let mut s = state.write().await;
-                        s.liked.set_like_status(&track_id, is_liked);
-                    }
-                    {
-                        let mut db = db.lock().await;
-                        let base_id = track_id.to_base_id().to_string();
-                        if is_liked {
-                            // We optimistically removed -> restore
-                            if let Err(e) = db.add_liked_track(&base_id).await {
-                                tracing::warn!("toggle_like rollback DB add failed: {:?}", e);
-                            }
-                        } else if let Err(e) = db.remove_liked_track(&base_id).await {
-                            tracing::warn!("toggle_like rollback DB remove failed: {:?}", e);
-                        }
-                    }
-                    signals.library_changed.send_replace(());
-                    signals.changed.send_replace(());
-                }
-            }
+    let api_result = if is_liked {
+        api.remove_like_track(entity_id.clone()).await
+    } else {
+        api.add_like_track(entity_id.clone()).await
+    };
+    let confirmed = match api_result {
+        Ok(_) => {
+            let msg = if is_liked {
+                crate::audio::commands::AudioMessage::WaveUnlike(track_id)
+            } else {
+                crate::audio::commands::AudioMessage::WaveLike(track_id)
+            };
+            let _ = audio_tx.send(msg).await;
+            // Reconcile the optimistic cache with server truth (concurrent
+            // edits from another client, partial failures). Cheap when in
+            // sync: the stream dedups identical id sets and skips rebuild.
+            let _ = audio_tx
+                .send(crate::audio::commands::AudioMessage::SyncLiked)
+                .await;
+            true
         }
-    });
+        Err(e) => {
+            tracing::warn!("toggle_like API failed, rolling back: {:?}", e);
+            // Don't overwrite a newer user action: roll back only if the
+            // current status still equals the optimistic value.
+            let should_rollback = {
+                let s = state.read().await;
+                s.liked.is_liked(&track_id) == expected
+            };
+            if should_rollback {
+                {
+                    let mut s = state.write().await;
+                    s.liked.set_like_status(&track_id, is_liked);
+                }
+                {
+                    let mut db = db.lock().await;
+                    let base_id = track_id.to_base_id().to_string();
+                    if is_liked {
+                        // We optimistically removed -> restore
+                        if let Err(e) = db.add_liked_track(&base_id).await {
+                            tracing::warn!("toggle_like rollback DB add failed: {:?}", e);
+                        }
+                    } else if let Err(e) = db.remove_liked_track(&base_id).await {
+                        tracing::warn!("toggle_like rollback DB remove failed: {:?}", e);
+                    }
+                }
+                signals.library_changed.send_replace(());
+                signals.changed.send_replace(());
+            }
+            false
+        }
+    };
 
     // Vibe effect (if liking)
     if !is_liked && let Ok(mut vibe) = ctx.audio.signals.monitor.vibe.try_lock() {
         vibe.trigger_like();
     }
+
+    confirmed
 }
 
 pub async fn toggle_dislike(ctx: &AppContext, track_id: String) {

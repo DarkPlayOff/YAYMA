@@ -156,9 +156,9 @@ class _TrackInfoState extends State<_TrackInfo> {
                   : null,
               onHoverChanged: (h) => _isCoverHovered.value = h,
               child: AnimatedScale(
-                scale: isPlaying ? 1.0 : 0.96,
-                duration: const Duration(milliseconds: 350),
-                curve: Curves.easeInOutCubic,
+                scale: isPlaying ? 1.0 : AppCoverMotion.smallPausedScale,
+                duration: AppCoverMotion.duration,
+                curve: AppCoverMotion.curve,
                 child: AnimatedSwitcher(
                   duration: const Duration(milliseconds: 400),
                   child: Stack(

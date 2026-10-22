@@ -12,7 +12,6 @@ import 'package:yayma/src/features/core/views/widgets/responsive.dart';
 import 'package:yayma/src/features/core/views/widgets/tab_visibility.dart';
 import 'package:yayma/src/features/core/views/widgets/track_elements.dart';
 import 'package:yayma/src/features/playback/providers/playback_provider.dart';
-import 'package:yayma/src/features/playback/views/wave_view.dart';
 import 'package:yayma/src/rust/api/models.dart';
 
 class HomeView extends StatelessWidget {
@@ -46,6 +45,7 @@ class HomeView extends StatelessWidget {
             }
 
             final isNarrow = context.isNarrow;
+            final narrowContentWidth = (width - 48).clamp(0.0, double.infinity);
 
             final headerMaxWidth = (width - 48).clamp(320.0, 1400.0);
 
@@ -79,15 +79,15 @@ class HomeView extends StatelessWidget {
                                       _HomeTrackHeader(
                                         small: height < 750,
                                         isNarrow: true,
-                                        maxWidth: width - 48,
+                                        maxWidth: narrowContentWidth,
                                       ),
                                       const SizedBox(
                                         height: 8,
                                       ), // Reduced from trackHeaderSpacing
                                       SizedBox(
-                                        width: width - 48,
+                                        width: narrowContentWidth,
                                         child: CommonProgressSlider(
-                                          maxWidth: width - 48,
+                                          maxWidth: narrowContentWidth,
                                         ),
                                       ),
                                       const SizedBox(
@@ -471,7 +471,6 @@ class _HomeMainControls extends StatelessWidget {
                       ),
                     ],
                   ),
-                  if (Platform.isAndroid) const _WaveSettingsButton(),
                   Row(
                     children: [
                       IconButton(
@@ -605,67 +604,6 @@ class _HomeMainControls extends StatelessWidget {
           ],
         );
       },
-    );
-  }
-}
-
-class _WaveSettingsButton extends StatelessWidget {
-  const _WaveSettingsButton();
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: () {
-          unawaited(
-            showModalBottomSheet<void>(
-              context: context,
-              isScrollControlled: true,
-              showDragHandle: true,
-              shape: const RoundedRectangleBorder(
-                borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-              ),
-              builder: (context) => DraggableScrollableSheet(
-                initialChildSize: 0.6,
-                minChildSize: 0.4,
-                maxChildSize: 0.9,
-                expand: false,
-                snap: true,
-                builder: (context, scrollController) => WaveSettingsPanel(
-                  onSelected: () => Navigator.pop(context),
-                  scrollController: scrollController,
-                ),
-              ),
-            ),
-          );
-        },
-        borderRadius: BorderRadius.circular(24),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-          child: Center(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-              decoration: BoxDecoration(
-                color: Theme.of(
-                  context,
-                ).colorScheme.onSurface.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: Theme.of(
-                    context,
-                  ).colorScheme.onSurface.withValues(alpha: 0.1),
-                ),
-              ),
-              child: Icon(
-                Icons.tune_rounded,
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-                size: 16,
-              ),
-            ),
-          ),
-        ),
-      ),
     );
   }
 }

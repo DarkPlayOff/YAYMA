@@ -432,27 +432,34 @@ SimpleTrackDto? findLikedDto(String baseId) {
 /// stream reconciles via reset shortly after, so a wrong guess is silently
 /// corrected. Removal needs only the id; insertion needs the DTO (without
 /// it the stream brings the track).
-void applyLikeOptimistic({required String trackId, SimpleTrackDto? track}) {
+/// Returns the optimistic liked state that was applied (`true` = inserted).
+bool applyLikeOptimistic({
+  required String trackId,
+  SimpleTrackDto? track,
+  bool? liked,
+}) {
   final baseId = trackId.split(':').first;
   // Prefer the source DTO's authoritative flag (the queue DTO reflects the
   // server's liked state); fall back to the local caches. Without this, a
   // track liked server-side but absent from the not-yet-loaded liked caches
-  // would optimistically *insert* on an unlike toggle.
-  final liked =
-      (track?.isLiked ?? false) ||
-      _likedAccumIds.contains(baseId) ||
-      _likedFullCache.any((t) => t.id == baseId);
-  if (liked) {
+  // would optimistically *insert* on an unlike toggle. [liked] overrides both
+  // so a failed Rust toggle can restore the exact previous state.
+  final effectiveLiked =
+      liked ??
+      ((track?.isLiked ?? false) ||
+          _likedAccumIds.contains(baseId) ||
+          _likedFullCache.any((t) => t.id == baseId));
+  if (effectiveLiked) {
     _likedAccumIds.remove(baseId);
     _likedAccum.removeWhere((t) => t.id == baseId);
     _likedFullCache.removeWhere((t) => t.id == baseId);
     likedTracksSignal.value = likedTracksSignal.value
         .where((t) => t.id != baseId)
         .toList();
-    return;
+    return false;
   }
   final dto = track;
-  if (dto == null) return;
+  if (dto == null) return false;
   // The source DTO (e.g. from the queue) may carry a composite id — normalize
   // it to the base id the liked list keys by.
   final normalized = SimpleTrackDto(
@@ -477,6 +484,7 @@ void applyLikeOptimistic({required String trackId, SimpleTrackDto? track}) {
       ...likedTracksSignal.value.where((t) => t.id != baseId),
     ];
   }
+  return true;
 }
 
 /// Local equivalent of Rust `track_dto_matches_query` (title/artists/album,

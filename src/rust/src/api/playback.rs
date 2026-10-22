@@ -57,6 +57,14 @@ pub async fn play_prev(ctx: &AppContext) {
     let _ = ctx.audio.tx.send(AudioMessage::Prev).await;
 }
 
+/// Skips to the previous queue track regardless of the playhead position.
+/// The regular `prev` restarts the current track when it has played for a
+/// while; gestures that explicitly preview and select the previous cover
+/// must always change the track instead.
+pub async fn play_previous_track(ctx: &AppContext) {
+    let _ = ctx.audio.tx.send(AudioMessage::PreviousTrack).await;
+}
+
 pub async fn seek(ctx: &AppContext, position_ms: u32) {
     let _ = ctx
         .audio

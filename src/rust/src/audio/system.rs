@@ -462,6 +462,13 @@ impl AudioSystem {
                         .await;
                 }
             }
+            AudioMessage::PreviousTrack => {
+                if let Some(prev_track) = self.queue.get_previous_track() {
+                    self.controller
+                        .play_track(prev_track, false, Duration::ZERO, false)
+                        .await;
+                }
+            }
             AudioMessage::TrackEnded => {
                 self.on_track_ended().await;
             }

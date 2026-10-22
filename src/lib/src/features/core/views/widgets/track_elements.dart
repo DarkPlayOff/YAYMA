@@ -49,6 +49,9 @@ class ArtistNamesWidget extends StatelessWidget {
   final WrapAlignment alignment;
   final int? maxLines;
 
+  /// Overrides the default navigation, e.g. to close a sheet first.
+  final void Function(String artistId)? onArtistTap;
+
   const ArtistNamesWidget({
     required this.artists,
     super.key,
@@ -57,7 +60,12 @@ class ArtistNamesWidget extends StatelessWidget {
     this.hoverColor,
     this.alignment = WrapAlignment.start,
     this.maxLines,
+    this.onArtistTap,
   });
+
+  void _openArtist(String artistId) => onArtistTap != null
+      ? onArtistTap!(artistId)
+      : navigateTo(AppSection.artist, artistId);
 
   @override
   Widget build(BuildContext context) {
@@ -78,7 +86,7 @@ class ArtistNamesWidget extends StatelessWidget {
                 child: _SingleArtistName(
                   key: ValueKey('nav_artist_${artists[i].id}_$i'),
                   artist: artists[i],
-                  onTap: () => navigateTo(AppSection.artist, artists[i].id),
+                  onTap: () => _openArtist(artists[i].id),
                   fontSize: fontSize,
                   color: resolvedColor,
                   hoverColor: resolvedHoverColor,
@@ -107,7 +115,7 @@ class ArtistNamesWidget extends StatelessWidget {
         _SingleArtistName(
           key: ValueKey('nav_artist_${artist.id}_$i'),
           artist: artist,
-          onTap: () => navigateTo(AppSection.artist, artist.id),
+          onTap: () => _openArtist(artist.id),
           fontSize: fontSize,
           color: resolvedColor,
           hoverColor: resolvedHoverColor,
