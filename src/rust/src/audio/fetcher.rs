@@ -6,6 +6,10 @@ use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::sync::Notify;
+use tokio::sync::mpsc::{
+    UnboundedReceiver, UnboundedSender, error::TryRecvError, unbounded_channel,
+};
 use tokio::task::JoinHandle;
 use tracing::error;
 use yandex_music::model::rotor::feedback::{StationFeedback, StationFeedbackEvent};
@@ -82,6 +86,9 @@ pub enum FetchTaskResult {
         /// are retried with the next page instead of being lost.
         failed_feedbacks: Vec<WaveTrackEvent>,
     },
+    /// The task ended without delivering a page (panic / abort). Treated as
+    /// an empty result so the queue can request again.
+    Aborted,
 }
 
 #[derive(Debug, Clone)]
@@ -105,7 +112,13 @@ pub struct WaveTrackEvent {
 }
 
 pub struct FetchState {
-    pub task: Option<JoinHandle<FetchTaskResult>>,
+    /// Handle kept only for abort on reset; the result travels through
+    /// `result_rx`. Reading the result from a channel (instead of polling
+    /// `is_finished()`) removes the race where the completion signal fires
+    /// before the `JoinHandle` reports finished and the page is dropped.
+    pub task: Option<JoinHandle<()>>,
+    result_tx: UnboundedSender<FetchTaskResult>,
+    result_rx: UnboundedReceiver<FetchTaskResult>,
     pub pending_track_ids: Vec<String>,
     pub wave_session: Arc<Mutex<Option<Session>>>,
     /// `track.id -> batchId` for every served wave track. The stored wave
@@ -113,6 +126,9 @@ pub struct FetchState {
     /// responses only extend this map via `remember_wave_batch`.
     wave_batch_ids: Arc<Mutex<HashMap<String, String>>>,
     playlist_failure_requeues: u8,
+    /// Signalled when a batch task finishes, so the audio actor can consume
+    /// the result right away instead of waiting for the next track change.
+    fetch_finished: Arc<Notify>,
 }
 
 impl Default for FetchState {
@@ -123,19 +139,35 @@ impl Default for FetchState {
 
 impl FetchState {
     pub fn new() -> Self {
+        let (result_tx, result_rx) = unbounded_channel();
         Self {
             task: None,
+            result_tx,
+            result_rx,
             pending_track_ids: Vec::new(),
             wave_session: Arc::new(Mutex::new(None)),
             wave_batch_ids: Arc::new(Mutex::new(HashMap::new())),
             playlist_failure_requeues: 0,
+            fetch_finished: Arc::new(Notify::new()),
         }
+    }
+
+    /// Handle for the actor to await batch completion without polling.
+    pub fn fetch_finished(&self) -> Arc<Notify> {
+        self.fetch_finished.clone()
     }
 
     pub fn reset(&mut self) {
         if let Some(task) = self.task.take() {
             task.abort();
         }
+        // `abort()` only takes effect at the next `.await`. A task already
+        // past its network call can still `send` its result, so replace the
+        // channel pair: the stale sender writes into the discarded channel
+        // instead of leaking the old page into the next context.
+        let (result_tx, result_rx) = unbounded_channel();
+        self.result_tx = result_tx;
+        self.result_rx = result_rx;
         self.pending_track_ids.clear();
         self.playlist_failure_requeues = 0;
         *self.wave_session.lock() = None;
@@ -154,8 +186,31 @@ impl FetchState {
         self.task.is_some()
     }
 
-    pub fn is_finished(&self) -> bool {
-        self.task.as_ref().map(|t| t.is_finished()).unwrap_or(false)
+    /// Takes a page that the task already delivered, without waiting.
+    /// `None` while the task is still running.
+    pub fn try_take_page(&mut self) -> Option<(Vec<Track>, Option<Session>, Vec<WaveTrackEvent>)> {
+        let result = self.try_take_result()?;
+        self.handle_result(result)
+    }
+
+    fn try_take_result(&mut self) -> Option<FetchTaskResult> {
+        match self.result_rx.try_recv() {
+            Ok(result) => {
+                self.task = None;
+                Some(result)
+            }
+            Err(TryRecvError::Empty) => {
+                // Ended without sending (panic): drop the handle so the queue
+                // is not stuck "fetching" forever.
+                if self.task.as_ref().is_some_and(|t| t.is_finished()) {
+                    self.task = None;
+                    return Some(FetchTaskResult::Aborted);
+                }
+                None
+            }
+            // `FetchState` owns `result_tx`, so the channel cannot disconnect.
+            Err(TryRecvError::Disconnected) => unreachable!("FetchState holds result_tx"),
+        }
     }
 
     /// Store the session created by `rotor/session/new` (or an explicit
@@ -248,6 +303,8 @@ impl FetchState {
         }
         let count = FETCH_BATCH_SIZE.min(self.pending_track_ids.len());
         let ids: Vec<String> = self.pending_track_ids.drain(0..count).collect();
+        let finished = self.fetch_finished.clone();
+        let result_tx = self.result_tx.clone();
 
         self.task = Some(tokio::spawn(async move {
             let mut last_error = None;
@@ -261,10 +318,14 @@ impl FetchState {
                             .into_iter()
                             .filter(|t| t.available.unwrap_or(false))
                             .collect();
-                        return FetchTaskResult::Playlist {
+                        // Send first, notify second: the actor may read the
+                        // channel the instant it is woken.
+                        let _ = result_tx.send(FetchTaskResult::Playlist {
                             ids,
                             result: Ok(valid),
-                        };
+                        });
+                        finished.notify_one();
+                        return;
                     }
                     Ok(Err(e)) => last_error = Some(e.to_string()),
                     Err(_) => last_error = Some("request timed out".to_string()),
@@ -274,10 +335,11 @@ impl FetchState {
                 }
             }
             error!(error = ?last_error, "track_fetch_failed");
-            FetchTaskResult::Playlist {
+            let _ = result_tx.send(FetchTaskResult::Playlist {
                 ids,
                 result: Err(last_error.unwrap_or_else(|| "track fetch failed".into())),
-            }
+            });
+            finished.notify_one();
         }));
         Ok(())
     }
@@ -300,6 +362,8 @@ impl FetchState {
             _ => return Err(FetchError::MissingWaveSession),
         };
 
+        let finished = self.fetch_finished.clone();
+        let result_tx = self.result_tx.clone();
         self.task = Some(tokio::spawn(async move {
             let default_batch = session.batch_id.clone();
             // Kept aside so a failed page request can hand its finish/skip
@@ -330,7 +394,7 @@ impl FetchState {
                 })
                 .collect();
 
-            match api
+            let result = match api
                 .get_session_tracks(session_id, wave_seeds, feedbacks)
                 .await
             {
@@ -352,68 +416,37 @@ impl FetchState {
                         failed_feedbacks: retry_events,
                     }
                 }
-            }
+            };
+            let _ = result_tx.send(result);
+            finished.notify_one();
         }));
         Ok(())
     }
 
-    /// Returns `(tracks, wave page response, failed wave feedbacks)`.
-    /// Page responses are returned verbatim for their track list — the
-    /// caller must feed them to `remember_wave_batch`, never to
-    /// `set_wave_session`.
-    pub async fn await_task(
-        &mut self,
-    ) -> Option<(
-        Vec<Track>,
-        Option<Session>,
-        Vec<WaveTrackEvent>,
-    )> {
-        self.await_task_timeout(Duration::from_secs(30)).await
-    }
-
     /// Bounded wait for the in-flight fetch so the audio actor never blocks
-    /// on a ~30s network fetch. On timeout the task handle is kept and the
+    /// on a ~30s network fetch. On timeout the task keeps running and its
     /// result is picked up later via poll_fetch().
     pub async fn await_task_timeout(
         &mut self,
         timeout: Duration,
-    ) -> Option<(
-        Vec<Track>,
-        Option<Session>,
-        Vec<WaveTrackEvent>,
-    )> {
-        if self.task.is_none() {
-            return None;
-        }
-        if !self.is_finished() {
-            // Wait without consuming the handle: `&mut JoinHandle` is itself
-            // a Future, so a timeout leaves `self.task` intact for poll_fetch().
-            if let Some(task) = self.task.as_mut() {
-                let _ = tokio::time::timeout(timeout, &mut *task).await;
-            }
-            if !self.is_finished() {
-                return None;
-            }
-        }
-        self.await_task_inner().await
+    ) -> Option<(Vec<Track>, Option<Session>, Vec<WaveTrackEvent>)> {
+        self.task.as_ref()?;
+        let result = match tokio::time::timeout(timeout, self.result_rx.recv()).await {
+            Ok(Some(result)) => result,
+            // `FetchState` owns `result_tx`, so the channel cannot disconnect.
+            Ok(None) => unreachable!("FetchState holds result_tx"),
+            Err(_) => return None,
+        };
+        self.task = None;
+        self.handle_result(result)
     }
 
-    async fn await_task_inner(
+    /// Applies a delivered page: updates failure bookkeeping and converts it
+    /// into `(tracks, wave session, failed feedbacks)` for the caller.
+    fn handle_result(
         &mut self,
-    ) -> Option<(
-        Vec<Track>,
-        Option<Session>,
-        Vec<WaveTrackEvent>,
-    )> {
-        let task = self.task.take()?;
-        let result = match task.await {
-            Ok(result) => result,
-            Err(_) => {
-                self.playlist_failure_requeues = 0;
-                return None;
-            }
-        };
-
+        result: FetchTaskResult,
+    ) -> Option<(Vec<Track>, Option<Session>, Vec<WaveTrackEvent>)> {
         match result {
             FetchTaskResult::Playlist { ids, result } => match result {
                 Ok(tracks) => {
@@ -434,10 +467,15 @@ impl FetchState {
                 failed_feedbacks,
             } => {
                 self.playlist_failure_requeues = 0;
-                Some(result.map_or(
-                    (vec![], None, failed_feedbacks),
-                    |(tracks, session)| (tracks, Some(session), Vec::new()),
-                ))
+                Some(
+                    result.map_or((vec![], None, failed_feedbacks), |(tracks, session)| {
+                        (tracks, Some(session), Vec::new())
+                    }),
+                )
+            }
+            FetchTaskResult::Aborted => {
+                self.playlist_failure_requeues = 0;
+                Some((vec![], None, Vec::new()))
             }
         }
     }
@@ -504,6 +542,34 @@ impl WaveExtensionHandles {
 mod tests {
     use super::*;
 
+    #[tokio::test]
+    async fn delivered_page_is_taken_exactly_once() {
+        let mut state = FetchState::new();
+        state.task = Some(tokio::spawn(async {}));
+        state
+            .result_tx
+            .send(FetchTaskResult::Playlist {
+                ids: Vec::new(),
+                result: Ok(Vec::new()),
+            })
+            .unwrap();
+
+        assert!(state.try_take_page().is_some());
+        assert!(!state.is_fetching());
+        assert!(state.try_take_page().is_none());
+    }
+
+    #[tokio::test]
+    async fn task_that_dies_without_a_page_reports_aborted() {
+        let mut state = FetchState::new();
+        state.task = Some(tokio::spawn(async {}));
+        state.task.as_mut().unwrap().await.unwrap();
+
+        let page = state.try_take_page().expect("aborted page is reported");
+        assert!(page.0.is_empty());
+        assert!(!state.is_fetching());
+    }
+
     #[test]
     fn set_pending_ids_rejects_replacement() {
         let mut state = FetchState::new();
@@ -514,6 +580,23 @@ mod tests {
             Err(FetchError::PendingIdsNotEmpty)
         );
         assert_eq!(state.pending_track_ids, vec!["first"]);
+    }
+
+    #[tokio::test]
+    async fn reset_discards_late_result_from_aborted_task() {
+        let mut state = FetchState::new();
+        state.task = Some(tokio::spawn(async {}));
+        let stale_tx = state.result_tx.clone();
+
+        state.reset();
+        // The aborted task may still send after reset (abort stops at the
+        // next await); that result must not reach the new context.
+        let _ = stale_tx.send(FetchTaskResult::Playlist {
+            ids: Vec::new(),
+            result: Ok(Vec::new()),
+        });
+
+        assert!(state.try_take_page().is_none());
     }
 
     #[test]

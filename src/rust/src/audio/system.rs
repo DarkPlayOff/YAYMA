@@ -231,8 +231,33 @@ impl AudioSystem {
 
         // Main Audio Loop
         tokio::spawn(async move {
-            while let Some(msg) = rx.recv().await {
-                system_loop.process_message(msg).await;
+            // A finished wave / playlist fetch is otherwise only consumed on
+            // the next track change, so the upcoming queue (and the cover
+            // carousel) stays empty while the current track plays. The fetch
+            // task signals completion instead of the actor polling for it.
+            let fetch_finished = system_loop.queue.fetch_finished();
+            // One `Notified` kept alive across iterations: recreating it each
+            // loop lets `select!` discard a future that already consumed the
+            // notify permit when the message branch wins, losing the wake-up.
+            // Replace it only after it actually fires.
+            let mut fetch_notified = Box::pin(fetch_finished.notified());
+            loop {
+                tokio::select! {
+                    msg = rx.recv() => {
+                        let Some(msg) = msg else { break };
+                        system_loop.process_message(msg).await;
+                    }
+                    _ = fetch_notified.as_mut() => {
+                        fetch_notified = Box::pin(fetch_finished.notified());
+                        // Refill from the buffer. Only request another page
+                        // when nothing is visible ahead: a page landed means
+                        // the carousel has tracks, and a short page must not
+                        // turn into a continuous fetch chain.
+                        let grew = system_loop.queue.poll_fetch();
+                        let nothing_ahead = system_loop.queue.has_no_visible_next();
+                        system_loop.queue.refill_wave_window(grew && nothing_ahead);
+                    }
+                }
             }
             // Channel closed on context teardown: stop SMTC loops and the
             // controller monitor/playback task in a defined order instead

@@ -70,12 +70,10 @@ src/android/.kotlin/sessions/
 src/android/build/
 src/android/app/build/
 src/android/app/.cxx/
-.gemini/
 src/rust/src/frb_generated.rs
 src/rust/target/
 .vscode/.codegen-stamp
 src/lib/src/rust/app/context.dart
 src/lib/src/rust/audio/signals.dart
 src/lib/src/rust/lib.dart
-decompile/
-src/yandex/
+context/

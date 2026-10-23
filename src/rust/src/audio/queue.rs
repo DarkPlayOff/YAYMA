@@ -10,6 +10,7 @@ use im::Vector;
 use parking_lot::Mutex;
 use std::collections::VecDeque;
 use std::sync::Arc;
+use tokio::sync::Notify;
 use tracing::error;
 
 use yandex_music::model::{
@@ -64,6 +65,7 @@ mod fetch_policy {
     use super::HistoryState;
     use super::Track;
     use super::Vector;
+    use super::WAVE_VISIBLE_TRACKS;
     use super::WaveTrackEvent;
     use super::as_wave_seed;
 
@@ -98,8 +100,13 @@ mod fetch_policy {
         !is_wave && index + threshold + 1 >= queue_len && !is_fetching
     }
 
-    pub(super) fn wave_buffer_needs_topup(remaining: usize, is_fetching: bool) -> bool {
-        remaining <= 1 && !is_fetching
+    /// How many buffered tracks to move into the visible window so that
+    /// `current + WAVE_VISIBLE_TRACKS` are queued ahead, and whether a fetch
+    /// is still needed after taking them.
+    pub(super) fn wave_window_refill(ahead: usize, buffered: usize) -> (usize, bool) {
+        let missing = WAVE_VISIBLE_TRACKS.saturating_sub(ahead);
+        let take = missing.min(buffered);
+        (take, take < missing)
     }
 
     // Pure split of `update_prefetch_interest`: window ids + next track.
@@ -299,6 +306,10 @@ impl QueueManager {
         matches!(*self.playback_context.lock(), PlaybackContext::Wave(_))
     }
 
+    pub fn fetch_finished(&self) -> Arc<Notify> {
+        self.fetch.fetch_finished()
+    }
+
     pub async fn load(
         &mut self,
         context: PlaybackContext,
@@ -466,7 +477,7 @@ impl QueueManager {
             return self.signals.queue().get(self.signals.index()).cloned();
         }
 
-        self.poll_fetch().await;
+        self.poll_fetch();
 
         let current = self.signals.index();
         let queue_len = self.signals.queue().len();
@@ -475,6 +486,10 @@ impl QueueManager {
         if fetch_policy::playlist_needs_topup(is_wave, current, queue_len, FETCH_THRESHOLD) {
             self.trigger_fetch();
         }
+
+        // Buffered wave tracks must reach the visible queue before the
+        // advance is attempted, or playback stops with music still buffered.
+        self.refill_wave_window(false);
 
         if let Some(track) = self.try_advance_or_fetch(current).await {
             return Some(track);
@@ -550,13 +565,13 @@ impl QueueManager {
                 ));
                 self.wave_feedback_sent = true;
             }
-            self.wave_buffer.clear();
-            if !self.fetch.is_fetching() {
-                self.trigger_fetch();
-            }
         }
 
         let current = self.signals.index();
+        // Keep the buffered upcoming tracks: a skip should send feedback for
+        // the current track, not throw away pages already fetched. Only ask
+        // for a page when the buffer cannot fill the visible window.
+        self.refill_wave_window(true);
         self.try_advance_or_fetch(current).await
     }
 
@@ -605,19 +620,7 @@ impl QueueManager {
         self.commit_track_to_history(track.clone());
 
         if self.in_wave() {
-            let queue_len = self.signals.queue().len();
-            let is_at_visible_tail = index + 1 >= queue_len;
-
-            if is_at_visible_tail && let Some(next) = self.wave_buffer.pop_front() {
-                let mut q = self.signals.queue();
-                q.push_back(next);
-                self.signals.set_queue(q);
-            }
-
-            let remaining = self.wave_buffer.len();
-            if fetch_policy::wave_buffer_needs_topup(remaining, self.fetch.is_fetching()) {
-                self.trigger_fetch();
-            }
+            self.refill_wave_window(true);
         }
 
         // `advance_to` is also used by direct queue controls (for example
@@ -652,6 +655,7 @@ impl QueueManager {
             self.signals.set_queue(queue);
             self.shuffle.record_inserted(insert_at);
         }
+        self.refill_wave_window(true);
         self.update_prefetch_interest();
     }
 
@@ -679,6 +683,7 @@ impl QueueManager {
                 self.signals.set_index(len - 1);
             }
         }
+        self.refill_wave_window(true);
         self.update_prefetch_interest();
     }
 
@@ -809,14 +814,10 @@ impl QueueManager {
         self.fetch.wave_batch_for(track_id)
     }
 
-    pub async fn poll_fetch(&mut self) {
-        if self.fetch.is_finished() {
-            self.consume_fetch_result().await;
-        }
-    }
-
-    async fn consume_fetch_result(&mut self) -> bool {
-        let Some((tracks, session, failed_feedbacks)) = self.fetch.await_task().await else {
+    /// Consumes a page that the fetch task already delivered.
+    /// Returns `true` if it added tracks.
+    pub fn poll_fetch(&mut self) -> bool {
+        let Some((tracks, session, failed_feedbacks)) = self.fetch.try_take_page() else {
             return false;
         };
         self.requeue_failed_wave_feedbacks(failed_feedbacks);
@@ -833,6 +834,34 @@ impl QueueManager {
 
         self.wave_append(tracks);
         true
+    }
+
+    /// Whether the visible wave window has no track after the current one.
+    pub fn has_no_visible_next(&self) -> bool {
+        self.signals.queue().len() <= self.signals.index() + 1
+    }
+
+    /// Keeps the visible window (current + `WAVE_VISIBLE_TRACKS`) full by
+    /// draining buffered wave tracks, and asks for the next page when the
+    /// buffer cannot fill it. Called after every advance and when a batch
+    /// completes, so the upcoming tracks (and the cover carousel that reads
+    /// them) are visible while the current track is still playing.
+    pub fn refill_wave_window(&mut self, allow_fetch: bool) {
+        if !self.in_wave() {
+            return;
+        }
+        let index = self.signals.index();
+        let mut queue = self.signals.queue();
+        let ahead = queue.len().saturating_sub(index + 1);
+        let (take, still_missing) = fetch_policy::wave_window_refill(ahead, self.wave_buffer.len());
+        if take > 0 {
+            queue.extend(self.wave_buffer.drain(..take));
+            self.signals.set_queue(queue);
+            self.update_prefetch_interest();
+        }
+        if allow_fetch && still_missing && !self.fetch.is_fetching() {
+            self.trigger_fetch();
+        }
     }
 
     fn wave_append(&mut self, tracks: Vec<Track>) {
@@ -1090,6 +1119,47 @@ mod tests {
         assert_eq!(seeds.len(), 20);
         assert_eq!(seeds[0], "t5");
         assert_eq!(seeds[19], "t24");
+    }
+
+    #[test]
+    fn wave_window_refill_tops_up_visible_ahead_and_requests_more() {
+        // Enough buffered: fill the window, no fetch needed.
+        assert_eq!(fetch_policy::wave_window_refill(1, 5), (2, false));
+        // Partially buffered: take all, still need a page.
+        assert_eq!(fetch_policy::wave_window_refill(1, 1), (1, true));
+        // Window already full: nothing to do.
+        assert_eq!(
+            fetch_policy::wave_window_refill(WAVE_VISIBLE_TRACKS, 5),
+            (0, false)
+        );
+        // Empty buffer: nothing to take, fetch needed.
+        assert_eq!(fetch_policy::wave_window_refill(0, 0), (0, true));
+    }
+
+    #[tokio::test]
+    async fn wave_advance_fills_visible_window_from_buffer_without_fetch() {
+        let mut q = manager().await;
+        let session: Session = serde_json::from_str(
+            r#"{"batchId":"b","descriptionSeed":null,"pumpkin":false,
+                "radioSessionId":"r","sequence":[],"terminated":false,
+                "wave":null,"unknownSession":null}"#,
+        )
+        .expect("minimal session parses");
+        *q.playback_context.lock() = PlaybackContext::Wave(session);
+        q.signals.set_queue(standalone(1));
+        q.signals.set_index(0);
+        q.wave_buffer = (1..=6).map(|i| test_track(&format!("t{i}"))).collect();
+
+        let next = q.get_next_track().await.expect("next from buffer");
+        assert_eq!(next.id, "t1");
+        // current + WAVE_VISIBLE_TRACKS stay visible after the advance.
+        assert_eq!(
+            q.signals.queue().len(),
+            q.signals.index() + 1 + WAVE_VISIBLE_TRACKS
+        );
+        // The buffer had enough tracks, so no page request was needed.
+        assert!(!q.fetch.is_fetching());
+        assert_eq!(q.wave_buffer.len(), 6 - WAVE_VISIBLE_TRACKS - 1);
     }
 
     #[tokio::test]
