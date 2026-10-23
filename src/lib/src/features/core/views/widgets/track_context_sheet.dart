@@ -232,6 +232,11 @@ class _SheetHeaderState extends State<_SheetHeader>
     curve: const Interval(0.1, 1, curve: Curves.easeOut),
   );
 
+  late final Animation<double> _coverScale = Tween<double>(
+    begin: 0.9,
+    end: 1,
+  ).animate(_fade);
+
   List<Color> _tint = const [];
   bool _tintRequested = false;
 
@@ -284,64 +289,62 @@ class _SheetHeaderState extends State<_SheetHeader>
             ),
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
-            child: AnimatedBuilder(
-              animation: _entrance,
-              builder: (context, _) {
-                final fade = _fade.value.clamp(0.0, 1.0);
-                return Row(
-                  children: [
-                    Opacity(
-                      opacity: fade,
-                      child: Transform.scale(
-                        scale: 0.9 + 0.1 * fade,
-                        alignment: Alignment.centerLeft,
-                        child: AppCover(
-                          coverUrl: header.coverUrl,
-                          localUri: header.localCoverUri,
-                          size: 96,
-                        ),
-                      ),
+            // Transition widgets drive this instead of an `AnimatedBuilder`
+            // rebuilding the header: the cover and the text stay mounted
+            // while the entrance plays.
+            child: FadeTransition(
+              opacity: _fade,
+              child: Row(
+                children: [
+                  ScaleTransition(
+                    scale: _coverScale,
+                    alignment: Alignment.centerLeft,
+                    child: AppCover(
+                      coverUrl: header.coverUrl,
+                      localUri: header.localCoverUri,
+                      size: 96,
                     ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Opacity(
-                        opacity: fade,
-                        child: Transform.translate(
-                          offset: Offset(0, 10 * (1 - fade)),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                header.version == null
-                                    ? header.title
-                                    : '${header.title} ${header.version}',
-                                style: TextStyle(
-                                  color: scheme.onSurface,
-                                  fontSize: 17,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              const SizedBox(height: 4),
-                              ArtistNamesWidget(
-                                artists: header.artists,
-                                // Close the sheet first, otherwise it stays
-                                // on top of the opened artist page.
-                                onArtistTap: (artistId) {
-                                  Navigator.of(context).pop();
-                                  navigateTo(AppSection.artist, artistId);
-                                },
-                              ),
-                            ],
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: AnimatedBuilder(
+                      animation: _fade,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            header.version == null
+                                ? header.title
+                                : '${header.title} ${header.version}',
+                            style: TextStyle(
+                              color: scheme.onSurface,
+                              fontSize: 17,
+                              fontWeight: FontWeight.w700,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                        ),
+                          const SizedBox(height: 4),
+                          ArtistNamesWidget(
+                            artists: header.artists,
+                            // Close the sheet first, otherwise it stays
+                            // on top of the opened artist page.
+                            onArtistTap: (artistId) {
+                              Navigator.of(context).pop();
+                              navigateTo(AppSection.artist, artistId);
+                            },
+                          ),
+                        ],
+                      ),
+                      builder: (context, child) => Transform.translate(
+                        offset: Offset(0, 10 * (1 - _fade.value)),
+                        child: child,
                       ),
                     ),
-                  ],
-                );
-              },
+                  ),
+                ],
+              ),
             ),
           ),
         ],

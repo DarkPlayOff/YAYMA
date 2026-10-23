@@ -689,7 +689,23 @@ class _LyricTimerWidgetState extends State<_LyricTimerWidget>
       vsync: this,
       duration: const Duration(milliseconds: 1000),
     );
-    _pulseController.repeat(reverse: true);
+    _syncPulse();
+  }
+
+  @override
+  void didUpdateWidget(_LyricTimerWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.isActive != widget.isActive) _syncPulse();
+  }
+
+  /// Only the active line draws dots, so the other timer rows must not keep
+  /// a repeating ticker alive for an animation they never show.
+  void _syncPulse() {
+    if (widget.isActive && !_pulseController.isAnimating) {
+      _pulseController.repeat(reverse: true);
+    } else if (!widget.isActive && _pulseController.isAnimating) {
+      _pulseController.stop();
+    }
   }
 
   @override

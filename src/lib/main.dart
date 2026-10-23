@@ -122,15 +122,12 @@ class MyApp extends StatelessWidget {
           title: 'YAYMA',
           debugShowCheckedModeBanner: false,
           theme: theme,
+          themeAnimationDuration: const Duration(milliseconds: 300),
+          themeAnimationCurve: Curves.easeOut,
           builder: (context, child) {
-            return AnimatedTheme(
-              data: theme,
-              duration: const Duration(milliseconds: 300),
-              curve: Curves.easeOut,
-              child: RepaintBoundary(
-                child: GlobalNotificationListener(
-                  child: child ?? const SizedBox.shrink(),
-                ),
+            return RepaintBoundary(
+              child: GlobalNotificationListener(
+                child: child ?? const SizedBox.shrink(),
               ),
             );
           },

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/scheduler.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:yayma/src/app/session.dart';
 import 'package:yayma/src/features/core/utils/lru_map.dart';
@@ -299,31 +300,62 @@ class _ShimmerLoader extends StatefulWidget {
   State<_ShimmerLoader> createState() => _ShimmerLoaderState();
 }
 
-class _ShimmerLoaderState extends State<_ShimmerLoader>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _animation;
+class _ShimmerLoaderState extends State<_ShimmerLoader> {
+  // One ticker for every loading cover in the app: a grid of placeholders
+  // would otherwise keep one repeating controller per tile alive. It runs
+  // only while at least one placeholder is visible (`TickerMode`), so a
+  // hidden tab full of loading covers costs no frames.
+  static AnimationController? _shared;
+  static int _mounted = 0;
+  static int _visible = 0;
+  static bool _ticking = false;
+
+  bool _isVisible = false;
 
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
+    _mounted++;
+    _shared ??= AnimationController(
+      vsync: const _ShimmerVsync(),
       duration: const Duration(milliseconds: 1500),
-      vsync: this,
-    );
-    _controller.repeat();
-    _animation = Tween<double>(begin: -2, end: 2).animate(
-      CurvedAnimation(
-        parent: _controller,
-        curve: Curves.easeInOut,
-      ),
     );
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final visible = TickerMode.valuesOf(context).enabled;
+    if (visible != _isVisible) {
+      _isVisible = visible;
+      visible ? _visible++ : _visible--;
+      _syncTicker();
+    }
+  }
+
+  @override
   void dispose() {
-    _controller.dispose();
+    if (_isVisible) _visible--;
+    _mounted--;
+    if (_mounted == 0) {
+      _shared?.dispose();
+      _shared = null;
+      _ticking = false;
+    } else {
+      _syncTicker();
+    }
     super.dispose();
+  }
+
+  static void _syncTicker() {
+    final shouldTick = _visible > 0;
+    if (shouldTick == _ticking) return;
+    _ticking = shouldTick;
+    if (shouldTick) {
+      _shared!.repeat();
+    } else {
+      _shared!.stop();
+    }
   }
 
   @override
@@ -334,7 +366,7 @@ class _ShimmerLoaderState extends State<_ShimmerLoader>
           : BorderRadius.zero,
       child: RepaintBoundary(
         child: CustomPaint(
-          painter: _ShimmerPainter(animation: _animation),
+          painter: _ShimmerPainter(animation: _shared!),
           child: Container(
             width: widget.width,
             height: widget.height,
@@ -346,6 +378,13 @@ class _ShimmerLoaderState extends State<_ShimmerLoader>
   }
 }
 
+class _ShimmerVsync implements TickerProvider {
+  const _ShimmerVsync();
+
+  @override
+  Ticker createTicker(TickerCallback onTick) => Ticker(onTick);
+}
+
 class _ShimmerPainter extends CustomPainter {
   _ShimmerPainter({required this.animation}) : super(repaint: animation);
   final Animation<double> animation;
@@ -353,9 +392,13 @@ class _ShimmerPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    // The shared controller is linear and spans 0..1; the old per-tile one
+    // ran an eased tween from -2 to 2. Same sweep, one less animation object.
+    final position =
+        -2 + 4 * Curves.easeInOut.transform(animation.value.clamp(0.0, 1.0));
     _paint.shader = LinearGradient(
-      begin: Alignment(animation.value, 0),
-      end: Alignment(animation.value + 0.5, 0),
+      begin: Alignment(position, 0),
+      end: Alignment(position + 0.5, 0),
       colors: const [
         Color(0xFF2A2A2A),
         Color(0xFF3A3A3A),
