@@ -23,6 +23,22 @@ const SpringDescription kCoverSwipeCloseSpring = SpringDescription(
   damping: 46,
 );
 
+/// How long the incoming artwork may stay forced on screen after a commit
+/// while playback has not reported the new track. Kept above the bounded wave
+/// page fetch (5 s) so a slow but successful advance is never cut short.
+const Duration kCoverSettleTimeout = Duration(seconds: 8);
+
+/// Direction of a queue move from the visible index alone: -1 is the previous
+/// track, 1 the next one, 0 when it cannot be told. Wraps at the ends are only
+/// inferred for queues longer than two tracks, where they cannot be confused
+/// with an ordinary adjacent move.
+int coverMoveDirection(int? oldIndex, int? newIndex, int count) {
+  if (oldIndex == null || newIndex == null || oldIndex == newIndex) return 0;
+  if (count > 2 && oldIndex == count - 1 && newIndex == 0) return 1;
+  if (count > 2 && oldIndex == 0 && newIndex == count - 1) return -1;
+  return newIndex > oldIndex ? 1 : -1;
+}
+
 /// Swipe state machine of the full player cover.
 ///
 /// Owns which neighbour is being pulled in, whether the gesture can commit,
@@ -37,10 +53,13 @@ class CoverSwipeController {
     required this.isMounted,
     required this.onNext,
     required this.onPrevious,
+    required this.onChanged,
     String? initialTrackId,
     String? initialCoverUrl,
+    int? initialIndex,
   }) : _visibleTrackId = initialTrackId,
-       _visibleCoverUrl = initialCoverUrl;
+       _visibleCoverUrl = initialCoverUrl,
+       _visibleIndex = initialIndex;
 
   final AnimationController animation;
 
@@ -53,6 +72,10 @@ class CoverSwipeController {
   final bool Function() isMounted;
   final VoidCallback onNext;
   final VoidCallback onPrevious;
+
+  /// Repaints the cover after state that no animation drives changed, e.g.
+  /// the settle watchdog giving the artwork back to the live track.
+  final VoidCallback onChanged;
 
   /// Direction of the cover swipe: -1 is the previous track, 1 the next one.
   int _direction = 0;
@@ -68,6 +91,10 @@ class CoverSwipeController {
 
   /// Set when the current drag started during a commit animation.
   bool _ignoreDrag = false;
+
+  /// Gives the artwork back to the live track when a commit settled but
+  /// playback never reported a new track (failed skip, failed wave fetch).
+  Timer? _settleWatchdog;
 
   /// True after a commit settled while the playback state was still catching
   /// up: [holdUrl] then shows the incoming artwork until it does.
@@ -95,6 +122,11 @@ class CoverSwipeController {
   /// new track by the time the effect runs.
   String? _visibleCoverUrl;
 
+  /// Queue position of the visible track. The direction of a move is taken
+  /// from it instead of the neighbour signals, which are backed by an
+  /// asynchronous queue list and can still describe the previous track.
+  int? _visibleIndex;
+
   int get direction => _direction;
   bool get canCommit => _canCommit;
   String? get holdUrl => _holdUrl;
@@ -106,9 +138,21 @@ class CoverSwipeController {
   void onTrackChange({String? trackId, String? coverUrl}) {
     final previousId = _visibleTrackId;
     final previousUrl = _visibleCoverUrl;
+    final previousIndex = _visibleIndex;
+    final state = playerStateSignal.value;
+    final newIndex = state?.queueIndex;
+    final newCount = state?.queueCount ?? 0;
     _visibleTrackId = trackId;
     _visibleCoverUrl = coverUrl;
+    _visibleIndex = newIndex;
     if (trackId == previousId) return;
+
+    final direction = _moveDirection(
+      oldTrackId: previousId,
+      oldIndex: previousIndex,
+      newIndex: newIndex,
+      newCount: newCount,
+    );
 
     // A committed swipe already slid the next cover into place and only
     // waits for playback to report it.
@@ -131,7 +175,7 @@ class CoverSwipeController {
         fromUrl: settledUrl,
         toId: trackId,
         toUrl: coverUrl,
-        direction: _trackChangeDirection(settledTargetId),
+        direction: direction,
       );
       return;
     }
@@ -139,7 +183,6 @@ class CoverSwipeController {
     // The queue changed while a swipe / slide was still animating.
     if (_committing) {
       if (trackId == _targetTrackId) return;
-      final direction = _trackChangeDirection(previousId);
       if (direction != 0 && direction == _direction && animation.isAnimating) {
         // Same direction: keep sliding out the artwork that is already on
         // screen and just land on the newest track instead of jumping.
@@ -170,7 +213,7 @@ class CoverSwipeController {
       fromUrl: previousUrl,
       toId: trackId,
       toUrl: coverUrl,
-      direction: _trackChangeDirection(previousId),
+      direction: direction,
     );
   }
 
@@ -183,6 +226,8 @@ class CoverSwipeController {
     _endDrag();
     _clearHold();
   }
+
+  void dispose() => _settleWatchdog?.cancel();
 
   void onDragStart() {
     if (animation.isAnimating) {
@@ -365,9 +410,34 @@ class CoverSwipeController {
       // slid in until the state reports the new track.
       _holdUrl = incoming;
       _settled = true;
+      _settleWatchdog?.cancel();
+      _settleWatchdog = Timer(kCoverSettleTimeout, () {
+        // The skip failed or the wave fetch never landed. Give the cover
+        // back to the track that is actually playing instead of leaving a
+        // foreign artwork with the old title forever.
+        if (!isMounted() || !_settled) return;
+        _clearHold();
+        onChanged();
+      });
     } else {
       _clearHold();
     }
+  }
+
+  /// Direction of a queue move. The index delta is authoritative: neighbour
+  /// signals read an asynchronous queue list and can still point at the
+  /// previous track when the new one is reported, which used to leave the
+  /// direction at 0 and swap the artwork without a slide. Falls back to the
+  /// neighbour heuristic when the index did not move (queue replaced in
+  /// place) or is unknown.
+  int _moveDirection({
+    required String? oldTrackId,
+    required int? oldIndex,
+    required int? newIndex,
+    required int newCount,
+  }) {
+    final byIndex = coverMoveDirection(oldIndex, newIndex, newCount);
+    return byIndex != 0 ? byIndex : _trackChangeDirection(oldTrackId);
   }
 
   /// Direction of a queue move, inferred from the old track still being one
@@ -387,6 +457,8 @@ class CoverSwipeController {
   }
 
   void _clearHold() {
+    _settleWatchdog?.cancel();
+    _settleWatchdog = null;
     _holdUrl = null;
     _fromTrackId = null;
     _targetTrackId = null;

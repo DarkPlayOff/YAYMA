@@ -166,11 +166,15 @@ class _MobileFullPlayerState extends State<MobileFullPlayer>
       animation: _coverSwipe,
       initialTrackId: initialState?.currentTrack?.id,
       initialCoverUrl: initialState?.currentTrack?.coverUrl,
+      initialIndex: initialState?.queueIndex,
       travel: () => _swipeTravel(context),
       canAnimate: () => !_closing && _controller.value >= 0.95,
       isMounted: () => mounted,
       onNext: () => unawaited(PlaybackController.next()),
       onPrevious: () => unawaited(PlaybackController.previousTrack()),
+      onChanged: () {
+        if (mounted) setState(() {});
+      },
     );
     _swipeTrackChange = effect(() {
       final state = playerStateSignal.value;
@@ -193,6 +197,7 @@ class _MobileFullPlayerState extends State<MobileFullPlayer>
     mobileFullPlayerProgress.value = 0;
     widget.controller?._detach(this);
     _swipeTrackChange();
+    _swipe.dispose();
     _controller.dispose();
     _coverSwipe.dispose();
     super.dispose();

@@ -35,6 +35,8 @@ dev_dependencies:
   build_runner: ^2.16.1
   flutter_launcher_icons: ^0.14.4
   flutter_lints: ^6.0.0
+  flutter_test:
+    sdk: flutter
   freezed: ^4.0.1
 #  integration_test:
 #    sdk: flutter
