@@ -152,12 +152,13 @@ class _FloatingNavBarState extends State<FloatingNavBar>
               ),
             ),
           if (isDesktop) const SizedBox(height: 12),
-          _NavIcon(
-            icon: Icons.home_rounded,
-            isSelected: currentSection == AppSection.home,
-            onTap: () => setSection(AppSection.home),
-            isNarrow: isNarrow,
-          ),
+          if (!Platform.isAndroid)
+            _NavIcon(
+              icon: Icons.home_rounded,
+              isSelected: currentSection == AppSection.home,
+              onTap: () => setSection(AppSection.home),
+              isNarrow: isNarrow,
+            ),
           _NavIcon(
             icon: Icons.search_rounded,
             isSelected: currentSection == AppSection.search,
@@ -286,7 +287,9 @@ class _AccountButton extends SignalWidget {
         onOpened();
         await showDialog<void>(
           context: context,
-          barrierColor: Colors.black54,
+          barrierColor: Platform.isAndroid
+              ? Colors.transparent
+              : Colors.black54,
           builder: (context) => _AccountMenuDialog(account: account),
         );
         onClosed();

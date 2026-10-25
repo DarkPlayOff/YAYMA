@@ -7,11 +7,6 @@ import 'package:yayma/src/app/session.dart';
 import 'package:yayma/src/features/core/utils/lru_map.dart';
 import 'package:yayma/src/rust/api/simple.dart';
 
-/// Cover size presets Yandex's avatar CDN actually serves, per the official
-/// web client (`createAvatarUrl` in its bundled JS) — matches must cover
-/// every size the Rust backend ever bakes into a `cover_url`
-/// (`COVER_SIZE_*` in `src/rust/src/api/models.rs`) so `resolveCoverUrl`
-/// can find and replace the existing token.
 const List<int> coverSizePicks = [
   30,
   50,
@@ -100,6 +95,10 @@ class _RustCachedImageState extends State<RustCachedImage> {
       return;
     }
 
+    // Drop the previous artwork right away: keeping it while the new path is
+    // resolved shows an unrelated (older) cover for as long as the lookup or
+    // download takes.
+    _resolvedPath = null;
     _isLoading = true;
     _lastUrl = url;
     unawaited(_resolvePathAsync(url));
@@ -148,6 +147,20 @@ class _RustCachedImageState extends State<RustCachedImage> {
 
   @override
   Widget build(BuildContext context) {
+    // Decode at the size the widget actually occupies on screen: without
+    // this every avatar and thumbnail is decoded at the source resolution,
+    // which is many times larger than needed on high-DPI phones.
+    final dpr = MediaQuery.devicePixelRatioOf(context);
+    final cacheWidth =
+        widget.cacheWidth ??
+        (widget.width?.isFinite ?? false
+            ? (widget.width! * dpr).round()
+            : null);
+    final cacheHeight =
+        widget.cacheHeight ??
+        (widget.height?.isFinite ?? false
+            ? (widget.height! * dpr).round()
+            : null);
     Widget content;
 
     if (widget.imageUrl == null || widget.imageUrl!.isEmpty) {
@@ -162,36 +175,29 @@ class _RustCachedImageState extends State<RustCachedImage> {
         fit: widget.fit,
         color: widget.color,
         colorBlendMode: widget.colorBlendMode,
-        cacheWidth: widget.cacheWidth,
-        cacheHeight: widget.cacheHeight,
+        cacheWidth: cacheWidth,
+        cacheHeight: cacheHeight,
         frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
-          if (wasSynchronouslyLoaded) {
+          if (wasSynchronouslyLoaded || frame != null) {
             return child;
           }
 
-          final isLoaded = frame != null;
-
+          // No cross-fade: while loading, the placeholder sits behind the
+          // image and is dropped once the first frame arrives. Keeping two
+          // AnimatedOpacity layers per image cost a saveLayer each, which is
+          // the most expensive thing on screen for large covers.
           return Stack(
             fit: StackFit.passthrough,
             children: [
               if (widget.placeholder != null)
-                AnimatedOpacity(
-                  opacity: isLoaded ? 0.0 : 1.0,
-                  duration: const Duration(milliseconds: 300),
-                  child: widget.placeholder,
-                )
-              else if (!isLoaded)
+                widget.placeholder!
+              else
                 _ImageShimmer(
                   width: widget.width,
                   height: widget.height,
                   borderRadius: widget.borderRadius,
                 ),
-              AnimatedOpacity(
-                opacity: isLoaded ? 1.0 : 0.0,
-                duration: const Duration(milliseconds: 300),
-                curve: Curves.easeInOut,
-                child: child,
-              ),
+              child,
             ],
           );
         },
@@ -290,11 +296,7 @@ class _ShimmerLoader extends StatefulWidget {
   final double? height;
   final double borderRadius;
 
-  const _ShimmerLoader({
-    this.width,
-    this.height,
-    this.borderRadius = 0,
-  });
+  const _ShimmerLoader({this.width, this.height, this.borderRadius = 0});
 
   @override
   State<_ShimmerLoader> createState() => _ShimmerLoaderState();

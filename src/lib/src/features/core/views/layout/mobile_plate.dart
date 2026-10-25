@@ -1,6 +1,7 @@
 import 'package:m3e_core/m3e_core.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:signals_flutter/signals_flutter.dart';
+import 'package:yayma/src/features/core/theme/app_theme.dart';
 import 'package:yayma/src/features/core/views/widgets/common_ui.dart';
 import 'package:yayma/src/features/core/views/widgets/track_elements.dart';
 import 'package:yayma/src/features/playback/providers/playback_provider.dart';
@@ -51,8 +52,7 @@ class MiniPlateSurface {
 
   /// Background colour of the plate.
   Color get color =>
-      Color.lerp(colorScheme.surfaceContainerHighest, Colors.black, 0.4) ??
-      colorScheme.surface;
+      surfaceOverlay(colorScheme.surfaceContainerHighest);
 
   /// Opacity of the plate background.
   double get alpha => lyricsStyle ? 0.5 : 0.9;
@@ -153,22 +153,25 @@ class MiniProgressSlider extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SignalBuilder(
-      builder: (context) {
-        final progress = trackProgressSignal();
-        final max = progress.durationMs > 0 ? progress.durationMs : 1.0;
+    // Repaints every position tick: isolate it from the surrounding layers.
+    return RepaintBoundary(
+      child: SignalBuilder(
+        builder: (context) {
+          final progress = trackProgressSignal();
+          final max = progress.durationMs > 0 ? progress.durationMs : 1.0;
 
-        return IgnorePointer(
-          child: M3ESlider(
-            value: progress.positionMs.clamp(0.0, max),
-            max: max,
-            decoration: miniProgressSliderDecoration(
-              Theme.of(context).colorScheme,
+          return IgnorePointer(
+            child: M3ESlider(
+              value: progress.positionMs.clamp(0.0, max),
+              max: max,
+              decoration: miniProgressSliderDecoration(
+                Theme.of(context).colorScheme,
+              ),
+              onChanged: (_) {},
             ),
-            onChanged: (_) {},
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 }

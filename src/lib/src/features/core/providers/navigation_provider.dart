@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 
@@ -33,9 +35,10 @@ class NavState {
   int get hashCode => section.hashCode ^ (id?.hashCode ?? 0);
 }
 
-/// List of root sections (tabs)
-const List<AppSection> rootSections = [
-  AppSection.home,
+/// List of root sections (tabs). Android has no home tab: its full player
+/// replaced the desktop home screen.
+final List<AppSection> rootSections = [
+  if (!Platform.isAndroid) AppSection.home,
   AppSection.search,
   AppSection.liked,
   AppSection.playlists,
@@ -44,7 +47,7 @@ const List<AppSection> rootSections = [
 
 /// Currently active root tab
 final FlutterSignal<AppSection> currentRootSignal = signal<AppSection>(
-  AppSection.home,
+  Platform.isAndroid ? AppSection.liked : AppSection.home,
 );
 
 /// Navigation stacks for each tab
@@ -129,7 +132,12 @@ void goBack() {
   rootStacksSignal.value = newStacks;
 }
 
-void setSection(AppSection section) => navigateTo(section);
+void setSection(AppSection section) {
+  // Home does not exist on Android; keep the current tab instead of
+  // switching to a section without a root stack.
+  if (section == AppSection.home && !rootSections.contains(section)) return;
+  navigateTo(section);
+}
 
 /// Counter of refresh requests for the current screen. The desktop
 /// refresh button (below the back button) only increments it — each

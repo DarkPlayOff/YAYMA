@@ -67,9 +67,15 @@ class _AppLayoutState extends State<AppLayout> {
               bucket: _bucket,
               child: Stack(
                 children: [
-                  // 1. Background (shader + blur)
-                  const Positioned.fill(child: BlurredCoverBackground()),
-                  const Positioned.fill(child: WaveBackground()),
+                  // 1. Background (Material gradient on Android, blurred
+                  // cover elsewhere) + shader.
+                  Positioned.fill(
+                    child: Platform.isAndroid
+                        ? const MaterialGradientBackground()
+                        : const BlurredCoverBackground(),
+                  ),
+                  if (!Platform.isAndroid)
+                    const Positioned.fill(child: WaveBackground()),
 
                   // 2. Dimming when leaving home or showing lyrics — held
                   // off while lyrics are still loading or came back empty,
@@ -80,9 +86,11 @@ class _AppLayoutState extends State<AppLayout> {
                       final showLyrics = showLyricsSignal.value;
                       final hideOverlay = hideLyricsOverlaySignal.value;
                       final suppressDim = lyricsSuppressDimSignal.value;
-                      final isDimmed =
-                          !isHome ||
-                          (showLyrics && !hideOverlay && !suppressDim);
+                      final dimForLyrics =
+                          showLyrics && !hideOverlay && !suppressDim;
+                      final isDimmed = Platform.isAndroid
+                          ? dimForLyrics
+                          : !isHome || dimForLyrics;
 
                       return Positioned.fill(
                         child: AnimatedContainer(
@@ -133,7 +141,21 @@ class _AppLayoutState extends State<AppLayout> {
                                             ? 80.0
                                             : 0.0) +
                                         systemBottom,
-                                    child: _AnimatedPlayerBar(isHome: isHome),
+                                    // While the full player covers the app,
+                                    // the bar keeps painting behind it (its
+                                    // own blur pass included). Unmount it on
+                                    // Android instead.
+                                    child: ValueListenableBuilder<double>(
+                                      valueListenable: mobileFullPlayerProgress,
+                                      builder: (context, progress, child) {
+                                        if (Platform.isAndroid &&
+                                            progress > 0.999) {
+                                          return const SizedBox.shrink();
+                                        }
+                                        return child!;
+                                      },
+                                      child: _AnimatedPlayerBar(isHome: isHome),
+                                    ),
                                   ),
                                 ],
                               ),
@@ -156,7 +178,16 @@ class _AppLayoutState extends State<AppLayout> {
                                 child: ValueListenableBuilder<double>(
                                   valueListenable: mobileFullPlayerProgress,
                                   builder: (context, progress, child) {
+                                    if (Platform.isAndroid &&
+                                        progress > 0.999) {
+                                      return const SizedBox.shrink();
+                                    }
                                     final hiddenAt = progress.clamp(0.0, 1.0);
+                                    // Fully faded: keep it out of the tree
+                                    // instead of painting a transparent copy.
+                                    if (hiddenAt >= 1) {
+                                      return const SizedBox.shrink();
+                                    }
                                     return IgnorePointer(
                                       ignoring: hiddenAt > 0,
                                       child: Opacity(
@@ -209,10 +240,12 @@ class _AppLayoutState extends State<AppLayout> {
                         }
                         final origin = mobileFullPlayerOrigin.value;
                         if (origin == null) return const SizedBox.shrink();
-                        return MobileFullPlayer(
-                          plateRect: origin.plateRect,
-                          coverRect: origin.coverRect,
-                          controller: mobileFullPlayerController,
+                        return RepaintBoundary(
+                          child: MobileFullPlayer(
+                            plateRect: origin.plateRect,
+                            coverRect: origin.coverRect,
+                            controller: mobileFullPlayerController,
+                          ),
                         );
                       },
                     ),

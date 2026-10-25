@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/physics.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:m3e_core/m3e_core.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:signals_flutter/signals_flutter.dart';
@@ -144,6 +145,12 @@ class _MobileFullPlayerState extends State<MobileFullPlayer>
   /// without a gesture (buttons, queue advance).
   late final EffectCleanup _swipeTrackChange;
 
+  /// Keeps the neighbours in sync with playback so their artwork is always
+  /// resolved, decoded and painted off-screen before it can slide in.
+  late final EffectCleanup _neighborWarmup;
+  String? _prevCoverUrl;
+  String? _nextCoverUrl;
+
   bool _closing = false;
 
   @override
@@ -183,6 +190,21 @@ class _MobileFullPlayerState extends State<MobileFullPlayer>
         coverUrl: state?.currentTrack?.coverUrl,
       );
     });
+    _neighborWarmup = effect(() {
+      final prev = previousTrackSignal.value?.coverUrl;
+      final next = nextTrackSignal.value?.coverUrl;
+      if (prev == _prevCoverUrl && next == _nextCoverUrl) return;
+      // The effect can run while a frame is being built; commit the new
+      // neighbours once it is done so they start decoding right away.
+      SchedulerBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        if (prev == _prevCoverUrl && next == _nextCoverUrl) return;
+        setState(() {
+          _prevCoverUrl = prev;
+          _nextCoverUrl = next;
+        });
+      });
+    });
     final dragController = widget.controller;
     if (dragController == null) {
       unawaited(_springTo(1, 0));
@@ -197,6 +219,7 @@ class _MobileFullPlayerState extends State<MobileFullPlayer>
     mobileFullPlayerProgress.value = 0;
     widget.controller?._detach(this);
     _swipeTrackChange();
+    _neighborWarmup();
     _swipe.dispose();
     _controller.dispose();
     _coverSwipe.dispose();
@@ -345,19 +368,21 @@ class _MobileFullPlayerState extends State<MobileFullPlayer>
         child: SignalBuilder(
           builder: (context) {
             final accent = accentColorSignal();
-            final isPlaying = isPlayingSignal();
+            // The stable variant: a track switch briefly reports `paused`,
+            // and reacting to it would flicker the button and shrink the
+            // cover mid-transition.
+            final isPlaying = stablePlayingSignal();
             final navState = currentNavStateSignal.value;
             final surface = MiniPlateSurface(
               lyricsStyle:
                   navState.section == AppSection.home && showLyricsSignal.value,
               colorScheme: Theme.of(context).colorScheme,
             );
-            // The neighbours of the playing track. Their covers are kept
-            // mounted (invisible) so that their artwork is resolved and
-            // downloaded before the user swipes. These signals also encode
-            // the repeat mode, so queue ends have no neighbour.
-            final prevCoverUrl = previousTrackSignal()?.coverUrl;
-            final nextCoverUrl = nextTrackSignal()?.coverUrl;
+            // The neighbours of the playing track, kept mounted (invisible)
+            // so their artwork is resolved and downloaded before the user
+            // swipes. Refreshed after the transition, not during it.
+            final prevCoverUrl = _prevCoverUrl;
+            final nextCoverUrl = _nextCoverUrl;
             return TweenAnimationBuilder<double>(
               // The cover grows while the track plays and shrinks back while
               // it is paused, the same way the cover on the home screen does.
@@ -447,11 +472,7 @@ class _MobileFullPlayerState extends State<MobileFullPlayer>
     );
     // The cover grows with the panel: the panel clips its content, so a
     // faster growing cover would be cut off at the top.
-    final coverRect = Rect.lerp(
-      closedCoverRect,
-      openCoverRect,
-      coverT,
-    )!.translate(_coverSwipe.value, 0);
+    final coverRect = Rect.lerp(closedCoverRect, openCoverRect, coverT)!;
     // The neighbour covers keep a gap from the current one, so they do not
     // look glued together while one of them slides in.
     final neighborDistance = metrics.coverRect.width + kCoverSwipeGap;
@@ -501,8 +522,9 @@ class _MobileFullPlayerState extends State<MobileFullPlayer>
         ),
         Positioned.fromRect(
           rect: panelRect,
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(panelRadius),
+          child: _panelClip(
+            panelRadius: panelRadius,
+            panelT: panelT,
             child: Stack(
               children: [
                 if (panelOpacity < 1)
@@ -526,16 +548,19 @@ class _MobileFullPlayerState extends State<MobileFullPlayer>
                     ),
                   ),
                 Positioned.fill(
-                  child: Opacity(
-                    opacity: panelOpacity,
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [topColor, baseColor, bottomColor],
-                          stops: const [0, 0.45, 1],
-                        ),
+                  // Alpha lives in the gradient stops instead of an Opacity
+                  // widget: same pixels, no full-screen saveLayer per frame.
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          topColor.withValues(alpha: panelOpacity),
+                          baseColor.withValues(alpha: panelOpacity),
+                          bottomColor.withValues(alpha: panelOpacity),
+                        ],
+                        stops: const [0, 0.45, 1],
                       ),
                     ),
                   ),
@@ -545,7 +570,11 @@ class _MobileFullPlayerState extends State<MobileFullPlayer>
                   top: -panelRect.top,
                   width: size.width,
                   height: size.height,
-                  child: IgnorePointer(ignoring: panelT < 0.35, child: child),
+                  // The content repaints on every position tick; keep the
+                  // full-screen panel gradient out of that repaint.
+                  child: RepaintBoundary(
+                    child: IgnorePointer(ignoring: panelT < 0.35, child: child),
+                  ),
                 ),
                 if (miniContentOpacity > 0)
                   Positioned(
@@ -576,41 +605,37 @@ class _MobileFullPlayerState extends State<MobileFullPlayer>
                       ),
                     ),
                   ),
-                // The neighbour covers stay mounted even when no swipe is
-                // running: that resolves and downloads their artwork ahead of
-                // the swipe, so the cover that slides in is already there.
-                // They only become interactive while they are actually
-                // sliding in, so the invisible copies never steal gestures.
-                _buildCover(
-                  context,
-                  panelRect,
-                  openCoverRect.translate(
-                    _coverSwipe.value - neighborDistance,
-                    0,
+                // The neighbour covers stay mounted off-screen: that resolves,
+                // downloads and rasterises their artwork ahead of the swipe,
+                // so the cover that slides in is already there.
+                // They only become visible and interactive while they actually
+                // slide in, so the off-screen copies never paint or steal
+                // gestures.
+                for (final neighbour in [
+                  (direction: -1, url: prevCoverUrl),
+                  (direction: 1, url: nextCoverUrl),
+                ])
+                  _buildCover(
+                    context,
+                    panelRect,
+                    openCoverRect,
+                    coverRadius,
+                    panelT,
+                    metrics.coverRect.width,
+                    dx:
+                        _coverSwipe.value +
+                        neighbour.direction * neighborDistance,
+                    coverUrl: _swipe.direction == neighbour.direction &&
+                            _swipe.canCommit
+                        ? _swipe.incomingUrl
+                        : neighbour.url,
+                    opacity: _swipe.direction == neighbour.direction &&
+                            _swipe.canCommit
+                        ? 1
+                        : 0,
+                    interactive: _swipe.direction == neighbour.direction &&
+                        _swipe.canCommit,
                   ),
-                  coverRadius,
-                  panelT,
-                  metrics.coverRect.width,
-                  coverUrl: _swipe.direction < 0 && _swipe.canCommit
-                      ? _swipe.incomingUrl
-                      : prevCoverUrl,
-                  opacity: _swipe.direction < 0 && _swipe.canCommit ? 1 : 0,
-                ),
-                _buildCover(
-                  context,
-                  panelRect,
-                  openCoverRect.translate(
-                    _coverSwipe.value + neighborDistance,
-                    0,
-                  ),
-                  coverRadius,
-                  panelT,
-                  metrics.coverRect.width,
-                  coverUrl: _swipe.direction > 0 && _swipe.canCommit
-                      ? _swipe.incomingUrl
-                      : nextCoverUrl,
-                  opacity: _swipe.direction > 0 && _swipe.canCommit ? 1 : 0,
-                ),
                 _buildCover(
                   context,
                   panelRect,
@@ -618,6 +643,7 @@ class _MobileFullPlayerState extends State<MobileFullPlayer>
                   coverRadius,
                   panelT,
                   metrics.coverRect.width,
+                  dx: _coverSwipe.value,
                   coverUrl: _swipe.holdUrl,
                   onTap: () {
                     final albumId = trackMetadataSignal().albumId;
@@ -643,6 +669,21 @@ class _MobileFullPlayerState extends State<MobileFullPlayer>
     );
   }
 
+  /// The panel only needs a clip while it grows over the screen: when open it
+  /// is the whole screen and the rounded corners are gone, so the clip layer
+  /// would be pure per-frame cost.
+  Widget _panelClip({
+    required double panelRadius,
+    required double panelT,
+    required Widget child,
+  }) {
+    if (panelT >= 1) return child;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(panelRadius),
+      child: child,
+    );
+  }
+
   Widget _buildCover(
     BuildContext context,
     Rect panelRect,
@@ -650,85 +691,101 @@ class _MobileFullPlayerState extends State<MobileFullPlayer>
     double radius,
     double progress,
     double side, {
+    double dx = 0,
     String? coverUrl,
     VoidCallback? onTap,
     double opacity = 1,
+    bool interactive = true,
   }) {
+    // The shadow is the most expensive thing to paint here, and it only
+    // changes when the panel animates or the artwork loads: keep it in its
+    // own layer instead of re-blurring it per frame.
+    final Widget artwork = RepaintBoundary(
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(radius),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.35 * progress),
+              blurRadius: 12 + 24 * progress,
+              offset: Offset(0, 8 * progress),
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(radius),
+          child: SignalBuilder(
+            builder: (context) {
+              final rawUrl = coverUrl ?? trackMetadataSignal().coverUrl;
+              final dpr = MediaQuery.devicePixelRatioOf(context);
+              final targetPx = (side * dpr).round().clamp(0, 800);
+              final lowResUrl = rawUrl == null
+                  ? null
+                  : resolveCoverUrl(rawUrl, (48 * dpr).round());
+              final highResUrl = rawUrl == null
+                  ? null
+                  : resolveCoverUrl(rawUrl, targetPx);
+
+              final placeholder = lowResUrl == null
+                  ? CoverPlaceholder(size: side, icon: Icons.music_note)
+                  : RustCachedImage(
+                      imageUrl: lowResUrl,
+                      width: side,
+                      height: side,
+                      cacheWidth: (48 * dpr).round(),
+                      cacheHeight: (48 * dpr).round(),
+                    );
+
+              return GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: onTap,
+                onHorizontalDragStart: _onCoverDragStart,
+                onHorizontalDragUpdate: _onCoverDragUpdate,
+                onHorizontalDragEnd: _onCoverDragEnd,
+                onHorizontalDragCancel: _onCoverDragCancel,
+                child: FittedBox(
+                  fit: BoxFit.fill,
+                  child: SizedBox.square(
+                    dimension: side,
+                    child: RustCachedImage(
+                      imageUrl: highResUrl,
+                      width: side,
+                      height: side,
+                      cacheWidth: targetPx,
+                      cacheHeight: targetPx,
+                      placeholder: placeholder,
+                      errorWidget: placeholder,
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+
     return Positioned(
+      // Only the resting layout here: the swipe / slide offset goes through
+      // the transform below, so moving the carousel is compositing only.
+      // A changing Positioned rect would relayout the cover and invalidate
+      // its cached raster (the large blurred shadow) on every frame.
       left: coverRect.left - panelRect.left,
       top: coverRect.top - panelRect.top,
       width: coverRect.width,
       height: coverRect.height,
-      // Invisible neighbours are only there to warm the artwork up; they must
-      // not intercept taps or drags next to the visible cover.
+      // Pre-warmed neighbours stay laid out off-screen but must not intercept
+      // taps or drags next to the visible cover. Zero opacity still builds and
+      // decodes the artwork, just without painting it.
       child: IgnorePointer(
-        ignoring: opacity == 0,
+        ignoring: !interactive,
         child: ExcludeSemantics(
-          excluding: opacity == 0,
-          child: Opacity(
-            opacity: opacity,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(radius),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.35 * progress),
-                    blurRadius: 12 + 24 * progress,
-                    offset: Offset(0, 8 * progress),
-                  ),
-                ],
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(radius),
-                child: SignalBuilder(
-                  builder: (context) {
-                    final rawUrl = coverUrl ?? trackMetadataSignal().coverUrl;
-                    final dpr = MediaQuery.devicePixelRatioOf(context);
-                    final targetPx = (side * dpr).round();
-                    final lowResUrl = rawUrl == null
-                        ? null
-                        : resolveCoverUrl(rawUrl, (48 * dpr).round());
-                    final highResUrl = rawUrl == null
-                        ? null
-                        : resolveCoverUrl(rawUrl, targetPx);
-
-                    final placeholder = lowResUrl == null
-                        ? CoverPlaceholder(size: side, icon: Icons.music_note)
-                        : RustCachedImage(
-                            imageUrl: lowResUrl,
-                            width: side,
-                            height: side,
-                            cacheWidth: (48 * dpr).round(),
-                            cacheHeight: (48 * dpr).round(),
-                          );
-
-                    return GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: onTap,
-                      onHorizontalDragStart: _onCoverDragStart,
-                      onHorizontalDragUpdate: _onCoverDragUpdate,
-                      onHorizontalDragEnd: _onCoverDragEnd,
-                      onHorizontalDragCancel: _onCoverDragCancel,
-                      child: FittedBox(
-                        fit: BoxFit.fill,
-                        child: SizedBox.square(
-                          dimension: side,
-                          child: RustCachedImage(
-                            imageUrl: highResUrl,
-                            width: side,
-                            height: side,
-                            cacheWidth: targetPx,
-                            cacheHeight: targetPx,
-                            placeholder: placeholder,
-                            errorWidget: placeholder,
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ),
+          excluding: !interactive,
+          child: Transform.translate(
+            offset: Offset(dx, 0),
+            child: opacity >= 1
+                ? artwork
+                : Opacity(opacity: opacity, child: artwork),
           ),
         ),
       ),
@@ -837,13 +894,13 @@ class _Reveal extends StatelessWidget {
       child: child,
       builder: (context, child) {
         final value = interval.transform(animation.value.clamp(0.0, 1.0));
-        return Opacity(
-          opacity: value,
-          child: Transform.translate(
-            offset: Offset(0, (1 - value) * offset),
-            child: child,
-          ),
+        final child_ = Transform.translate(
+          offset: Offset(0, (1 - value) * offset),
+          child: child,
         );
+        // Fully revealed sections need no opacity layer at all.
+        if (value >= 1) return child_;
+        return Opacity(opacity: value, child: child_);
       },
     );
   }
@@ -881,13 +938,13 @@ class _CoverClearReveal extends StatelessWidget {
         final value = Curves.easeOutCubic.transform(
           ((t - start) / (end - start)).clamp(0.0, 1.0),
         );
-        return Opacity(
-          opacity: value,
-          child: Transform.translate(
-            offset: Offset(0, (1 - value) * offset),
-            child: child,
-          ),
+        final child_ = Transform.translate(
+          offset: Offset(0, (1 - value) * offset),
+          child: child,
         );
+        // Fully revealed sections need no opacity layer at all.
+        if (value >= 1) return child_;
+        return Opacity(opacity: value, child: child_);
       },
     );
   }
@@ -1278,27 +1335,36 @@ class _MarqueeTitleState extends State<_MarqueeTitle>
           return Align(alignment: Alignment.centerLeft, child: text);
         }
 
-        return ClipRect(
-          child: SizedBox(
-            width: constraints.maxWidth,
-            height: painter.height,
-            child: OverflowBox(
-              alignment: Alignment.centerLeft,
-              minWidth: 0,
-              maxWidth: double.infinity,
-              child: AnimatedBuilder(
-                animation: _position,
-                builder: (context, child) => Transform.translate(
-                  offset: Offset(-_position.value * _distance, 0),
-                  child: child,
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    text,
-                    const SizedBox(width: _gap),
-                    text,
-                  ],
+        // The marquee animates on every frame. Without a repaint boundary
+        // here the moving Transform would repaint its whole ancestry (panel
+        // gradients, buttons, slider), not just the text.
+        return RepaintBoundary(
+          child: ClipRect(
+            child: SizedBox(
+              width: constraints.maxWidth,
+              height: painter.height,
+              child: OverflowBox(
+                alignment: Alignment.centerLeft,
+                minWidth: 0,
+                maxWidth: double.infinity,
+                child: AnimatedBuilder(
+                  animation: _position,
+                  builder: (context, child) => Transform.translate(
+                    offset: Offset(-_position.value * _distance, 0),
+                    child: child,
+                  ),
+                  child: RepaintBoundary(
+                    // The text itself never changes, so let it scroll as a
+                    // cached layer.
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        text,
+                        const SizedBox(width: _gap),
+                        text,
+                      ],
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -1335,7 +1401,7 @@ class _FullPlayerControls extends StatelessWidget {
   Widget build(BuildContext context) {
     return SignalBuilder(
       builder: (context) {
-        final isPlaying = isPlayingSignal();
+        final isPlaying = stablePlayingSignal();
         final showBuffering = showBufferingIndicatorSignal.value;
         final meta = trackMetadataSignal();
         final trackId = meta.id;

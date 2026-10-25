@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:io' show File, Platform;
+import 'dart:io' show Platform;
 import 'dart:typed_data';
 
 import 'package:flutter/services.dart';
@@ -11,7 +11,8 @@ import 'package:yayma/src/features/core/providers/notification_provider.dart';
 import 'package:yayma/src/features/core/providers/visual_effects_provider.dart';
 import 'package:yayma/src/features/core/services/debouncer.dart';
 import 'package:yayma/src/features/core/services/rust_bridge.dart';
-import 'package:yayma/src/features/core/utils/lru_map.dart';
+import 'package:yayma/src/features/core/theme/app_theme.dart';
+import 'package:yayma/src/features/core/theme/cover_palette.dart';
 import 'package:yayma/src/features/library/providers/library_provider.dart';
 import 'package:yayma/src/rust/api/audio_fx.dart' as rust;
 import 'package:yayma/src/rust/api/library.dart' as rust;
@@ -45,11 +46,14 @@ Future<void> initPlayback() {
   final future = _initPlaybackUnsafe();
   _initPlaybackFuture = future;
   unawaited(
-    future.then((_) {
-      if (identical(_initPlaybackFuture, future)) _initPlaybackFuture = null;
-    }, onError: (_) {
-      if (identical(_initPlaybackFuture, future)) _initPlaybackFuture = null;
-    }),
+    future.then(
+      (_) {
+        if (identical(_initPlaybackFuture, future)) _initPlaybackFuture = null;
+      },
+      onError: (_) {
+        if (identical(_initPlaybackFuture, future)) _initPlaybackFuture = null;
+      },
+    ),
   );
   return future;
 }
@@ -63,6 +67,9 @@ Future<void> disposePlayback() async {
   _eventSub = null;
 
   _bufferingDelayDebouncer.dispose();
+  _stablePlayingDebouncer.dispose();
+  stablePlayingSignal.value = false;
+  _userPausePending = false;
 
   playerStateSignal.value = null;
   playerProgressSignal.value = null;
@@ -71,6 +78,7 @@ Future<void> disposePlayback() async {
   audioDevicesSignal.value = [];
   selectedAudioDeviceSignal.value = null;
   colorSchemeSignal.value = null;
+  appThemeSignal.value = null;
   showBufferingIndicatorSignal.value = false;
   showLyricsSignal.value = false;
   hideLyricsOverlaySignal.value = false;
@@ -78,7 +86,7 @@ Future<void> disposePlayback() async {
   equalizerSignal.value = null;
   audioEffectsSignal.value = [];
 
-  _preparedCoverSchemes.clear();
+  clearCoverPalettes();
   // In-flight preparations finish harmlessly; clearing drops the handles so
   // stale futures are not held across login sessions.
 }
@@ -86,6 +94,13 @@ Future<void> disposePlayback() async {
 Future<void> _initPlaybackUnsafe() async {
   final ctx = appContextSignal.value;
   if (ctx == null) return;
+
+  // The Android UI has no wave shader, so keep Rust from computing ticks
+  // for a frame nobody draws.
+  if (Platform.isAndroid) {
+    vibeVisibleSignal.value = false;
+    unawaited(rust.setVibeAnimationEnabled(ctx: ctx, enabled: false));
+  }
 
   await _eventSub?.cancel();
   _eventSub = null;
@@ -121,17 +136,15 @@ Future<void> _initPlaybackUnsafe() async {
           trackId,
         };
       case rust.AppEvent_TrackDownloadFinished(field0: final trackId):
-        downloadingTracksSignal.value = {
-          ...downloadingTracksSignal.value,
-        }..remove(trackId);
+        downloadingTracksSignal.value = {...downloadingTracksSignal.value}
+          ..remove(trackId);
         unawaited(refreshDownloadedTracks());
       case rust.AppEvent_TrackDownloadFailed(
         field0: final trackId,
         field1: final error,
       ):
-        downloadingTracksSignal.value = {
-          ...downloadingTracksSignal.value,
-        }..remove(trackId);
+        downloadingTracksSignal.value = {...downloadingTracksSignal.value}
+          ..remove(trackId);
         showAppError('Ошибка загрузки трека: $error');
       case _:
         break;
@@ -140,20 +153,20 @@ Future<void> _initPlaybackUnsafe() async {
 
   audioQualitySignal.value = await rust.getAudioQuality(ctx: ctx);
 
-  _activatePersistentColorScheme();
-  _activateAdjacentCoverPrecache();
-  _activateVibePalette();
-  _activateBufferingDelay();
-  _activateLyricsOverlayReset();
-  _activateWifiLock();
+  activateCoverTheme();
+  _activateEffects();
 }
 
-void _activatePersistentColorScheme() => _persistentColorSchemeEffect;
-void _activateAdjacentCoverPrecache() => _adjacentCoverPrecacheEffect;
-void _activateVibePalette() => _vibePaletteEffect;
-void _activateBufferingDelay() => _bufferingDelayEffect;
-void _activateLyricsOverlayReset() => _lyricsOverlayResetEffect;
-void _activateWifiLock() => _wifiLockEffect;
+/// Reading a lazy top-level effect initializes it and starts it listening.
+final List<EffectCleanup> _playbackEffects = [
+  _vibePaletteEffect,
+  _bufferingDelayEffect,
+  _stablePlayingEffect,
+  _lyricsOverlayResetEffect,
+  _wifiLockEffect,
+];
+
+void _activateEffects() => _playbackEffects;
 
 const _wifiLockChannel = MethodChannel('io.github.darkplayoff.yayma/wifilock');
 
@@ -198,6 +211,41 @@ final FlutterComputed<bool> isPlayingSignal = computed(
   () => playerStateSignal.value?.isPlaying ?? false,
   options: const ComputedOptions(name: 'isPlayingSignal'),
 );
+
+// A track switch briefly reports `isPlaying = false` while the engine swaps
+// sources. Propagating that directly flickers the play/pause button and
+// shrinks the cover for the length of the transition. [stablePlayingSignal]
+// delays every false transition by [stablePlayingDelay]: if playback resumes
+// within the window, the pause never becomes visible. A pause the user asked
+// for flushes the delay immediately (see [PlaybackController.togglePlay]
+// and [PlaybackController.pause]).
+const Duration stablePlayingDelay = Duration(seconds: 1);
+final FlutterSignal<bool> stablePlayingSignal = signal(false);
+final Debouncer _stablePlayingDebouncer = Debouncer();
+// Set when the user asks for a pause, so the matching false transition skips
+// the delay instead of leaving the button unresponsive for a second.
+bool _userPausePending = false;
+
+final EffectCleanup _stablePlayingEffect = effect(() {
+  if (isPlayingSignal()) {
+    _userPausePending = false;
+    _stablePlayingDebouncer.cancel();
+    stablePlayingSignal.value = true;
+    return;
+  }
+  if (!stablePlayingSignal.peek()) return;
+  if (_userPausePending) {
+    _userPausePending = false;
+    _stablePlayingDebouncer.cancel();
+    stablePlayingSignal.value = false;
+    return;
+  }
+  // runOnce: repeated false pushes must not restart the countdown.
+  _stablePlayingDebouncer.runOnce(
+    () => stablePlayingSignal.value = false,
+    stablePlayingDelay,
+  );
+});
 
 // Shuffle signal
 final FlutterComputed<bool> isShuffledSignal = computed(
@@ -351,119 +399,9 @@ final FlutterSignal<ColorScheme?> colorSchemeSignal = signal<ColorScheme?>(
   null,
 );
 
-// Keep only the covers around the current queue position. Apart from avoiding
-// repeated palette extraction when going back, this lets the normal next-track
-// transition do its image work before the track actually changes.
-//
-// This second level next to Flutter's ImageCache is intentional: ImageCache
-// stores decoded images, not the derived ColorScheme palettes, and
-// ColorScheme.fromImageProvider is the expensive part worth memoizing.
-// In-flight extractions are deduplicated by caching the Future itself, so
-// concurrent readers share one palette computation (see [LruMap]).
-const int _preparedCoverCacheLimit = 6;
-final LruMap<String, Future<ColorScheme?>> _preparedCoverSchemes = LruMap(
-  maximumSize: _preparedCoverCacheLimit,
-);
-
-Future<ColorScheme?> _prepareCoverScheme(String url) {
-  final cached = _preparedCoverSchemes[url];
-  if (cached != null) return cached;
-
-  final future = _extractCoverScheme(url);
-  _preparedCoverSchemes[url] = future;
-  // Don't poison the cache with misses or errors: null results and failures
-  // are evicted so the next request retries instead of reusing the failure.
-  // The identity check guards against evicting a fresher entry inserted
-  // for the same url.
-  unawaited(
-    future.then((scheme) {
-      if (scheme == null &&
-          identical(_preparedCoverSchemes.peek(url), future)) {
-        final _ = _preparedCoverSchemes.remove(url);
-      }
-    }, onError: (_) {
-      if (identical(_preparedCoverSchemes.peek(url), future)) {
-        final _ = _preparedCoverSchemes.remove(url);
-      }
-    }),
-  );
-  return future;
-}
-
-Future<ColorScheme?> _extractCoverScheme(String url) async {
-  try {
-    final ctx = appContextSignal.value;
-    if (ctx == null) return null;
-
-    final path = await rust.getCachedImagePath(ctx: ctx, url: url);
-    if (path == null) return null;
-
-    final file = File(path);
-    final paletteProvider = ResizeImage(
-      FileImage(file),
-      width: 32,
-      height: 32,
-    );
-    final scheme = await ColorScheme.fromImageProvider(
-      provider: paletteProvider,
-      brightness: Brightness.dark,
-    );
-
-    // Warm the exact decoded size used by BlurredCoverBackground. Resolving
-    // an ImageProvider is enough to put it into Flutter's shared image cache.
-    final backgroundProvider = ResizeImage(
-      FileImage(file),
-      width: 60,
-      height: 60,
-    );
-    final stream = backgroundProvider.resolve(ImageConfiguration.empty);
-    late final ImageStreamListener listener;
-    listener = ImageStreamListener(
-      (_, _) => stream.removeListener(listener),
-      onError: (_, _) => stream.removeListener(listener),
-    );
-    stream.addListener(listener);
-
-    return scheme;
-  } on Object catch (error) {
-    debugPrint('Cover preparation failed: $error');
-    return null;
-  }
-}
-
-// Effect to update the scheme, normally from the already prepared queue entry.
-final EffectCleanup _persistentColorSchemeEffect = effect(() {
-  final url = currentCoverUrlSignal();
-
-  if (url == null || appContextSignal.value == null) {
-    colorSchemeSignal.value = null;
-    return;
-  }
-
-  unawaited(() async {
-    final scheme = await _prepareCoverScheme(url);
-    if (scheme == null) return;
-
-    // Check if the track hasn't changed while preparation was in flight.
-    if (currentCoverUrlSignal() == url) {
-      colorSchemeSignal.value = scheme;
-    }
-  }());
-});
-
-// Queue updates happen well ahead of playback. Prepare both neighbours so
-// next/previous buttons and automatic advancement don't decode on transition.
-final EffectCleanup _adjacentCoverPrecacheEffect = effect(() {
-  final previousUrl = previousTrackSignal()?.coverUrl;
-  final nextUrl = nextTrackSignal()?.coverUrl;
-  if (previousUrl != null) unawaited(_prepareCoverScheme(previousUrl));
-  if (nextUrl != null && nextUrl != previousUrl) {
-    unawaited(_prepareCoverScheme(nextUrl));
-  }
-});
-
-// Material Orange 500 is the stable fallback before a cover palette is ready.
-const Color defaultAccentColor = Color(0xFFFF9800);
+// ThemeData built together with [colorSchemeSignal], so the app's root build
+// only swaps an object instead of running the colour math per track.
+final FlutterSignal<ThemeData?> appThemeSignal = signal<ThemeData?>(null);
 
 // Accent color
 final FlutterComputed<Color> accentColorSignal = computed(
@@ -473,34 +411,20 @@ final FlutterComputed<Color> accentColorSignal = computed(
 
 // Player bar background color
 final FlutterComputed<Color> playerBarColorSignal = computed(
-  () =>
-      Color.lerp(
-        colorSchemeSignal()?.surfaceContainerHighest,
-        Colors.black,
-        0.4,
-      ) ??
-      const Color(0xFF181818),
+  () => surfaceOverlay(colorSchemeSignal()?.surfaceContainerHighest),
   options: const ComputedOptions(name: 'playerBarColorSignal'),
 );
 
 // Sync palette with Rust for Vibe effect
 final EffectCleanup _vibePaletteEffect = effect(() {
+  if (Platform.isAndroid) return; // no wave shader on Android
   final scheme = colorSchemeSignal();
   final ctx = appContextSignal.value;
   if (scheme != null && ctx != null) {
-    List<double> c(Color col) => [col.r, col.g, col.b];
-    final p = [
-      ...c(scheme.primary),
-      ...c(scheme.secondary),
-      ...c(scheme.tertiary),
-      ...c(scheme.primaryContainer),
-      ...c(scheme.secondaryContainer),
-      ...c(scheme.tertiaryContainer),
-    ];
     unawaited(
       rust.setVibePalette(
         ctx: ctx,
-        colors: Float32List.fromList(p),
+        colors: Float32List.fromList(vibePalette(scheme)),
       ),
     );
   }
@@ -594,12 +518,27 @@ class PlaybackController {
       runRustAction((ctx) => rust.playPlaylist(ctx: ctx, uid: uid, kind: kind));
   static Future<void> playAlbum(int albumId) =>
       runRustAction((ctx) => rust.playAlbum(ctx: ctx, albumId: albumId));
-  static Future<void> togglePlay() =>
-      runRustAction((ctx) => rust.togglePlayPause(ctx: ctx));
+  static Future<void> togglePlay() {
+    // A pause the user asked for must not wait out the track-switch debounce.
+    final wasPlaying = stablePlayingSignal.peek();
+    if (wasPlaying) _userPausePending = true;
+    return runRustAction((ctx) => rust.togglePlayPause(ctx: ctx)).then((ok) {
+      // The pause may have failed; don't let the flag eat the next transition.
+      if (wasPlaying && !ok) _userPausePending = false;
+    });
+  }
 
-  static Future<void> play() => runRustAction((ctx) => rust.play(ctx: ctx));
+  static Future<void> play() {
+    return runRustAction((ctx) => rust.play(ctx: ctx));
+  }
 
-  static Future<void> pause() => runRustAction((ctx) => rust.pause(ctx: ctx));
+  static Future<void> pause() {
+    final wasPlaying = stablePlayingSignal.peek();
+    if (wasPlaying) _userPausePending = true;
+    return runRustAction((ctx) => rust.pause(ctx: ctx)).then((ok) {
+      if (wasPlaying && !ok) _userPausePending = false;
+    });
+  }
   static Future<void> next() => runRustAction((ctx) => rust.playNext(ctx: ctx));
   static Future<void> prev() => runRustAction((ctx) => rust.playPrev(ctx: ctx));
 
@@ -639,6 +578,7 @@ class PlaybackController {
     }
     return confirmed;
   }
+
   static Future<void> toggleDislike({required String trackId}) =>
       runRustAction((ctx) => rust.toggleDislike(ctx: ctx, trackId: trackId));
 
@@ -653,9 +593,8 @@ class PlaybackController {
       );
   static Future<void> changeVolume(int volume) =>
       runRustAction((ctx) => rust.setVolume(ctx: ctx, volume: volume));
-  static Future<void> changeTransientVolumeGain(int gain) => runRustAction(
-    (ctx) => rust.setTransientVolumeGain(ctx: ctx, gain: gain),
-  );
+  static Future<void> changeTransientVolumeGain(int gain) =>
+      runRustAction((ctx) => rust.setTransientVolumeGain(ctx: ctx, gain: gain));
   static Future<void> seekTo(Duration duration) {
     // Optimistic update so the timeline stays at the new position even while
     // paused (progress events only tick during playback, and the seek echo

@@ -8,6 +8,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/app/session.dart';
 import 'package:yayma/src/features/core/providers/visual_effects_provider.dart';
+import 'package:yayma/src/features/core/theme/app_theme.dart';
 import 'package:yayma/src/features/core/utils/lru_map.dart';
 import 'package:yayma/src/features/core/views/widgets/rust_cached_image.dart';
 import 'package:yayma/src/features/playback/providers/playback_provider.dart';
@@ -301,6 +302,40 @@ class _BlurredCoverPainter extends CustomPainter {
       !identical(oldDelegate.entry, entry);
 }
 
+/// Flat Material gradient for Android: replaces the blurred cover raster so
+/// the backdrop follows the theme instead of the artwork and costs no blur
+/// pass on every track change.
+class MaterialGradientBackground extends StatelessWidget {
+  const MaterialGradientBackground({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return RepaintBoundary(
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Color.alphaBlend(
+                scheme.primary.withValues(alpha: 0.22),
+                scheme.surfaceContainerHigh,
+              ),
+              scheme.surface,
+              Color.alphaBlend(
+                scheme.tertiary.withValues(alpha: 0.12),
+                scheme.surfaceContainerLowest,
+              ),
+            ],
+            stops: const [0, 0.55, 1],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class WaveBackground extends StatefulWidget {
   const WaveBackground({super.key});
   @override
@@ -323,19 +358,7 @@ class _WaveBackgroundState extends State<WaveBackground> {
     super.didChangeDependencies();
     _devicePixelRatio = MediaQuery.of(context).devicePixelRatio;
     final scheme = Theme.of(context).colorScheme;
-    List<double> c(ui.Color col) => [
-      (col.r * 255.0).round().clamp(0, 255) / 255.0,
-      (col.g * 255.0).round().clamp(0, 255) / 255.0,
-      (col.b * 255.0).round().clamp(0, 255) / 255.0,
-    ];
-    _cachedThemePalette = [
-      ...c(scheme.primary),
-      ...c(scheme.secondary),
-      ...c(scheme.tertiary),
-      ...c(scheme.primaryContainer),
-      ...c(scheme.secondaryContainer),
-      ...c(scheme.tertiaryContainer),
-    ];
+    _cachedThemePalette = vibePalette(scheme);
     final ctx = appContextSignal.value;
     if (trackMetadataSignal().id == null && ctx != null) {
       unawaited(

@@ -487,7 +487,9 @@ class CommonDetailSliverLayout extends StatelessWidget {
     final scrollView = SmoothScroll(
       child: CustomScrollView(
         controller: controller,
-        physics: onRefresh != null ? const AlwaysScrollableScrollPhysics() : null,
+        physics: onRefresh != null
+            ? const AlwaysScrollableScrollPhysics()
+            : null,
         slivers: [
           SliverToBoxAdapter(child: header),
           ...slivers,
@@ -633,130 +635,139 @@ class _CommonProgressSliderState extends State<CommonProgressSlider> {
   Widget build(BuildContext context) {
     return ConstrainedBox(
       constraints: BoxConstraints(maxWidth: widget.maxWidth),
-      child: SignalBuilder(
-        builder: (context) {
-          final progress = trackProgressSignal();
-          final trackId = currentTrackIdSignal();
-          // A seek hold that is no longer anchored to the current track
-          // (the track changed after the drag ended) is stale — drop it so
-          // the live position of the new track takes over.
-          if (_dragValue != null && !_isDragging && trackId != _dragTrackId) {
-            WidgetsBinding.instance.addPostFrameCallback((_) => _clearDrag());
-          }
-          // Guard against a zero/unknown duration (e.g. streams). The
-          // non-compact branch used to pass a raw 0 max while the compact
-          // branch clamped to 1.0 — use the same guard for both.
-          final maxDur = progress.durationMs > 0 ? progress.durationMs : 1.0;
-          final dur = progress.durationMs;
-          final displayPosition = _dragValue ?? progress.positionMs;
-          final trackHeight = widget.compact ? 4.0 : 6.0;
-          final thumbRadius = widget.compact ? 4.0 : 6.0;
-          final fontSize = widget.compact ? 11.0 : 12.0;
-          // No accent subscription while the hosting tab is hidden.
-          final accentColor =
-              widget.accentColor ?? visibleSignal<Color>(context, accentColorSignal);
-          final onSurfaceVariant = Theme.of(
-            context,
-          ).colorScheme.onSurfaceVariant;
+      // The position ticks rebuild and repaint this subtree several times a
+      // second; keep that off the surrounding cover / background layers.
+      child: RepaintBoundary(
+        child: SignalBuilder(
+          builder: (context) {
+            final progress = trackProgressSignal();
+            final trackId = currentTrackIdSignal();
+            // A seek hold that is no longer anchored to the current track
+            // (the track changed after the drag ended) is stale — drop it so
+            // the live position of the new track takes over.
+            if (_dragValue != null && !_isDragging && trackId != _dragTrackId) {
+              WidgetsBinding.instance.addPostFrameCallback((_) => _clearDrag());
+            }
+            // Guard against a zero/unknown duration (e.g. streams). The
+            // non-compact branch used to pass a raw 0 max while the compact
+            // branch clamped to 1.0 — use the same guard for both.
+            final maxDur = progress.durationMs > 0 ? progress.durationMs : 1.0;
+            final dur = progress.durationMs;
+            final displayPosition = _dragValue ?? progress.positionMs;
+            final trackHeight = widget.compact ? 4.0 : 6.0;
+            final thumbRadius = widget.compact ? 4.0 : 6.0;
+            final fontSize = widget.compact ? 11.0 : 12.0;
+            // No accent subscription while the hosting tab is hidden.
+            final accentColor =
+                widget.accentColor ??
+                visibleSignal<Color>(context, accentColorSignal);
+            final onSurfaceVariant = Theme.of(
+              context,
+            ).colorScheme.onSurfaceVariant;
 
-          return widget.compact
-              ? Row(
-                  children: [
-                    SizedBox(
-                      width: 40,
-                      child: Text(
-                        formatDuration(displayPosition.toInt()),
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: onSurfaceVariant,
-                          fontSize: fontSize,
-                          fontWeight: FontWeight.bold,
-                          fontFeatures: const [FontFeature.tabularFigures()],
-                        ),
-                      ),
-                    ),
-                    Expanded(
-                      child: ClipRect(
-                        child: SizedBox(
-                          height: 28,
-                          child: M3ESlider(
-                            value: displayPosition.clamp(0, maxDur),
-                            max: maxDur,
-                            decoration: expressSliderDecoration(
-                              activeColor: accentColor,
-                              trackHeight: trackHeight,
-                              thumbWidth: thumbRadius,
-                              thumbHeight: thumbRadius * 3.5,
-                              inactiveColor: Theme.of(
-                                context,
-                              ).colorScheme.onSurface.withValues(alpha: 0.15),
-                            ),
-                            onChangeStart: _onDragStart,
-                            onChanged: _onDragUpdate,
-                            onChangeEnd: _onDragEnd,
-                          ),
-                        ),
-                      ),
-                    ),
-                    SizedBox(
-                      width: 40,
-                      child: Text(
-                        formatDuration(dur.toInt()),
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: onSurfaceVariant,
-                          fontSize: fontSize,
-                          fontWeight: FontWeight.bold,
-                          fontFeatures: const [FontFeature.tabularFigures()],
-                        ),
-                      ),
-                    ),
-                  ],
-                )
-              : Column(
-                  children: [
-                    M3ESlider(
-                      value: displayPosition.clamp(0.0, maxDur),
-                      max: maxDur,
-                      decoration: expressSliderDecoration(
-                        activeColor: accentColor,
-                        trackHeight: trackHeight,
-                        thumbWidth: thumbRadius * 1.4,
-                        thumbHeight: thumbRadius * 4,
-                        inactiveColor: Theme.of(
-                          context,
-                        ).colorScheme.onSurface.withValues(alpha: 0.15),
-                      ),
-                      onChangeStart: _onDragStart,
-                      onChanged: _onDragUpdate,
-                      onChangeEnd: _onDragEnd,
-                    ),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
+            return widget.compact
+                ? Row(
+                    children: [
+                      SizedBox(
+                        width: 40,
+                        child: Text(
                           formatDuration(displayPosition.toInt()),
+                          textAlign: TextAlign.center,
                           style: TextStyle(
                             color: onSurfaceVariant,
                             fontSize: fontSize,
-                            fontWeight: FontWeight.w600,
+                            fontWeight: FontWeight.bold,
                             fontFeatures: const [FontFeature.tabularFigures()],
                           ),
                         ),
-                        Text(
+                      ),
+                      Expanded(
+                        child: ClipRect(
+                          child: SizedBox(
+                            height: 28,
+                            child: M3ESlider(
+                              value: displayPosition.clamp(0, maxDur),
+                              max: maxDur,
+                              decoration: expressSliderDecoration(
+                                activeColor: accentColor,
+                                trackHeight: trackHeight,
+                                thumbWidth: thumbRadius,
+                                thumbHeight: thumbRadius * 3.5,
+                                inactiveColor: Theme.of(
+                                  context,
+                                ).colorScheme.onSurface.withValues(alpha: 0.15),
+                              ),
+                              onChangeStart: _onDragStart,
+                              onChanged: _onDragUpdate,
+                              onChangeEnd: _onDragEnd,
+                            ),
+                          ),
+                        ),
+                      ),
+                      SizedBox(
+                        width: 40,
+                        child: Text(
                           formatDuration(dur.toInt()),
+                          textAlign: TextAlign.center,
                           style: TextStyle(
                             color: onSurfaceVariant,
                             fontSize: fontSize,
-                            fontWeight: FontWeight.w600,
+                            fontWeight: FontWeight.bold,
                             fontFeatures: const [FontFeature.tabularFigures()],
                           ),
                         ),
-                      ],
-                    ),
-                  ],
-                );
-        },
+                      ),
+                    ],
+                  )
+                : Column(
+                    children: [
+                      M3ESlider(
+                        value: displayPosition.clamp(0.0, maxDur),
+                        max: maxDur,
+                        decoration: expressSliderDecoration(
+                          activeColor: accentColor,
+                          trackHeight: trackHeight,
+                          thumbWidth: thumbRadius * 1.4,
+                          thumbHeight: thumbRadius * 4,
+                          inactiveColor: Theme.of(
+                            context,
+                          ).colorScheme.onSurface.withValues(alpha: 0.15),
+                        ),
+                        onChangeStart: _onDragStart,
+                        onChanged: _onDragUpdate,
+                        onChangeEnd: _onDragEnd,
+                      ),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            formatDuration(displayPosition.toInt()),
+                            style: TextStyle(
+                              color: onSurfaceVariant,
+                              fontSize: fontSize,
+                              fontWeight: FontWeight.w600,
+                              fontFeatures: const [
+                                FontFeature.tabularFigures(),
+                              ],
+                            ),
+                          ),
+                          Text(
+                            formatDuration(dur.toInt()),
+                            style: TextStyle(
+                              color: onSurfaceVariant,
+                              fontSize: fontSize,
+                              fontWeight: FontWeight.w600,
+                              fontFeatures: const [
+                                FontFeature.tabularFigures(),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  );
+          },
+        ),
       ),
     );
   }

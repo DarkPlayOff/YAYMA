@@ -470,135 +470,141 @@ class _MiniProgressBarState extends State<_MiniProgressBar> {
 
   @override
   Widget build(BuildContext context) {
-    return SignalBuilder(
-      builder: (context) {
-        final progress = trackProgressSignal();
-        final duration = progress.durationMs;
-        final position = progress.positionMs;
+    // Sits inside the plate's BackdropFilter: without its own layer every
+    // position tick would make the blur pass re-run over the whole plate.
+    return RepaintBoundary(
+      child: SignalBuilder(
+        builder: (context) {
+          final progress = trackProgressSignal();
+          final duration = progress.durationMs;
+          final position = progress.positionMs;
 
-        final currentPosition = _dragValueMs ?? position;
-        final max = duration > 0 ? duration : 1.0;
-        final ratio = (currentPosition / max).clamp(0.0, 1.0);
+          final currentPosition = _dragValueMs ?? position;
+          final max = duration > 0 ? duration : 1.0;
+          final ratio = (currentPosition / max).clamp(0.0, 1.0);
 
-        final theme = Theme.of(context);
-        final colorScheme = theme.colorScheme;
+          final theme = Theme.of(context);
+          final colorScheme = theme.colorScheme;
 
-        final navState = currentNavStateSignal.value;
-        final showLyrics = showLyricsSignal.value;
-        final isHome = navState.section == AppSection.home;
+          final navState = currentNavStateSignal.value;
+          final showLyrics = showLyricsSignal.value;
+          final isHome = navState.section == AppSection.home;
 
-        final surface = MiniPlateSurface(
-          lyricsStyle: isHome && showLyrics,
-          colorScheme: colorScheme,
-        );
-        // The drag tooltip is a floating chip, not the plate itself, so it
-        // gets a stronger blur than the plate backdrop.
-        final blur = surface.lyricsStyle ? 0.0 : 3.0;
+          final surface = MiniPlateSurface(
+            lyricsStyle: isHome && showLyrics,
+            colorScheme: colorScheme,
+          );
+          // The drag tooltip is a floating chip, not the plate itself, so it
+          // gets a stronger blur than the plate backdrop.
+          final blur = surface.lyricsStyle ? 0.0 : 3.0;
 
-        return SizedBox(
-          height: 16,
-          width: widget.width,
-          child: Stack(
-            clipBehavior: Clip.none,
-            alignment: Alignment.bottomCenter,
-            children: [
-              Positioned.fill(
-                child: M3ESlider(
-                  value: currentPosition.clamp(0.0, max),
-                  max: max,
-                  decoration: miniProgressSliderDecoration(colorScheme),
-                  onChangeStart: (val) {
-                    // Abort a pending deferred commit: a new drag took over
-                    // the gesture, so the press jump must not seek (see
-                    // onChangeEnd below).
-                    _commitTimer?.cancel();
-                    _dragEndTimer?.cancel();
-                    _isDragging = true;
-                    setState(() => _dragValueMs = val);
-                  },
-                  onChanged: (val) {
-                    setState(() => _dragValueMs = val);
-                  },
-                  onChangeEnd: (val) {
-                    _isDragging = false;
-                    // Keep the freshest held value: M3ESlider passes
-                    // widget.value here, which can be one frame stale — a
-                    // fast press+release completes within a single frame, so
-                    // widget.value is still the pre-tap position. onChanged
-                    // already held the fresh tapped value in _dragValueMs.
-                    final commitValue = _dragValueMs ?? val;
-                    // M3ESlider also emits onChangeEnd mid-gesture when a
-                    // press loses the arena to a drag (its onTapCancel path
-                    // rejects before the drag accepts), committing a seek
-                    // while the finger is still down. Defer the actual seek
-                    // one event-loop turn: if the drag took over,
-                    // onChangeStart cancels this timer in the same dispatch.
-                    _commitTimer?.cancel();
-                    _commitTimer = Timer(Duration.zero, () {
-                      if (!mounted || _isDragging) return; // preview only
-                      unawaited(
-                        PlaybackController.seekTo(
-                          Duration(milliseconds: commitValue.toInt()),
-                        ),
-                      );
-                      // Free the held value (and the tooltip) shortly after
-                      // the seek echo.
+          return SizedBox(
+            height: 16,
+            width: widget.width,
+            child: Stack(
+              clipBehavior: Clip.none,
+              alignment: Alignment.bottomCenter,
+              children: [
+                Positioned.fill(
+                  child: M3ESlider(
+                    value: currentPosition.clamp(0.0, max),
+                    max: max,
+                    decoration: miniProgressSliderDecoration(colorScheme),
+                    onChangeStart: (val) {
+                      // Abort a pending deferred commit: a new drag took over
+                      // the gesture, so the press jump must not seek (see
+                      // onChangeEnd below).
+                      _commitTimer?.cancel();
                       _dragEndTimer?.cancel();
-                      _dragEndTimer = Timer(
-                        const Duration(milliseconds: 500),
-                        () {
-                          if (mounted) setState(() => _dragValueMs = null);
-                        },
-                      );
-                    });
-                  },
-                ),
-              ),
-              if (_dragValueMs != null)
-                Positioned(
-                  bottom: 24,
-                  left: (ratio * widget.width - 25).clamp(
-                    8.0,
-                    widget.width - 58.0,
+                      _isDragging = true;
+                      setState(() => _dragValueMs = val);
+                    },
+                    onChanged: (val) {
+                      setState(() => _dragValueMs = val);
+                    },
+                    onChangeEnd: (val) {
+                      _isDragging = false;
+                      // Keep the freshest held value: M3ESlider passes
+                      // widget.value here, which can be one frame stale — a
+                      // fast press+release completes within a single frame, so
+                      // widget.value is still the pre-tap position. onChanged
+                      // already held the fresh tapped value in _dragValueMs.
+                      final commitValue = _dragValueMs ?? val;
+                      // M3ESlider also emits onChangeEnd mid-gesture when a
+                      // press loses the arena to a drag (its onTapCancel path
+                      // rejects before the drag accepts), committing a seek
+                      // while the finger is still down. Defer the actual seek
+                      // one event-loop turn: if the drag took over,
+                      // onChangeStart cancels this timer in the same dispatch.
+                      _commitTimer?.cancel();
+                      _commitTimer = Timer(Duration.zero, () {
+                        if (!mounted || _isDragging) return; // preview only
+                        unawaited(
+                          PlaybackController.seekTo(
+                            Duration(milliseconds: commitValue.toInt()),
+                          ),
+                        );
+                        // Free the held value (and the tooltip) shortly after
+                        // the seek echo.
+                        _dragEndTimer?.cancel();
+                        _dragEndTimer = Timer(
+                          const Duration(milliseconds: 500),
+                          () {
+                            if (mounted) setState(() => _dragValueMs = null);
+                          },
+                        );
+                      });
+                    },
                   ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(AppRadius.xs),
-                    child: BackdropFilter(
-                      enabled: blurEffectsEnabledSignal.value && blur > 0,
-                      filter: ui.ImageFilter.blur(sigmaX: blur, sigmaY: blur),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: surface.color.withValues(alpha: surface.alpha),
-                          borderRadius: BorderRadius.circular(AppRadius.xs),
-                          border: Border.all(color: surface.borderColor),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.15),
-                              blurRadius: 4,
-                              offset: const Offset(0, 2),
+                ),
+                if (_dragValueMs != null)
+                  Positioned(
+                    bottom: 24,
+                    left: (ratio * widget.width - 25).clamp(
+                      8.0,
+                      widget.width - 58.0,
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(AppRadius.xs),
+                      child: BackdropFilter(
+                        enabled: blurEffectsEnabledSignal.value && blur > 0,
+                        filter: ui.ImageFilter.blur(sigmaX: blur, sigmaY: blur),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: surface.color.withValues(
+                              alpha: surface.alpha,
                             ),
-                          ],
-                        ),
-                        child: Text(
-                          formatDuration(_dragValueMs!.toInt()),
-                          style: TextStyle(
-                            color: colorScheme.onSurface,
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
+                            borderRadius: BorderRadius.circular(AppRadius.xs),
+                            border: Border.all(color: surface.borderColor),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.15),
+                                blurRadius: 4,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: Text(
+                            formatDuration(_dragValueMs!.toInt()),
+                            style: TextStyle(
+                              color: colorScheme.onSurface,
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                         ),
                       ),
                     ),
                   ),
-                ),
-            ],
-          ),
-        );
-      },
+              ],
+            ),
+          );
+        },
+      ),
     );
   }
 }
