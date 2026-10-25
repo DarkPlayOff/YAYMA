@@ -124,21 +124,26 @@ class _ArtistViewState extends State<ArtistView> {
     final id = widget.artistId;
     if (id == null) return;
 
+    // Advance the counter only once the page actually arrives: bumping it
+    // before the request skipped that page forever after one failure.
+    final page = _currentPage + 1;
     _isLoading.value = true;
-    _currentPage++;
 
     try {
       final details = await rust.getArtistDetails(
         ctx: appContextSignal.value!,
         artistId: id,
-        page: _currentPage,
+        page: page,
         pageSize: _pageSize,
       );
-      if (details != null) {
+      // A refresh may have reset the list while this page was in flight.
+      if (details != null && page == _currentPage + 1) {
+        _currentPage = page;
         _tracks.value = [..._tracks.value, ...details.tracks];
       }
     } on Object catch (e) {
       debugPrint('Error loading more tracks: $e');
+      showAppError('Не удалось загрузить треки исполнителя');
     } finally {
       _isLoading.value = false;
     }

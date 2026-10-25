@@ -136,21 +136,26 @@ class _LyricsWidgetState extends State<LyricsWidget> {
         _activeIndexSignal.value = activeIndex;
       }
 
-      if (activeIndex == lines.length - 1) {
-        final lastLine = lines.last;
-        if (lastLine is LyricLine) {
-          final lastLineEndMs =
-              lastLine.time.inMilliseconds + lastLine.duration.inMilliseconds;
-          if (currentMs > lastLineEndMs + 1000) {
-            final remainingMs = durationMs - currentMs;
-            if (remainingMs > 5000) {
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                if (mounted && !hideLyricsOverlaySignal.value) {
-                  hideLyricsOverlaySignal.value = true;
-                }
-              });
-            }
+      // The pane hides after the last line, so a seek back into the lyrics
+      // (or repeat-one looping) has to bring it back.
+      final lastLine = lines.last;
+      if (lastLine is LyricLine) {
+        final lastLineEndMs =
+            lastLine.time.inMilliseconds + lastLine.duration.inMilliseconds;
+        if (currentMs < lastLineEndMs) {
+          if (hideLyricsOverlaySignal.peek()) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) hideLyricsOverlaySignal.value = false;
+            });
           }
+        } else if (activeIndex == lines.length - 1 &&
+            currentMs > lastLineEndMs + 1000 &&
+            durationMs - currentMs > 5000) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted && !hideLyricsOverlaySignal.value) {
+              hideLyricsOverlaySignal.value = true;
+            }
+          });
         }
       }
     });

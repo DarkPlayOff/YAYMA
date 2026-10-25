@@ -419,8 +419,6 @@ class _YandexLoginDialogState extends State<YandexLoginDialog> {
   Future<NavigationDecision> _parseToken(String urlString) async {
     if (_isFinalized) return NavigationDecision.navigate;
 
-    debugPrint('🌐 URL: $urlString');
-
     // 1. Intercept from URL (OAuth redirect)
     final match = _tokenRegExp.firstMatch(urlString);
     if (match != null) {
@@ -435,7 +433,6 @@ class _YandexLoginDialogState extends State<YandexLoginDialog> {
     if (!_isFetchingToken &&
         (urlString.startsWith('https://id.yandex.ru') ||
             urlString.startsWith('https://passport.yandex.ru/profile'))) {
-      debugPrint('🔍 Authorized! Getting token via official desktop client...');
       _isFetchingToken = true;
 
       unawaited(

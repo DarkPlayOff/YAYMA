@@ -26,6 +26,7 @@ class _MobileMiniPlayerState extends State<MobileMiniPlayer> {
   final GlobalKey _plateKey = GlobalKey();
   double _dragOffset = 0;
   bool _isNext = true;
+  bool _swiping = false;
   Duration _animationDuration = Duration.zero;
   bool _expandingFromDrag = false;
   MobileFullPlayerController? _expandController;
@@ -137,25 +138,32 @@ class _MobileMiniPlayerState extends State<MobileMiniPlayer> {
 
   @override
   void dispose() {
-    if (_expandingFromDrag) {
+    // At progress 1 the full player is open and this bar is unmounted; the
+    // full player owns the panel from there, so collapsing here would shut it
+    // under the user's finger.
+    if (_expandingFromDrag && (_expandController?.progress ?? 1) < 1) {
       _expandController?.endDrag(expand: false);
     }
     super.dispose();
   }
 
   void _onDragStart(DragStartDetails details) {
+    if (_swiping) return;
     setState(() {
       _animationDuration = Duration.zero;
+      _dragOffset = 0;
     });
   }
 
   void _onDragUpdate(DragUpdateDetails details) {
+    if (_swiping) return;
     setState(() {
       _dragOffset += details.primaryDelta ?? 0;
     });
   }
 
   Future<void> _onDragEnd(DragEndDetails details) async {
+    if (_swiping) return;
     final screenWidth = MediaQuery.sizeOf(context).width;
     final defaultWidth = screenWidth - 32;
     const minWidth = 80.0;
@@ -167,6 +175,7 @@ class _MobileMiniPlayerState extends State<MobileMiniPlayer> {
     const transitionDuration = Duration(milliseconds: 300);
 
     if (_dragOffset > 100 || velocity > 300) {
+      _swiping = true;
       setState(() {
         _isNext = false;
         _animationDuration = transitionDuration;
@@ -174,6 +183,7 @@ class _MobileMiniPlayerState extends State<MobileMiniPlayer> {
       });
       await Future<void>.delayed(transitionDuration);
       await PlaybackController.prev();
+      _swiping = false;
       if (mounted) {
         setState(() {
           _animationDuration = transitionDuration;
@@ -181,6 +191,7 @@ class _MobileMiniPlayerState extends State<MobileMiniPlayer> {
         });
       }
     } else if (_dragOffset < -100 || velocity < -300) {
+      _swiping = true;
       setState(() {
         _isNext = true;
         _animationDuration = transitionDuration;
@@ -188,6 +199,7 @@ class _MobileMiniPlayerState extends State<MobileMiniPlayer> {
       });
       await Future<void>.delayed(transitionDuration);
       await PlaybackController.next();
+      _swiping = false;
       if (mounted) {
         setState(() {
           _animationDuration = transitionDuration;

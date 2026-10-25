@@ -842,7 +842,14 @@ class _FullPlayerMetrics {
         controlsHeight +
         actionsHeight +
         bottomGap;
-    final availableForCover = math.max<double>(0, safeHeight - fixedHeight);
+    // The column spends these two gaps around the cover, so they come out of
+    // the cover budget — otherwise the column overflows by exactly their sum.
+    const coverGap = 12.0;
+    const coverTopGap = 12.0;
+    final availableForCover = math.max<double>(
+      0,
+      safeHeight - fixedHeight - coverGap - coverTopGap,
+    );
     final coverSide = math.max<double>(
       1,
       math.min<double>(sectionWidth, availableForCover),
@@ -850,8 +857,6 @@ class _FullPlayerMetrics {
     // The cover sits right under the header and the title right under the
     // cover; the height that is left over goes between the title and the
     // progress bar, so the controls stay anchored to the bottom.
-    const coverGap = 12.0;
-    const coverTopGap = 12.0;
     final coverTop = padding.top + headerHeight + coverTopGap;
 
     return _FullPlayerMetrics(

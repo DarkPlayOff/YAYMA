@@ -15,6 +15,7 @@ import 'package:yayma/src/features/core/views/widgets/common_ui.dart';
 import 'package:yayma/src/features/core/views/widgets/download_menu.dart';
 import 'package:yayma/src/features/core/views/widgets/responsive.dart';
 import 'package:yayma/src/features/core/views/widgets/tab_visibility.dart';
+import 'package:yayma/src/features/core/views/widgets/track_context_sheet.dart';
 import 'package:yayma/src/features/core/views/widgets/track_tile.dart';
 import 'package:yayma/src/features/library/providers/library_provider.dart';
 import 'package:yayma/src/features/playback/providers/playback_provider.dart';
@@ -204,6 +205,52 @@ class _PlaylistContentState extends State<_PlaylistContent> {
     }
   }
 
+  Future<void> _handlePlaylistAction(String value) async {
+    switch (value) {
+      case 'rename':
+        await _showRenameDialog(context, widget.playlist);
+      case 'visibility':
+        await setPlaylistVisibilityAction(
+          widget.playlist.kind,
+          isPublic: !widget.playlist.isPublic,
+        );
+        unawaited(widget.refresh());
+      case 'delete':
+        await _showDeleteConfirm(context, widget.playlist);
+    }
+  }
+
+  /// Android: the same options as the desktop popup, as a bottom sheet.
+  Future<void> _showPlaylistSheet() {
+    return showTrackSubActionSheet(
+      context,
+      title: 'Плейлист',
+      actionsBuilder: () => [
+        const TrackSheetAction(
+          value: 'rename',
+          label: 'Переименовать',
+          icon: Icons.edit_rounded,
+        ),
+        TrackSheetAction(
+          value: 'visibility',
+          label: widget.playlist.isPublic
+              ? 'Сделать приватным'
+              : 'Сделать публичным',
+          icon: widget.playlist.isPublic
+              ? Icons.lock_outline_rounded
+              : Icons.public_rounded,
+        ),
+        TrackSheetAction(
+          value: 'delete',
+          label: 'Удалить плейлист',
+          icon: Icons.delete_forever_rounded,
+          color: Theme.of(context).colorScheme.error,
+        ),
+      ],
+      onSelected: (value) => unawaited(_handlePlaylistAction(value)),
+    );
+  }
+
   Future<void> _downloadPlaylist(DownloadMode mode) async {
     if (_isDownloading || widget.playlist.tracks.isEmpty) return;
 
@@ -261,53 +308,51 @@ class _PlaylistContentState extends State<_PlaylistContent> {
         type: 'Плейлист',
         title: widget.playlist.title,
         coverUrl: widget.playlist.coverUrl,
-        titleTrailing: AppContextMenu<String>(
-          onSelected: (value) async {
-            switch (value) {
-              case 'rename':
-                await _showRenameDialog(context, widget.playlist);
-              case 'visibility':
-                await setPlaylistVisibilityAction(
-                  widget.playlist.kind,
-                  isPublic: !widget.playlist.isPublic,
-                );
-                unawaited(widget.refresh());
-              case 'delete':
-                await _showDeleteConfirm(context, widget.playlist);
-            }
-          },
-          items: [
-            const AppContextMenuItem(
-              value: 'rename',
-              label: 'Переименовать',
-              icon: Icons.edit_rounded,
-            ),
-            AppContextMenuItem(
-              value: 'visibility',
-              label: widget.playlist.isPublic
-                  ? 'Сделать приватным'
-                  : 'Сделать публичным',
-              icon: widget.playlist.isPublic
-                  ? Icons.lock_outline_rounded
-                  : Icons.public_rounded,
-            ),
-            AppContextMenuItem(
-              value: 'delete',
-              label: 'Удалить плейлист',
-              icon: Icons.delete_forever_rounded,
-              color: cs.error,
-            ),
-          ],
-          child: IconButton(
-            icon: Icon(
-              Icons.more_vert_rounded,
-              color: cs.onSurfaceVariant,
-              size: 32,
-            ),
-            onPressed: null,
-            tooltip: 'Опции плейлиста',
-          ),
-        ),
+        titleTrailing: isAndroid
+            ? IconButton(
+                icon: Icon(
+                  Icons.more_vert_rounded,
+                  color: cs.onSurfaceVariant,
+                  size: 32,
+                ),
+                onPressed: _showPlaylistSheet,
+                tooltip: 'Опции плейлиста',
+              )
+            : AppContextMenu<String>(
+                onSelected: (value) =>
+                    unawaited(_handlePlaylistAction(value)),
+                items: [
+                  const AppContextMenuItem(
+                    value: 'rename',
+                    label: 'Переименовать',
+                    icon: Icons.edit_rounded,
+                  ),
+                  AppContextMenuItem(
+                    value: 'visibility',
+                    label: widget.playlist.isPublic
+                        ? 'Сделать приватным'
+                        : 'Сделать публичным',
+                    icon: widget.playlist.isPublic
+                        ? Icons.lock_outline_rounded
+                        : Icons.public_rounded,
+                  ),
+                  AppContextMenuItem(
+                    value: 'delete',
+                    label: 'Удалить плейлист',
+                    icon: Icons.delete_forever_rounded,
+                    color: cs.error,
+                  ),
+                ],
+                child: IconButton(
+                  icon: Icon(
+                    Icons.more_vert_rounded,
+                    color: cs.onSurfaceVariant,
+                    size: 32,
+                  ),
+                  onPressed: null,
+                  tooltip: 'Опции плейлиста',
+                ),
+              ),
         actions: isAndroid
             ? [
                 Row(
@@ -486,10 +531,10 @@ class _PlaylistContentState extends State<_PlaylistContent> {
               );
             },
             itemCount: _localTracks.length,
-            onReorderItem: (oldIndex, originalNewIndex) async {
-              var newIndex = originalNewIndex;
+            // onReorderItem already shifts newIndex down for items moved
+            // downward; subtracting again here made reordering a no-op.
+            onReorderItem: (oldIndex, newIndex) async {
               setState(() {
-                if (newIndex > oldIndex) newIndex -= 1;
                 final item = _localTracks.removeAt(oldIndex);
                 _localTracks.insert(newIndex, item);
               });
