@@ -140,8 +140,15 @@ impl AudioSystem {
             if let Ok(ids) = db.load_liked_tracks().await {
                 let revision: Option<u64> =
                     db.load_setting("liked_tracks_revision").await.ok().flatten();
+                let disliked: Vec<String> = db
+                    .load_setting(crate::api::library::DISLIKED_TRACKS_KEY)
+                    .await
+                    .ok()
+                    .flatten()
+                    .unwrap_or_default();
                 let mut state = state.write().await;
                 state.liked.set_liked_ids(ids);
+                state.liked.set_disliked_ids(disliked);
                 state.liked.revision = revision;
                 signals.library_changed.send_replace(());
             }

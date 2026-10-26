@@ -8,6 +8,9 @@ use crate::util::track::{CleanId, like_entity_id};
 use foldhash::HashMapExt;
 use futures::StreamExt;
 
+/// `app_settings` key holding the disliked track ids (JSON array).
+pub const DISLIKED_TRACKS_KEY: &str = "disliked_tracks";
+
 /// Resolves the full `"id:album"` entity id for like/unlike HTTP requests.
 ///
 /// Cache/DB/Wave keep using the base id; only the likes HTTP API needs the
@@ -34,6 +37,58 @@ async fn resolve_like_entity_id(ctx: &AppContext, track_id: &str) -> String {
 
 pub async fn track_is_liked(ctx: &AppContext, track_id: String) -> bool {
     ctx.audio.state.read().await.liked.is_liked(&track_id)
+}
+
+pub async fn track_is_disliked(ctx: &AppContext, track_id: String) -> bool {
+    ctx.audio.state.read().await.liked.is_disliked(&track_id)
+}
+
+/// Tracks marked «не нравится», newest dislike first. Fetched from the server
+/// so a pull-to-refresh actually refreshes; the result also replaces the cached
+/// dislike set and is persisted in the same order, so the offline list and the
+/// track menu agree with the server.
+pub async fn get_disliked_tracks(ctx: &AppContext) -> Vec<SimpleTrackDto> {
+    let ids = match ctx.core.api.fetch_disliked_ids().await {
+        Ok(ids) => {
+            ctx.audio
+                .state
+                .write()
+                .await
+                .liked
+                .set_disliked_ids(ids.clone());
+            let mut db = ctx.core.db.lock().await;
+            if let Err(e) = db.save_setting(DISLIKED_TRACKS_KEY, &ids).await {
+                tracing::warn!("Failed to persist disliked tracks: {:?}", e);
+            }
+            drop(db);
+            ids
+        }
+        Err(e) => {
+            tracing::warn!("Failed to fetch disliked tracks: {:?}", e);
+            // Offline: the persisted list keeps the dislike order; the
+            // in-memory set has none to offer.
+            let persisted: Option<Vec<String>> = {
+                let mut db = ctx.core.db.lock().await;
+                db.load_setting(DISLIKED_TRACKS_KEY).await.ok().flatten()
+            };
+            match persisted {
+                Some(ids) if !ids.is_empty() => ids,
+                _ => ctx
+                    .audio
+                    .state
+                    .read()
+                    .await
+                    .liked
+                    .snapshot()
+                    .1
+                    .into_iter()
+                    .collect(),
+            }
+        }
+    };
+    // `build_track_dtos` keeps the input order, so the server's
+    // newest-dislike-first order survives without a second sort.
+    build_track_dtos(ctx, ids).await
 }
 
 /// Returns `true` when the server confirmed the like change. On failure the

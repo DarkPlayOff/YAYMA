@@ -1,4 +1,5 @@
 use crate::api::models::AudioQuality;
+use crate::util::track::CleanId;
 use chrono::Utc;
 use parking_lot::RwLock;
 use serde_json;
@@ -40,9 +41,9 @@ use yandex_music::{
         search::get_search::SearchOptions,
         track::{
             add_disliked_tracks::AddDislikedTracksOptions, add_liked_tracks::AddLikedTracksOptions,
-            get_file_info::GetFileInfoOptions, get_file_info_batch::GetFileInfoBatchOptions,
-            get_lyrics::GetLyricsOptions, get_tracks::GetTracksOptions,
-            remove_disliked_tracks::RemoveDislikedTracksOptions,
+            get_disliked_tracks::GetDislikedTracksOptions, get_file_info::GetFileInfoOptions,
+            get_file_info_batch::GetFileInfoBatchOptions, get_lyrics::GetLyricsOptions,
+            get_tracks::GetTracksOptions, remove_disliked_tracks::RemoveDislikedTracksOptions,
             remove_liked_tracks::RemoveLikedTracksOptions,
         },
     },
@@ -943,6 +944,23 @@ impl ApiService {
         Ok(library.tracks.into_iter().map(|t| t.id).collect())
     }
 
+    /// Authoritative disliked list, newest first. The in-memory cache only
+    /// learns about dislikes from the revision-gated collection sync, which
+    /// skips them once the stored revision is current, so a refresh has to ask
+    /// the server.
+    pub async fn fetch_disliked_ids(&self) -> Result<Vec<String>> {
+        let opts = GetDislikedTracksOptions::new(self.user_id);
+        let library = self.client.get_disliked_tracks(&opts).await?;
+
+        let mut tracks = library.tracks;
+        sort_disliked_tracks(&mut tracks);
+
+        Ok(tracks
+            .into_iter()
+            .map(|t| t.id.to_base_id().to_string())
+            .collect())
+    }
+
     /// Revision-gated collection sync for liked tracks (mirrors the official
     /// desktop client): with a known `revision` the server answers
     /// `likedTracks: {info: {...}}` with **no `values`** when nothing changed
@@ -1003,10 +1021,34 @@ impl ApiService {
     }
 }
 
+/// Newest dislike first; the id tie-break keeps equal timestamps stable, so the
+/// list does not reshuffle between refreshes when two tracks were disliked in
+/// the same second (or the server drops the sub-second precision).
+fn sort_disliked_tracks(tracks: &mut [yandex_music::model::track::PartialTrack]) {
+    tracks.sort_by(|a, b| b.timestamp.cmp(&a.timestamp).then_with(|| a.id.cmp(&b.id)));
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn disliked_tracks_sort_newest_first_and_stable_on_ties() {
+        let mut tracks: Vec<yandex_music::model::track::PartialTrack> = serde_json::from_value(
+            json!([
+                {"id": 3, "timestamp": "2026-01-01T00:00:00+00:00"},
+                {"id": 1, "timestamp": "2026-03-01T00:00:00+00:00"},
+                {"id": 2, "timestamp": "2026-01-01T00:00:00+00:00"},
+            ]),
+        )
+        .unwrap();
+
+        sort_disliked_tracks(&mut tracks);
+
+        let ids: Vec<&str> = tracks.iter().map(|t| t.id.as_str()).collect();
+        assert_eq!(ids, ["1", "2", "3"]);
+    }
 
     #[test]
     fn extracts_wrapped_albums_from_top_level_array() {

@@ -33,6 +33,12 @@ pub async fn clear_token() {
         if let Err(e) = db.delete_setting("liked_tracks_revision").await {
             tracing::error!("Failed to delete liked revision: {:?}", e);
         }
+        if let Err(e) = db
+            .delete_setting(crate::api::library::DISLIKED_TRACKS_KEY)
+            .await
+        {
+            tracing::error!("Failed to delete disliked tracks: {:?}", e);
+        }
     }
 }
 

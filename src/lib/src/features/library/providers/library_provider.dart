@@ -11,6 +11,8 @@ import 'package:yayma/src/rust/api/models.dart';
 
 final FlutterSignal<List<SimpleTrackDto>> likedTracksSignal =
     signal<List<SimpleTrackDto>>([]);
+final FlutterSignal<List<SimpleTrackDto>> dislikedTracksSignal =
+    signal<List<SimpleTrackDto>>([]);
 final FlutterSignal<List<SimplePlaylistDto>> playlistsSignal =
     signal<List<SimplePlaylistDto>>([]);
 final FlutterSignal<List<SimpleAlbumDto>> likedAlbumsSignal =
@@ -18,6 +20,7 @@ final FlutterSignal<List<SimpleAlbumDto>> likedAlbumsSignal =
 final FlutterSignal<List<SimpleArtistDto>> likedArtistsSignal =
     signal<List<SimpleArtistDto>>([]);
 final FlutterSignal<bool> isLibraryLoadingSignal = signal<bool>(false);
+final FlutterSignal<bool> isDislikedTracksLoadingSignal = signal<bool>(false);
 final FlutterSignal<String> librarySearchQuerySignal = signal<String>('');
 
 /// Number of liked tracks received in the active unfiltered sequence.
@@ -150,6 +153,8 @@ Future<void> disposeLibrary() async {
   playlistsSignal.value = [];
   likedAlbumsSignal.value = [];
   likedArtistsSignal.value = [];
+  dislikedTracksSignal.value = [];
+  isDislikedTracksLoadingSignal.value = false;
   isLibraryLoadingSignal.value = false;
   likedTracksLoadedSignal.value = 0;
   likedTracksExpectedSignal.value = 0;
@@ -186,6 +191,15 @@ Future<void> refreshLikedArtists() async {
   if (artists != null) {
     likedArtistsSignal.value = artists;
   }
+}
+
+Future<void> refreshDislikedTracks() async {
+  isDislikedTracksLoadingSignal.value = true;
+  final tracks = await runRustFetch((ctx) => getDislikedTracks(ctx: ctx));
+  if (tracks != null) {
+    dislikedTracksSignal.value = tracks;
+  }
+  isDislikedTracksLoadingSignal.value = false;
 }
 
 Future<bool> addLikedAlbumAction(String albumId) async {
@@ -653,7 +667,9 @@ Future<bool> createPlaylistAction(
 }
 
 Future<bool> deletePlaylistAction(int kind) async {
-  final success = await runRustAction((ctx) => deletePlaylist(ctx: ctx, kind: kind));
+  final success = await runRustAction(
+    (ctx) => deletePlaylist(ctx: ctx, kind: kind),
+  );
   if (success) {
     _pruneMembershipKind(kind);
     await refreshPlaylists();

@@ -58,6 +58,8 @@ class _LibraryViewState extends State<LibraryView>
           await refreshLikedAlbums();
         case 3:
           await refreshLikedArtists();
+        case 4:
+          await refreshDislikedTracks();
       }
     } finally {
       _refreshBusy = false;
@@ -71,7 +73,7 @@ class _LibraryViewState extends State<LibraryView>
     final initialIndex = currentSection == AppSection.playlists ? 1 : 0;
     _root = currentRootSignal.value;
     _tabController = TabController(
-      length: 4,
+      length: 5,
       vsync: this,
       initialIndex: initialIndex,
     );
@@ -242,6 +244,7 @@ class _LibraryViewState extends State<LibraryView>
             Tab(text: 'Плейлисты'),
             Tab(text: 'Любимые альбомы'),
             Tab(text: 'Любимые исполнители'),
+            Tab(text: 'Дизлайки'),
           ],
         ),
         Expanded(
@@ -252,6 +255,7 @@ class _LibraryViewState extends State<LibraryView>
               const _PlaylistsTab(),
               const _LikedAlbumsTab(),
               const _LikedArtistsTab(),
+              const _DislikedTracksTab(),
             ],
           ),
         ),
@@ -771,6 +775,97 @@ class _PlaylistsTab extends StatelessWidget {
             itemBuilder: (context, index) {
               final playlist = playlists[index];
               return _PlaylistCard(playlist: playlist);
+            },
+          ),
+        );
+      },
+    );
+    return SmoothScroll(child: body);
+  }
+}
+
+class _DislikedTracksTab extends StatefulWidget {
+  const _DislikedTracksTab();
+
+  @override
+  State<_DislikedTracksTab> createState() => _DislikedTracksTabState();
+}
+
+class _DislikedTracksTabState extends State<_DislikedTracksTab> {
+  @override
+  void initState() {
+    super.initState();
+    unawaited(refreshDislikedTracks());
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isNarrow = MediaQuery.sizeOf(context).width < 600;
+
+    final body = SignalBuilder(
+      builder: (context) {
+        // No subscription while the tab is hidden.
+        final tracks = visibleSignal(context, dislikedTracksSignal);
+        final isLoading = visibleSignal(context, isDislikedTracksLoadingSignal);
+        final cs = Theme.of(context).colorScheme;
+
+        if (tracks.isEmpty) {
+          return AppRefreshIndicator(
+            onRefresh: refreshDislikedTracks,
+            child: CustomScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: [
+                SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: Center(
+                    child: Text(
+                      isLoading ? 'Загрузка…' : 'Нет дизлайков',
+                      style: TextStyle(
+                        color: cs.onSurface.withValues(alpha: 0.38),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+
+        return AppRefreshIndicator(
+          onRefresh: refreshDislikedTracks,
+          child: M3ESegmentedList.builder(
+            haptic: M3EHapticFeedback.light,
+            physics: const AlwaysScrollableScrollPhysics(),
+            itemCount: tracks.length,
+            addAutomaticKeepAlives: false,
+            cacheExtent: 500,
+            listPadding: const EdgeInsets.only(bottom: 140),
+            margin: EdgeInsets.symmetric(horizontal: isNarrow ? 0 : 40),
+            color: Colors.transparent,
+            padding: EdgeInsets.symmetric(
+              horizontal: isNarrow ? 0 : 40,
+              vertical: 8,
+            ),
+            itemBuilder: (context, index) {
+              final track = tracks[index];
+              return CommonTrackTile(
+                trackId: track.id,
+                title: track.title,
+                version: track.version,
+                artists: track.artists,
+                albumId: track.albumId,
+                leading: AppCover(coverUrl: track.coverUrl),
+                trailing: Text(
+                  formatDuration(track.durationMs),
+                  style: TextStyle(color: cs.onSurface.withValues(alpha: 0.38)),
+                ),
+                onTap: () => unawaited(PlaybackController.playTrack(track.id)),
+                onTitleTap: () {
+                  if (track.albumId != null) {
+                    navigateTo(AppSection.album, track.albumId);
+                  }
+                },
+              );
             },
           ),
         );

@@ -27,7 +27,11 @@ impl LikedCache {
     ) {
         self.revision = Some(revision);
         self.set_liked_ids(liked_track_ids);
-        self.disliked_ids = disliked_track_ids
+        self.set_disliked_ids(disliked_track_ids);
+    }
+
+    pub fn set_disliked_ids(&mut self, ids: Vec<String>) {
+        self.disliked_ids = ids
             .into_iter()
             .map(|id| id.to_base_id().to_string())
             .collect();

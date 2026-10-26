@@ -83,6 +83,11 @@ class TrackContextActions {
     final initialLiked = await runRustFetch(
       (ctx) => rust_library.trackIsLiked(ctx: ctx, trackId: trackId),
     );
+    final initialDisliked =
+        await runRustFetch(
+          (ctx) => rust_library.trackIsDisliked(ctx: ctx, trackId: trackId),
+        ) ??
+        false;
     if (!context.mounted) return;
     final likedOverride = signal<bool?>(initialLiked);
 
@@ -146,6 +151,13 @@ class TrackContextActions {
         ];
       },
       actions: [
+        TrackSheetAction(
+          value: 'dislike',
+          label: initialDisliked ? 'Убрать дизлайк' : 'Не нравится',
+          icon: initialDisliked
+              ? Icons.heart_broken_rounded
+              : Icons.heart_broken_outlined,
+        ),
         if (albumId != null)
           const TrackSheetAction(
             value: 'go_to_album',
@@ -205,6 +217,11 @@ class TrackContextActions {
     switch (value) {
       case 'like':
         await PlaybackController.toggleLike(trackId: trackId);
+      case 'dislike':
+        await PlaybackController.toggleDislike(trackId: trackId);
+        // The disliked list is a snapshot, not a stream: refresh it so the
+        // library tab reflects the change without a manual pull.
+        unawaited(refreshDislikedTracks());
       case 'go_to_album':
         if (albumId != null) {
           navigateTo(AppSection.album, albumId);
