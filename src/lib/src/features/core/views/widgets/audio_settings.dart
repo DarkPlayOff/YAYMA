@@ -89,7 +89,7 @@ class _AudioSettingsDialogState extends State<AudioSettingsDialog> {
                       ),
                     ),
                     if (_activeTab == 0)
-                      TextButton(
+                      M3ETextButton(
                         onPressed: () =>
                             unawaited(PlaybackController.resetEqualizer()),
                         child: Text(
@@ -153,7 +153,7 @@ class _AudioSettingsDialogState extends State<AudioSettingsDialog> {
             ),
             actions: [
               if (_activeTab == 0)
-                TextButton(
+                M3ETextButton(
                   onPressed: () =>
                       unawaited(PlaybackController.resetEqualizer()),
                   child: Text(
@@ -161,7 +161,7 @@ class _AudioSettingsDialogState extends State<AudioSettingsDialog> {
                     style: TextStyle(color: cs.error),
                   ),
                 ),
-              TextButton(
+              M3ETextButton(
                 onPressed: () => Navigator.pop(context),
                 child: const Text('Закрыть'),
               ),
@@ -689,7 +689,7 @@ class _EffectCardState extends State<_EffectCard> {
                   ),
                   Align(
                     alignment: Alignment.centerRight,
-                    child: TextButton.icon(
+                    child: M3ETextButton.icon(
                       onPressed: () =>
                           unawaited(PlaybackController.resetEffect(effect.id)),
                       icon: const Icon(Icons.refresh_rounded, size: 14),
@@ -697,7 +697,7 @@ class _EffectCardState extends State<_EffectCard> {
                         'Сбросить параметры',
                         style: TextStyle(fontSize: 11),
                       ),
-                      style: TextButton.styleFrom(
+                      decoration: M3EButtonDecoration.styleFrom(
                         foregroundColor: cs.error.withValues(alpha: 0.7),
                         padding: const EdgeInsets.symmetric(horizontal: 12),
                       ),

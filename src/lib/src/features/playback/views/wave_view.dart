@@ -4,6 +4,7 @@ import 'package:flutter/rendering.dart';
 import 'package:m3e_core/m3e_core.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:signals_flutter/signals_flutter.dart';
+import 'package:yayma/src/features/core/views/widgets/common_ui.dart';
 import 'package:yayma/src/features/core/views/widgets/responsive.dart';
 import 'package:yayma/src/features/core/views/widgets/smooth_scroll.dart';
 import 'package:yayma/src/features/playback/providers/playback_provider.dart';
@@ -12,13 +13,9 @@ import 'package:yayma/src/rust/api/models.dart';
 
 /// Opens the "Моя волна" settings sheet (stations, moods, seeds).
 Future<void> showWaveSettingsSheet(BuildContext context) {
-  return showModalBottomSheet<void>(
+  return showAppBottomSheet<void>(
     context: context,
-    isScrollControlled: true,
     showDragHandle: true,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-    ),
     builder: (context) => DraggableScrollableSheet(
       initialChildSize: 0.6,
       minChildSize: 0.4,
@@ -110,10 +107,8 @@ class WaveSettingsPanel extends StatelessWidget {
                             cursor: SystemMouseCursors.click,
                             child: GestureDetector(
                               onTap: () async {
-                                await showModalBottomSheet<void>(
+                                await showAppBottomSheet<void>(
                                   context: context,
-                                  backgroundColor: Colors.transparent,
-                                  isScrollControlled: true,
                                   builder: (context) =>
                                       const _AllStationsSheet(),
                                 );
@@ -216,13 +211,13 @@ class WaveSettingsPanel extends StatelessWidget {
                 Positioned(
                   right: 24,
                   bottom: 32,
-                  child: FloatingActionButton(
+                  child: M3EFloatingActionButton(
                     onPressed: () {
                       unawaited(WaveController.startMyWave());
                       onSelected();
                     },
-                    backgroundColor: Theme.of(context).colorScheme.primary,
-                    foregroundColor: Colors.black,
+                    containerColor: Theme.of(context).colorScheme.primary,
+                    contentColor: Colors.black,
                     elevation: 8,
                     child: const Icon(Icons.play_arrow_rounded, size: 28),
                   ),

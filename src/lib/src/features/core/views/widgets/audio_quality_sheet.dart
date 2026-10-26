@@ -2,22 +2,17 @@ import 'dart:async';
 
 import 'package:material_ui/material_ui.dart';
 import 'package:signals_flutter/signals_flutter.dart';
-import 'package:yayma/src/features/core/theme/app_tokens.dart';
 import 'package:yayma/src/features/core/views/widgets/audio_settings.dart';
+import 'package:yayma/src/features/core/views/widgets/common_ui.dart';
 import 'package:yayma/src/features/playback/providers/playback_provider.dart';
 import 'package:yayma/src/rust/api/models.dart';
 
 /// Bottom sheet with the stream quality choice. Below the list there is an
 /// entry that opens the equalizer / DSP effects sheet.
 Future<void> showAudioQualitySheet(BuildContext context) {
-  return showModalBottomSheet<void>(
+  return showAppBottomSheet<void>(
     context: context,
-    useSafeArea: true,
-    isScrollControlled: true,
     showDragHandle: true,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xl)),
-    ),
     builder: (_) => const _AudioQualitySheet(),
   );
 }
@@ -126,12 +121,8 @@ class _AudioQualitySheet extends StatelessWidget {
     unawaited(refreshAudioEffects());
 
     final navigator = Navigator.of(context)..pop();
-    await showModalBottomSheet<void>(
+    await showAppBottomSheet<void>(
       context: navigator.context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xl)),
-      ),
       builder: (_) => const AudioSettingsDialog(bottomSheet: true),
     );
   }

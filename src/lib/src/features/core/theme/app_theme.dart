@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:m3e_core/m3e_core.dart';
 import 'package:material_ui/material_ui.dart';
 
 /// Material Orange 500 is the stable fallback before a cover palette is ready.
@@ -7,10 +8,9 @@ const Color defaultAccentColor = Color(0xFFFF9800);
 
 /// The scheme used when no cover palette is available. Computed once: these
 /// colours only change with the app's own constants.
-final ColorScheme baseColorScheme = ColorScheme.fromSeed(
+final ColorScheme baseColorScheme = M3EColorScheme.dark(
   seedColor: defaultAccentColor,
-  brightness: Brightness.dark,
-  dynamicSchemeVariant: DynamicSchemeVariant.expressive,
+  variant: M3EColorVariant.expressive,
 );
 
 /// Merges a cover-derived scheme into the stable surface colours: the artwork
@@ -20,10 +20,9 @@ ColorScheme appColorScheme(ColorScheme? cover) {
   if (cover == null) return baseColorScheme;
   // The neutral base is seeded from the cover's own primary (not the fallback
   // orange), so surfaces carry the track's hue instead of one fixed warm tint.
-  final base = ColorScheme.fromSeed(
+  final base = M3EColorScheme.dark(
     seedColor: cover.primary,
-    brightness: Brightness.dark,
-    dynamicSchemeVariant: DynamicSchemeVariant.expressive,
+    variant: M3EColorVariant.expressive,
   );
   return cover.copyWith(
     surface: base.surface,
@@ -67,47 +66,7 @@ final ThemeData defaultAppTheme = buildAppTheme(baseColorScheme);
 
 ThemeData buildAppTheme(ColorScheme scheme) {
   final base = ThemeData.dark(useMaterial3: true);
-  final textTheme = base.textTheme.copyWith(
-    displayLarge: base.textTheme.displayLarge?.copyWith(
-      fontWeight: FontWeight.w900,
-      letterSpacing: -2.5,
-      height: 1,
-    ),
-    displayMedium: base.textTheme.displayMedium?.copyWith(
-      fontWeight: FontWeight.w900,
-      letterSpacing: -2,
-      height: 1.05,
-    ),
-    displaySmall: base.textTheme.displaySmall?.copyWith(
-      fontWeight: FontWeight.w800,
-      letterSpacing: -1,
-    ),
-    headlineLarge: base.textTheme.headlineLarge?.copyWith(
-      fontWeight: FontWeight.w800,
-      letterSpacing: -0.5,
-    ),
-    headlineMedium: base.textTheme.headlineMedium?.copyWith(
-      fontWeight: FontWeight.w700,
-      letterSpacing: -0.3,
-    ),
-    titleLarge: base.textTheme.titleLarge?.copyWith(
-      fontWeight: FontWeight.w700,
-      letterSpacing: -0.2,
-    ),
-    titleMedium: base.textTheme.titleMedium?.copyWith(
-      fontWeight: FontWeight.w600,
-    ),
-    labelLarge: base.textTheme.labelLarge?.copyWith(
-      fontWeight: FontWeight.w700,
-    ),
-  );
-
-  // Filled, elevated and outlined buttons share the same shape and metrics.
-  final buttonStyle = FilledButton.styleFrom(
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-    textStyle: textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700),
-    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-  );
+  final textTheme = M3ETypography.emphasized(base.textTheme);
 
   return ThemeData(
     useMaterial3: true,
@@ -158,15 +117,6 @@ ThemeData buildAppTheme(ColorScheme scheme) {
       ),
       labelColor: scheme.onSurface,
       unselectedLabelColor: scheme.onSurfaceVariant,
-    ),
-    filledButtonTheme: FilledButtonThemeData(style: buttonStyle),
-    elevatedButtonTheme: ElevatedButtonThemeData(style: buttonStyle),
-    outlinedButtonTheme: OutlinedButtonThemeData(style: buttonStyle),
-    textButtonTheme: TextButtonThemeData(
-      style: TextButton.styleFrom(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        textStyle: textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w600),
-      ),
     ),
     iconButtonTheme: IconButtonThemeData(
       style: IconButton.styleFrom(

@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/services.dart';
+import 'package:m3e_core/m3e_core.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -274,7 +275,7 @@ class _SettingsViewState extends State<SettingsView> {
                           onTap: () {},
                           trailing: SizedBox(
                             width: isNarrow ? 120 : 200,
-                            child: Slider(
+                            child: M3ESlider(
                               value: scale,
                               min: minVibeRenderScale,
                               max: maxVibeRenderScale,
@@ -619,12 +620,12 @@ class _GlobalHotkeysDialogState extends State<_GlobalHotkeysDialog> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              TextButton.icon(
+              M3ETextButton.icon(
                 onPressed: () => unawaited(_reset()),
                 icon: const Icon(Icons.restore_rounded, size: 18),
                 label: const Text('Сбросить по умолчанию'),
               ),
-              TextButton(
+              M3ETextButton(
                 onPressed: () => Navigator.pop(context),
                 child: const Text('Закрыть'),
               ),
@@ -812,7 +813,7 @@ class _HotkeyDialogState extends State<_HotkeyDialog> {
       ),
       actions: [
         AppDialog.cancelButton(context),
-        FilledButton(
+        M3EFilledButton(
           onPressed: _combo == null ? null : _save,
           child: const Text('Сохранить'),
         ),
@@ -1148,7 +1149,7 @@ class _AboutAppCard extends StatelessWidget {
                   icon: const Icon(Icons.code_rounded, size: 20),
                 )
               else
-                OutlinedButton.icon(
+                M3EOutlinedButton.icon(
                   onPressed: () => unawaited(_openRepo()),
                   icon: const Icon(Icons.code_rounded, size: 18),
                   label: const Text('GitHub'),

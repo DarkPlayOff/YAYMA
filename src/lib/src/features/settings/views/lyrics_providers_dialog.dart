@@ -22,10 +22,8 @@ class LyricsProvidersDialog extends StatefulWidget {
   static void show(BuildContext context) {
     if (Platform.isAndroid) {
       unawaited(
-        showModalBottomSheet<void>(
+        showAppBottomSheet<void>(
           context: context,
-          useSafeArea: true,
-          isScrollControlled: true,
           showDragHandle: true,
           builder: (context) => const LyricsProvidersDialog(asSheet: true),
         ),

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:m3e_core/m3e_core.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/app/session.dart';
@@ -25,10 +26,8 @@ class TrackDetailsDialog extends StatefulWidget {
   static void show(BuildContext context, String trackId) {
     if (Platform.isAndroid) {
       unawaited(
-        showModalBottomSheet<void>(
+        showAppBottomSheet<void>(
           context: context,
-          useSafeArea: true,
-          isScrollControlled: true,
           showDragHandle: true,
           builder: (context) =>
               TrackDetailsDialog(trackId: trackId, asSheet: true),
@@ -106,7 +105,7 @@ class _TrackDetailsDialogState extends State<TrackDetailsDialog> {
         child: content,
       ),
       actions: [
-        TextButton(
+        M3ETextButton(
           onPressed: () => Navigator.pop(context),
           child: Text('Закрыть', style: TextStyle(color: cs.primary)),
         ),

@@ -9,6 +9,7 @@ import 'package:yayma/src/features/core/providers/notification_provider.dart';
 import 'package:yayma/src/features/core/services/rust_bridge.dart';
 import 'package:yayma/src/features/core/views/widgets/app_cover.dart';
 import 'package:yayma/src/features/core/views/widgets/audio_quality_sheet.dart';
+import 'package:yayma/src/features/core/views/widgets/common_ui.dart';
 import 'package:yayma/src/features/core/views/widgets/download_menu.dart';
 import 'package:yayma/src/features/core/views/widgets/lyrics_view.dart';
 import 'package:yayma/src/features/core/views/widgets/track_context_sheet.dart';
@@ -126,7 +127,7 @@ class TrackContextActions {
             icon: Icons.playlist_add_rounded,
             subSheetTitle: 'Добавить в плейлист',
             onSubSheetOpen: refreshMembership,
-            subActions: buildPlaylistSubActions,
+            subItems: buildPlaylistSubActions,
           ),
           TrackSheetAction(
             value: 'like',
@@ -141,7 +142,7 @@ class TrackContextActions {
             label: 'Скачать',
             icon: Icons.download_rounded,
             subSheetTitle: 'Скачать',
-            subActions: _downloadSubActionsGetter,
+            subItems: _downloadSubActionsGetter,
           ),
           const TrackSheetAction(
             value: 'wave',
@@ -261,39 +262,13 @@ class TrackContextActions {
   }
 
   Future<String?> _promptPlaylistTitle(BuildContext context) {
-    final controller = TextEditingController();
-    Future<void> close([String? value]) async {
-      Navigator.of(context, rootNavigator: true).pop<String>(value);
-    }
-
-    return showDialog<String>(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: const Text('Новый плейлист'),
-          content: TextField(
-            controller: controller,
-            maxLength: 64,
-            decoration: const InputDecoration(hintText: 'Название'),
-            onSubmitted: close,
-          ),
-          actions: [
-            TextButton(onPressed: close, child: const Text('Отмена')),
-            FilledButton(
-              onPressed: () => close(controller.text),
-              child: const Text('Создать'),
-            ),
-          ],
-        );
-      },
-    ).whenComplete(controller.dispose);
+    return showTextPromptDialog(context, title: 'Новый плейлист');
   }
 
   /// Creates a private playlist with the entered name and immediately adds
   /// the current track to it.
   Future<void> _createPlaylistAndAddTrack(BuildContext context) async {
-    final title = await _promptPlaylistTitle(context);
-    final trimmed = title?.trim();
+    final trimmed = await _promptPlaylistTitle(context);
     if (trimmed == null || trimmed.isEmpty || !context.mounted) return;
 
     final existingKinds = playlistsSignal.value.map((p) => p.kind).toSet();

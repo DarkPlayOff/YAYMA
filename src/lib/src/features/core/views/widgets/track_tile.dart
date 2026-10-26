@@ -161,7 +161,7 @@ class _CommonTrackTileState extends State<CommonTrackTile> {
                   AppContextMenuItem(
                     label: 'Добавить в плейлист',
                     icon: Icons.playlist_add_rounded,
-                    subItems: [
+                    subItems: () => [
                       ...playlists.map(
                         (p) => AppContextMenuItem(
                           value: 'add_to_${p.kind}',
@@ -210,16 +210,16 @@ class _CommonTrackTileState extends State<CommonTrackTile> {
                     label: 'О треке',
                     icon: Icons.info_outline_rounded,
                   ),
-                  const AppContextMenuItem(
+                  AppContextMenuItem(
                     label: 'Скачать',
                     icon: Icons.download_rounded,
-                    subItems: [
-                      AppContextMenuItem(
+                    subItems: () => [
+                      const AppContextMenuItem(
                         value: 'download_cache',
                         label: 'В кэш приложения',
                         icon: Icons.offline_bolt_rounded,
                       ),
-                      AppContextMenuItem(
+                      const AppContextMenuItem(
                         value: 'download_files',
                         label: 'В отдельный файл',
                         icon: Icons.file_download_rounded,

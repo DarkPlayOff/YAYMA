@@ -10,6 +10,7 @@ import 'package:yayma/src/features/auth/views/yandex_id_view.dart';
 import 'package:yayma/src/features/core/providers/navigation_provider.dart';
 import 'package:yayma/src/features/core/providers/visual_effects_provider.dart';
 import 'package:yayma/src/features/core/theme/app_tokens.dart';
+import 'package:yayma/src/features/core/views/widgets/common_ui.dart';
 import 'package:yayma/src/features/core/views/widgets/rust_cached_image.dart';
 import 'package:yayma/src/features/playback/providers/playback_provider.dart';
 import 'package:yayma/src/features/playback/providers/wave_provider.dart';
@@ -285,13 +286,18 @@ class _AccountButton extends SignalWidget {
     return InkWell(
       onTap: () async {
         onOpened();
-        await showDialog<void>(
-          context: context,
-          barrierColor: Platform.isAndroid
-              ? Colors.transparent
-              : Colors.black54,
-          builder: (context) => _AccountMenuDialog(account: account),
-        );
+        if (Platform.isAndroid) {
+          await showAppBottomSheet<void>(
+            context: context,
+            builder: (context) => _AccountMenuContent(account: account),
+          );
+        } else {
+          await showDialog<void>(
+            context: context,
+            barrierColor: Colors.black54,
+            builder: (context) => _AccountMenuDialog(account: account),
+          );
+        }
         onClosed();
       },
       borderRadius: BorderRadius.circular(AppRadius.lg),
@@ -351,7 +357,6 @@ class _AccountMenuDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
     final isNarrow = MediaQuery.sizeOf(context).width < 600;
 
     return Dialog(
@@ -362,143 +367,149 @@ class _AccountMenuDialog extends StatelessWidget {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppRadius.xxl),
       ),
-      child: Container(
+      child: SizedBox(
         width: isNarrow ? double.infinity : 320,
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(3),
-                  decoration: BoxDecoration(
+        child: _AccountMenuContent(account: account),
+      ),
+    );
+  }
+}
+
+/// Avatar header + account actions. Shared by the desktop dialog and the
+/// Android sheet so both stay in sync.
+class _AccountMenuContent extends StatelessWidget {
+  final UserAccountDto account;
+
+  const _AccountMenuContent({required this.account});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(3),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: account.hasPlus
+                      ? LinearGradient(
+                          colors: [
+                            Colors.purple,
+                            Colors.orange,
+                            Theme.of(context).colorScheme.primary,
+                          ],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        )
+                      : null,
+                  border: account.hasPlus
+                      ? null
+                      : Border.all(color: cs.onSurface.withValues(alpha: 0.1)),
+                ),
+                child: Container(
+                  padding: const EdgeInsets.all(2),
+                  decoration: const BoxDecoration(
+                    color: Colors.black,
                     shape: BoxShape.circle,
-                    gradient: account.hasPlus
-                        ? LinearGradient(
-                            colors: [
-                              Colors.purple,
-                              Colors.orange,
-                              Theme.of(context).colorScheme.primary,
-                            ],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          )
-                        : null,
-                    border: account.hasPlus
-                        ? null
-                        : Border.all(
-                            color: cs.onSurface.withValues(alpha: 0.1),
-                          ),
                   ),
-                  child: Container(
-                    padding: const EdgeInsets.all(2),
-                    decoration: const BoxDecoration(
-                      color: Colors.black,
-                      shape: BoxShape.circle,
-                    ),
-                    child: ClipOval(
-                      child: account.avatarUrl != null
-                          ? RustCachedImage(
-                              imageUrl: account.avatarUrl,
-                              width: 64,
-                              height: 64,
-                              errorWidget: Icon(
-                                Icons.person_rounded,
-                                size: 32,
-                                color: cs.onSurfaceVariant,
-                              ),
-                            )
-                          : Icon(
+                  child: ClipOval(
+                    child: account.avatarUrl != null
+                        ? RustCachedImage(
+                            imageUrl: account.avatarUrl,
+                            width: 64,
+                            height: 64,
+                            errorWidget: Icon(
                               Icons.person_rounded,
                               size: 32,
                               color: cs.onSurfaceVariant,
                             ),
-                    ),
+                          )
+                        : Icon(
+                            Icons.person_rounded,
+                            size: 32,
+                            color: cs.onSurfaceVariant,
+                          ),
                   ),
                 ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        account.displayName ??
-                            account.fullName ??
-                            account.login,
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: cs.onSurface,
-                        ),
-                        overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      account.displayName ?? account.fullName ?? account.login,
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: cs.onSurface,
                       ),
-                      Text(
-                        account.login,
-                        style: TextStyle(
-                          color: cs.onSurfaceVariant,
-                          fontSize: 13,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ),
-                ),
-                IconButton(
-                  onPressed: () => Navigator.pop(context),
-                  icon: Icon(
-                    Icons.close,
-                    color: cs.onSurfaceVariant,
-                    size: 20,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 24),
-            _MenuTile(
-              icon: Icons.badge_outlined,
-              title: 'Управление аккаунтом',
-              onTap: () {
-                Navigator.pop(context);
-                if (Platform.isAndroid) {
-                  Navigator.push<YandexIdView>(
-                    context,
-                    MaterialPageRoute<YandexIdView>(
-                      fullscreenDialog: true,
-                      builder: (_) => const YandexIdView(fullscreen: true),
+                      overflow: TextOverflow.ellipsis,
                     ),
-                  );
-                } else {
-                  setSection(AppSection.yandexId);
-                }
-              },
-            ),
-            _MenuTile(
-              icon: Icons.settings_outlined,
-              title: 'Настройки',
-              onTap: () {
-                Navigator.pop(context);
-                setSection(AppSection.account);
-              },
-            ),
+                    Text(
+                      account.login,
+                      style: TextStyle(
+                        color: cs.onSurfaceVariant,
+                        fontSize: 13,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                onPressed: () => Navigator.pop(context),
+                icon: Icon(Icons.close, color: cs.onSurfaceVariant, size: 20),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          _MenuTile(
+            icon: Icons.badge_outlined,
+            title: 'Управление аккаунтом',
+            onTap: () {
+              Navigator.pop(context);
+              if (Platform.isAndroid) {
+                Navigator.push<YandexIdView>(
+                  context,
+                  MaterialPageRoute<YandexIdView>(
+                    fullscreenDialog: true,
+                    builder: (_) => const YandexIdView(fullscreen: true),
+                  ),
+                );
+              } else {
+                setSection(AppSection.yandexId);
+              }
+            },
+          ),
+          _MenuTile(
+            icon: Icons.settings_outlined,
+            title: 'Настройки',
+            onTap: () {
+              Navigator.pop(context);
+              setSection(AppSection.account);
+            },
+          ),
 
-            Divider(
-              color: cs.onSurface.withValues(alpha: 0.1),
-              height: 40,
-            ),
+          Divider(color: cs.onSurface.withValues(alpha: 0.1), height: 40),
 
-            _MenuTile(
-              icon: Icons.logout_rounded,
-              title: 'Выйти из аккаунта',
-              onTap: () {
-                unawaited(AppInit.logout());
-                Navigator.pop(context);
-              },
-            ),
-          ],
-        ),
+          _MenuTile(
+            icon: Icons.logout_rounded,
+            title: 'Выйти из аккаунта',
+            onTap: () {
+              unawaited(AppInit.logout());
+              Navigator.pop(context);
+            },
+          ),
+        ],
       ),
     );
   }
@@ -509,11 +520,7 @@ class _MenuTile extends StatelessWidget {
   final String title;
   final VoidCallback? onTap;
 
-  const _MenuTile({
-    required this.icon,
-    required this.title,
-    this.onTap,
-  });
+  const _MenuTile({required this.icon, required this.title, this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -655,9 +662,7 @@ class _NavIcon extends StatelessWidget {
                 : Colors.transparent,
             borderRadius: BorderRadius.circular(isSelected ? 16 : 14),
             border: isSelected
-                ? Border.all(
-                    color: scheme.primary.withValues(alpha: 0.35),
-                  )
+                ? Border.all(color: scheme.primary.withValues(alpha: 0.35))
                 : null,
           ),
           child: IconButton(

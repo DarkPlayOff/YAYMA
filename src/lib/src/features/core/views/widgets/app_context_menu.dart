@@ -1,6 +1,9 @@
+import 'dart:io';
+
 import 'package:material_ui/material_ui.dart';
 
 import 'package:yayma/src/features/core/theme/app_tokens.dart';
+import 'package:yayma/src/features/core/views/widgets/track_context_sheet.dart';
 
 class AppContextMenuItem<T> {
   final T? value;
@@ -8,8 +11,19 @@ class AppContextMenuItem<T> {
   final IconData? icon;
   final Widget? leading;
   final Color? color;
-  final List<AppContextMenuItem<T>>? subItems;
+
+  /// Builds the children on each open so they can hold fresh state.
+  final List<AppContextMenuItem<T>> Function()? subItems;
   final bool isSelected;
+
+  /// Title of the follow-up sheet; falls back to [label].
+  final String? subSheetTitle;
+
+  /// Called when the user opens the nested sheet.
+  final VoidCallback? onSubSheetOpen;
+
+  /// Keep the sheet open after the action fires (quick toggles like "like").
+  final bool keepOpen;
 
   const AppContextMenuItem({
     required this.label,
@@ -19,6 +33,9 @@ class AppContextMenuItem<T> {
     this.color,
     this.subItems,
     this.isSelected = false,
+    this.subSheetTitle,
+    this.onSubSheetOpen,
+    this.keepOpen = false,
   });
 }
 
@@ -48,6 +65,28 @@ class AppContextMenu<T> extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Android has no hover/flyout menus: the same actions open as a sheet.
+    if (Platform.isAndroid) {
+      return Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () async {
+            onOpen?.call();
+            await showAppActionSheet<T>(
+              context,
+              actions: items,
+              onSelected: onSelected,
+            );
+            onClose?.call();
+          },
+          hoverColor: hoverColor,
+          highlightColor: hoverColor,
+          borderRadius: borderRadius,
+          child: child,
+        ),
+      );
+    }
+
     return MenuAnchor(
       onOpen: onOpen,
       onClose: onClose,
@@ -144,7 +183,9 @@ class AppContextMenu<T> extends StatelessWidget {
               )
             : null);
 
-    if (item.subItems != null && item.subItems!.isNotEmpty) {
+    final subItems = item.subItems?.call();
+
+    if (subItems != null && subItems.isNotEmpty) {
       return SubmenuButton(
         menuStyle: MenuStyle(
           backgroundColor: WidgetStateProperty.all(
@@ -163,7 +204,7 @@ class AppContextMenu<T> extends StatelessWidget {
             ),
           ),
         ),
-        menuChildren: item.subItems!
+        menuChildren: subItems
             .asMap()
             .entries
             .map((entry) => _buildItem(context, entry.value, entry.key))

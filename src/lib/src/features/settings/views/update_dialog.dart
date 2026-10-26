@@ -19,14 +19,8 @@ class UpdateDialog extends StatefulWidget {
   static void show(BuildContext context, {AppUpdateInfo? initialInfo}) {
     if (Platform.isAndroid) {
       unawaited(
-        showModalBottomSheet<void>(
+        showAppBottomSheet<void>(
           context: context,
-          isScrollControlled: true,
-          shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.vertical(
-              top: Radius.circular(AppRadius.xxl),
-            ),
-          ),
           builder: (context) => UpdateDialog(
             initialInfo: initialInfo,
             bottomSheet: true,
@@ -258,7 +252,7 @@ class _UpdateDialogState extends State<UpdateDialog> {
   }
 
   Widget _closeButton(ColorScheme cs) {
-    return TextButton(
+    return M3ETextButton(
       onPressed: () => Navigator.pop(context),
       child: Text('Закрыть', style: TextStyle(color: cs.onSurfaceVariant)),
     );
@@ -283,7 +277,7 @@ class _UpdateDialogState extends State<UpdateDialog> {
         children: [
           ClipRRect(
             borderRadius: BorderRadius.circular(AppRadius.sm),
-            child: LinearProgressIndicator(
+            child: M3ELinearProgressIndicator(
               value: progress,
               minHeight: 6,
               backgroundColor: cs.surfaceContainerHighest,
@@ -359,12 +353,12 @@ class _UpdateDialogState extends State<UpdateDialog> {
         ),
       );
       actions = [
-        TextButton(
+        M3ETextButton(
           onPressed: () => unawaited(_checkUpdates()),
           child: Text('Повторить', style: TextStyle(color: primaryColor)),
         ),
         if (!widget.bottomSheet)
-          TextButton(
+          M3ETextButton(
             onPressed: () => Navigator.pop(context),
             child: Text(
               'Закрыть',
@@ -418,9 +412,9 @@ class _UpdateDialogState extends State<UpdateDialog> {
           leadingAction = _browserIconButton(cs, info.url);
           if (_downloadedPath != null) {
             actions = [
-              ElevatedButton.icon(
+              M3EElevatedButton.icon(
                 onPressed: _isInstalling ? null : () => unawaited(_installUpdate()),
-                style: ElevatedButton.styleFrom(
+                decoration: M3EButtonDecoration.styleFrom(
                   backgroundColor: primaryColor,
                   foregroundColor: Colors.black,
                 ),
@@ -434,11 +428,11 @@ class _UpdateDialogState extends State<UpdateDialog> {
             ];
           } else {
             actions = [
-              ElevatedButton.icon(
+              M3EElevatedButton.icon(
                 onPressed: _isDownloading
                     ? null
                     : () => unawaited(_downloadUpdate()),
-                style: ElevatedButton.styleFrom(
+                decoration: M3EButtonDecoration.styleFrom(
                   backgroundColor: primaryColor,
                   foregroundColor: Colors.black,
                 ),
@@ -453,9 +447,9 @@ class _UpdateDialogState extends State<UpdateDialog> {
           }
         } else {
           actions = [
-            ElevatedButton(
+            M3EElevatedButton(
               onPressed: () => _launchUrl(info.url),
-              style: ElevatedButton.styleFrom(
+              decoration: M3EButtonDecoration.styleFrom(
                 backgroundColor: primaryColor,
                 foregroundColor: Colors.black,
               ),
@@ -498,7 +492,7 @@ class _UpdateDialogState extends State<UpdateDialog> {
         );
         actions = [
           if (!widget.bottomSheet)
-            TextButton(
+            M3ETextButton(
               onPressed: () => Navigator.pop(context),
               child: Text(
                 'Отлично',

@@ -178,10 +178,10 @@ class _LoginScreenState extends State<LoginScreen> {
         final showBrowserFirst = Platform.isLinux;
 
         final webViewButton = showBrowserFirst
-            ? OutlinedButton.icon(
+            ? M3EOutlinedButton.icon(
                 onPressed: _showWebView,
                 icon: const Icon(Icons.open_in_new_rounded),
-                style: OutlinedButton.styleFrom(
+                decoration: M3EButtonDecoration.styleFrom(
                   minimumSize: const Size(double.infinity, 50),
                 ),
                 label: const Text(
@@ -189,10 +189,10 @@ class _LoginScreenState extends State<LoginScreen> {
                   style: TextStyle(fontWeight: FontWeight.bold),
                 ),
               )
-            : ElevatedButton.icon(
+            : M3EElevatedButton.icon(
                 onPressed: _showWebView,
                 icon: const Icon(Icons.open_in_new_rounded),
-                style: ElevatedButton.styleFrom(
+                decoration: M3EButtonDecoration.styleFrom(
                   backgroundColor: theme.colorScheme.primary,
                   foregroundColor: Colors.black,
                   minimumSize: const Size(double.infinity, 50),
@@ -204,10 +204,10 @@ class _LoginScreenState extends State<LoginScreen> {
               );
 
         final browserButton = showBrowserFirst
-            ? ElevatedButton.icon(
+            ? M3EElevatedButton.icon(
                 onPressed: _showDeviceLogin,
                 icon: const Icon(Icons.devices_rounded),
-                style: ElevatedButton.styleFrom(
+                decoration: M3EButtonDecoration.styleFrom(
                   backgroundColor: theme.colorScheme.primary,
                   foregroundColor: Colors.black,
                   minimumSize: const Size(double.infinity, 50),
@@ -217,10 +217,10 @@ class _LoginScreenState extends State<LoginScreen> {
                   style: TextStyle(fontWeight: FontWeight.bold),
                 ),
               )
-            : OutlinedButton.icon(
+            : M3EOutlinedButton.icon(
                 onPressed: _showDeviceLogin,
                 icon: const Icon(Icons.devices_rounded),
-                style: OutlinedButton.styleFrom(
+                decoration: M3EButtonDecoration.styleFrom(
                   minimumSize: const Size(double.infinity, 50),
                 ),
                 label: const Text(
@@ -484,7 +484,7 @@ class _YandexLoginDialogState extends State<YandexLoginDialog> {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: Row(
                 children: [
-                  TextButton.icon(
+                  M3ETextButton.icon(
                     onPressed: () async {
                       await WebViewCookieManager().clearCookies();
                       if (context.mounted) Navigator.pop(context);
@@ -499,7 +499,7 @@ class _YandexLoginDialogState extends State<YandexLoginDialog> {
                     ),
                   ),
                   const Spacer(),
-                  TextButton(
+                  M3ETextButton(
                     onPressed: () => Navigator.pop(context),
                     child: const Text('ЗАКРЫТЬ'),
                   ),
@@ -694,7 +694,7 @@ class _YandexDeviceLoginDialogState extends State<YandexDeviceLoginDialog> {
                 style: const TextStyle(color: Colors.redAccent),
               ),
               const SizedBox(height: 24),
-              ElevatedButton(
+              M3EElevatedButton(
                 onPressed: () {
                   setState(() {
                     _isLoading = true;
@@ -743,7 +743,7 @@ class _YandexDeviceLoginDialogState extends State<YandexDeviceLoginDialog> {
             runSpacing: 12,
             alignment: WrapAlignment.center,
             children: [
-              OutlinedButton.icon(
+              M3EOutlinedButton.icon(
                 onPressed: () async {
                   if (_userCode != null) {
                     await Clipboard.setData(ClipboardData(text: _userCode!));
@@ -760,7 +760,7 @@ class _YandexDeviceLoginDialogState extends State<YandexDeviceLoginDialog> {
                 icon: const Icon(Icons.copy_rounded),
                 label: const Text('Копировать код'),
               ),
-              ElevatedButton.icon(
+              M3EElevatedButton.icon(
                 onPressed: _openBrowser,
                 icon: const Icon(Icons.open_in_browser_rounded),
                 label: const Text('Открыть ссылку'),

@@ -157,7 +157,7 @@ class _LibraryViewState extends State<LibraryView>
               ),
               actions: [
                 AppDialog.cancelButton(context),
-                ElevatedButton(
+                M3EElevatedButton(
                   onPressed: () async {
                     if (controller.text.isNotEmpty) {
                       final success = await createPlaylistAction(
@@ -302,7 +302,7 @@ class _LikedTracksTabState extends State<_LikedTracksTab> {
           ),
           actions: [
             AppDialog.cancelButton(context),
-            ElevatedButton(
+            M3EElevatedButton(
               onPressed: () => Navigator.pop(context, true),
               child: const Text('Скачать'),
             ),
@@ -370,8 +370,8 @@ class _LikedTracksTabState extends State<_LikedTracksTab> {
             ),
             actions: [
               AppDialog.cancelButton(context),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
+              M3EElevatedButton(
+                decoration: M3EButtonDecoration.styleFrom(
                   backgroundColor: cs.error,
                   foregroundColor: cs.onError,
                 ),

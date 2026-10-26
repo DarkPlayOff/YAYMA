@@ -16,7 +16,6 @@ class WindowPlacement {
   WindowPlacement._();
 
   static const String _fileName = 'window_geometry.json';
-  static const String _legacyFileName = 'window_geometry.json';
   static const Size defaultSize = Size(1280, 720);
   static const Size minimumSize = Size(800, 600);
 
@@ -142,7 +141,7 @@ class WindowPlacement {
     try {
       final docs = await getApplicationDocumentsDirectory();
       final legacy = File(
-        '${docs.path}${Platform.pathSeparator}$_legacyFileName',
+        '${docs.path}${Platform.pathSeparator}$_fileName',
       );
       if (!legacy.existsSync()) return;
       final target = await _file();

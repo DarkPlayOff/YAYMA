@@ -89,14 +89,7 @@ windows = { version = "0.62.2", features = [
 rustls-platform-verifier = { version = "0.7.0", features = ["jni"] }
 jni = "0.22"
 ndk-context = "0.1.1"
-mimalloc = { workspace = true, features = ["local_dynamic_tls"] }
-
-[workspace]
-members = ["."]
-
-[workspace.dependencies]
-mimalloc = { version = "0.1.52" }
-
+mimalloc = { version = "0.1.52", features = ["local_dynamic_tls"] }
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(frb_expand)'] }

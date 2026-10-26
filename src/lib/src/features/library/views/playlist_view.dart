@@ -319,8 +319,7 @@ class _PlaylistContentState extends State<_PlaylistContent> {
                 tooltip: 'Опции плейлиста',
               )
             : AppContextMenu<String>(
-                onSelected: (value) =>
-                    unawaited(_handlePlaylistAction(value)),
+                onSelected: (value) => unawaited(_handlePlaylistAction(value)),
                 items: [
                   const AppContextMenuItem(
                     value: 'rename',
@@ -561,46 +560,17 @@ class _PlaylistContentState extends State<_PlaylistContent> {
     BuildContext context,
     PlaylistDetailsDto playlist,
   ) async {
-    final controller = TextEditingController(text: playlist.title);
-    try {
-      await showDialog<void>(
-        context: context,
-        builder: (context) {
-          final cs = Theme.of(context).colorScheme;
-          return AppDialog(
-            title: 'Переименовать плейлист',
-            content: TextField(
-              controller: controller,
-              autofocus: true,
-              style: TextStyle(color: cs.onSurface),
-              decoration: InputDecoration(
-                filled: true,
-                fillColor: cs.onSurface.withValues(alpha: 0.05),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(AppRadius.sm),
-                  borderSide: BorderSide.none,
-                ),
-              ),
-            ),
-            actions: [
-              AppDialog.cancelButton(context),
-              ElevatedButton(
-                onPressed: () async {
-                  if (controller.text.isNotEmpty) {
-                    await renamePlaylistAction(playlist.kind, controller.text);
-                    unawaited(widget.refresh());
-                    if (context.mounted) Navigator.pop(context);
-                  }
-                },
-                child: const Text('Сохранить'),
-              ),
-            ],
-          );
-        },
-      );
-    } finally {
-      controller.dispose();
-    }
+    final title = await showTextPromptDialog(
+      context,
+      title: 'Переименовать плейлист',
+      initial: playlist.title,
+      autofocus: true,
+      confirmLabel: 'Сохранить',
+    );
+    if (title == null || title.isEmpty) return;
+
+    await renamePlaylistAction(playlist.kind, title);
+    unawaited(widget.refresh());
   }
 
   Future<void> _showDeleteConfirm(
@@ -619,7 +589,7 @@ class _PlaylistContentState extends State<_PlaylistContent> {
           ),
           actions: [
             AppDialog.cancelButton(context),
-            ElevatedButton(
+            M3EElevatedButton(
               onPressed: () async {
                 await deletePlaylistAction(playlist.kind);
                 if (context.mounted) {
@@ -627,7 +597,9 @@ class _PlaylistContentState extends State<_PlaylistContent> {
                   setSection(AppSection.liked);
                 }
               },
-              style: ElevatedButton.styleFrom(backgroundColor: cs.error),
+              decoration: M3EButtonDecoration.styleFrom(
+                backgroundColor: cs.error,
+              ),
               child: const Text('Удалить'),
             ),
           ],

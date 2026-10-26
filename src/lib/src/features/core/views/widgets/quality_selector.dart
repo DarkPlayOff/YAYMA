@@ -3,9 +3,9 @@ import 'dart:io';
 
 import 'package:material_ui/material_ui.dart';
 import 'package:signals_flutter/signals_flutter.dart';
-import 'package:yayma/src/features/core/theme/app_tokens.dart';
 import 'package:yayma/src/features/core/views/widgets/app_context_menu.dart';
 import 'package:yayma/src/features/core/views/widgets/audio_settings.dart';
+import 'package:yayma/src/features/core/views/widgets/common_ui.dart';
 import 'package:yayma/src/features/core/views/widgets/tab_visibility.dart';
 import 'package:yayma/src/features/playback/providers/playback_provider.dart';
 import 'package:yayma/src/rust/api/models.dart';
@@ -95,14 +95,8 @@ class CommonQualitySelector extends SignalWidget {
               unawaited(refreshAudioEffects());
               if (Platform.isAndroid) {
                 unawaited(
-                  showModalBottomSheet<void>(
+                  showAppBottomSheet<void>(
                     context: context,
-                    isScrollControlled: true,
-                    shape: const RoundedRectangleBorder(
-                      borderRadius: BorderRadius.vertical(
-                        top: Radius.circular(AppRadius.xl),
-                      ),
-                    ),
                     builder: (_) =>
                         const AudioSettingsDialog(bottomSheet: true),
                   ),

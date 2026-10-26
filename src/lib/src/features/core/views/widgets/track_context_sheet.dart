@@ -6,8 +6,10 @@ import 'package:material_ui/material_ui.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/features/core/providers/navigation_provider.dart';
 import 'package:yayma/src/features/core/theme/app_tokens.dart';
-import 'package:yayma/src/features/core/utils/cover_tint.dart';
+import 'package:yayma/src/features/core/theme/cover_palette.dart';
+import 'package:yayma/src/features/core/views/widgets/app_context_menu.dart';
 import 'package:yayma/src/features/core/views/widgets/app_cover.dart';
+import 'package:yayma/src/features/core/views/widgets/common_ui.dart';
 import 'package:yayma/src/features/core/views/widgets/track_elements.dart';
 import 'package:yayma/src/rust/api/models.dart';
 
@@ -28,46 +30,13 @@ class TrackContextSheetHeader {
   });
 }
 
-class TrackSheetAction {
-  final String? value;
-  final String label;
-  final IconData? icon;
-
-  /// Custom leading widget (e.g. playlist cover); overrides [icon].
-  final Widget? leading;
-  final Color? color;
-
-  /// Non-null: tapping this entry opens a follow-up sheet built with this
-  /// builder instead of firing [value] directly. Called each time the sub
-  /// sheet (re)builds, so it can return fresh options.
-  final List<TrackSheetAction> Function()? subActions;
-  final String? subSheetTitle;
-  final bool isSelected;
-
-  /// Keep the sheet open after the action fires (quick toggles like "like").
-  final bool keepOpen;
-
-  /// Called when the user opens the nested sheet.
-  final VoidCallback? onSubSheetOpen;
-
-  const TrackSheetAction({
-    required this.label,
-    this.icon,
-    this.value,
-    this.leading,
-    this.color,
-    this.subActions,
-    this.subSheetTitle,
-    this.onSubSheetOpen,
-    this.isSelected = false,
-    this.keepOpen = false,
-  });
-}
+/// A sheet action; the same model the desktop context menu uses.
+typedef TrackSheetAction = AppContextMenuItem<String>;
 
 /// Bottom menu (sheet) with actions on a track (Android).
 /// At the top — cover with title and track version, below — artists, then a
 /// row of [quickActions] (icon + label), at the bottom — the rest of the
-/// actions. Items with [TrackSheetAction.subActions] open a nested sheet.
+/// actions. Items with [TrackSheetAction.subItems] open a nested sheet.
 ///
 /// [quickActions] is rebuilt on signal changes, so it can render live state
 /// (e.g. a filled heart for a liked track).
@@ -75,18 +44,16 @@ class TrackSheetAction {
 /// [subSheetRebuildOn] is only forwarded to the nested sheets: bumping it
 /// redraws their contents (e.g. fresh membership checkmarks), but does not
 /// rebuild this top-level sheet.
-Future<void> showTrackContextSheet(
+Future<void> showTrackContextSheet<T>(
   BuildContext context, {
   required TrackContextSheetHeader header,
-  required List<TrackSheetAction> actions,
-  required void Function(String value) onSelected,
-  List<TrackSheetAction> Function()? quickActions,
+  required List<AppContextMenuItem<T>> actions,
+  required void Function(T value) onSelected,
+  List<AppContextMenuItem<T>> Function()? quickActions,
   ValueListenable<int>? subSheetRebuildOn,
 }) {
-  return showModalBottomSheet<void>(
+  return showAppBottomSheet<void>(
     context: context,
-    useSafeArea: true,
-    isScrollControlled: true,
     showDragHandle: true,
     builder: (sheetContext) {
       final scheme = Theme.of(sheetContext).colorScheme;
@@ -145,35 +112,38 @@ Future<void> showTrackContextSheet(
   );
 }
 
-/// Nested menu (sheet) — list of options with a title (Android).
+/// Nested menu (sheet) — list of options with an optional title (Android).
 /// [actionsBuilder] is called on every build: when [rebuildOn] changes
 /// the list of items is rebuilt (fresh data, e.g. checkmarks).
-Future<void> showTrackSubActionSheet(
+///
+/// With no [title] it renders as a plain action list, which is what
+/// [AppContextMenu] uses on Android instead of a desktop popup.
+Future<void> showTrackSubActionSheet<T>(
   BuildContext context, {
-  required String title,
-  required List<TrackSheetAction> Function() actionsBuilder,
-  required void Function(String value) onSelected,
+  required List<AppContextMenuItem<T>> Function() actionsBuilder,
+  required void Function(T value) onSelected,
+  String? title,
   ValueListenable<int>? rebuildOn,
 }) {
-  return showModalBottomSheet<void>(
+  return showAppBottomSheet<void>(
     context: context,
-    useSafeArea: true,
-    isScrollControlled: true,
     showDragHandle: true,
     builder: (sheetContext) {
       final scheme = Theme.of(sheetContext).colorScheme;
 
-      final header = Padding(
-        padding: const EdgeInsets.fromLTRB(24, 8, 24, 12),
-        child: Text(
-          title,
-          style: TextStyle(
-            color: scheme.onSurfaceVariant,
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      );
+      final header = title == null
+          ? const SizedBox(height: 8)
+          : Padding(
+              padding: const EdgeInsets.fromLTRB(24, 8, 24, 12),
+              child: Text(
+                title,
+                style: TextStyle(
+                  color: scheme.onSurfaceVariant,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            );
 
       final content = SafeArea(
         top: false,
@@ -205,6 +175,20 @@ Future<void> showTrackSubActionSheet(
       );
       return content;
     },
+  );
+}
+
+/// Plain action sheet, no header. Used by [AppContextMenu] on Android in
+/// place of the desktop popup menu.
+Future<void> showAppActionSheet<T>(
+  BuildContext context, {
+  required List<AppContextMenuItem<T>> actions,
+  required void Function(T value) onSelected,
+}) {
+  return showTrackSubActionSheet<T>(
+    context,
+    actionsBuilder: () => actions,
+    onSelected: onSelected,
   );
 }
 
@@ -461,49 +445,48 @@ final ValueListenable<int> _dummyRebuildVersions = ValueNotifier(0);
 
 /// Runs a sheet action: opens its nested sheet, or closes the current one and
 /// reports the value (unless the action opts to stay open).
-void _runAction(
+void _runAction<T>(
   BuildContext context,
-  TrackSheetAction action,
-  void Function(String value) onSelected,
+  AppContextMenuItem<T> action,
+  void Function(T value) onSelected,
   ValueListenable<int>? subSheetRebuildOn,
 ) {
-  if (action.subActions != null) {
+  if (action.subItems != null) {
     unawaited(_openSubSheet(context, action, onSelected, subSheetRebuildOn));
     return;
   }
   final value = action.value;
-  if (value == null) {
-    assert(false, 'Действие «${action.label}» без value/subActions');
-    return;
-  }
+  // Display-only rows (e.g. the stream info line) have no value.
+  if (value == null) return;
   if (!action.keepOpen) Navigator.of(context).pop();
   onSelected(value);
 }
 
-Future<void> _openSubSheet(
+Future<void> _openSubSheet<T>(
   BuildContext context,
-  TrackSheetAction action,
-  void Function(String value) onSelected,
+  AppContextMenuItem<T> action,
+  void Function(T value) onSelected,
   ValueListenable<int>? subSheetRebuildOn,
 ) async {
   action.onSubSheetOpen?.call();
   // Close the current sheet first, then show the follow-up one.
   final navigator = Navigator.of(context)..pop();
-  await showTrackSubActionSheet(
+  await showTrackSubActionSheet<T>(
     navigator.context,
     title: action.subSheetTitle ?? action.label,
     // The builder is passed "as is": showTrackSubActionSheet calls it
     // on every rebuild (rebuildOn), otherwise the checkmarks won't update.
-    actionsBuilder: action.subActions ?? (() => const []),
+    actionsBuilder:
+        action.subItems ?? (() => <AppContextMenuItem<T>>[]),
     rebuildOn: subSheetRebuildOn,
     onSelected: onSelected,
   );
 }
 
 /// Icon + label quick action in the row under the sheet header.
-class _QuickActionButton extends StatelessWidget {
-  final TrackSheetAction action;
-  final void Function(String value) onSelected;
+class _QuickActionButton<T> extends StatelessWidget {
+  final AppContextMenuItem<T> action;
+  final void Function(T value) onSelected;
 
   /// Forwarded to the nested sheet, which rebuilds on every increment.
   final ValueListenable<int>? subSheetRebuildOn;
@@ -512,9 +495,7 @@ class _QuickActionButton extends StatelessWidget {
     this.action,
     this.onSelected, {
     this.subSheetRebuildOn,
-  });
-
-  @override
+  });  @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Column(
@@ -543,9 +524,9 @@ class _QuickActionButton extends StatelessWidget {
   }
 }
 
-class _SheetActionTile extends StatelessWidget {
-  final TrackSheetAction action;
-  final void Function(String value) onSelected;
+class _SheetActionTile<T> extends StatelessWidget {
+  final AppContextMenuItem<T> action;
+  final void Function(T value) onSelected;
 
   /// Forwarded to the nested sheet, which rebuilds on every increment.
   final ValueListenable<int>? subSheetRebuildOn;
@@ -589,7 +570,7 @@ class _SheetActionTile extends StatelessWidget {
           ),
           trailing: action.isSelected
               ? Icon(Icons.check_rounded, size: 22, color: scheme.primary)
-              : action.subActions != null
+              : action.subItems != null
               ? Icon(
                   Icons.chevron_right_rounded,
                   size: 22,

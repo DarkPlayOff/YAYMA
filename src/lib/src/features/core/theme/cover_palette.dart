@@ -5,12 +5,14 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/scheduler.dart';
+import 'package:m3e_core/m3e_core.dart';
 import 'package:material_color_utilities/material_color_utilities.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/app/session.dart';
 import 'package:yayma/src/features/core/theme/app_theme.dart';
 import 'package:yayma/src/features/core/utils/lru_map.dart';
+import 'package:yayma/src/features/core/views/widgets/rust_cached_image.dart';
 import 'package:yayma/src/features/playback/providers/playback_provider.dart';
 import 'package:yayma/src/rust/api/simple.dart' as rust;
 
@@ -27,6 +29,112 @@ const int _preparedCoverCacheLimit = 6;
 final LruMap<String, Future<ColorScheme?>> _preparedCoverSchemes = LruMap(
   maximumSize: _preparedCoverCacheLimit,
 );
+
+final LruMap<String, Future<List<Color>>> _coverTintCache = LruMap(
+  maximumSize: 6,
+);
+
+// Intentionally the cheap 24px hue histogram, not the Celebi seed: the context
+// sheet should not wait for the isolate quantizer.
+/// Up to three accent colours of a cover, picked from its most frequent hues.
+///
+/// Reads the already-cached file, so no extra network. Returns an empty list
+/// when the cover is missing or nearly greyscale. [pixels] should be the size
+/// the cover is drawn at, so the same cached preset is reused.
+Future<List<Color>> coverTint({
+  String? coverUrl,
+  Uri? localUri,
+  int pixels = 300,
+}) {
+  final url = coverUrl ?? localUri?.toString();
+  if (url == null) return Future.value(const []);
+  final requestUrl = localUri != null && localUri.scheme == 'file'
+      ? url
+      : resolveCoverUrl(url, pixels);
+  final cached = _coverTintCache[requestUrl];
+  if (cached != null) return cached;
+
+  final future = _loadCoverTint(requestUrl, localUri);
+  _coverTintCache[requestUrl] = future;
+  // Don't keep misses around, matching the previous behaviour of only caching
+  // successfully read covers.
+  unawaited(
+    future.then((colors) {
+      if (colors.isEmpty &&
+          identical(_coverTintCache.peek(requestUrl), future)) {
+        final _ = _coverTintCache.remove(requestUrl);
+      }
+    }),
+  );
+  return future;
+}
+
+Future<List<Color>> _loadCoverTint(String requestUrl, Uri? localUri) async {
+  try {
+    final String? path;
+    if (localUri != null && localUri.scheme == 'file') {
+      path = localUri.toFilePath();
+    } else {
+      final ctx = appContextSignal.value;
+      if (ctx == null) return const [];
+      path = await rust.getCachedImagePath(ctx: ctx, url: requestUrl);
+    }
+    if (path == null) return const [];
+    return await _colorsOfFile(path);
+  } on Object {
+    return const [];
+  }
+}
+
+Future<List<Color>> _colorsOfFile(String path) async {
+  final codec = await ui.instantiateImageCodec(
+    await File(path).readAsBytes(),
+    targetWidth: 24,
+    targetHeight: 24,
+  );
+  try {
+    final frame = await codec.getNextFrame();
+    final data = await frame.image.toByteData();
+    frame.image.dispose();
+    if (data == null) return const [];
+
+    final bytes = data.buffer.asUint8List();
+    final counts = <int, int>{};
+    final sums = <int, List<int>>{};
+    for (var i = 0; i + 3 < bytes.length; i += 4) {
+      if (bytes[i + 3] < 200) continue;
+      final r = bytes[i];
+      final g = bytes[i + 1];
+      final b = bytes[i + 2];
+      final hsv = HSVColor.fromColor(Color.fromARGB(255, r, g, b));
+      // Near-greys would only desaturate the result.
+      if (hsv.saturation < 0.25) continue;
+      final bucket = (hsv.hue / 30).floor();
+      counts[bucket] = (counts[bucket] ?? 0) + 1;
+      final sum = sums.putIfAbsent(bucket, () => [0, 0, 0]);
+      sum[0] += r;
+      sum[1] += g;
+      sum[2] += b;
+    }
+    if (counts.isEmpty) return const [];
+
+    final top = counts.keys.toList()
+      ..sort((a, b) => counts[b]!.compareTo(counts[a]!));
+    return [
+      for (final bucket in top.take(3))
+        HSVColor.fromColor(
+          Color.fromARGB(
+            255,
+            sums[bucket]![0] ~/ counts[bucket]!,
+            sums[bucket]![1] ~/ counts[bucket]!,
+            sums[bucket]![2] ~/ counts[bucket]!,
+          ),
+        ).withSaturation(0.72).withValue(0.62).toColor(),
+    ];
+  } finally {
+    codec.dispose();
+  }
+}
 
 // At most two extractions run at once. Without the cap, skipping N tracks
 // leaves N stale isolate jobs competing with the palette of the track the
@@ -174,10 +282,7 @@ Future<ColorScheme?> _extractCoverScheme(String url) async {
     // Default variant (tonalSpot), like the pre-refactor
     // `ColorScheme.fromImageProvider` call: it keeps the cover's hue, while
     // expressive rotates the primary palette 240° away from the source color.
-    final scheme = ColorScheme.fromSeed(
-      seedColor: Color(seed),
-      brightness: Brightness.dark,
-    );
+    final scheme = M3EColorScheme.dark(seedColor: Color(seed));
 
     // Warm the exact decoded size used by BlurredCoverBackground. Resolving
     // an ImageProvider is enough to put it into Flutter's shared image cache.
@@ -248,4 +353,7 @@ final List<EffectCleanup> _coverThemeEffects = [
 void activateCoverTheme() => _coverThemeEffects;
 
 /// Drops the memoized palettes between sessions.
-void clearCoverPalettes() => _preparedCoverSchemes.clear();
+void clearCoverPalettes() {
+  _preparedCoverSchemes.clear();
+  _coverTintCache.clear();
+}

@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:m3e_core/m3e_core.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:signals_flutter/signals_flutter.dart';
+import 'package:yayma/src/features/core/theme/app_theme.dart';
 import 'package:yayma/src/features/core/theme/app_tokens.dart';
 import 'package:yayma/src/features/core/views/widgets/app_context_menu.dart';
 import 'package:yayma/src/features/core/views/widgets/app_cover.dart';
@@ -13,6 +14,25 @@ import 'package:yayma/src/features/core/views/widgets/tab_visibility.dart';
 import 'package:yayma/src/features/core/views/widgets/track_elements.dart';
 import 'package:yayma/src/features/playback/providers/playback_provider.dart';
 import 'package:yayma/src/rust/api/models.dart';
+
+/// App-styled M3E modal sheet. Content owns its own padding: the M3E default
+/// 24dp inner padding would double the padding each sheet already sets.
+Future<T?> showAppBottomSheet<T>({
+  required BuildContext context,
+  required WidgetBuilder builder,
+  bool showDragHandle = false,
+  Color? backgroundColor,
+}) {
+  final cs = Theme.of(context).colorScheme;
+  return showM3EModalBottomSheet<T>(
+    context: context,
+    showDragHandle: showDragHandle,
+    backgroundColor:
+        backgroundColor ?? surfaceOverlay(cs.surfaceContainerHighest),
+    style: const M3EBottomSheetStyle(padding: EdgeInsets.zero),
+    builder: builder,
+  );
+}
 
 String formatDuration(int ms) {
   final d = Duration(milliseconds: ms);
@@ -508,23 +528,22 @@ class CommonDetailSliverLayout extends StatelessWidget {
 class AppRefreshIndicator extends StatelessWidget {
   final Future<void> Function() onRefresh;
   final Widget child;
-  final double displacement;
 
   const AppRefreshIndicator({
     required this.onRefresh,
     required this.child,
     super.key,
-    this.displacement = 40,
   });
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    return RefreshIndicator(
+    return M3EPullToRefreshIndicator(
       onRefresh: onRefresh,
-      color: cs.primary,
-      backgroundColor: cs.surfaceContainerHighest,
-      displacement: displacement,
+      style: M3EPullToRefreshStyle(
+        indicatorColor: cs.primary,
+        containerColor: cs.surfaceContainerHighest,
+      ),
       child: child,
     );
   }
@@ -1022,7 +1041,7 @@ class AppDialog extends StatelessWidget {
 
   /// Standard dismiss action with default button color.
   static Widget cancelButton(BuildContext context, [String label = 'Отмена']) {
-    return TextButton(
+    return M3ETextButton(
       onPressed: () => Navigator.pop(context),
       child: Text(label),
     );
@@ -1031,7 +1050,7 @@ class AppDialog extends StatelessWidget {
   /// Standard dismiss action in muted color.
   static Widget closeButton(BuildContext context, [String label = 'Закрыть']) {
     final cs = Theme.of(context).colorScheme;
-    return TextButton(
+    return M3ETextButton(
       onPressed: () => Navigator.pop(context),
       child: Text(label, style: TextStyle(color: cs.onSurfaceVariant)),
     );
@@ -1082,4 +1101,53 @@ class AppDialog extends StatelessWidget {
       actions: actions,
     );
   }
+}
+
+/// Single-line text prompt in the app's dialog shell: title, one field,
+/// cancel + confirm. Returns the trimmed text, or null when cancelled.
+Future<String?> showTextPromptDialog(
+  BuildContext context, {
+  required String title,
+  String hint = 'Название',
+  String confirmLabel = 'Создать',
+  String? initial,
+  bool autofocus = false,
+}) {
+  final controller = TextEditingController(text: initial);
+  final cs = Theme.of(context).colorScheme;
+
+  return showDialog<String>(
+    context: context,
+    builder: (dialogContext) {
+      void close([String? value]) =>
+          Navigator.of(dialogContext).pop<String>(value);
+
+      return AppDialog(
+        title: title,
+        content: TextField(
+          controller: controller,
+          autofocus: autofocus,
+          style: TextStyle(color: cs.onSurface),
+          decoration: InputDecoration(
+            hintText: hint,
+            hintStyle: TextStyle(color: cs.onSurface.withValues(alpha: 0.24)),
+            filled: true,
+            fillColor: cs.onSurface.withValues(alpha: 0.05),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(AppRadius.sm),
+              borderSide: BorderSide.none,
+            ),
+          ),
+          onSubmitted: close,
+        ),
+        actions: [
+          AppDialog.cancelButton(dialogContext),
+          M3EFilledButton(
+            onPressed: () => close(controller.text),
+            child: Text(confirmLabel),
+          ),
+        ],
+      );
+    },
+  ).then((value) => value?.trim()).whenComplete(controller.dispose);
 }
