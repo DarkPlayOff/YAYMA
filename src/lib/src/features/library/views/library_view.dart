@@ -200,9 +200,7 @@ class _LibraryViewState extends State<LibraryView>
           ),
           child: Row(
             children: [
-              const Expanded(
-                child: CommonPageTitle(title: 'Библиотека'),
-              ),
+              const Expanded(child: CommonPageTitle(title: 'Библиотека')),
               const SizedBox(width: 16),
               M3EButton.icon(
                 onPressed: () => _showCreatePlaylistDialog(context),
@@ -357,34 +355,32 @@ class _LikedTracksTabState extends State<_LikedTracksTab> {
     BuildContext context,
     List<SimpleTrackDto> tracks,
   ) {
-    unawaited(
-      showDialog<void>(
-        context: context,
-        builder: (context) {
-          final cs = Theme.of(context).colorScheme;
-          return AppDialog(
-            title: 'Удалить всё?',
-            content: Text(
-              'Вы действительно хотите удалить все скачанные любимые треки?',
-              style: TextStyle(color: cs.onSurfaceVariant),
-            ),
-            actions: [
-              AppDialog.cancelButton(context),
-              M3EElevatedButton(
-                decoration: M3EButtonDecoration.styleFrom(
-                  backgroundColor: cs.error,
-                  foregroundColor: cs.onError,
-                ),
-                onPressed: () {
-                  Navigator.pop(context);
-                  unawaited(_deleteAllLikedTracks(tracks));
-                },
-                child: const Text('Удалить'),
+    showDialog<void>(
+      context: context,
+      builder: (context) {
+        final cs = Theme.of(context).colorScheme;
+        return AppDialog(
+          title: 'Удалить всё?',
+          content: Text(
+            'Вы действительно хотите удалить все скачанные любимые треки?',
+            style: TextStyle(color: cs.onSurfaceVariant),
+          ),
+          actions: [
+            AppDialog.cancelButton(context),
+            M3EElevatedButton(
+              decoration: M3EButtonDecoration.styleFrom(
+                backgroundColor: cs.error,
+                foregroundColor: cs.onError,
               ),
-            ],
-          );
-        },
-      ),
+              onPressed: () {
+                Navigator.pop(context);
+                unawaited(_deleteAllLikedTracks(tracks));
+              },
+              child: const Text('Удалить'),
+            ),
+          ],
+        );
+      },
     );
   }
 

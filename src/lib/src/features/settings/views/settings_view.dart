@@ -320,11 +320,9 @@ class _SettingsViewState extends State<SettingsView> {
                       subtitle:
                           'Глобальные сочетания клавиш, работающие вне окна',
                       icon: Icons.keyboard_command_key_rounded,
-                      onTap: () => unawaited(
-                        showDialog<void>(
-                          context: context,
-                          builder: (context) => const _GlobalHotkeysDialog(),
-                        ),
+                      onTap: () => showDialog<void>(
+                        context: context,
+                        builder: (context) => const _GlobalHotkeysDialog(),
                       ),
                     ),
                   ],

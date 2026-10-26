@@ -30,11 +30,9 @@ class LyricsProvidersDialog extends StatefulWidget {
       );
       return;
     }
-    unawaited(
-      showDialog<void>(
-        context: context,
-        builder: (context) => const LyricsProvidersDialog(),
-      ),
+    showDialog<void>(
+      context: context,
+      builder: (context) => const LyricsProvidersDialog(),
     );
   }
 

@@ -421,10 +421,7 @@ class _LyricRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final onSurface = Theme.of(context).colorScheme.onSurface;
     if (item is LyricTimer) {
-      return _LyricTimerWidget(
-        item: item as LyricTimer,
-        isActive: isActive,
-      );
+      return _LyricTimerWidget(item: item as LyricTimer, isActive: isActive);
     }
 
     final line = item as LyricLine;
@@ -661,10 +658,7 @@ class _KaraokeWordText extends StatelessWidget {
         color: pending ? onSurface.withValues(alpha: 0.3) : onSurface,
         fontWeight: FontWeight.w900,
         glow: singing
-            ? Shadow(
-                color: onSurface.withValues(alpha: 0.5),
-                blurRadius: 24,
-              )
+            ? Shadow(color: onSurface.withValues(alpha: 0.5), blurRadius: 24)
             : null,
       ),
       child: Text(word.text),
@@ -751,10 +745,7 @@ class _LyricTimerWidgetState extends State<_LyricTimerWidget>
                   final pulse = active
                       ? (_pulseController.value * 0.15 + 1.0)
                       : 1.0;
-                  return Transform.scale(
-                    scale: pulse,
-                    child: child,
-                  );
+                  return Transform.scale(scale: pulse, child: child);
                 },
                 child: Container(
                   margin: const EdgeInsets.symmetric(horizontal: 12),
@@ -821,12 +812,9 @@ class LyricsReaderDialog extends StatefulWidget {
       return;
     }
 
-    unawaited(
-      showDialog<void>(
-        context: context,
-        builder: (context) =>
-            LyricsReaderDialog(trackId: trackId, title: title),
-      ),
+    showDialog<void>(
+      context: context,
+      builder: (context) => LyricsReaderDialog(trackId: trackId, title: title),
     );
   }
 

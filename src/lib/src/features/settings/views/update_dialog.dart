@@ -21,19 +21,15 @@ class UpdateDialog extends StatefulWidget {
       unawaited(
         showAppBottomSheet<void>(
           context: context,
-          builder: (context) => UpdateDialog(
-            initialInfo: initialInfo,
-            bottomSheet: true,
-          ),
+          builder: (context) =>
+              UpdateDialog(initialInfo: initialInfo, bottomSheet: true),
         ),
       );
       return;
     }
-    unawaited(
-      showDialog<void>(
-        context: context,
-        builder: (context) => UpdateDialog(initialInfo: initialInfo),
-      ),
+    showDialog<void>(
+      context: context,
+      builder: (context) => UpdateDialog(initialInfo: initialInfo),
     );
   }
 
@@ -92,18 +88,16 @@ class _UpdateDialogState extends State<UpdateDialog> {
   }
 
   void _launchUrl(String url) {
-    unawaited(
-      () async {
-        try {
-          final uri = Uri.parse(url);
-          if (await canLaunchUrl(uri)) {
-            await launchUrl(uri, mode: LaunchMode.externalApplication);
-          }
-        } on Object catch (e) {
-          debugPrint('Error launching browser: $e');
+    unawaited(() async {
+      try {
+        final uri = Uri.parse(url);
+        if (await canLaunchUrl(uri)) {
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
         }
-      }(),
-    );
+      } on Object catch (e) {
+        debugPrint('Error launching browser: $e');
+      }
+    }());
   }
 
   Future<void> _downloadUpdate() async {
@@ -328,9 +322,7 @@ class _UpdateDialogState extends State<UpdateDialog> {
     if (_isLoading) {
       content = const SizedBox(
         height: 150,
-        child: Center(
-          child: M3ELoadingIndicator(),
-        ),
+        child: Center(child: M3ELoadingIndicator()),
       );
     } else if (_error != null) {
       content = Padding(
@@ -338,11 +330,7 @@ class _UpdateDialogState extends State<UpdateDialog> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              Icons.error_outline_rounded,
-              color: cs.error,
-              size: 48,
-            ),
+            Icon(Icons.error_outline_rounded, color: cs.error, size: 48),
             const SizedBox(height: 16),
             Text(
               _error!,
@@ -413,7 +401,9 @@ class _UpdateDialogState extends State<UpdateDialog> {
           if (_downloadedPath != null) {
             actions = [
               M3EElevatedButton.icon(
-                onPressed: _isInstalling ? null : () => unawaited(_installUpdate()),
+                onPressed: _isInstalling
+                    ? null
+                    : () => unawaited(_installUpdate()),
                 decoration: M3EButtonDecoration.styleFrom(
                   backgroundColor: primaryColor,
                   foregroundColor: Colors.black,
@@ -532,9 +522,7 @@ class _UpdateDialogState extends State<UpdateDialog> {
               ),
               const SizedBox(height: 16),
               Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppSpacing.lg,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
                 child: Row(
                   children: [
                     Icon(Icons.system_update_rounded, color: cs.onSurface),
@@ -570,11 +558,7 @@ class _UpdateDialogState extends State<UpdateDialog> {
                     AppSpacing.lg,
                   ),
                   child: Row(
-                    children: [
-                      ?leadingAction,
-                      const Spacer(),
-                      ...actions,
-                    ],
+                    children: [?leadingAction, const Spacer(), ...actions],
                   ),
                 ),
             ],

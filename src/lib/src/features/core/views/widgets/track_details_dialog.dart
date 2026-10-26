@@ -35,11 +35,9 @@ class TrackDetailsDialog extends StatefulWidget {
       );
       return;
     }
-    unawaited(
-      showDialog<void>(
-        context: context,
-        builder: (context) => TrackDetailsDialog(trackId: trackId),
-      ),
+    showDialog<void>(
+      context: context,
+      builder: (context) => TrackDetailsDialog(trackId: trackId),
     );
   }
 }

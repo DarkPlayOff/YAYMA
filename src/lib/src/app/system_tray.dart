@@ -18,20 +18,17 @@ import 'package:yayma/src/features/playback/providers/playback_provider.dart';
 /// Currently scoped to Windows, mirroring the other Win32-only integrations
 /// (taskbar thumbnail buttons). The shipped tray icon asset is a `.ico`, which
 /// only the Windows tray accepts.
-class SystemTrayManager with TrayListener, WindowListener {
+class SystemTrayManager with WindowListener {
   SystemTrayManager._();
 
   static final SystemTrayManager instance = SystemTrayManager._();
 
-  static const String _expandKey = 'expand';
-  static const String _pauseKey = 'pause';
-  static const String _prevKey = 'previous';
-  static const String _nextKey = 'next';
-  static const String _closeKey = 'close';
-
   bool _initialized = false;
   bool _quitting = false;
   EffectCleanup? _menuEffect;
+  TrayIcon? _trayIcon;
+  Menu? _menu;
+  MenuItem? _pauseItem;
 
   /// Whether the tray is supported on the current platform.
   static bool get isSupported => Platform.isWindows;
@@ -44,30 +41,49 @@ class SystemTrayManager with TrayListener, WindowListener {
     await windowManager.setPreventClose(true);
     windowManager.addListener(this);
 
-    trayManager.addListener(this);
-    await trayManager.setIcon('assets/icons/tray_icon.ico');
-    await trayManager.setToolTip('YAYMA');
+    final trayIcon = TrayIcon.create();
+    if (trayIcon == null) return;
+    _trayIcon = trayIcon;
 
-    // Rebuild the context menu whenever playback state changes so the pause
-    // item reflects it ("Pause" while playing, "Resume" while paused).
+    trayIcon
+      ..icon = ImageAsset.fromAsset('assets/icons/tray_icon.ico')
+      ..setTooltip('YAYMA')
+      // Left click restores the window, right click opens the menu.
+      ..setContextMenuTrigger(ContextMenuTrigger.rightClicked)
+      ..addListener((event) {
+        if (event is TrayIconClickedEvent) unawaited(_showWindow());
+      });
+
+    final menu = Menu.create();
+    if (menu == null) return;
+    _menu = menu;
+    _pauseItem = _menuItem('Пауза', PlaybackController.togglePlay);
+    menu
+      ..addItem(_menuItem('Показать окно', _showWindow))
+      ..addSeparator()
+      ..addItem(_pauseItem)
+      ..addItem(_menuItem('Предыдущий трек', PlaybackController.prev))
+      ..addItem(_menuItem('Следующий трек', PlaybackController.next))
+      ..addSeparator()
+      ..addItem(_menuItem('Закрыть', _quit));
+    trayIcon
+      ..setContextMenu(menu)
+      ..setVisible(true);
+
+    // Keep the pause item in sync with playback ("Pause" while playing,
+    // "Resume" while paused). A label assignment updates the visible menu.
     _menuEffect = effect(() {
       final isPlaying = isPlayingSignal();
-      unawaited(trayManager.setContextMenu(_buildMenu(isPlaying: isPlaying)));
+      _pauseItem?.label = isPlaying ? 'Пауза' : 'Возобновить';
     });
   }
 
-  Menu _buildMenu({required bool isPlaying}) {
-    return Menu(
-      items: [
-        MenuItem(key: _expandKey, label: 'Показать окно'),
-        MenuItem.separator(),
-        MenuItem(key: _pauseKey, label: isPlaying ? 'Пауза' : 'Возобновить'),
-        MenuItem(key: _prevKey, label: 'Предыдущий трек'),
-        MenuItem(key: _nextKey, label: 'Следующий трек'),
-        MenuItem.separator(),
-        MenuItem(key: _closeKey, label: 'Закрыть'),
-      ],
-    );
+  /// Menu item that runs [onClick] on every click.
+  MenuItem _menuItem(String label, Future<void> Function() onClick) {
+    return MenuItem.createWithLabelAndType(label, MenuItemType.normal)!
+      ..addListener((event) {
+        if (event is MenuItemClickedEvent) unawaited(onClick());
+      });
   }
 
   Future<void> _showWindow() async {
@@ -83,41 +99,13 @@ class SystemTrayManager with TrayListener, WindowListener {
     await GlobalHotkeyService.dispose();
     // Allow the window to actually close now that the user asked to quit.
     await windowManager.setPreventClose(false);
-    await trayManager.destroy();
+    // Removes the icon; the menu and its items are released with it.
+    _trayIcon?.dispose();
+    _trayIcon = null;
+    _menu?.dispose();
+    _menu = null;
+    _pauseItem = null;
     await windowManager.close();
-  }
-
-  // --- TrayListener ---------------------------------------------------------
-
-  @override
-  void onTrayIconMouseDown() {
-    // Single left click restores the window.
-    unawaited(_showWindow());
-  }
-
-  @override
-  void onTrayIconRightMouseDown() {
-    // bringAppToFront makes the owning window foreground before TrackPopupMenu,
-    // which is required on Windows for the menu to dismiss on an outside click
-    // (classic Win32 notification-icon menu behaviour, MS KB Q135788).
-    // ignore: deprecated_member_use (no replacement; still required on Windows)
-    unawaited(trayManager.popUpContextMenu(bringAppToFront: true));
-  }
-
-  @override
-  void onTrayMenuItemClick(MenuItem menuItem) {
-    switch (menuItem.key) {
-      case _expandKey:
-        unawaited(_showWindow());
-      case _pauseKey:
-        unawaited(PlaybackController.togglePlay());
-      case _prevKey:
-        unawaited(PlaybackController.prev());
-      case _nextKey:
-        unawaited(PlaybackController.next());
-      case _closeKey:
-        unawaited(_quit());
-    }
   }
 
   // --- WindowListener -------------------------------------------------------
