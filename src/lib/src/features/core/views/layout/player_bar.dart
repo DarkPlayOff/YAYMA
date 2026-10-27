@@ -228,27 +228,30 @@ class _TrackInfoState extends State<_TrackInfo> {
                                     navigateTo(AppSection.album, meta.albumId);
                                   }
                                 },
-                                child: Text(
-                                  meta.title,
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w800,
-                                    fontSize: 17,
-                                    height: 1.15,
-                                    letterSpacing: -0.4,
-                                    decoration: hovered && meta.albumId != null
-                                        ? TextDecoration.underline
-                                        : null,
+                                child: Text.rich(
+                                  trackTitleSpan(
+                                    context,
+                                    title: meta.title,
+                                    version: meta.version,
+                                    versionFontSize: 12,
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 17,
+                                      height: 1.15,
+                                      letterSpacing: -0.4,
+                                      decoration:
+                                          hovered && meta.albumId != null
+                                          ? TextDecoration.underline
+                                          : null,
+                                    ),
                                   ),
+                                  maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               );
                             },
                           ),
                         ),
-                      ),
-                      TrackVersionWidget(
-                        version: meta.version,
-                        fontSize: 12,
                       ),
                     ],
                   ),

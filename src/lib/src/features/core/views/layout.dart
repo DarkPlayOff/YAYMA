@@ -47,10 +47,6 @@ class _AppLayoutState extends State<AppLayout> {
         // Use the touch layout for all Android form factors, including
         // tablets. A large Android screen must not select the desktop navbar.
         final isNarrow = Platform.isAndroid || screenWidth < 600;
-        // Edge-to-edge: Flutter draws behind the Android system navigation
-        // bar, so floating UI must sit above it manually. viewPadding (not
-        // padding) stays stable when the keyboard opens.
-        final systemBottom = MediaQuery.viewPaddingOf(context).bottom;
 
         return PopScope(
           canPop: !canGoBackSignal.value,
@@ -67,153 +63,25 @@ class _AppLayoutState extends State<AppLayout> {
               bucket: _bucket,
               child: Stack(
                 children: [
-                  // 1. Background (Material gradient on Android, blurred
-                  // cover elsewhere) + shader.
-                  Positioned.fill(
-                    child: Platform.isAndroid
-                        ? const MaterialGradientBackground()
-                        : const BlurredCoverBackground(),
-                  ),
-                  if (!Platform.isAndroid)
-                    const Positioned.fill(child: WaveBackground()),
-
-                  // 2. Dimming when leaving home or showing lyrics — held
-                  // off while lyrics are still loading or came back empty,
-                  // so nothing is shown over a darkened background in
-                  // either case.
-                  SignalBuilder(
-                    builder: (context) {
-                      final showLyrics = showLyricsSignal.value;
-                      final hideOverlay = hideLyricsOverlaySignal.value;
-                      final suppressDim = lyricsSuppressDimSignal.value;
-                      final dimForLyrics =
-                          showLyrics && !hideOverlay && !suppressDim;
-                      final isDimmed = Platform.isAndroid
-                          ? dimForLyrics
-                          : !isHome || dimForLyrics;
-
-                      return Positioned.fill(
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 500),
-                          color: isDimmed
-                              ? (isHome
-                                    ? Colors.black54
-                                    : Colors.black.withValues(alpha: 0.6))
-                              : Colors.transparent,
-                        ),
-                      );
-                    },
-                  ),
-
+                  ..._buildBackground(),
+                  _buildDimOverlay(isHome),
                   Positioned.fill(
                     child: SafeArea(
                       top: !isCustomTitlebar,
                       bottom: false,
                       child: Stack(
                         children: [
-                          // 3. Content (set of independent stacks for each tab)
-                          Positioned.fill(
-                            child: Padding(
-                              padding: EdgeInsets.only(
-                                top: isCustomTitlebar ? 32.0 : 0,
-                              ),
-                              child: Stack(
-                                children: [
-                                  Positioned.fill(
-                                    child: Stack(
-                                      children: rootSections
-                                          .map(
-                                            (root) => _RootBucket(root: root),
-                                          )
-                                          .toList(),
-                                    ),
-                                  ),
-                                  Positioned(
-                                    left: 0,
-                                    right: 0,
-                                    // Floating player sits above the floating
-                                    // navbar on narrow layouts, plus the
-                                    // Android system navigation inset.
-                                    bottom:
-                                        ((isNarrow &&
-                                                !(Platform.isAndroid &&
-                                                    showLyricsSignal.value))
-                                            ? 80.0
-                                            : 0.0) +
-                                        systemBottom,
-                                    // While the full player covers the app,
-                                    // the bar keeps painting behind it (its
-                                    // own blur pass included). Unmount it on
-                                    // Android instead.
-                                    child: ValueListenableBuilder<double>(
-                                      valueListenable: mobileFullPlayerProgress,
-                                      builder: (context, progress, child) {
-                                        if (Platform.isAndroid &&
-                                            progress > 0.999) {
-                                          return const SizedBox.shrink();
-                                        }
-                                        return child!;
-                                      },
-                                      child: _AnimatedPlayerBar(isHome: isHome),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
+                          _buildContentLayer(
+                            isHome: isHome,
+                            isNarrow: isNarrow,
+                            isCustomTitlebar: isCustomTitlebar,
                           ),
-
-                          // 4. Navigation
-                          SignalBuilder(
-                            builder: (context) {
-                              final showLyrics = showLyricsSignal.value;
-                              final isAndroid = Platform.isAndroid;
-                              if (isAndroid && showLyrics) {
-                                return const SizedBox.shrink();
-                              }
-                              return Align(
-                                alignment:
-                                    MediaQuery.sizeOf(context).width < 600
-                                    ? Alignment.bottomCenter
-                                    : Alignment.centerLeft,
-                                child: ValueListenableBuilder<double>(
-                                  valueListenable: mobileFullPlayerProgress,
-                                  builder: (context, progress, child) {
-                                    if (Platform.isAndroid &&
-                                        progress > 0.999) {
-                                      return const SizedBox.shrink();
-                                    }
-                                    final hiddenAt = progress.clamp(0.0, 1.0);
-                                    // Fully faded: keep it out of the tree
-                                    // instead of painting a transparent copy.
-                                    if (hiddenAt >= 1) {
-                                      return const SizedBox.shrink();
-                                    }
-                                    return IgnorePointer(
-                                      ignoring: hiddenAt > 0,
-                                      child: Opacity(
-                                        opacity: 1 - hiddenAt,
-                                        child: Transform.translate(
-                                          offset: Offset(0, 120 * hiddenAt),
-                                          child: child,
-                                        ),
-                                      ),
-                                    );
-                                  },
-                                  child: const FloatingNavBar(),
-                                ),
-                              );
-                            },
-                          ),
-
-                          // 5. Back button
+                          _buildNavigation(),
+                          // Back button, and on desktop a refresh button
+                          // because pull-to-refresh is not reachable with a
+                          // mouse.
                           _FloatingBackButton(),
-
-                          // 5b. Refresh button (desktop: pull-to-refresh
-                          // is not reachable with a mouse, hence a dedicated
-                          // button below the back button)
                           const _FloatingRefreshButton(),
-
-                          // 6. Custom Titlebar
                           if (isCustomTitlebar)
                             const Positioned(
                               top: 0,
@@ -231,31 +99,170 @@ class _AppLayoutState extends State<AppLayout> {
                       ),
                     ),
                   ),
-
-                  Positioned.fill(
-                    child: SignalBuilder(
-                      builder: (context) {
-                        if (!mobileFullPlayerOpenSignal.value) {
-                          return const SizedBox.shrink();
-                        }
-                        final origin = mobileFullPlayerOrigin.value;
-                        if (origin == null) return const SizedBox.shrink();
-                        return RepaintBoundary(
-                          child: MobileFullPlayer(
-                            plateRect: origin.plateRect,
-                            coverRect: origin.coverRect,
-                            controller: mobileFullPlayerController,
-                          ),
-                        );
-                      },
-                    ),
-                  ),
+                  _buildFullPlayerOverlay(),
                 ],
               ),
             ),
           ),
         );
       },
+    );
+  }
+
+  /// Material gradient on Android, blurred cover elsewhere, plus the shader.
+  List<Widget> _buildBackground() {
+    return [
+      Positioned.fill(
+        child: Platform.isAndroid
+            ? const MaterialGradientBackground()
+            : const BlurredCoverBackground(),
+      ),
+      if (!Platform.isAndroid) const Positioned.fill(child: WaveBackground()),
+    ];
+  }
+
+  /// Dimming when leaving home or showing lyrics — held off while lyrics are
+  /// still loading or came back empty, so nothing is shown over a darkened
+  /// background in either case.
+  Widget _buildDimOverlay(bool isHome) {
+    return Positioned.fill(
+      child: SignalBuilder(
+        builder: (context) {
+          final showLyrics = showLyricsSignal.value;
+          final hideOverlay = hideLyricsOverlaySignal.value;
+          final suppressDim = lyricsSuppressDimSignal.value;
+          final dimForLyrics = showLyrics && !hideOverlay && !suppressDim;
+          final isDimmed = Platform.isAndroid
+              ? dimForLyrics
+              : !isHome || dimForLyrics;
+
+          return AnimatedContainer(
+            duration: const Duration(milliseconds: 500),
+            color: isDimmed
+                ? (isHome
+                      ? Colors.black54
+                      : Colors.black.withValues(alpha: 0.6))
+                : Colors.transparent,
+          );
+        },
+      ),
+    );
+  }
+
+  /// Tabs plus the floating player bar above them.
+  Widget _buildContentLayer({
+    required bool isHome,
+    required bool isNarrow,
+    required bool isCustomTitlebar,
+  }) {
+    // Edge-to-edge: Flutter draws behind the Android system navigation bar, so
+    // floating UI must sit above it manually. viewPadding (not padding) stays
+    // stable when the keyboard opens.
+    final systemBottom = MediaQuery.viewPaddingOf(context).bottom;
+
+    return Positioned.fill(
+      child: Padding(
+        padding: EdgeInsets.only(top: isCustomTitlebar ? 32.0 : 0),
+        child: Stack(
+          children: [
+            // Independent stacks per tab, so each keeps its own scroll state.
+            Positioned.fill(
+              child: Stack(
+                children: rootSections
+                    .map((root) => _RootBucket(root: root))
+                    .toList(),
+              ),
+            ),
+            Positioned(
+              left: 0,
+              right: 0,
+              // Floating player sits above the floating navbar on narrow
+              // layouts, plus the Android system navigation inset.
+              bottom:
+                  ((isNarrow && !(Platform.isAndroid && showLyricsSignal.value))
+                      ? 80.0
+                      : 0.0) +
+                  systemBottom,
+              // While the full player covers the app, the bar keeps painting
+              // behind it (its own blur pass included). Unmount it on Android
+              // instead.
+              child: ValueListenableBuilder<double>(
+                valueListenable: mobileFullPlayerProgress,
+                builder: (context, progress, child) {
+                  if (Platform.isAndroid && progress > 0.999) {
+                    return const SizedBox.shrink();
+                  }
+                  return child!;
+                },
+                child: _AnimatedPlayerBar(isHome: isHome),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNavigation() {
+    return SignalBuilder(
+      builder: (context) {
+        final showLyrics = showLyricsSignal.value;
+        final isAndroid = Platform.isAndroid;
+        if (isAndroid && showLyrics) {
+          return const SizedBox.shrink();
+        }
+        return Align(
+          alignment: MediaQuery.sizeOf(context).width < 600
+              ? Alignment.bottomCenter
+              : Alignment.centerLeft,
+          child: ValueListenableBuilder<double>(
+            valueListenable: mobileFullPlayerProgress,
+            builder: (context, progress, child) {
+              if (Platform.isAndroid && progress > 0.999) {
+                return const SizedBox.shrink();
+              }
+              final hiddenAt = progress.clamp(0.0, 1.0);
+              // Fully faded: keep it out of the tree instead of painting a
+              // transparent copy.
+              if (hiddenAt >= 1) {
+                return const SizedBox.shrink();
+              }
+              return IgnorePointer(
+                ignoring: hiddenAt > 0,
+                child: Opacity(
+                  opacity: 1 - hiddenAt,
+                  child: Transform.translate(
+                    offset: Offset(0, 120 * hiddenAt),
+                    child: child,
+                  ),
+                ),
+              );
+            },
+            child: const FloatingNavBar(),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildFullPlayerOverlay() {
+    return Positioned.fill(
+      child: SignalBuilder(
+        builder: (context) {
+          if (!mobileFullPlayerOpenSignal.value) {
+            return const SizedBox.shrink();
+          }
+          final origin = mobileFullPlayerOrigin.value;
+          if (origin == null) return const SizedBox.shrink();
+          return RepaintBoundary(
+            child: MobileFullPlayer(
+              plateRect: origin.plateRect,
+              coverRect: origin.coverRect,
+              controller: mobileFullPlayerController,
+            ),
+          );
+        },
+      ),
     );
   }
 }

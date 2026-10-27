@@ -1372,6 +1372,8 @@ class _FullPlayerTrackInfo extends StatelessWidget {
                               : null,
                           child: _MarqueeTitle(
                             text: meta.title,
+                            version: meta.version,
+                            versionFontSize: compact ? 13 : 15,
                             style: TextStyle(
                               color: cs.onSurface,
                               fontSize: compact ? 17 : 20,
@@ -1381,10 +1383,6 @@ class _FullPlayerTrackInfo extends StatelessWidget {
                             ),
                           ),
                         ),
-                      ),
-                      TrackVersionWidget(
-                        version: meta.version,
-                        fontSize: compact ? 13 : 15,
                       ),
                     ],
                   ),
@@ -1434,9 +1432,16 @@ class _FullPlayerTrackInfo extends StatelessWidget {
 /// it fits or when animations are disabled.
 class _MarqueeTitle extends StatefulWidget {
   final String text;
+  final String? version;
+  final double? versionFontSize;
   final TextStyle style;
 
-  const _MarqueeTitle({required this.text, required this.style});
+  const _MarqueeTitle({
+    required this.text,
+    required this.style,
+    this.version,
+    this.versionFontSize,
+  });
 
   @override
   State<_MarqueeTitle> createState() => _MarqueeTitleState();
@@ -1485,10 +1490,18 @@ class _MarqueeTitleState extends State<_MarqueeTitle>
 
   @override
   Widget build(BuildContext context) {
+    final span = trackTitleSpan(
+      context,
+      title: widget.text,
+      version: widget.version,
+      versionFontSize: widget.versionFontSize,
+      style: widget.style,
+    );
+
     return LayoutBuilder(
       builder: (context, constraints) {
         final painter = TextPainter(
-          text: TextSpan(text: widget.text, style: widget.style),
+          text: span,
           textDirection: Directionality.of(context),
           maxLines: 1,
           textScaler: MediaQuery.textScalerOf(context),
@@ -1502,9 +1515,8 @@ class _MarqueeTitleState extends State<_MarqueeTitle>
 
         _syncAnimation(scrolling: overflow, distance: textWidth + _gap);
 
-        final text = Text(
-          widget.text,
-          style: widget.style,
+        final text = Text.rich(
+          span,
           maxLines: 1,
           softWrap: false,
           overflow: TextOverflow.clip,

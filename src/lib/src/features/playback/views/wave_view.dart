@@ -38,13 +38,32 @@ class WaveSettingsPanel extends StatelessWidget {
     this.scrollController,
     super.key,
   });
+  static const List<_VibeItem> _vibes = [
+    _VibeItem('Просыпаюсь', 'activity:wake-up'),
+    _VibeItem('В дороге', 'activity:road-trip'),
+    _VibeItem('Работаю', 'activity:work-background'),
+    _VibeItem('Тренируюсь', 'activity:workout'),
+    _VibeItem('Засыпаю', 'activity:fall-asleep'),
+  ];
+
+  static const List<_VibeItem> _languages = [
+    _VibeItem('Русский', 'local-language:russian'),
+    _VibeItem('Иностранный', 'local-language:english'),
+    _VibeItem('Без слов', 'local-language:instrumental'),
+  ];
+
+  static const List<_MoodItem> _moods = [
+    _MoodItem('Бодрое', [Colors.orange, Colors.deepOrange], 'mood:energetic'),
+    _MoodItem('Весёлое', [Colors.lightGreen, Colors.lime], 'mood:happy'),
+    _MoodItem('Спокойное', [Colors.cyan, Colors.teal], 'mood:calm'),
+    _MoodItem('Грустное', [Colors.blue, Colors.indigo], 'mood:sad'),
+  ];
 
   @override
   Widget build(BuildContext context) {
     return SignalBuilder(
       builder: (context) {
         final currentSeeds = currentWaveSeedsSignal();
-        final isNarrow = context.isNarrow;
 
         return Material(
           color: Colors.transparent,
@@ -60,145 +79,19 @@ class WaveSettingsPanel extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            'Настроить Мою волну',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: Theme.of(context).colorScheme.onSurface,
-                              fontSize: 22,
-                              fontWeight: FontWeight.w900,
-                              letterSpacing: -0.5,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        SizedBox(
-                          width: 40,
-                          height: 40,
-                          child:
-                              (currentSeeds.isNotEmpty &&
-                                  !currentSeeds.contains('user:onyourwave'))
-                              ? MouseRegion(
-                                  cursor: SystemMouseCursors.click,
-                                  child: GestureDetector(
-                                    onTap: () {
-                                      unawaited(WaveController.resetStations());
-                                    },
-                                    behavior: HitTestBehavior.opaque,
-                                    child: Icon(
-                                      Icons.refresh,
-                                      color: Theme.of(
-                                        context,
-                                      ).colorScheme.onSurfaceVariant,
-                                      size: 20,
-                                    ),
-                                  ),
-                                )
-                              : null,
-                        ),
-                        SizedBox(
-                          width: 40,
-                          height: 40,
-                          child: MouseRegion(
-                            cursor: SystemMouseCursors.click,
-                            child: GestureDetector(
-                              onTap: () async {
-                                await showAppBottomSheet<void>(
-                                  context: context,
-                                  builder: (context) =>
-                                      const _AllStationsSheet(),
-                                );
-                              },
-                              behavior: HitTestBehavior.opaque,
-                              child: Icon(
-                                Icons.explore,
-                                color: Theme.of(
-                                  context,
-                                ).colorScheme.onSurfaceVariant,
-                                size: 20,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
+                    _buildHeader(context, currentSeeds),
                     const SizedBox(height: 24),
                     _buildSectionTitle(context, 'Под занятие'),
-
-                    _buildChips(context, [
-                      _VibeItem('Просыпаюсь', 'activity:wake-up'),
-                      _VibeItem('В дороге', 'activity:road-trip'),
-                      _VibeItem('Работаю', 'activity:work-background'),
-                      _VibeItem('Тренируюсь', 'activity:workout'),
-                      _VibeItem('Засыпаю', 'activity:fall-asleep'),
-                    ], currentSeeds),
+                    _buildChips(context, _vibes, currentSeeds),
                     const SizedBox(height: 24),
                     _buildSectionTitle(context, 'По характеру'),
-                    Row(
-                      children: [
-                        _CharacterCard(
-                          label: 'Любимое',
-                          icon: Icons.favorite,
-                          color: Colors.red,
-                          seed: 'personal:collection',
-                          onSelected: onSelected,
-                          isSelected: currentSeeds.contains(
-                            'personal:collection',
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        _CharacterCard(
-                          label: 'Незнакомое',
-                          icon: Icons.auto_awesome,
-                          color: Colors.amber,
-                          seed: 'personal:never-heard',
-                          onSelected: onSelected,
-                          isSelected: currentSeeds.contains(
-                            'personal:never-heard',
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        _CharacterCard(
-                          label: 'Популярное',
-                          icon: Icons.bolt,
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                          seed: 'personal:hits',
-                          onSelected: onSelected,
-                          isSelected: currentSeeds.contains('personal:hits'),
-                        ),
-                      ],
-                    ),
+                    _buildCharacters(context, currentSeeds),
                     const SizedBox(height: 24),
                     _buildSectionTitle(context, 'Под настроение'),
-                    _buildMoods([
-                      _MoodItem('Бодрое', [
-                        Colors.orange,
-                        Colors.deepOrange,
-                      ], 'mood:energetic'),
-                      _MoodItem('Весёлое', [
-                        Colors.lightGreen,
-                        Colors.lime,
-                      ], 'mood:happy'),
-                      _MoodItem('Спокойное', [
-                        Colors.cyan,
-                        Colors.teal,
-                      ], 'mood:calm'),
-                      _MoodItem('Грустное', [
-                        Colors.blue,
-                        Colors.indigo,
-                      ], 'mood:sad'),
-                    ], currentSeeds),
+                    _buildMoods(_moods, currentSeeds),
                     const SizedBox(height: 24),
                     _buildSectionTitle(context, 'По языку'),
-                    _buildChips(context, [
-                      _VibeItem('Русский', 'local-language:russian'),
-                      _VibeItem('Иностранный', 'local-language:english'),
-                      _VibeItem('Без слов', 'local-language:instrumental'),
-                    ], currentSeeds),
+                    _buildChips(context, _languages, currentSeeds),
                     const SizedBox(height: 24),
                     if (currentSeeds.isNotEmpty &&
                         !currentSeeds.contains('user:onyourwave') &&
@@ -207,25 +100,109 @@ class WaveSettingsPanel extends StatelessWidget {
                   ],
                 ),
               ),
-              if (isNarrow)
-                Positioned(
-                  right: 24,
-                  bottom: 32,
-                  child: M3EFloatingActionButton(
-                    onPressed: () {
-                      unawaited(WaveController.startMyWave());
-                      onSelected();
-                    },
-                    containerColor: Theme.of(context).colorScheme.primary,
-                    contentColor: Colors.black,
-                    elevation: 8,
-                    child: const Icon(Icons.play_arrow_rounded, size: 28),
-                  ),
-                ),
+              if (context.isNarrow) _buildStartButton(context),
             ],
           ),
         );
       },
+    );
+  }
+
+  Widget _buildHeader(BuildContext context, List<String> currentSeeds) {
+    final iconColor = Theme.of(context).colorScheme.onSurfaceVariant;
+    final canReset =
+        currentSeeds.isNotEmpty && !currentSeeds.contains('user:onyourwave');
+
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            'Настроить Мою волну',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurface,
+              fontSize: 22,
+              fontWeight: FontWeight.w900,
+              letterSpacing: -0.5,
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        SizedBox(
+          width: 40,
+          height: 40,
+          child: canReset
+              ? _HeaderIcon(
+                  icon: Icons.refresh,
+                  color: iconColor,
+                  onTap: () => unawaited(WaveController.resetStations()),
+                )
+              : null,
+        ),
+        SizedBox(
+          width: 40,
+          height: 40,
+          child: _HeaderIcon(
+            icon: Icons.explore,
+            color: iconColor,
+            onTap: () => showAppBottomSheet<void>(
+              context: context,
+              builder: (context) => const _AllStationsSheet(),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCharacters(BuildContext context, List<String> currentSeeds) {
+    return Row(
+      children: [
+        _CharacterCard(
+          label: 'Любимое',
+          icon: Icons.favorite,
+          color: Colors.red,
+          seed: 'personal:collection',
+          onSelected: onSelected,
+          isSelected: currentSeeds.contains('personal:collection'),
+        ),
+        const SizedBox(width: 12),
+        _CharacterCard(
+          label: 'Незнакомое',
+          icon: Icons.auto_awesome,
+          color: Colors.amber,
+          seed: 'personal:never-heard',
+          onSelected: onSelected,
+          isSelected: currentSeeds.contains('personal:never-heard'),
+        ),
+        const SizedBox(width: 12),
+        _CharacterCard(
+          label: 'Популярное',
+          icon: Icons.bolt,
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+          seed: 'personal:hits',
+          onSelected: onSelected,
+          isSelected: currentSeeds.contains('personal:hits'),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStartButton(BuildContext context) {
+    return Positioned(
+      right: 24,
+      bottom: 32,
+      child: M3EFloatingActionButton(
+        onPressed: () {
+          unawaited(WaveController.startMyWave());
+          onSelected();
+        },
+        containerColor: Theme.of(context).colorScheme.primary,
+        contentColor: Colors.black,
+        elevation: 8,
+        child: const Icon(Icons.play_arrow_rounded, size: 28),
+      ),
     );
   }
 
@@ -372,14 +349,39 @@ class WaveSettingsPanel extends StatelessWidget {
 class _VibeItem {
   final String label;
   final String seed;
-  _VibeItem(this.label, this.seed);
+  const _VibeItem(this.label, this.seed);
 }
 
 class _MoodItem {
   final String label;
   final List<Color> colors;
   final String seed;
-  _MoodItem(this.label, this.colors, this.seed);
+  const _MoodItem(this.label, this.colors, this.seed);
+}
+
+/// Square tap target with a plain icon, used in the sheet header.
+class _HeaderIcon extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _HeaderIcon({
+    required this.icon,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: Icon(icon, color: color, size: 20),
+      ),
+    );
+  }
 }
 
 class _RoundedChip extends StatelessWidget {
@@ -405,11 +407,7 @@ class _RoundedChip extends StatelessWidget {
         constraints: BoxConstraints(
           maxWidth: maxLabelWidth > 0 ? maxLabelWidth : 100,
         ),
-        child: Text(
-          item.label,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
+        child: Text(item.label, maxLines: 1, overflow: TextOverflow.ellipsis),
       ),
       onSelected: (_) {
         unawaited(WaveController.toggleStation(item.seed));
@@ -429,9 +427,9 @@ class _RoundedChip extends StatelessWidget {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       side: isSelected
           ? BorderSide(
-              color: Theme.of(context).colorScheme.onSurface.withValues(
-                alpha: 0.24,
-              ),
+              color: Theme.of(
+                context,
+              ).colorScheme.onSurface.withValues(alpha: 0.24),
             )
           : BorderSide.none,
       showCheckmark: false,
@@ -467,9 +465,7 @@ class _CharacterCard extends StatelessWidget {
           height: 90,
           decoration: BoxDecoration(
             color: isSelected
-                ? Theme.of(
-                    context,
-                  ).colorScheme.onSurface.withValues(alpha: 0.1)
+                ? Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.1)
                 : Theme.of(
                     context,
                   ).colorScheme.onSurface.withValues(alpha: 0.05),
@@ -606,242 +602,203 @@ class _AllStationsSheetState extends State<_AllStationsSheet> {
         }
 
         final currentSeeds = currentWaveSeedsSignal();
-        var cats = stationsFuture.value ?? [];
         final query = _searchQuery().toLowerCase();
-
-        if (query.isNotEmpty) {
-          cats = cats
-              .map(
-                (cat) => StationCategoryDto(
-                  title: cat.title,
-                  items: cat.items
-                      .where((i) => i.label.toLowerCase().contains(query))
-                      .toList(),
-                ),
-              )
-              .where((cat) => cat.items.isNotEmpty)
-              .toList();
-        }
+        final cats = _filterCategories(stationsFuture.value ?? const [], query);
 
         return Container(
           height: MediaQuery.of(context).size.height * 0.8,
           decoration: BoxDecoration(
             color: Theme.of(context).colorScheme.surfaceContainerHighest,
-            borderRadius: const BorderRadius.vertical(
-              top: Radius.circular(24),
-            ),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
           ),
           child: SafeArea(
             child: Column(
               children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 24, 24, 8),
-                  child: Row(
-                    children: [
-                      Text(
-                        'Каталог станций',
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.onSurface,
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const Spacer(),
-                      IconButton(
-                        icon: Icon(
-                          Icons.close,
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        ),
-                        onPressed: () => Navigator.pop(context),
-                      ),
-                    ],
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 24,
-                    vertical: 8,
-                  ),
-                  child: TextField(
-                    controller: _controller,
-                    onChanged: (v) => _searchQuery.value = v,
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.onSurface,
-                    ),
-                    decoration: InputDecoration(
-                      hintText: 'Поиск по жанрам, настроениям...',
-                      hintStyle: TextStyle(
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
-                      ),
-                      prefixIcon: Icon(
-                        Icons.search,
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
-                      ),
-                      filled: true,
-                      fillColor: Theme.of(
-                        context,
-                      ).colorScheme.onSurface.withValues(alpha: 0.05),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide.none,
-                      ),
-                      contentPadding: EdgeInsets.zero,
-                    ),
-                  ),
-                ),
+                _buildHeader(context),
+                _buildSearchField(context),
                 Expanded(
-                  child: cats.isEmpty && query.isNotEmpty
-                      ? Center(
-                          child: Text(
-                            'Ничего не найдено',
-                            style: TextStyle(
-                              color: Theme.of(
-                                context,
-                              ).colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                        )
-                      : Scrollbar(
-                          controller: _scrollController,
-                          child: CustomScrollView(
-                            scrollCacheExtent: const ScrollCacheExtent.pixels(
-                              1000,
-                            ),
-                            controller: _scrollController,
-                            slivers: [
-                              for (final cat in cats) ...[
-                                SliverPadding(
-                                  padding: const EdgeInsets.fromLTRB(
-                                    24,
-                                    24,
-                                    24,
-                                    12,
-                                  ),
-                                  sliver: SliverToBoxAdapter(
-                                    child: Text(
-                                      cat.title.toUpperCase(),
-                                      style: TextStyle(
-                                        color:
-                                            Theme.of(
-                                                  context,
-                                                ).colorScheme.onSurfaceVariant
-                                                .withValues(alpha: 0.6),
-                                        fontWeight: FontWeight.bold,
-                                        letterSpacing: 1.2,
-                                        fontSize: 12,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                SliverPadding(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 24,
-                                  ),
-                                  sliver: SliverToBoxAdapter(
-                                    child: Wrap(
-                                      spacing: 8,
-                                      runSpacing: 8,
-                                      children: cat.items.map((item) {
-                                        final isSelected = currentSeeds
-                                            .contains(
-                                              item.seed,
-                                            );
-                                        final maxSheetLabelWidth =
-                                            MediaQuery.sizeOf(context).width -
-                                            48 -
-                                            40; // Subtract modal padding and chip padding
-                                        return FilterChip(
-                                          selected: isSelected,
-                                          label: ConstrainedBox(
-                                            constraints: BoxConstraints(
-                                              maxWidth: maxSheetLabelWidth > 0
-                                                  ? maxSheetLabelWidth
-                                                  : 100,
-                                            ),
-                                            child: Text(
-                                              item.label,
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                          ),
-                                          onSelected: (_) {
-                                            unawaited(
-                                              WaveController.toggleStation(
-                                                item.seed,
-                                              ),
-                                            );
-                                            Navigator.pop(context);
-                                          },
-                                          backgroundColor:
-                                              Theme.of(
-                                                    context,
-                                                  ).colorScheme.onSurface
-                                                  .withValues(
-                                                    alpha: 0.05,
-                                                  ),
-                                          selectedColor:
-                                              Theme.of(
-                                                    context,
-                                                  ).colorScheme.onSurface
-                                                  .withValues(
-                                                    alpha: 0.2,
-                                                  ),
-                                          labelStyle: TextStyle(
-                                            color: isSelected
-                                                ? Theme.of(
-                                                    context,
-                                                  ).colorScheme.onSurface
-                                                : Theme.of(
-                                                        context,
-                                                      )
-                                                      .colorScheme
-                                                      .onSurfaceVariant,
-                                            fontWeight: isSelected
-                                                ? FontWeight.w900
-                                                : FontWeight.w600,
-                                            fontSize: 12,
-                                          ),
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(
-                                              20,
-                                            ),
-                                          ),
-                                          side: isSelected
-                                              ? BorderSide(
-                                                  color:
-                                                      Theme.of(
-                                                            context,
-                                                          )
-                                                          .colorScheme
-                                                          .onSurface
-                                                          .withValues(
-                                                            alpha: 0.24,
-                                                          ),
-                                                )
-                                              : BorderSide.none,
-                                          showCheckmark: false,
-                                        );
-                                      }).toList(),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                              const SliverPadding(
-                                padding: EdgeInsets.only(bottom: 40),
-                              ),
-                            ],
-                          ),
-                        ),
+                  child: _buildStationList(context, cats, currentSeeds, query),
                 ),
               ],
             ),
           ),
         );
       },
+    );
+  }
+
+  /// Keeps only station categories that still have a matching item.
+  List<StationCategoryDto> _filterCategories(
+    List<StationCategoryDto> cats,
+    String query,
+  ) {
+    if (query.isEmpty) return cats;
+    return cats
+        .map(
+          (cat) => StationCategoryDto(
+            title: cat.title,
+            items: cat.items
+                .where((i) => i.label.toLowerCase().contains(query))
+                .toList(),
+          ),
+        )
+        .where((cat) => cat.items.isNotEmpty)
+        .toList();
+  }
+
+  Widget _buildHeader(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 24, 24, 8),
+      child: Row(
+        children: [
+          Text(
+            'Каталог станций',
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurface,
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const Spacer(),
+          IconButton(
+            icon: Icon(
+              Icons.close,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+            onPressed: () => Navigator.pop(context),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSearchField(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+      child: TextField(
+        controller: _controller,
+        onChanged: (v) => _searchQuery.value = v,
+        style: TextStyle(color: cs.onSurface),
+        decoration: InputDecoration(
+          hintText: 'Поиск по жанрам, настроениям...',
+          hintStyle: TextStyle(
+            color: cs.onSurfaceVariant.withValues(alpha: 0.6),
+          ),
+          prefixIcon: Icon(
+            Icons.search,
+            color: cs.onSurfaceVariant.withValues(alpha: 0.6),
+          ),
+          filled: true,
+          fillColor: cs.onSurface.withValues(alpha: 0.05),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide.none,
+          ),
+          contentPadding: EdgeInsets.zero,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStationList(
+    BuildContext context,
+    List<StationCategoryDto> cats,
+    List<String> currentSeeds,
+    String query,
+  ) {
+    if (cats.isEmpty && query.isNotEmpty) {
+      return Center(
+        child: Text(
+          'Ничего не найдено',
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+        ),
+      );
+    }
+
+    final maxLabelWidth = MediaQuery.sizeOf(context).width - 48 - 40;
+
+    return Scrollbar(
+      controller: _scrollController,
+      child: CustomScrollView(
+        scrollCacheExtent: const ScrollCacheExtent.pixels(1000),
+        controller: _scrollController,
+        slivers: [
+          for (final cat in cats) ...[
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(24, 24, 24, 12),
+              sliver: SliverToBoxAdapter(
+                child: Text(
+                  cat.title.toUpperCase(),
+                  style: TextStyle(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.2,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+            ),
+            SliverPadding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              sliver: SliverToBoxAdapter(
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final item in cat.items)
+                      _buildStationChip(
+                        context,
+                        item,
+                        currentSeeds.contains(item.seed),
+                        maxLabelWidth,
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+          const SliverPadding(padding: EdgeInsets.only(bottom: 40)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStationChip(
+    BuildContext context,
+    StationItemDto item,
+    bool isSelected,
+    double maxLabelWidth,
+  ) {
+    final cs = Theme.of(context).colorScheme;
+    return FilterChip(
+      selected: isSelected,
+      label: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: maxLabelWidth > 0 ? maxLabelWidth : 100,
+        ),
+        child: Text(item.label, maxLines: 1, overflow: TextOverflow.ellipsis),
+      ),
+      onSelected: (_) {
+        unawaited(WaveController.toggleStation(item.seed));
+        Navigator.pop(context);
+      },
+      backgroundColor: cs.onSurface.withValues(alpha: 0.05),
+      selectedColor: cs.onSurface.withValues(alpha: 0.2),
+      labelStyle: TextStyle(
+        color: isSelected ? cs.onSurface : cs.onSurfaceVariant,
+        fontWeight: isSelected ? FontWeight.w900 : FontWeight.w600,
+        fontSize: 12,
+      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      side: isSelected
+          ? BorderSide(color: cs.onSurface.withValues(alpha: 0.24))
+          : BorderSide.none,
+      showCheckmark: false,
     );
   }
 }

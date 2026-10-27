@@ -398,222 +398,229 @@ class _LikedTracksTabState extends State<_LikedTracksTab> {
 
   @override
   Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.sizeOf(context).width;
-    final isNarrow = screenWidth < 600;
+    final isNarrow = MediaQuery.sizeOf(context).width < 600;
 
-    final body = SignalBuilder(
-      builder: (context) {
-        final cs = Theme.of(context).colorScheme;
-        // No subscriptions while the tab is hidden.
-        final tracks = visibleSignal(context, likedTracksSignal);
-        final query = visibleSignal(context, librarySearchQuerySignal);
-        final isLoading = visibleSignal(context, isLibraryLoadingSignal);
-        final loaded = visibleSignal(context, likedTracksLoadedSignal);
-        final expected = visibleSignal(context, likedTracksExpectedSignal);
+    return SmoothScroll(
+      child: SignalBuilder(
+        builder: (context) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildSearchRow(context, isNarrow),
+              _buildLoadingLabel(context, isNarrow),
+              Expanded(child: _buildTrackList(context, isNarrow)),
+            ],
+          );
+        },
+      ),
+    );
+  }
 
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: EdgeInsets.fromLTRB(
-                isNarrow ? 20 : 40,
-                8,
-                isNarrow ? 20 : 40,
-                16,
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: widget.searchController,
-                      onChanged: setLibrarySearchQuery,
-                      style: TextStyle(color: cs.onSurface, fontSize: 14),
-                      decoration: InputDecoration(
-                        hintText: 'Поиск в любимых треках...',
-                        hintStyle: TextStyle(
-                          color: cs.onSurface.withValues(alpha: 0.24),
-                        ),
-                        prefixIcon: Icon(
-                          Icons.search,
+  Widget _buildSearchRow(BuildContext context, bool isNarrow) {
+    final cs = Theme.of(context).colorScheme;
+    // No subscriptions while the tab is hidden.
+    final tracks = visibleSignal(context, likedTracksSignal);
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        isNarrow ? 20 : 40,
+        8,
+        isNarrow ? 20 : 40,
+        16,
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: TextField(
+              controller: widget.searchController,
+              onChanged: setLibrarySearchQuery,
+              style: TextStyle(color: cs.onSurface, fontSize: 14),
+              decoration: InputDecoration(
+                hintText: 'Поиск в любимых треках...',
+                hintStyle: TextStyle(
+                  color: cs.onSurface.withValues(alpha: 0.24),
+                ),
+                prefixIcon: Icon(
+                  Icons.search,
+                  color: cs.onSurface.withValues(alpha: 0.38),
+                  size: 20,
+                ),
+                suffixIcon: widget.searchController.text.isNotEmpty
+                    ? IconButton(
+                        icon: Icon(
+                          Icons.clear,
                           color: cs.onSurface.withValues(alpha: 0.38),
-                          size: 20,
+                          size: 18,
                         ),
-                        suffixIcon: widget.searchController.text.isNotEmpty
-                            ? IconButton(
-                                icon: Icon(
-                                  Icons.clear,
-                                  color: cs.onSurface.withValues(alpha: 0.38),
-                                  size: 18,
-                                ),
-                                onPressed: () {
-                                  widget.searchController.clear();
-                                  setLibrarySearchQuery('');
-                                },
-                              )
-                            : null,
-                        filled: true,
-                        fillColor: cs.onSurface.withValues(alpha: 0.05),
-                        isDense: true,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(AppRadius.sm),
-                          borderSide: BorderSide.none,
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 10,
-                        ),
+                        onPressed: () {
+                          widget.searchController.clear();
+                          setLibrarySearchQuery('');
+                        },
+                      )
+                    : null,
+                filled: true,
+                fillColor: cs.onSurface.withValues(alpha: 0.05),
+                isDense: true,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(AppRadius.sm),
+                  borderSide: BorderSide.none,
+                ),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 10,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          SignalBuilder(
+            builder: (context) {
+              // No subscriptions while the tab is hidden.
+              final isDownloading = visibleSignal(
+                context,
+                isDownloadingAllLikedTracksSignal,
+              );
+              final downloadedTracks = visibleSignal(
+                context,
+                downloadedTracksSignal,
+              );
+              final allDownloaded =
+                  tracks.isNotEmpty &&
+                  tracks.every((t) => downloadedTracks.contains(t.id));
+
+              if (allDownloaded) {
+                return _LikedTracksCompletedActions(
+                  onSelected: (mode) =>
+                      unawaited(_downloadLikedTracks(context, tracks, mode)),
+                  onPressed: () => _showDeleteAllConfirmation(context, tracks),
+                  icon: const Icon(Icons.delete_sweep_rounded),
+                  tooltip: 'Удалить всё из кэша',
+                  style: IconButton.styleFrom(
+                    backgroundColor: cs.onSurface.withValues(alpha: 0.05),
+                    foregroundColor: cs.error,
+                  ),
+                );
+              }
+
+              return _LikedTracksDownloadButton(
+                onSelected: (mode) =>
+                    unawaited(_downloadLikedTracks(context, tracks, mode)),
+                onPressed: isDownloading || tracks.isEmpty ? null : () {},
+                icon: isDownloading
+                    ? const M3ECircularWavyProgressIndicator(
+                        strokeWidth: 2,
+                        size: 20,
+                      )
+                    : const Icon(Icons.download_rounded),
+                tooltip: 'Скачать всё',
+                style: IconButton.styleFrom(
+                  backgroundColor: cs.onSurface.withValues(alpha: 0.05),
+                  foregroundColor: cs.primary,
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Progress line while more liked tracks are still being loaded.
+  Widget _buildLoadingLabel(BuildContext context, bool isNarrow) {
+    final cs = Theme.of(context).colorScheme;
+    final tracks = visibleSignal(context, likedTracksSignal);
+    final isLoading = visibleSignal(context, isLibraryLoadingSignal);
+    final loaded = visibleSignal(context, likedTracksLoadedSignal);
+    final expected = visibleSignal(context, likedTracksExpectedSignal);
+    if (!isLoading || tracks.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        isNarrow ? 20 : 40,
+        0,
+        isNarrow ? 20 : 40,
+        8,
+      ),
+      child: Text(
+        'Загрузка… $loaded${expected > 0 ? ' / $expected' : ''}',
+        style: TextStyle(
+          color: cs.onSurface.withValues(alpha: 0.38),
+          fontSize: 12,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTrackList(BuildContext context, bool isNarrow) {
+    final cs = Theme.of(context).colorScheme;
+    final tracks = visibleSignal(context, likedTracksSignal);
+    final query = visibleSignal(context, librarySearchQuerySignal);
+    final isLoading = visibleSignal(context, isLibraryLoadingSignal);
+    final loaded = visibleSignal(context, likedTracksLoadedSignal);
+    final expected = visibleSignal(context, likedTracksExpectedSignal);
+
+    return AppRefreshIndicator(
+      onRefresh: _handleRefresh,
+      child: tracks.isEmpty
+          ? CustomScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: [
+                SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: Center(
+                    child: Text(
+                      isLoading
+                          ? 'Загрузка… $loaded${expected > 0 ? ' / $expected' : ''}'
+                          : query.isEmpty
+                          ? 'Нет любимых треков'
+                          : 'Ничего не найдено',
+                      style: TextStyle(
+                        color: cs.onSurface.withValues(alpha: 0.38),
                       ),
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  SignalBuilder(
-                    builder: (context) {
-                      // No subscriptions while the tab is hidden.
-                      final isDownloading = visibleSignal(
-                        context,
-                        isDownloadingAllLikedTracksSignal,
-                      );
-                      final downloadedTracks = visibleSignal(
-                        context,
-                        downloadedTracksSignal,
-                      );
-                      final allDownloaded =
-                          tracks.isNotEmpty &&
-                          tracks.every((t) => downloadedTracks.contains(t.id));
-
-                      if (allDownloaded) {
-                        return _LikedTracksCompletedActions(
-                          onSelected: (mode) => unawaited(
-                            _downloadLikedTracks(context, tracks, mode),
-                          ),
-                          onPressed: () =>
-                              _showDeleteAllConfirmation(context, tracks),
-                          icon: const Icon(Icons.delete_sweep_rounded),
-                          tooltip: 'Удалить всё из кэша',
-                          style: IconButton.styleFrom(
-                            backgroundColor: cs.onSurface.withValues(
-                              alpha: 0.05,
-                            ),
-                            foregroundColor: cs.error,
-                          ),
-                        );
-                      }
-
-                      return _LikedTracksDownloadButton(
-                        onSelected: (mode) => unawaited(
-                          _downloadLikedTracks(context, tracks, mode),
-                        ),
-                        onPressed: isDownloading || tracks.isEmpty
-                            ? null
-                            : () {},
-                        icon: isDownloading
-                            ? const M3ECircularWavyProgressIndicator(
-                                strokeWidth: 2,
-                                size: 20,
-                              )
-                            : const Icon(Icons.download_rounded),
-                        tooltip: 'Скачать всё',
-                        style: IconButton.styleFrom(
-                          backgroundColor: cs.onSurface.withValues(alpha: 0.05),
-                          foregroundColor: Theme.of(
-                            context,
-                          ).colorScheme.primary,
-                        ),
-                      );
-                    },
-                  ),
-                ],
-              ),
-            ),
-
-            if (isLoading && tracks.isNotEmpty)
-              Padding(
-                padding: EdgeInsets.fromLTRB(
-                  isNarrow ? 20 : 40,
-                  0,
-                  isNarrow ? 20 : 40,
-                  8,
                 ),
-                child: Text(
-                  'Загрузка… $loaded${expected > 0 ? ' / $expected' : ''}',
-                  style: TextStyle(
-                    color: cs.onSurface.withValues(alpha: 0.38),
-                    fontSize: 12,
+              ],
+            )
+          : M3ESegmentedList.builder(
+              haptic: M3EHapticFeedback.light,
+              physics: const AlwaysScrollableScrollPhysics(),
+              itemCount: tracks.length,
+              addAutomaticKeepAlives: false,
+              cacheExtent: 500,
+              listPadding: const EdgeInsets.only(bottom: 140),
+              margin: EdgeInsets.symmetric(horizontal: isNarrow ? 0 : 40),
+              color: Colors.transparent,
+              padding: EdgeInsets.symmetric(
+                horizontal: isNarrow ? 0 : 40,
+                vertical: 8,
+              ),
+              itemBuilder: (context, index) {
+                final track = tracks[index];
+                return CommonTrackTile(
+                  trackId: track.id,
+                  title: track.title,
+                  version: track.version,
+                  artists: track.artists,
+                  albumId: track.albumId,
+                  leading: AppCover(coverUrl: track.coverUrl),
+                  trailing: Text(
+                    formatDuration(track.durationMs),
+                    style: TextStyle(
+                      color: cs.onSurface.withValues(alpha: 0.38),
+                    ),
                   ),
-                ),
-              ),
-            Expanded(
-              child: AppRefreshIndicator(
-                onRefresh: _handleRefresh,
-                child: tracks.isEmpty
-                    ? CustomScrollView(
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        slivers: [
-                          SliverFillRemaining(
-                            hasScrollBody: false,
-                            child: Center(
-                              child: Text(
-                                isLoading
-                                    ? 'Загрузка… $loaded${expected > 0 ? ' / $expected' : ''}'
-                                    : query.isEmpty
-                                    ? 'Нет любимых треков'
-                                    : 'Ничего не найдено',
-                                style: TextStyle(
-                                  color: cs.onSurface.withValues(alpha: 0.38),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      )
-                    : M3ESegmentedList.builder(
-                        haptic: M3EHapticFeedback.light,
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        itemCount: tracks.length,
-                        addAutomaticKeepAlives: false,
-                        cacheExtent: 500,
-                        listPadding: const EdgeInsets.only(bottom: 140),
-                        margin: EdgeInsets.symmetric(
-                          horizontal: isNarrow ? 0 : 40,
-                        ),
-                        color: Colors.transparent,
-                        padding: EdgeInsets.symmetric(
-                          horizontal: isNarrow ? 0 : 40,
-                          vertical: 8,
-                        ),
-                        itemBuilder: (context, index) {
-                          final track = tracks[index];
-                          return CommonTrackTile(
-                            trackId: track.id,
-                            title: track.title,
-                            version: track.version,
-                            artists: track.artists,
-                            albumId: track.albumId,
-                            leading: AppCover(coverUrl: track.coverUrl),
-                            trailing: Text(
-                              formatDuration(track.durationMs),
-                              style: TextStyle(
-                                color: cs.onSurface.withValues(alpha: 0.38),
-                              ),
-                            ),
-                            onTap: () => unawaited(
-                              PlaybackController.playLikedTrack(track.id),
-                            ),
-                            onTitleTap: () {
-                              if (track.albumId != null) {
-                                navigateTo(AppSection.album, track.albumId);
-                              }
-                            },
-                          );
-                        },
-                      ),
-              ),
+                  onTap: () =>
+                      unawaited(PlaybackController.playLikedTrack(track.id)),
+                  onTitleTap: () {
+                    if (track.albumId != null) {
+                      navigateTo(AppSection.album, track.albumId);
+                    }
+                  },
+                );
+              },
             ),
-          ],
-        );
-      },
     );
-    return SmoothScroll(child: body);
   }
 }
 

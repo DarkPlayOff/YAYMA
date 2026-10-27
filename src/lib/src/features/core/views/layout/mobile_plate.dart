@@ -78,21 +78,19 @@ class MiniTrackTextInfo extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                Flexible(
-                  child: Text(
-                    meta.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 15,
-                    ),
-                  ),
+            Text.rich(
+              trackTitleSpan(
+                context,
+                title: meta.title,
+                version: meta.version,
+                versionFontSize: 12,
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 15,
                 ),
-                TrackVersionWidget(version: meta.version, fontSize: 12),
-              ],
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
             ArtistNamesWidget(artists: meta.artists, maxLines: 1),
           ],

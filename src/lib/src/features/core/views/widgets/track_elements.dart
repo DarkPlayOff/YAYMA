@@ -5,40 +5,33 @@ import 'package:material_ui/material_ui.dart';
 import 'package:yayma/src/features/core/providers/navigation_provider.dart';
 import 'package:yayma/src/rust/api/models.dart';
 
-class TrackVersionWidget extends StatelessWidget {
-  final String? version;
-  final double fontSize;
-  final Color? color;
-  final EdgeInsets padding;
-
-  const TrackVersionWidget({
-    required this.version,
-    super.key,
-    this.fontSize = 14,
-    this.color,
-    this.padding = const EdgeInsets.only(left: 8),
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    if (version == null) return const SizedBox.shrink();
-    return Padding(
-      padding: padding,
-      child: Text(
-        version!,
-        style: TextStyle(
-          color:
-              color ??
-              Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.38),
-          fontSize: fontSize,
-          fontWeight: FontWeight.w400,
+/// Title with the track version appended after a space, so both share one line
+/// and one ellipsis. The version keeps the muted colour, which still marks it
+/// as secondary without needing a slot of its own.
+TextSpan trackTitleSpan(
+  BuildContext context, {
+  required String title,
+  required TextStyle style,
+  String? version,
+  double? versionFontSize,
+}) {
+  return TextSpan(
+    text: title,
+    style: style,
+    children: [
+      if (version != null && version.isNotEmpty)
+        TextSpan(
+          text: ' $version',
+          style: TextStyle(
+            color: Theme.of(
+              context,
+            ).colorScheme.onSurface.withValues(alpha: 0.38),
+            fontSize: versionFontSize,
+            fontWeight: FontWeight.w400,
+          ),
         ),
-        maxLines: 1,
-        softWrap: false,
-        overflow: TextOverflow.ellipsis,
-      ),
-    );
-  }
+    ],
+  );
 }
 
 class ArtistNamesWidget extends StatelessWidget {

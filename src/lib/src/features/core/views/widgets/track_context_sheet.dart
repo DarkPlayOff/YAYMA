@@ -297,14 +297,16 @@ class _SheetHeaderState extends State<_SheetHeader>
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text(
-                            header.version == null
-                                ? header.title
-                                : '${header.title} ${header.version}',
-                            style: TextStyle(
-                              color: scheme.onSurface,
-                              fontSize: 17,
-                              fontWeight: FontWeight.w700,
+                          Text.rich(
+                            trackTitleSpan(
+                              context,
+                              title: header.title,
+                              version: header.version,
+                              style: TextStyle(
+                                color: scheme.onSurface,
+                                fontSize: 17,
+                                fontWeight: FontWeight.w700,
+                              ),
                             ),
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
@@ -476,8 +478,7 @@ Future<void> _openSubSheet<T>(
     title: action.subSheetTitle ?? action.label,
     // The builder is passed "as is": showTrackSubActionSheet calls it
     // on every rebuild (rebuildOn), otherwise the checkmarks won't update.
-    actionsBuilder:
-        action.subItems ?? (() => <AppContextMenuItem<T>>[]),
+    actionsBuilder: action.subItems ?? (() => <AppContextMenuItem<T>>[]),
     rebuildOn: subSheetRebuildOn,
     onSelected: onSelected,
   );
@@ -495,7 +496,9 @@ class _QuickActionButton<T> extends StatelessWidget {
     this.action,
     this.onSelected, {
     this.subSheetRebuildOn,
-  });  @override
+  });
+
+  @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Column(

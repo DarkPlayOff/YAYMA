@@ -61,102 +61,125 @@ class _SearchViewState extends State<SearchView> {
         final searchResultsAsync = visibleSignal(context, searchResultsSignal);
         final screenWidth = MediaQuery.sizeOf(context).width;
         final isNarrow = screenWidth < 600;
+        final results = searchResultsAsync.value;
+        final noResults =
+            results != null &&
+            results.tracks.isEmpty &&
+            results.albums.isEmpty &&
+            results.artists.isEmpty;
 
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        // Painted over the whole page. Centred in the column below it would
+        // drop by half the search field's height.
+        final Widget? placeholder = searchResultsAsync.isLoading
+            ? const CommonLoadingWidget()
+            : searchResultsAsync.hasError
+            ? CommonErrorWidget(error: searchResultsAsync.error.toString())
+            : results == null
+            ? const _EmptySearchState()
+            : noResults
+            ? Text(
+                'Ничего не найдено',
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  fontSize: 18,
+                ),
+              )
+            : null;
+
+        return Stack(
           children: [
-            Padding(
-              padding: isNarrow
-                  ? const EdgeInsets.fromLTRB(20, 16, 20, 8)
-                  : context.viewPadding,
+            Positioned.fill(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const CommonPageTitle(title: 'Поиск'),
-                  if (!isNarrow) const SizedBox(height: 24),
-                  if (isNarrow) const SizedBox(height: 8),
-                  TextField(
-                    controller: _controller,
-                    onChanged: setSearchQuery,
-                    style: TextStyle(
-                      fontSize: isNarrow ? 18 : 24,
-                      color: Theme.of(context).colorScheme.onSurface,
-                    ),
-                    decoration: InputDecoration(
-                      hintText: 'Треки, альбомы, артисты...',
-                      hintStyle: TextStyle(
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
-                      ),
-                      prefixIcon: Padding(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: isNarrow ? 12 : 16,
+                  Padding(
+                    padding: isNarrow
+                        ? const EdgeInsets.fromLTRB(20, 16, 20, 8)
+                        : context.viewPadding,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const CommonPageTitle(title: 'Поиск'),
+                        if (!isNarrow) const SizedBox(height: 24),
+                        if (isNarrow) const SizedBox(height: 8),
+                        TextField(
+                          controller: _controller,
+                          onChanged: setSearchQuery,
+                          style: TextStyle(
+                            fontSize: isNarrow ? 18 : 24,
+                            color: Theme.of(context).colorScheme.onSurface,
+                          ),
+                          decoration: InputDecoration(
+                            hintText: 'Треки, альбомы, артисты...',
+                            hintStyle: TextStyle(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant
+                                  .withValues(alpha: 0.6),
+                            ),
+                            prefixIcon: Padding(
+                              padding: EdgeInsets.symmetric(
+                                horizontal: isNarrow ? 12 : 16,
+                              ),
+                              child: Icon(
+                                Icons.search,
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
+                                size: isNarrow ? 24 : 32,
+                              ),
+                            ),
+                            filled: true,
+                            fillColor: Theme.of(
+                              context,
+                            ).colorScheme.onSurface.withValues(alpha: 0.05),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(
+                                isNarrow ? 16 : 24,
+                              ),
+                              borderSide: BorderSide.none,
+                            ),
+                            contentPadding: EdgeInsets.symmetric(
+                              vertical: isNarrow ? 16 : 24,
+                              horizontal: 20,
+                            ),
+                          ),
                         ),
-                        child: Icon(
-                          Icons.search,
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                          size: isNarrow ? 24 : 32,
-                        ),
-                      ),
-                      filled: true,
-                      fillColor: Theme.of(
-                        context,
-                      ).colorScheme.onSurface.withValues(alpha: 0.05),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(isNarrow ? 16 : 24),
-                        borderSide: BorderSide.none,
-                      ),
-                      contentPadding: EdgeInsets.symmetric(
-                        vertical: isNarrow ? 16 : 24,
-                        horizontal: 20,
-                      ),
+                      ],
                     ),
+                  ),
+                  Expanded(
+                    child: results == null
+                        ? const SizedBox.shrink()
+                        : noResults
+                        ? AppRefreshIndicator(
+                            onRefresh: searchResultsSignal.refresh,
+                            child: CustomScrollView(
+                              controller: _scrollController,
+                              physics: const AlwaysScrollableScrollPhysics(),
+                              // Kept scrollable for pull-to-refresh; the message is
+                              // the page-level placeholder above.
+                              slivers: const [
+                                SliverFillRemaining(
+                                  hasScrollBody: false,
+                                  child: SizedBox.shrink(),
+                                ),
+                              ],
+                            ),
+                          )
+                        : _SearchResults(
+                            results: results,
+                            controller: _scrollController,
+                          ),
                   ),
                 ],
               ),
             ),
-            Expanded(
-              child: searchResultsAsync.map(
-                data: (results) {
-                  if (results == null) return const _EmptySearchState();
-                  if (results.tracks.isEmpty &&
-                      results.albums.isEmpty &&
-                      results.artists.isEmpty) {
-                    return AppRefreshIndicator(
-                      onRefresh: searchResultsSignal.refresh,
-                      child: CustomScrollView(
-                        controller: _scrollController,
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        slivers: [
-                          SliverFillRemaining(
-                            hasScrollBody: false,
-                            child: Center(
-                              child: Text(
-                                'Ничего не найдено',
-                                style: TextStyle(
-                                  color: Theme.of(
-                                    context,
-                                  ).colorScheme.onSurfaceVariant,
-                                  fontSize: 18,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  }
-                  return _SearchResults(
-                    results: results,
-                    controller: _scrollController,
-                  );
-                },
-                loading: () => const CommonLoadingWidget(),
-                error: (Object e, StackTrace? _) =>
-                    CommonErrorWidget(error: e.toString()),
+            if (placeholder != null)
+              Positioned.fill(
+                // Must not eat the field's taps or the list's drags.
+                child: IgnorePointer(child: Center(child: placeholder)),
               ),
-            ),
           ],
         );
       },
@@ -170,25 +193,23 @@ class _EmptySearchState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final onSurface = Theme.of(context).colorScheme.onSurface;
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.manage_search_rounded,
-            size: 80,
-            color: onSurface.withValues(alpha: 0.1),
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          Icons.manage_search_rounded,
+          size: 80,
+          color: onSurface.withValues(alpha: 0.1),
+        ),
+        const SizedBox(height: 16),
+        Text(
+          'Начните вводить текст',
+          style: TextStyle(
+            color: onSurface.withValues(alpha: 0.38),
+            fontSize: 18,
           ),
-          const SizedBox(height: 16),
-          Text(
-            'Начните вводить текст',
-            style: TextStyle(
-              color: onSurface.withValues(alpha: 0.38),
-              fontSize: 18,
-            ),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

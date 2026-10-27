@@ -228,191 +228,12 @@ class _SettingsViewState extends State<SettingsView> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const _SectionTitle(title: 'Загрузки'),
-                  const SizedBox(height: 20),
-                  SignalBuilder(
-                    builder: (context) {
-                      final path = _pathSignal.value;
-                      return _SettingItem(
-                        title: 'Путь для сохранения треков',
-                        subtitle: path.value ?? 'По умолчанию (Загрузки)',
-                        icon: Icons.folder_open_rounded,
-                        onTap: () => unawaited(_pickPath()),
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 32),
-                  const _SectionTitle(title: 'Визуальные эффекты'),
-                  const SizedBox(height: 20),
-                  // Android has no wave shader, so its settings are hidden.
-                  if (!Platform.isAndroid) ...[
-                    SignalBuilder(
-                      builder: (context) {
-                        final enabled = vibeVisibleSignal.value;
-                        return _SettingItem(
-                          title: 'Показывать волну',
-                          subtitle: 'Динамический фон, реагирующий на музыку',
-                          icon: Icons.waves_rounded,
-                          onTap: () =>
-                              unawaited(_toggleVibeVisibility(!enabled)),
-                          trailing: Switch(
-                            value: enabled,
-                            onChanged: (value) =>
-                                unawaited(_toggleVibeVisibility(value)),
-                          ),
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 8),
-                    SignalBuilder(
-                      builder: (context) {
-                        final scale = vibeRenderScaleSignal.value;
-                        return _SettingItem(
-                          title: 'Разрешение волны',
-                          subtitle:
-                              '${(scale * 100).round()}% — выше качество, выше нагрузка',
-                          icon: Icons.high_quality_rounded,
-                          onTap: () {},
-                          trailing: SizedBox(
-                            width: isNarrow ? 120 : 200,
-                            child: M3ESlider(
-                              value: scale,
-                              min: minVibeRenderScale,
-                              max: maxVibeRenderScale,
-                              divisions: 5,
-                              label: '${(scale * 100).round()}%',
-                              onChanged: vibeVisibleSignal.value
-                                  ? (value) {
-                                      vibeRenderScaleSignal.value = value;
-                                    }
-                                  : null,
-                              onChangeEnd: (value) =>
-                                  unawaited(_saveVibeRenderScale(value)),
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 8),
-                  ],
-                  SignalBuilder(
-                    builder: (context) {
-                      final enabled = blurEffectsEnabledSignal.value;
-                      return _SettingItem(
-                        title: 'Размытие интерфейса',
-                        subtitle: 'Размывать фон под панелями управления',
-                        icon: Icons.blur_on_rounded,
-                        onTap: () => unawaited(_toggleBlurEffects(!enabled)),
-                        trailing: Switch(
-                          value: enabled,
-                          onChanged: (value) =>
-                              unawaited(_toggleBlurEffects(value)),
-                        ),
-                      );
-                    },
-                  ),
+                  ..._buildDownloadsAndEffects(isNarrow),
                   if (context.isDesktop) ...[
                     const SizedBox(height: 32),
-                    const _SectionTitle(title: 'Горячие клавиши'),
-                    const SizedBox(height: 20),
-                    _SettingItem(
-                      title: 'Управление горячими клавишами',
-                      subtitle:
-                          'Глобальные сочетания клавиш, работающие вне окна',
-                      icon: Icons.keyboard_command_key_rounded,
-                      onTap: () => showDialog<void>(
-                        context: context,
-                        builder: (context) => const _GlobalHotkeysDialog(),
-                      ),
-                    ),
-                  ],
-                  if (context.isDesktop) ...[
+                    ..._buildDesktopAppearance(),
                     const SizedBox(height: 32),
-                    const _SectionTitle(title: 'Внешний вид'),
-                    const SizedBox(height: 20),
-                    SignalBuilder(
-                      builder: (context) {
-                        final enabled = _customTitlebarSignal.value;
-                        return _SettingItem(
-                          title: 'Собственная рамка окна',
-                          subtitle: 'Отключает стандартную рамку ОС',
-                          icon: Icons.web_asset_rounded,
-                          onTap: () => unawaited(
-                            _toggleCustomTitlebar(!(enabled.value ?? false)),
-                          ),
-                          trailing: Switch(
-                            value: enabled.value ?? false,
-                            onChanged: (v) =>
-                                unawaited(_toggleCustomTitlebar(v)),
-                          ),
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 8),
-                    SignalBuilder(
-                      builder: (context) {
-                        final enabled = _autoHideNavbarSignal.value;
-                        return _SettingItem(
-                          title: 'Скрывать боковую панель',
-                          subtitle:
-                              'Автоматически скрывать навигацию на главном экране',
-                          icon: Icons.vertical_split_rounded,
-                          onTap: () => unawaited(
-                            _toggleAutoHideNavbar(!(enabled.value ?? false)),
-                          ),
-                          trailing: Switch(
-                            value: enabled.value ?? false,
-                            onChanged: (v) =>
-                                unawaited(_toggleAutoHideNavbar(v)),
-                          ),
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 32),
-                  ],
-                  if (context.isDesktop) ...[
-                    const _SectionTitle(title: 'Интеграции'),
-                    const SizedBox(height: 20),
-                    SignalBuilder(
-                      builder: (context) {
-                        final enabled = _discordRpcSignal.value;
-                        return _SettingItem(
-                          title: 'Discord Rich Presence',
-                          subtitle: 'Показывать текущий трек в статусе Discord',
-                          icon: Icons.discord_rounded,
-                          onTap: () => unawaited(
-                            _toggleDiscordRpc(!(enabled.value ?? true)),
-                          ),
-                          trailing: Switch(
-                            value: enabled.value ?? true,
-                            onChanged: (v) => unawaited(_toggleDiscordRpc(v)),
-                          ),
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 32),
-                  ],
-                  if (context.isDesktop) ...[
-                    const _SectionTitle(title: 'Система'),
-                    const SizedBox(height: 20),
-                    SignalBuilder(
-                      builder: (context) {
-                        final enabled = _closeToTraySignal.value;
-                        return _SettingItem(
-                          title: 'Сворачивать в трей при закрытии',
-                          subtitle:
-                              'При нажатии на крестик приложение будет скрыто в трей',
-                          icon: Icons.window_rounded,
-                          onTap: () => unawaited(
-                            _toggleCloseToTray(!(enabled.value ?? true)),
-                          ),
-                          trailing: Switch(
-                            value: enabled.value ?? true,
-                            onChanged: (v) => unawaited(_toggleCloseToTray(v)),
-                          ),
-                        );
-                      },
-                    ),
+                    ..._buildDesktopIntegrations(),
                     const SizedBox(height: 32),
                   ],
                   const _SectionTitle(title: 'Тексты песен'),
@@ -425,62 +246,9 @@ class _SettingsViewState extends State<SettingsView> {
                     onTap: () => LyricsProvidersDialog.show(context),
                   ),
                   const SizedBox(height: 32),
-                  const _SectionTitle(title: 'Кэш'),
-                  const SizedBox(height: 20),
-                  SignalBuilder(
-                    builder: (context) {
-                      final size = _cacheSizeSignal.value;
-                      return _SettingItem(
-                        title: 'Очистить кэш изображений и данных',
-                        subtitle: size.map(
-                          data: (d) => 'Занято: ${_formatBytes(d)}',
-                          error: (e, s) => 'Ошибка при получении размера',
-                          loading: () => 'Подсчет...',
-                        ),
-                        icon: Icons.image_not_supported_rounded,
-                        onTap: () => unawaited(_clearCache()),
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 8),
-                  SignalBuilder(
-                    builder: (context) {
-                      final size = _trackCacheSizeSignal.value;
-                      return _SettingItem(
-                        title: 'Удалить скачанные треки',
-                        subtitle: size.map(
-                          data: (d) => 'Занято: ${_formatBytes(d)}',
-                          error: (e, s) => 'Ошибка при получении размера',
-                          loading: () => 'Подсчет...',
-                        ),
-                        icon: Icons.music_off_rounded,
-                        onTap: () => unawaited(_clearTrackCache()),
-                      );
-                    },
-                  ),
+                  ..._buildCache(),
                   const SizedBox(height: 32),
-                  const _SectionTitle(title: 'О приложении'),
-                  const SizedBox(height: 20),
-                  _AboutAppCard(versionSignal: _versionSignal),
-                  const SizedBox(height: 8),
-                  SignalBuilder(
-                    builder: (context) {
-                      final enabled = _updateCheckSignal.value;
-                      return _SettingItem(
-                        title: 'Проверка обновлений при запуске',
-                        subtitle:
-                            'Проверять наличие новых версий на GitHub при запуске',
-                        icon: Icons.system_update_rounded,
-                        onTap: () => unawaited(
-                          _toggleUpdateCheck(!(enabled.value ?? true)),
-                        ),
-                        trailing: Switch(
-                          value: enabled.value ?? true,
-                          onChanged: (v) => unawaited(_toggleUpdateCheck(v)),
-                        ),
-                      );
-                    },
-                  ),
+                  ..._buildAbout(),
                 ],
               ),
             ),
@@ -489,6 +257,247 @@ class _SettingsViewState extends State<SettingsView> {
         ],
       ),
     );
+  }
+
+  List<Widget> _buildDownloadsAndEffects(bool isNarrow) {
+    return [
+      const _SectionTitle(title: 'Загрузки'),
+      const SizedBox(height: 20),
+      SignalBuilder(
+        builder: (context) {
+          final path = _pathSignal.value;
+          return _SettingItem(
+            title: 'Путь для сохранения треков',
+            subtitle: path.value ?? 'По умолчанию (Загрузки)',
+            icon: Icons.folder_open_rounded,
+            onTap: () => unawaited(_pickPath()),
+          );
+        },
+      ),
+      const SizedBox(height: 32),
+      const _SectionTitle(title: 'Визуальные эффекты'),
+      const SizedBox(height: 20),
+      // Android has no wave shader, so its settings are hidden.
+      if (!Platform.isAndroid) ...[
+        SignalBuilder(
+          builder: (context) {
+            final enabled = vibeVisibleSignal.value;
+            return _SettingItem(
+              title: 'Показывать волну',
+              subtitle: 'Динамический фон, реагирующий на музыку',
+              icon: Icons.waves_rounded,
+              onTap: () => unawaited(_toggleVibeVisibility(!enabled)),
+              trailing: Switch(
+                value: enabled,
+                onChanged: (value) => unawaited(_toggleVibeVisibility(value)),
+              ),
+            );
+          },
+        ),
+        const SizedBox(height: 8),
+        SignalBuilder(
+          builder: (context) {
+            final scale = vibeRenderScaleSignal.value;
+            return _SettingItem(
+              title: 'Разрешение волны',
+              subtitle:
+                  '${(scale * 100).round()}% — выше качество, выше нагрузка',
+              icon: Icons.high_quality_rounded,
+              onTap: () {},
+              trailing: SizedBox(
+                width: isNarrow ? 120 : 200,
+                child: M3ESlider(
+                  value: scale,
+                  min: minVibeRenderScale,
+                  max: maxVibeRenderScale,
+                  divisions: 5,
+                  label: '${(scale * 100).round()}%',
+                  onChanged: vibeVisibleSignal.value
+                      ? (value) {
+                          vibeRenderScaleSignal.value = value;
+                        }
+                      : null,
+                  onChangeEnd: (value) =>
+                      unawaited(_saveVibeRenderScale(value)),
+                ),
+              ),
+            );
+          },
+        ),
+        const SizedBox(height: 8),
+      ],
+      SignalBuilder(
+        builder: (context) {
+          final enabled = blurEffectsEnabledSignal.value;
+          return _SettingItem(
+            title: 'Размытие интерфейса',
+            subtitle: 'Размывать фон под панелями управления',
+            icon: Icons.blur_on_rounded,
+            onTap: () => unawaited(_toggleBlurEffects(!enabled)),
+            trailing: Switch(
+              value: enabled,
+              onChanged: (value) => unawaited(_toggleBlurEffects(value)),
+            ),
+          );
+        },
+      ),
+    ];
+  }
+
+  List<Widget> _buildDesktopAppearance() {
+    return [
+      const _SectionTitle(title: 'Горячие клавиши'),
+      const SizedBox(height: 20),
+      _SettingItem(
+        title: 'Управление горячими клавишами',
+        subtitle: 'Глобальные сочетания клавиш, работающие вне окна',
+        icon: Icons.keyboard_command_key_rounded,
+        onTap: () => showDialog<void>(
+          context: context,
+          builder: (context) => const _GlobalHotkeysDialog(),
+        ),
+      ),
+      const SizedBox(height: 32),
+      const _SectionTitle(title: 'Внешний вид'),
+      const SizedBox(height: 20),
+      SignalBuilder(
+        builder: (context) {
+          final enabled = _customTitlebarSignal.value;
+          return _SettingItem(
+            title: 'Собственная рамка окна',
+            subtitle: 'Отключает стандартную рамку ОС',
+            icon: Icons.web_asset_rounded,
+            onTap: () =>
+                unawaited(_toggleCustomTitlebar(!(enabled.value ?? false))),
+            trailing: Switch(
+              value: enabled.value ?? false,
+              onChanged: (v) => unawaited(_toggleCustomTitlebar(v)),
+            ),
+          );
+        },
+      ),
+      const SizedBox(height: 8),
+      SignalBuilder(
+        builder: (context) {
+          final enabled = _autoHideNavbarSignal.value;
+          return _SettingItem(
+            title: 'Скрывать боковую панель',
+            subtitle: 'Автоматически скрывать навигацию на главном экране',
+            icon: Icons.vertical_split_rounded,
+            onTap: () =>
+                unawaited(_toggleAutoHideNavbar(!(enabled.value ?? false))),
+            trailing: Switch(
+              value: enabled.value ?? false,
+              onChanged: (v) => unawaited(_toggleAutoHideNavbar(v)),
+            ),
+          );
+        },
+      ),
+    ];
+  }
+
+  List<Widget> _buildDesktopIntegrations() {
+    return [
+      const _SectionTitle(title: 'Интеграции'),
+      const SizedBox(height: 20),
+      SignalBuilder(
+        builder: (context) {
+          final enabled = _discordRpcSignal.value;
+          return _SettingItem(
+            title: 'Discord Rich Presence',
+            subtitle: 'Показывать текущий трек в статусе Discord',
+            icon: Icons.discord_rounded,
+            onTap: () => unawaited(_toggleDiscordRpc(!(enabled.value ?? true))),
+            trailing: Switch(
+              value: enabled.value ?? true,
+              onChanged: (v) => unawaited(_toggleDiscordRpc(v)),
+            ),
+          );
+        },
+      ),
+      const SizedBox(height: 32),
+      const _SectionTitle(title: 'Система'),
+      const SizedBox(height: 20),
+      SignalBuilder(
+        builder: (context) {
+          final enabled = _closeToTraySignal.value;
+          return _SettingItem(
+            title: 'Сворачивать в трей при закрытии',
+            subtitle: 'При нажатии на крестик приложение будет скрыто в трей',
+            icon: Icons.window_rounded,
+            onTap: () =>
+                unawaited(_toggleCloseToTray(!(enabled.value ?? true))),
+            trailing: Switch(
+              value: enabled.value ?? true,
+              onChanged: (v) => unawaited(_toggleCloseToTray(v)),
+            ),
+          );
+        },
+      ),
+    ];
+  }
+
+  List<Widget> _buildCache() {
+    return [
+      const _SectionTitle(title: 'Кэш'),
+      const SizedBox(height: 20),
+      SignalBuilder(
+        builder: (context) {
+          final size = _cacheSizeSignal.value;
+          return _SettingItem(
+            title: 'Очистить кэш изображений и данных',
+            subtitle: size.map(
+              data: (d) => 'Занято: ${_formatBytes(d)}',
+              error: (e, s) => 'Ошибка при получении размера',
+              loading: () => 'Подсчет...',
+            ),
+            icon: Icons.image_not_supported_rounded,
+            onTap: () => unawaited(_clearCache()),
+          );
+        },
+      ),
+      const SizedBox(height: 8),
+      SignalBuilder(
+        builder: (context) {
+          final size = _trackCacheSizeSignal.value;
+          return _SettingItem(
+            title: 'Удалить скачанные треки',
+            subtitle: size.map(
+              data: (d) => 'Занято: ${_formatBytes(d)}',
+              error: (e, s) => 'Ошибка при получении размера',
+              loading: () => 'Подсчет...',
+            ),
+            icon: Icons.music_off_rounded,
+            onTap: () => unawaited(_clearTrackCache()),
+          );
+        },
+      ),
+    ];
+  }
+
+  List<Widget> _buildAbout() {
+    return [
+      const _SectionTitle(title: 'О приложении'),
+      const SizedBox(height: 20),
+      _AboutAppCard(versionSignal: _versionSignal),
+      const SizedBox(height: 8),
+      SignalBuilder(
+        builder: (context) {
+          final enabled = _updateCheckSignal.value;
+          return _SettingItem(
+            title: 'Проверка обновлений при запуске',
+            subtitle: 'Проверять наличие новых версий на GitHub при запуске',
+            icon: Icons.system_update_rounded,
+            onTap: () =>
+                unawaited(_toggleUpdateCheck(!(enabled.value ?? true))),
+            trailing: Switch(
+              value: enabled.value ?? true,
+              onChanged: (v) => unawaited(_toggleUpdateCheck(v)),
+            ),
+          );
+        },
+      ),
+    ];
   }
 }
 
@@ -990,21 +999,6 @@ class _AboutAppCard extends StatelessWidget {
     showAppError('Не удалось открыть страницу проекта');
   }
 
-  String get _platform {
-    switch (Platform.operatingSystem) {
-      case 'windows':
-        return 'Windows';
-      case 'macos':
-        return 'macOS';
-      case 'linux':
-        return 'Linux';
-      case 'android':
-        return 'Android';
-      default:
-        return Platform.operatingSystem;
-    }
-  }
-
   Widget _chip(
     BuildContext context, {
     required IconData icon,
@@ -1052,135 +1046,138 @@ class _AboutAppCard extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                padding: const EdgeInsets.all(7),
-                decoration: BoxDecoration(
-                  color: cs.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(AppRadius.md),
-                  border: Border.all(
-                    color: cs.onSurface.withValues(alpha: 0.08),
-                  ),
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(AppRadius.sm),
-                  child: Image.asset(
-                    'assets/icons/logo.webp',
-                    width: logoSize,
-                    height: logoSize,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) => SizedBox(
-                      width: logoSize,
-                      height: logoSize,
-                      child: Icon(
-                        Icons.graphic_eq_rounded,
-                        size: logoSize * 0.6,
-                        color: cs.primary,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
+              _buildLogo(context, logoSize),
               SizedBox(width: isNarrow ? 12 : 20),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'YAYMA',
-                      style: TextStyle(
-                        color: cs.onSurface,
-                        fontSize: isNarrow ? 24 : 30,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: -1,
-                        height: 1.05,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Yet Another Yandex Music App',
-                      style: TextStyle(
-                        color: cs.onSurfaceVariant,
-                        fontSize: isNarrow ? 13 : 14,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: [
-                        SignalBuilder(
-                          builder: (context) {
-                            return _chip(
-                              context,
-                              icon: Icons.verified_rounded,
-                              label: versionSignal.value.map(
-                                data: (v) => 'Версия $v',
-                                error: (e, s) => 'Версия неизвестна',
-                                loading: () => 'Версия…',
-                              ),
-                              foreground: cs.primary,
-                              background: cs.primary.withValues(alpha: 0.14),
-                              border: cs.primary.withValues(alpha: 0.30),
-                            );
-                          },
-                        ),
-                        _chip(
-                          context,
-                          icon: Icons.devices_rounded,
-                          label: _platform,
-                          foreground: cs.onSurface,
-                          background: cs.onSurface.withValues(alpha: 0.06),
-                          border: cs.onSurface.withValues(alpha: 0.12),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
+              Expanded(child: _buildTitleBlock(context, isNarrow)),
               SizedBox(width: isNarrow ? 4 : 16),
-              if (isNarrow)
-                IconButton.filledTonal(
-                  onPressed: () => unawaited(_openRepo()),
-                  tooltip: 'Страница проекта на GitHub',
-                  icon: const Icon(Icons.code_rounded, size: 20),
-                )
-              else
-                M3EOutlinedButton.icon(
-                  onPressed: () => unawaited(_openRepo()),
-                  icon: const Icon(Icons.code_rounded, size: 18),
-                  label: const Text('GitHub'),
-                ),
+              _buildRepoButton(isNarrow),
             ],
           ),
           const SizedBox(height: 18),
           Divider(height: 1, color: cs.onSurface.withValues(alpha: 0.08)),
           const SizedBox(height: 12),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(
-                Icons.info_outline_rounded,
-                size: 16,
-                color: cs.onSurfaceVariant,
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'YAYMA — независимый проект с открытым исходным кодом и не '
-                  'связан с Яндексом.',
-                  style: TextStyle(
-                    color: cs.onSurfaceVariant.withValues(alpha: 0.8),
-                    fontSize: 12,
-                    height: 1.4,
-                  ),
-                ),
-              ),
-            ],
-          ),
+          _buildDisclaimer(context),
         ],
       ),
+    );
+  }
+
+  Widget _buildLogo(BuildContext context, double logoSize) {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.all(7),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        border: Border.all(color: cs.onSurface.withValues(alpha: 0.08)),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(AppRadius.sm),
+        child: Image.asset(
+          'assets/icons/logo.webp',
+          width: logoSize,
+          height: logoSize,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) => SizedBox(
+            width: logoSize,
+            height: logoSize,
+            child: Icon(
+              Icons.graphic_eq_rounded,
+              size: logoSize * 0.6,
+              color: cs.primary,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTitleBlock(BuildContext context, bool isNarrow) {
+    final cs = Theme.of(context).colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'YAYMA',
+          style: TextStyle(
+            color: cs.onSurface,
+            fontSize: isNarrow ? 24 : 30,
+            fontWeight: FontWeight.w900,
+            letterSpacing: -1,
+            height: 1.05,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Yet Another Yandex Music App',
+          style: TextStyle(
+            color: cs.onSurfaceVariant,
+            fontSize: isNarrow ? 13 : 14,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            SignalBuilder(
+              builder: (context) {
+                return _chip(
+                  context,
+                  icon: Icons.verified_rounded,
+                  label: versionSignal.value.map(
+                    data: (v) => 'Версия $v',
+                    error: (e, s) => 'Версия неизвестна',
+                    loading: () => 'Версия…',
+                  ),
+                  foreground: cs.primary,
+                  background: cs.primary.withValues(alpha: 0.14),
+                  border: cs.primary.withValues(alpha: 0.30),
+                );
+              },
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRepoButton(bool isNarrow) {
+    if (isNarrow) {
+      return IconButton.filledTonal(
+        onPressed: () => unawaited(_openRepo()),
+        tooltip: 'Страница проекта на GitHub',
+        icon: const Icon(Icons.code_rounded, size: 20),
+      );
+    }
+    return M3EOutlinedButton.icon(
+      onPressed: () => unawaited(_openRepo()),
+      icon: const Icon(Icons.code_rounded, size: 18),
+      label: const Text('GitHub'),
+    );
+  }
+
+  Widget _buildDisclaimer(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(Icons.info_outline_rounded, size: 16, color: cs.onSurfaceVariant),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            'YAYMA — независимый проект с открытым исходным кодом и не '
+            'связан с Яндексом.',
+            style: TextStyle(
+              color: cs.onSurfaceVariant.withValues(alpha: 0.8),
+              fontSize: 12,
+              height: 1.4,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
