@@ -29,8 +29,8 @@ type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>
 
 const RUSSIAN_TRUSTED_ROOT_CA: &[u8] =
     include_bytes!("../../../assets/certs/russian-trusted-root-ca.pem");
-/// Mozilla bundle for the Android fallback below (PEM, 121 roots, fetched
-/// 2026-09-26 from https://curl.se/ca/cacert.pem — refresh periodically).
+/// Mozilla bundle for the Android fallback below (PEM, 118 roots, fetched
+/// 2026-10-27 from https://curl.se/ca/cacert.pem — refresh periodically).
 /// `reqwest` cannot merge extra roots into the Android platform verifier,
 /// so there we pin the whole trust store instead of merging.
 #[cfg(target_os = "android")]
