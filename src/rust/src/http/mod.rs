@@ -157,6 +157,38 @@ impl SessionExt for Session {
     }
 }
 
+/// Numeric id of a playlist track entry, which arrives either as
+/// `{"id": 123, ...}` (id-only) or as a bare number.
+fn track_entry_id(entry: &serde_json::Value) -> Option<String> {
+    let id = entry.get("id").unwrap_or(entry);
+    match id {
+        serde_json::Value::Number(n) => {
+            Some(n.as_u64().map_or_else(|| n.to_string(), |v| v.to_string()))
+        }
+        serde_json::Value::String(s) => Some(s.clone()),
+        _ => None,
+    }
+}
+
+/// Kinds of the playlists in a `/playlists?richTracks=false` response that
+/// contain [track_id]. Entries without a track list are skipped, not guessed.
+fn containing_kinds(body: &serde_json::Value, track_id: &str) -> Vec<u32> {
+    body["result"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|playlist| {
+            let kind = playlist["kind"].as_u64()? as u32;
+            let has_track = playlist["tracks"].as_array().is_some_and(|tracks| {
+                tracks
+                    .iter()
+                    .any(|t| track_entry_id(t).as_deref() == Some(track_id))
+            });
+            has_track.then_some(kind)
+        })
+        .collect()
+}
+
 pub struct ApiService {
     pub client: Arc<YandexMusicClient>,
     /// Separate client for `get-file-info`/`get-file-info/batch`: the crate's
@@ -439,6 +471,38 @@ impl ApiService {
             ),
         )
         .await
+    }
+
+    /// Kinds out of [kinds] whose playlist already contains [track_id].
+    ///
+    /// One request for all playlists with id-only tracks (`richTracks=false`).
+    /// The full-track path costs one `fetch_tracks(50)` round trip per 50
+    /// tracks for every playlist, and the track ids are all this needs.
+    pub async fn fetch_playlists_containing_track(
+        &self,
+        kinds: &[u32],
+        track_id: &str,
+    ) -> Result<Vec<u32>> {
+        if kinds.is_empty() {
+            return Ok(Vec::new());
+        }
+        let kinds_param = kinds
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join(",");
+        let url = format!(
+            "https://api.music.yandex.ru/users/{}/playlists?kinds={}&withTracks=true&richTracks=false",
+            self.user_id, kinds_param
+        );
+        // Raw JSON on purpose: the crate's untagged `PlaylistTracks` fails the
+        // whole playlist if one entry is shaped differently, and a missed id is
+        // a wrong checkmark here.
+        let body: serde_json::Value = send_with_retry(|| self.http_client.get(&url))
+            .await?
+            .json()
+            .await?;
+        Ok(containing_kinds(&body, track_id))
     }
 
     async fn fetch_first<T, Fut, E>(&self, fut: Fut) -> Result<T>
@@ -1032,6 +1096,23 @@ fn sort_disliked_tracks(tracks: &mut [yandex_music::model::track::PartialTrack])
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn containing_kinds_finds_playlists_by_track_id() {
+        // Shape of `/playlists?withTracks=true&richTracks=false`: tracks are
+        // id-only entries, and a playlist without tracks must not match.
+        let body = json!({"result": [
+            {"kind": 1000, "tracks": [{"id": 42, "timestamp": "2026-01-01T00:00:00+00:00"}]},
+            {"kind": 1001, "tracks": [{"id": "7"}, {"id": "42"}]},
+            {"kind": 1002, "tracks": []},
+            {"kind": 1003},
+            {"kind": 1004, "tracks": [{"id": 421}]},
+        ]});
+
+        assert_eq!(containing_kinds(&body, "42"), [1000, 1001]);
+        assert!(containing_kinds(&json!({"result": []}), "42").is_empty());
+        assert!(containing_kinds(&json!({"error": "unauthorized"}), "42").is_empty());
+    }
 
     #[test]
     fn disliked_tracks_sort_newest_first_and_stable_on_ties() {

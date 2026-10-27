@@ -45,7 +45,9 @@ final FlutterSignal<Set<String>> downloadingTracksSignal = signal<Set<String>>(
 final FlutterSignal<Map<String, Set<int>>> trackPlaylistMembershipSignal =
     signal<Map<String, Set<int>>>({});
 
-final Set<String> _membershipFetching = {};
+/// In-flight membership checks, so a second request for the same track waits
+/// for the running one instead of returning stale cache to its caller.
+final Map<String, Future<void>> _membershipFetching = {};
 
 /// Max number of track ids kept in the membership cache. Dart maps are
 /// insertion-ordered, so the oldest entries get evicted first.
@@ -63,43 +65,42 @@ void _cacheMembership(String trackId, Set<int> kinds) {
 /// Checks which playlists track [trackId] is already in
 /// (by fetching each playlist's details) and updates
 /// [trackPlaylistMembershipSignal].
-Future<void> refreshTrackPlaylistMembership(String trackId) async {
+Future<void> refreshTrackPlaylistMembership(String trackId) {
+  final inFlight = _membershipFetching[trackId];
+  if (inFlight != null) return inFlight;
+
+  final future = _loadMembership(trackId).whenComplete(() {
+    unawaited(_membershipFetching.remove(trackId));
+  });
+  _membershipFetching[trackId] = future;
+  return future;
+}
+
+Future<void> _loadMembership(String trackId) async {
   final ctx = appContextSignal.value;
   if (ctx == null) return;
-  if (!_membershipFetching.add(trackId)) return;
 
-  try {
-    // Snapshot the playlist list once: `refreshPlaylists()` may complete
-    // concurrently (mutating the signal), and re-reading it after the
-    // await would desync indices from the details list (TOCTOU).
-    final playlists = playlistsSignal.value;
-    var failedFetches = 0;
-    final kinds = <int>{};
-    final detailsList = await Future.wait(
-      playlists.map((p) async {
-        final details = await runRustFetch(
-          (c) => getPlaylistDetails(ctx: c, uid: p.uid, kind: p.kind),
-          notifyErrors: false,
-        );
-        if (details == null) failedFetches++;
-        return details;
-      }),
-    );
-    for (final (index, details) in detailsList.indexed) {
-      if (details == null) continue;
-      if (details.tracks.any((t) => t.id == trackId)) {
-        kinds.add(playlists[index].kind);
-      }
-    }
+  // An empty list means the playlists are not loaded yet (right after
+  // login), not that the track is in none — caching that would stick.
+  final kinds = playlistsSignal.value.map((p) => p.kind).toList();
+  if (kinds.isEmpty) return;
 
-    // One aggregated notification instead of one per failed fetch.
-    if (failedFetches > 0) {
-      showAppError('Не удалось проверить плейлисты');
-    }
-    _cacheMembership(trackId, kinds);
-  } finally {
-    _membershipFetching.remove(trackId);
+  // One request for all playlists, ids only: checking every playlist's full
+  // track list costs a `fetch_tracks(50)` round trip per 50 tracks each, and
+  // only the track ids are needed here.
+  final containing = await runRustFetch(
+    (c) => getPlaylistsContainingTrack(
+      ctx: c,
+      kinds: kinds,
+      trackId: trackId,
+    ),
+    notifyErrors: false,
+  );
+  if (containing == null) {
+    showAppError('Не удалось проверить плейлисты');
+    return;
   }
+  _cacheMembership(trackId, containing.toSet());
 }
 
 StreamSubscription<List<SimpleTrackDto>>? _likedSub;
@@ -163,6 +164,10 @@ Future<void> disposeLibrary() async {
   downloadedTracksSignal.value = {};
   downloadingTracksSignal.value = {};
   isDownloadingAllLikedTracksSignal.value = false;
+  // Playlist kinds are per account: keeping them would mark tracks as
+  // belonging to another account's playlists with the same kind.
+  trackPlaylistMembershipSignal.value = {};
+  _membershipFetching.clear();
 }
 
 Future<void> refreshDownloadedTracks() async {

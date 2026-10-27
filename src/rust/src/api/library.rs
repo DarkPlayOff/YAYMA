@@ -322,6 +322,27 @@ pub async fn get_playlists(ctx: &AppContext) -> Vec<SimplePlaylistDto> {
     }
 }
 
+/// Kinds out of [kinds] that already contain [track_id].
+/// `None` when the request failed, so the caller does not cache "in none".
+pub async fn get_playlists_containing_track(
+    ctx: &AppContext,
+    kinds: Vec<u32>,
+    track_id: String,
+) -> Option<Vec<u32>> {
+    match ctx
+        .core
+        .api
+        .fetch_playlists_containing_track(&kinds, &track_id)
+        .await
+    {
+        Ok(containing) => Some(containing),
+        Err(e) => {
+            tracing::error!("Failed to check track playlists: {:?}", e);
+            None
+        }
+    }
+}
+
 pub async fn get_liked_albums(ctx: &AppContext) -> Vec<SimpleAlbumDto> {
     match ctx.core.api.fetch_liked_albums().await {
         Ok(albums) => albums
