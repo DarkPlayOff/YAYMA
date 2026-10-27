@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/physics.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:yayma/src/features/playback/providers/playback_provider.dart';
+import 'package:yayma/src/rust/api/models.dart';
 
 /// Gap between the cover and the neighbour cover that slides in.
 const double kCoverSwipeGap = 24;
@@ -28,6 +29,20 @@ const SpringDescription kCoverSwipeCloseSpring = SpringDescription(
 /// page fetch (5 s) so a slow but successful advance is never cut short.
 const Duration kCoverSettleTimeout = Duration(seconds: 8);
 
+/// How close the slide has to be to its target before it counts as arrived.
+/// The default spring tolerance (0.001 px) keeps the animation running for a
+/// few hundred ms after the cover visibly stops, which holds the swipe state
+/// hostage for the next gesture.
+const Tolerance kCoverSwipeSettleTolerance = Tolerance(
+  distance: 0.5,
+  velocity: 24,
+);
+
+/// Catch-up slide that carries a burst of skips to the newest track. It starts
+/// from the artwork already on screen, so it only adds the remainder instead
+/// of a full transition per skipped track.
+const Duration kCoverCatchUpDuration = Duration(milliseconds: 140);
+
 /// Direction of a queue move from the visible index alone: -1 is the previous
 /// track, 1 the next one, 0 when it cannot be told. Wraps at the ends are only
 /// inferred for queues longer than two tracks, where they cannot be confused
@@ -39,12 +54,26 @@ int coverMoveDirection(int? oldIndex, int? newIndex, int count) {
   return newIndex > oldIndex ? 1 : -1;
 }
 
+/// Index of the neighbour of [index] in a queue of [count] items, or null at
+/// the ends.
+int? coverNeighbourIndex(int index, int direction, int count) {
+  final target = index + direction;
+  return target < 0 || target >= count ? null : target;
+}
+
 /// Swipe state machine of the full player cover.
 ///
-/// Owns which neighbour is being pulled in, whether the gesture can commit,
-/// the artwork currently forced on screen and the commit / rollback
-/// transitions. Rendering (offsets, opacity, layout) stays in the widget; this
-/// class only advances the state and drives the shared [animation].
+/// Holds one notion of "what the user sees": [_centreId] / [_centreUrl], the
+/// artwork resting at the screen centre. Every slide starts from it and ends
+/// by replacing it, so the cover can never show two different ideas of the
+/// current track at once.
+///
+/// The neighbour to pull in comes from the playback queue list only. The
+/// queue-index based neighbour signals lag behind a skip, and mixing the two
+/// sources made the cover slide onto itself or refuse to move at all.
+///
+/// Rendering (offsets, opacity, layout) stays in the widget; this class only
+/// advances the state and drives the shared [animation].
 class CoverSwipeController {
   CoverSwipeController({
     required this.animation,
@@ -54,12 +83,13 @@ class CoverSwipeController {
     required this.onNext,
     required this.onPrevious,
     required this.onChanged,
-    String? initialTrackId,
-    String? initialCoverUrl,
+    required this.queue,
+    SimpleTrackDto? initialTrack,
     int? initialIndex,
-  }) : _visibleTrackId = initialTrackId,
-       _visibleCoverUrl = initialCoverUrl,
-       _visibleIndex = initialIndex;
+  }) : _reportedId = initialTrack?.id,
+       _reportedIndex = initialIndex,
+       _centreId = initialTrack?.id,
+       _centreUrl = initialTrack?.coverUrl;
 
   final AnimationController animation;
 
@@ -77,6 +107,10 @@ class CoverSwipeController {
   /// the settle watchdog giving the artwork back to the live track.
   final VoidCallback onChanged;
 
+  /// The playback queue in order. The only source of "what is next", so it is
+  /// injected instead of read from a signal.
+  final List<SimpleTrackDto> Function() queue;
+
   /// Direction of the cover swipe: -1 is the previous track, 1 the next one.
   int _direction = 0;
 
@@ -89,132 +123,100 @@ class CoverSwipeController {
   /// gesture cannot skip twice.
   bool _committing = false;
 
-  /// Set when the current drag started during a commit animation.
-  bool _ignoreDrag = false;
+  /// Last track playback reported. Only used to notice changes and to work out
+  /// which way the queue moved; the artwork on screen is [_centreId].
+  String? _reportedId;
+  int? _reportedIndex;
 
-  /// Gives the artwork back to the live track when a commit settled but
-  /// playback never reported a new track (failed skip, failed wave fetch).
-  Timer? _settleWatchdog;
+  /// Artwork resting at the screen centre: what the user actually sees.
+  String? _centreId;
+  String? _centreUrl;
 
-  /// True after a commit settled while the playback state was still catching
-  /// up: [holdUrl] then shows the incoming artwork until it does.
-  bool _settled = false;
+  /// Ends of the slide that is running, kept to tell a lagging playback report
+  /// from a skip that went past the landing artwork.
+  String? _fromId;
+  String? _targetId;
 
-  /// Track the swipe started from, used to detect when playback actually
-  /// switches to the new track.
-  String? _fromTrackId;
-
-  /// Track the committed swipe expects to land on.
-  String? _targetTrackId;
-
-  /// Artwork forced on the central cover while the gesture / commit is in
-  /// flight, so it does not flip to the new track before the animation ends.
-  String? _holdUrl;
-
-  /// Artwork of the track that slides in.
+  /// Artwork of the neighbour that slides in. Non-null exactly while a
+  /// direction is picked and it has somewhere to go.
   String? _incomingUrl;
 
-  /// Track currently shown by the player, used to notice track changes that
-  /// did not come from the cover gesture (buttons, queue advance).
-  String? _visibleTrackId;
+  /// Newest track change that arrived while a cover animation was running.
+  /// It is taken up once that animation lands, so the artwork on screen never
+  /// changes in flight.
+  ({String? id, String? url, int direction})? _pending;
 
-  /// Artwork of [_visibleTrackId], kept because the signals are already on the
-  /// new track by the time the effect runs.
-  String? _visibleCoverUrl;
+  /// Gives the artwork back to the live track when a commit landed but
+  /// playback never reported the new track (failed skip, failed wave fetch).
+  Timer? _settleWatchdog;
 
-  /// Queue position of the visible track. The direction of a move is taken
-  /// from it instead of the neighbour signals, which are backed by an
-  /// asynchronous queue list and can still describe the previous track.
-  int? _visibleIndex;
+  /// Direction the artwork at rest was reached in, kept while the watchdog
+  /// holds it, so a late report that is still behind can be recognised.
+  int _heldDirection = 0;
+
+  /// Invalidates the callback of an animation that a grab took over, so a
+  /// slide that already finished cannot settle the new gesture's state.
+  int _animationEpoch = 0;
 
   int get direction => _direction;
   bool get canCommit => _canCommit;
-  String? get holdUrl => _holdUrl;
+
+  /// Artwork of the central cover. Always the resting artwork, so the cover
+  /// cannot fall back to a different source mid-gesture.
+  String? get holdUrl => _centreUrl;
   String? get incomingUrl => _incomingUrl;
 
-  /// Keeps the artwork in sync with playback: finishes a committed swipe once
-  /// the new track arrives and slides the carousel when the track changes
-  /// without a gesture (buttons, queue advance).
+  /// Keeps the artwork in sync with playback: lands a committed swipe once the
+  /// new track arrives and slides the carousel when the track changes without
+  /// a gesture (buttons, queue advance).
   void onTrackChange({String? trackId, String? coverUrl}) {
-    final previousId = _visibleTrackId;
-    final previousUrl = _visibleCoverUrl;
-    final previousIndex = _visibleIndex;
+    final previousId = _reportedId;
+    final previousIndex = _reportedIndex;
     final state = playerStateSignal.value;
-    final newIndex = state?.queueIndex;
-    final newCount = state?.queueCount ?? 0;
-    _visibleTrackId = trackId;
-    _visibleCoverUrl = coverUrl;
-    _visibleIndex = newIndex;
-    if (trackId == previousId) return;
+    _reportedId = trackId;
+    _reportedIndex = state?.queueIndex;
 
-    final direction = _moveDirection(
-      oldTrackId: previousId,
-      oldIndex: previousIndex,
-      newIndex: newIndex,
-      newCount: newCount,
-    );
-
-    // A committed swipe already slid the next cover into place and only
-    // waits for playback to report it.
-    if (_settled) {
-      final settledTargetId = _targetTrackId;
-      final settledUrl = _holdUrl;
-      final reachedTarget =
-          settledTargetId != null && trackId == settledTargetId;
-      final diverged = trackId != _fromTrackId && trackId != settledTargetId;
-      if (reachedTarget) {
-        _clearHold();
-        return;
+    if (trackId == previousId) {
+      // Same track: late metadata can still refine the artwork on screen.
+      if (trackId == _centreId && coverUrl != _centreUrl) {
+        _centreUrl = coverUrl;
+        onChanged();
       }
-      if (!diverged) return;
-      // Playback moved somewhere else: slide on from the artwork that is
-      // currently on screen instead of flashing the new cover.
-      _clearHold();
-      _startTrackSlide(
-        fromId: settledTargetId,
-        fromUrl: settledUrl,
-        toId: trackId,
-        toUrl: coverUrl,
-        direction: direction,
-      );
       return;
     }
 
-    // The queue changed while a swipe / slide was still animating.
-    if (_committing) {
-      if (trackId == _targetTrackId) return;
-      if (direction != 0 && direction == _direction && animation.isAnimating) {
-        // Same direction: keep sliding out the artwork that is already on
-        // screen and just land on the newest track instead of jumping.
-        _incomingUrl = coverUrl;
-        _fromTrackId = previousId;
-        _targetTrackId = trackId;
-        return;
-      }
-      // Direction changed or the animation was interrupted: finish the
-      // current transition at once and start a fresh one.
-      animation
-        ..stop()
-        ..value = 0;
-      _endDrag();
-      _clearHold();
-      _startTrackSlide(
-        fromId: previousId,
-        fromUrl: previousUrl,
-        toId: trackId,
-        toUrl: coverUrl,
-        direction: direction,
-      );
+    final direction = _changeDirection(
+      previousId,
+      previousIndex,
+      trackId,
+      state?.queueIndex,
+      state?.queueCount ?? 0,
+    );
+
+    // An animation owns both covers until it lands. Queue the newest change
+    // and take it up afterwards: retargeting or rolling back the artwork in
+    // flight is what made a burst of skips flicker and go missing.
+    if (_committing || animation.isAnimating) {
+      _pending = (id: trackId, url: coverUrl, direction: direction);
       return;
     }
 
-    _startTrackSlide(
-      fromId: previousId,
-      fromUrl: previousUrl,
-      toId: trackId,
-      toUrl: coverUrl,
-      direction: direction,
-    );
+    if (trackId == _centreId) {
+      _syncCentre();
+      return;
+    }
+    // While a landed artwork is held, a report that is still behind it is the
+    // same slow skip, not news: remember it and keep waiting instead of
+    // dragging the cover backwards.
+    if (_settleWatchdog != null &&
+        _isBehind(trackId ?? '', _centreId, _heldDirection)) {
+      _pending = null;
+      return;
+    }
+    if (!_startSlide(toId: trackId, toUrl: coverUrl, direction: direction)) {
+      _setCentre(trackId, coverUrl);
+      onChanged();
+    }
   }
 
   /// Clears any in-flight swipe state (called when the panel closes).
@@ -222,58 +224,54 @@ class CoverSwipeController {
     animation
       ..stop()
       ..value = 0;
-    _ignoreDrag = false;
+    _animationEpoch++;
+    _pending = null;
+    _settleWatchdog?.cancel();
+    _settleWatchdog = null;
     _endDrag();
-    _clearHold();
+    _clearSlide();
   }
 
   void dispose() => _settleWatchdog?.cancel();
 
   void onDragStart() {
     if (animation.isAnimating) {
-      if (_committing) {
-        // The track is already changing; ignore this gesture until the
-        // commit animation settles so it cannot skip twice.
-        _ignoreDrag = true;
-        return;
-      }
       animation.stop();
     }
-    _ignoreDrag = false;
-    // When the previous commit settled before playback caught up, the art on
-    // screen is the incoming cover: keep it and treat its track as the new
-    // starting point instead of flashing the old artwork.
-    final settled = _settled && _holdUrl != null;
-    final settledTargetId = _targetTrackId;
-    final settledHoldUrl = _holdUrl;
-    _endDrag();
-    _settled = false;
-    if (settled) {
-      _fromTrackId =
-          settledTargetId ?? playerStateSignal.value?.currentTrack?.id;
-      _holdUrl = settledHoldUrl;
-    } else {
-      _clearHold();
-      _fromTrackId = playerStateSignal.value?.currentTrack?.id;
-      _holdUrl = currentCoverUrlSignal.value ?? trackMetadataSignal().coverUrl;
+    // The gesture owns the state from here: drop the callback of the slide it
+    // interrupted so it cannot settle on top of it.
+    _animationEpoch++;
+    _pending = null;
+    _settleWatchdog?.cancel();
+    _settleWatchdog = null;
+    if (_committing && _incomingUrl != null) {
+      // The skip already went through. The art that was sliding in is now the
+      // cover at rest; falling back to the playback signal here would flash
+      // the art that was sliding out, because the state has not caught up.
+      // shortcut: this also moves the covers to their rest position at once,
+      // which is a visible hop when the finger grabs a slide that just
+      // started. Upgrade to a takeover that keeps the slider offset if rapid
+      // double swipes ever look jumpy on a device.
+      animation.value = 0;
+      _centreId = _targetId;
+      _centreUrl = _incomingUrl;
     }
+    _endDrag();
   }
 
   void onDragUpdate(double delta) {
-    if (_ignoreDrag || _committing) return;
+    if (_committing) return;
     // The cover only slides when the player is fully open.
     if (!canAnimate()) return;
     if (delta == 0) return;
     if (_direction == 0) {
       // Dragging to the left brings the next track in.
       final wanted = delta < 0 ? 1 : -1;
-      final previous = previousTrackSignal();
-      final next = nextTrackSignal();
-      final neighbor = wanted > 0 ? next : previous;
+      final neighbour = _neighbour(wanted);
       _direction = wanted;
-      _canCommit = neighbor != null;
-      _incomingUrl = neighbor?.coverUrl;
-      _targetTrackId = neighbor?.id;
+      _canCommit = neighbour != null;
+      _incomingUrl = neighbour?.url;
+      _targetId = neighbour?.id;
     }
     final distance = travel();
     // The swipe cannot cross the centre: once a direction is picked the
@@ -287,16 +285,11 @@ class CoverSwipeController {
   }
 
   void onDragEnd(double velocity) {
-    if (_ignoreDrag) {
-      _ignoreDrag = false;
-      return;
-    }
     if (_committing) return;
     final distance = travel();
     final direction = _direction;
     if (direction == 0) {
       _endDrag();
-      _clearHold();
       return;
     }
     final flung = direction > 0
@@ -309,6 +302,7 @@ class CoverSwipeController {
       return;
     }
     _committing = true;
+    _fromId = _centreId;
     if (direction > 0) {
       onNext();
     } else {
@@ -324,129 +318,228 @@ class CoverSwipeController {
   }
 
   void onDragCancel() {
-    if (_ignoreDrag) {
-      _ignoreDrag = false;
-      return;
-    }
     if (_committing) return;
     if (animation.value == 0) {
       _endDrag();
-      _clearHold();
       return;
     }
     _animateTo(0, onDone: _finishRollback);
   }
 
-  /// Slides the cover to the new track the same way a committed swipe does,
-  /// so next / previous buttons do not swap the artwork abruptly.
-  void _startTrackSlide({
-    required String? fromId,
-    required String? fromUrl,
+  /// Slides the cover to [toId] from the artwork at rest. Returns whether the
+  /// slide could start; when it cannot, the caller shows the new artwork at
+  /// once instead of leaving a stale one.
+  bool _startSlide({
     required String? toId,
     required String? toUrl,
     required int direction,
+    bool fast = false,
   }) {
-    if (!isMounted() || !canAnimate()) return;
-    if (direction == 0 || fromId == null || toId == null) return;
-    if (fromUrl == null || toUrl == null) return;
+    final fromId = _centreId;
+    final fromUrl = _centreUrl;
+    if (!isMounted() || !canAnimate()) return false;
+    if (direction == 0 || fromId == null || toId == null) return false;
+    if (fromId == toId || fromUrl == null || toUrl == null) return false;
+    _settleWatchdog?.cancel();
+    _settleWatchdog = null;
     _committing = true;
     _direction = direction;
     _canCommit = true;
-    _holdUrl = fromUrl;
+    _fromId = fromId;
+    _targetId = toId;
     _incomingUrl = toUrl;
-    _fromTrackId = fromId;
-    _targetTrackId = toId;
-    _settled = false;
-    _animateTo(-direction * travel(), onDone: _finishCommit);
+    _animateTo(-direction * travel(), onDone: _finishCommit, fast: fast);
+    return true;
   }
 
   void _animateTo(
     double target, {
     required VoidCallback onDone,
     double velocity = 0,
+    bool fast = false,
   }) {
     // Mirror the open / close gesture: the spring is seeded with the fling
     // velocity, so the cover keeps the speed the finger had on release.
-    final simulation = SpringSimulation(
-      target == 0 ? kCoverSwipeCloseSpring : kCoverSwipeExpandSpring,
-      animation.value,
-      target,
-      velocity,
-      snapToEnd: true,
-    );
+    final epoch = ++_animationEpoch;
+    final run = fast && target != 0
+        ? animation.animateTo(
+            target,
+            duration: kCoverCatchUpDuration,
+            curve: Curves.easeOutCubic,
+          )
+        : animation.animateWith(
+            SpringSimulation(
+              target == 0 ? kCoverSwipeCloseSpring : kCoverSwipeExpandSpring,
+              animation.value,
+              target,
+              velocity,
+              snapToEnd: true,
+              // The default tolerance keeps the controller running until the
+              // spring is within 0.001 px of the target, which is a few
+              // hundred ms after the cover has visibly arrived. The slide is
+              // held as "committing" for that whole tail, so the next gesture
+              // and the next track change are late. Stop as soon as the
+              // remaining motion cannot be seen.
+              tolerance: kCoverSwipeSettleTolerance,
+            ),
+          );
     unawaited(
-      animation
-          .animateWith(simulation)
-          .orCancel
-          .then(
-            (_) => onDone(),
-            onError: (Object _) {
-              // Canceled by a new gesture or by closing; the caller resets.
-            },
-          ),
+      run.orCancel.then(
+        (_) {
+          if (epoch != _animationEpoch) return;
+          onDone();
+        },
+        onError: (Object _) {
+          // Canceled by a new gesture or by closing; the caller resets.
+        },
+      ),
     );
   }
 
   void _finishRollback() {
-    if (!isMounted()) return;
-    animation.value = 0;
-    _endDrag();
-    _clearHold();
+    // The cover is back at rest on the artwork it started from.
+    _land(_centreId, _centreUrl, 0);
   }
 
   void _finishCommit() {
+    // The artwork that slid in now sits at the screen centre.
+    _land(_targetId, _incomingUrl, _direction);
+  }
+
+  /// Ends a cover animation at rest on [id] / [url] and reconciles it with
+  /// what playback reports: a lagging report is waited out, a skip that went
+  /// past the landing artwork is carried on by one short slide.
+  void _land(String? id, String? url, int travelDirection) {
     if (!isMounted()) return;
-    final incoming = _incomingUrl;
-    final targetId = _targetTrackId;
     animation.value = 0;
-    final trackId = playerStateSignal.value?.currentTrack?.id;
     _endDrag();
-    if (targetId != null && trackId == targetId) {
-      // Playback has already switched: the live cover is the incoming one.
-      _clearHold();
-    } else if (incoming != null &&
-        (trackId == _fromTrackId || trackId == null)) {
-      // Playback is still catching up. Keep showing the artwork that just
-      // slid in until the state reports the new track.
-      _holdUrl = incoming;
-      _settled = true;
-      _settleWatchdog?.cancel();
-      _settleWatchdog = Timer(kCoverSettleTimeout, () {
-        // The skip failed or the wave fetch never landed. Give the cover
-        // back to the track that is actually playing instead of leaving a
-        // foreign artwork with the old title forever.
-        if (!isMounted() || !_settled) return;
-        _clearHold();
-        onChanged();
-      });
-    } else {
-      _clearHold();
+    _setCentre(id, url);
+
+    final live = playerStateSignal.value?.currentTrack;
+    final liveId = live?.id;
+    if (liveId == null || liveId == id) {
+      // Playback is on the artwork at rest.
+      _clearSlide();
+      onChanged();
+      return;
+    }
+    if (_isBehind(liveId, id, travelDirection)) {
+      // Playback has not caught up yet: keep the artwork that just landed
+      // until it does.
+      _armSettleWatchdog(travelDirection);
+      onChanged();
+      return;
+    }
+    final direction = _pending?.direction ?? _queueDirection(id, liveId);
+    _pending = null;
+    if (!_startSlide(
+      toId: liveId,
+      toUrl: live!.coverUrl,
+      direction: direction,
+      fast: true,
+    )) {
+      _setCentre(liveId, live.coverUrl);
+      onChanged();
     }
   }
 
-  /// Direction of a queue move. The index delta is authoritative: neighbour
-  /// signals read an asynchronous queue list and can still point at the
-  /// previous track when the new one is reported, which used to leave the
-  /// direction at 0 and swap the artwork without a slide. Falls back to the
-  /// neighbour heuristic when the index did not move (queue replaced in
-  /// place) or is unknown.
-  int _moveDirection({
-    required String? oldTrackId,
-    required int? oldIndex,
-    required int? newIndex,
-    required int newCount,
-  }) {
-    final byIndex = coverMoveDirection(oldIndex, newIndex, newCount);
-    return byIndex != 0 ? byIndex : _trackChangeDirection(oldTrackId);
+  /// Whether [liveId] has not reached [centreId] yet, in the direction the
+  /// cover is travelling. Without a usable queue position the only lagging
+  /// report that can be recognised is the one still on the original track.
+  bool _isBehind(String liveId, String? centreId, int travelDirection) {
+    if (travelDirection == 0) return liveId == _fromId;
+    final list = queue();
+    final live = _indexOf(list, liveId);
+    final centre = _indexOf(list, centreId);
+    // A two-track queue only has one other track, so a wrap there is the track
+    // the cover left; the index delta cannot tell it from an ordinary move.
+    if (live < 0 || centre < 0 || list.length < 3) {
+      return liveId == _fromId;
+    }
+    return coverMoveDirection(live, centre, list.length) == travelDirection;
   }
 
-  /// Direction of a queue move, inferred from the old track still being one
-  /// of the neighbours of the new one.
-  int _trackChangeDirection(String? oldTrackId) {
-    if (oldTrackId == null) return 0;
-    if (previousTrackSignal()?.id == oldTrackId) return 1;
-    if (nextTrackSignal()?.id == oldTrackId) return -1;
-    return 0;
+  /// Neighbour of the centre in the queue, wrapping only in repeat-all.
+  ({String? id, String? url})? _neighbour(int direction) {
+    final list = queue();
+    final index = _indexOf(list, _centreId);
+    if (index < 0) return null;
+    final target = coverNeighbourIndex(index, direction, list.length);
+    if (target != null) {
+      final track = list[target];
+      return (id: track.id, url: track.coverUrl);
+    }
+    if (list.length < 2) return null;
+    if (playerStateSignal.value?.repeatMode != RepeatModeDto.all) return null;
+    final track = direction > 0 ? list.first : list.last;
+    return (id: track.id, url: track.coverUrl);
+  }
+
+  int _indexOf(List<SimpleTrackDto> list, String? id) =>
+      id == null ? -1 : list.indexWhere((track) => track.id == id);
+
+  /// Direction from [fromId] to [toId] in the queue, 0 when unknown.
+  int _queueDirection(String? fromId, String? toId) {
+    final list = queue();
+    final from = _indexOf(list, fromId);
+    final to = _indexOf(list, toId);
+    if (from < 0 || to < 0 || from == to) return 0;
+    return to > from ? 1 : -1;
+  }
+
+  /// Direction of a reported track change. The queue index delta is
+  /// authoritative; when it did not move (queue replaced in place) the queue
+  /// list still knows both positions.
+  int _changeDirection(
+    String? fromId,
+    int? fromIndex,
+    String? toId,
+    int? toIndex,
+    int count,
+  ) {
+    // A two-track queue can only wrap through repeat-all, and the index delta
+    // calls that wrap a backwards move. Count it as forward, the usual skip.
+    if (count == 2 &&
+        playerStateSignal.value?.repeatMode == RepeatModeDto.all) {
+      if (fromIndex == 1 && toIndex == 0) return 1;
+      if (fromIndex == 0 && toIndex == 1) return -1;
+    }
+    final byIndex = coverMoveDirection(fromIndex, toIndex, count);
+    if (byIndex != 0) return byIndex;
+    return _queueDirection(fromId, toId);
+  }
+
+  /// Artwork at rest follows the live track again.
+  void _syncCentre() {
+    _settleWatchdog?.cancel();
+    _settleWatchdog = null;
+    final url = playerStateSignal.value?.currentTrack?.coverUrl;
+    if (url == _centreUrl) return;
+    _centreUrl = url;
+    onChanged();
+  }
+
+  void _setCentre(String? id, String? url) {
+    _centreId = id;
+    _centreUrl = url;
+    if (id != null && id == playerStateSignal.value?.currentTrack?.id) {
+      _settleWatchdog?.cancel();
+      _settleWatchdog = null;
+    }
+  }
+
+  /// Gives the artwork back to the live track when a commit landed but the
+  /// state never reported a new track (failed skip, failed wave fetch).
+  void _armSettleWatchdog(int travelDirection) {
+    _settleWatchdog?.cancel();
+    _heldDirection = travelDirection;
+    _settleWatchdog = Timer(kCoverSettleTimeout, () {
+      if (!isMounted()) return;
+      final live = playerStateSignal.value?.currentTrack;
+      if (live?.id == null || live?.id == _centreId) return;
+      _setCentre(live!.id, live.coverUrl);
+      onChanged();
+    });
   }
 
   void _endDrag() {
@@ -456,12 +549,8 @@ class CoverSwipeController {
     _committing = false;
   }
 
-  void _clearHold() {
-    _settleWatchdog?.cancel();
-    _settleWatchdog = null;
-    _holdUrl = null;
-    _fromTrackId = null;
-    _targetTrackId = null;
-    _settled = false;
+  void _clearSlide() {
+    _fromId = null;
+    _targetId = null;
   }
 }

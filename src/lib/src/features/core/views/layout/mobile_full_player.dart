@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/physics.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:m3e_core/m3e_core.dart';
@@ -191,9 +192,9 @@ class _MobileFullPlayerState extends State<MobileFullPlayer>
     final initialState = playerStateSignal.value;
     _swipe = CoverSwipeController(
       animation: _coverSwipe,
-      initialTrackId: initialState?.currentTrack?.id,
-      initialCoverUrl: initialState?.currentTrack?.coverUrl,
+      initialTrack: initialState?.currentTrack,
       initialIndex: initialState?.queueIndex,
+      queue: () => queueTracksSignal().value ?? const [],
       travel: () => _swipeTravel(context),
       canAnimate: () => !_closing && _controller.value >= 0.95,
       isMounted: () => mounted,
@@ -776,6 +777,10 @@ class _MobileFullPlayerState extends State<MobileFullPlayer>
 
               return GestureDetector(
                 behavior: HitTestBehavior.opaque,
+                // Follow the finger from where it went down: with the default
+                // the cover only starts moving after the drag is accepted,
+                // which reads as lag on the first few pixels.
+                dragStartBehavior: DragStartBehavior.down,
                 onTap: onTap,
                 onHorizontalDragStart: _onCoverDragStart,
                 onHorizontalDragUpdate: _onCoverDragUpdate,

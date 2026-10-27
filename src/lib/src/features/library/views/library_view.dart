@@ -242,7 +242,7 @@ class _LibraryViewState extends State<LibraryView>
             Tab(text: 'Плейлисты'),
             Tab(text: 'Любимые альбомы'),
             Tab(text: 'Любимые исполнители'),
-            Tab(text: 'Дизлайки'),
+            Tab(text: 'Не нравится'),
           ],
         ),
         Expanded(
@@ -822,7 +822,7 @@ class _DislikedTracksTabState extends State<_DislikedTracksTab> {
                   hasScrollBody: false,
                   child: Center(
                     child: Text(
-                      isLoading ? 'Загрузка…' : 'Нет дизлайков',
+                      isLoading ? 'Загрузка…' : 'Нет нелюбимых треков',
                       style: TextStyle(
                         color: cs.onSurface.withValues(alpha: 0.38),
                       ),

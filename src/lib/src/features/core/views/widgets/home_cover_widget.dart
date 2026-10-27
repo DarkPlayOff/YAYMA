@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:material_ui/material_ui.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/features/core/providers/navigation_provider.dart';
@@ -34,13 +32,6 @@ class _HomeCoverWidgetState extends State<HomeCoverWidget> {
         if (height < 650) size = showLyrics ? 200.0 : 260.0;
         if (isNarrow && !showLyrics) size = width * 0.8;
 
-        // The mobile cover keeps the motion of the queue carousel it replaced.
-        final isMobile = Platform.isAndroid;
-        final coverDuration = isMobile
-            ? AppCoverMotion.duration
-            : const Duration(milliseconds: 400);
-        final coverCurve = isMobile ? AppCoverMotion.curve : Curves.easeOutBack;
-
         return HoverScale(
           hoverScale: 1.035,
           duration: const Duration(milliseconds: 400),
@@ -52,8 +43,8 @@ class _HomeCoverWidgetState extends State<HomeCoverWidget> {
               : null,
           child: AnimatedScale(
             scale: isPlaying ? 1.0 : AppCoverMotion.largePausedScale,
-            duration: coverDuration,
-            curve: coverCurve,
+            duration: const Duration(milliseconds: 400),
+            curve: Curves.easeOutBack,
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 350),
               curve: Curves.easeInOutCubic,

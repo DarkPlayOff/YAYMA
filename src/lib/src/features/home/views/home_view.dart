@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:material_ui/material_ui.dart';
 import 'package:signals_flutter/signals_flutter.dart';
@@ -135,12 +134,10 @@ class HomeView extends StatelessWidget {
       bottom: 0,
       child: Container(
         padding: EdgeInsets.only(
-          left: Platform.isAndroid ? 20 : 60,
-          right: Platform.isAndroid ? 20 : 60,
-          top: Platform.isAndroid ? 20 : 40,
-          bottom:
-              (Platform.isAndroid ? 100 : 40) +
-              MediaQuery.viewPaddingOf(context).bottom,
+          left: 60,
+          right: 60,
+          top: 40,
+          bottom: 40 + MediaQuery.viewPaddingOf(context).bottom,
         ),
         child: Stack(
           children: [
@@ -165,23 +162,6 @@ class HomeView extends StatelessWidget {
                 },
               ),
             ),
-            if (Platform.isAndroid)
-              Positioned(
-                top: 10,
-                left: 0,
-                child: SafeArea(
-                  child: IconButton(
-                    icon: Icon(
-                      Icons.arrow_back_ios_new_rounded,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      size: 24,
-                    ),
-                    onPressed: () {
-                      showLyricsSignal.value = false;
-                    },
-                  ),
-                ),
-              ),
           ],
         ),
       ),
@@ -564,24 +544,22 @@ class _HomeMainControls extends StatelessWidget {
             CommonQualitySelector(iconSize: small ? 20 : 24),
           ],
         ),
-        if (!Platform.isAndroid) ...[
-          SizedBox(height: small ? 20 : 32),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.volume_down, color: onSurfaceVariant, size: 18),
-              const SizedBox(width: 12),
-              CommonVolumeSlider(
-                width: small ? 180 : 240,
-                activeColor: accentColor,
-              ),
-              const SizedBox(width: 12),
-              Icon(Icons.volume_up, color: onSurfaceVariant, size: 18),
-              const SizedBox(width: 8),
-              const AudioDeviceButton(),
-            ],
-          ),
-        ],
+        SizedBox(height: small ? 20 : 32),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.volume_down, color: onSurfaceVariant, size: 18),
+            const SizedBox(width: 12),
+            CommonVolumeSlider(
+              width: small ? 180 : 240,
+              activeColor: accentColor,
+            ),
+            const SizedBox(width: 12),
+            Icon(Icons.volume_up, color: onSurfaceVariant, size: 18),
+            const SizedBox(width: 8),
+            const AudioDeviceButton(),
+          ],
+        ),
       ],
     );
   }
