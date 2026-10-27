@@ -30,6 +30,7 @@
 
 - [Vyfor](https://github.com/vyfor) — за исходный TUI-клиент [YaMusic](https://github.com/yamusic/yamusic) и библиотеку [yandex-music-rs](https://github.com/vyfor/yandex-music-rs) для работы с API Яндекса
 - [LrcLib](https://lrclib.net), [BetterLyrics](https://github.com/better-lyrics/better-lyrics), [YouLyPlus](https://github.com/ibratabian17/YouLyPlus) — за базы текстов песен
+- [Metrolist](https://github.com/MetrolistGroup/Metrolist) — за референс полноэкранного режима текстов
 
 ## Лицензия
 

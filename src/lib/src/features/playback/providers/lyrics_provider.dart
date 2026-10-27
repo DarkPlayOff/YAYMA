@@ -36,6 +36,23 @@ class LyricsResult {
   LyricsResult(this.items, this.providerName);
 }
 
+/// First index in [items] whose time is past [ms], or `items.length` if none.
+/// `items` is time-sorted, so this binary-searches instead of scanning — it is
+/// called on every progress tick (~8/sec while playing).
+int upperBoundByTime(List<LyricItem> items, int ms) {
+  var lo = 0;
+  var hi = items.length;
+  while (lo < hi) {
+    final mid = (lo + hi) >> 1;
+    if (items[mid].time.inMilliseconds > ms) {
+      hi = mid;
+    } else {
+      lo = mid + 1;
+    }
+  }
+  return lo;
+}
+
 const int _maxLyricsCacheSize = 20;
 
 /// Bounded LRU of per-track lyrics fetches. Reads promote entries and

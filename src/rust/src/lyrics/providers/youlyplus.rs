@@ -3,13 +3,14 @@ use serde::Deserialize;
 
 use crate::lyrics::{CLIENT, ParsedLine, ParsedWord, lrc};
 
+// Only mirrors that actually answer are listed. Dropped for good:
+// - atomix.one: its Fastly deployment serves the default `*.ssl.fastly.net`
+//   certificate, so TLS verification fails on every request.
+// - prjktla.workers.dev: Cloudflare error 1042 on every request.
+// - lyricsplus-seven / lyrics-plus-backend.vercel.app: 402 DEPLOYMENT_DISABLED.
 const SERVERS: &[&str] = &[
     "https://lyricsplus.prjktla.my.id",
-    "https://lyricsplus.atomix.one",
     "https://lyricsplus.binimum.org",
-    "https://lyricsplus.prjktla.workers.dev",
-    "https://lyricsplus-seven.vercel.app",
-    "https://lyrics-plus-backend.vercel.app",
 ];
 
 #[derive(Debug, Deserialize)]

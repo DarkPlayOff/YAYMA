@@ -13,6 +13,7 @@ import 'package:yayma/src/features/core/providers/visual_effects_provider.dart';
 import 'package:yayma/src/features/core/theme/app_tokens.dart';
 import 'package:yayma/src/features/core/views/layout/mobile_cover_swipe.dart';
 import 'package:yayma/src/features/core/views/layout/mobile_plate.dart';
+import 'package:yayma/src/features/core/views/layout/player_lyrics.dart';
 import 'package:yayma/src/features/core/views/widgets/app_cover.dart';
 import 'package:yayma/src/features/core/views/widgets/common_ui.dart';
 import 'package:yayma/src/features/core/views/widgets/rust_cached_image.dart';
@@ -152,12 +153,31 @@ class _MobileFullPlayerState extends State<MobileFullPlayer>
   String? _nextCoverUrl;
 
   bool _closing = false;
+  bool _lyrics = false;
+
+  /// 0 = cover, 1 = lyrics. Fades the artwork out instead of swapping the
+  /// two layouts within a single frame.
+  late final AnimationController _lyricsFade;
+
+  void _toggleLyrics() {
+    setState(() => _lyrics = !_lyrics);
+    if (_lyrics) {
+      _lyricsFade.forward();
+    } else {
+      _lyricsFade.reverse();
+    }
+  }
 
   @override
   void initState() {
     super.initState();
     _controller = AnimationController(vsync: this);
     _controller.addListener(_syncProgress);
+    _lyricsFade = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 240),
+      value: _lyrics ? 1 : 0,
+    );
     _coverSwipe = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 260),
@@ -167,7 +187,7 @@ class _MobileFullPlayerState extends State<MobileFullPlayer>
       lowerBound: double.negativeInfinity,
       upperBound: double.infinity,
     );
-    _animations = Listenable.merge([_controller, _coverSwipe]);
+    _animations = Listenable.merge([_controller, _coverSwipe, _lyricsFade]);
     final initialState = playerStateSignal.value;
     _swipe = CoverSwipeController(
       animation: _coverSwipe,
@@ -223,6 +243,7 @@ class _MobileFullPlayerState extends State<MobileFullPlayer>
     _swipe.dispose();
     _controller.dispose();
     _coverSwipe.dispose();
+    _lyricsFade.dispose();
     super.dispose();
   }
 
@@ -261,6 +282,7 @@ class _MobileFullPlayerState extends State<MobileFullPlayer>
       unawaited(_springTo(1, velocity));
       return;
     }
+    if (_lyrics) setState(() => _lyrics = false);
     _closing = true;
     unawaited(
       _springTo(0, velocity).then((_) {
@@ -271,6 +293,7 @@ class _MobileFullPlayerState extends State<MobileFullPlayer>
 
   Future<void> _dismiss() async {
     if (_closing) return;
+    if (_lyrics) setState(() => _lyrics = false);
     _closing = true;
     if (_controller.value <= 0) {
       await _revealMiniPlayer();
@@ -404,6 +427,7 @@ class _MobileFullPlayerState extends State<MobileFullPlayer>
                   coverScale: coverScale,
                   prevCoverUrl: prevCoverUrl,
                   nextCoverUrl: nextCoverUrl,
+                  coverFade: _lyricsFade.value,
                   child: child!,
                 ),
               ),
@@ -415,6 +439,9 @@ class _MobileFullPlayerState extends State<MobileFullPlayer>
                 padding: padding,
                 accent: accent,
                 onClose: _dismiss,
+                onToggleLyrics: _toggleLyrics,
+                lyrics: _lyrics,
+                lyricsFade: _lyricsFade,
                 onOpenAlbum: _openAlbum,
                 onOpenArtist: _openArtist,
               ),
@@ -435,6 +462,7 @@ class _MobileFullPlayerState extends State<MobileFullPlayer>
     required double coverScale,
     required String? prevCoverUrl,
     required String? nextCoverUrl,
+    required double coverFade,
     required Widget child,
   }) {
     final panelT = _controller.value;
@@ -605,51 +633,60 @@ class _MobileFullPlayerState extends State<MobileFullPlayer>
                       ),
                     ),
                   ),
-                // The neighbour covers stay mounted off-screen: that resolves,
-                // downloads and rasterises their artwork ahead of the swipe,
-                // so the cover that slides in is already there.
-                // They only become visible and interactive while they actually
-                // slide in, so the off-screen copies never paint or steal
-                // gestures.
-                for (final neighbour in [
-                  (direction: -1, url: prevCoverUrl),
-                  (direction: 1, url: nextCoverUrl),
-                ])
+                if (coverFade < 1) ...[
+                  // The neighbour covers stay mounted off-screen: that resolves,
+                  // downloads and rasterises their artwork ahead of the swipe,
+                  // so the cover that slides in is already there.
+                  // They only become visible and interactive while they actually
+                  // slide in, so the off-screen copies never paint or steal
+                  // gestures.
+                  for (final neighbour in [
+                    (direction: -1, url: prevCoverUrl),
+                    (direction: 1, url: nextCoverUrl),
+                  ])
+                    _buildCover(
+                      context,
+                      panelRect,
+                      openCoverRect,
+                      coverRadius,
+                      panelT,
+                      metrics.coverRect.width,
+                      dx:
+                          _coverSwipe.value +
+                          neighbour.direction * neighborDistance,
+                      coverUrl:
+                          _swipe.direction == neighbour.direction &&
+                              _swipe.canCommit
+                          ? _swipe.incomingUrl
+                          : neighbour.url,
+                      opacity:
+                          _swipe.direction == neighbour.direction &&
+                              _swipe.canCommit
+                          ? 1 - coverFade
+                          : 0,
+                      interactive:
+                          coverFade == 0 &&
+                          _swipe.direction == neighbour.direction &&
+                          _swipe.canCommit,
+                    ),
                   _buildCover(
                     context,
                     panelRect,
-                    openCoverRect,
+                    coverRect,
                     coverRadius,
                     panelT,
                     metrics.coverRect.width,
-                    dx:
-                        _coverSwipe.value +
-                        neighbour.direction * neighborDistance,
-                    coverUrl: _swipe.direction == neighbour.direction &&
-                            _swipe.canCommit
-                        ? _swipe.incomingUrl
-                        : neighbour.url,
-                    opacity: _swipe.direction == neighbour.direction &&
-                            _swipe.canCommit
-                        ? 1
-                        : 0,
-                    interactive: _swipe.direction == neighbour.direction &&
-                        _swipe.canCommit,
+                    dx: _coverSwipe.value,
+                    coverUrl: _swipe.holdUrl,
+                    opacity: 1 - coverFade,
+                    scale: 1 - 0.06 * coverFade,
+                    interactive: coverFade == 0,
+                    onTap: () {
+                      final albumId = trackMetadataSignal().albumId;
+                      if (albumId != null) _openAlbum(albumId);
+                    },
                   ),
-                _buildCover(
-                  context,
-                  panelRect,
-                  coverRect,
-                  coverRadius,
-                  panelT,
-                  metrics.coverRect.width,
-                  dx: _coverSwipe.value,
-                  coverUrl: _swipe.holdUrl,
-                  onTap: () {
-                    final albumId = trackMetadataSignal().albumId;
-                    if (albumId != null) _openAlbum(albumId);
-                  },
-                ),
+                ],
                 if (miniContentOpacity > 0)
                   Positioned(
                     left: MiniPlateLayout.sideInset,
@@ -695,6 +732,7 @@ class _MobileFullPlayerState extends State<MobileFullPlayer>
     String? coverUrl,
     VoidCallback? onTap,
     double opacity = 1,
+    double scale = 1,
     bool interactive = true,
   }) {
     // The shadow is the most expensive thing to paint here, and it only
@@ -783,9 +821,12 @@ class _MobileFullPlayerState extends State<MobileFullPlayer>
           excluding: !interactive,
           child: Transform.translate(
             offset: Offset(dx, 0),
-            child: opacity >= 1
-                ? artwork
-                : Opacity(opacity: opacity, child: artwork),
+            child: Transform.scale(
+              scale: scale,
+              child: opacity >= 1
+                  ? artwork
+                  : Opacity(opacity: opacity, child: artwork),
+            ),
           ),
         ),
       ),
@@ -963,6 +1004,13 @@ class _FullPlayerContent extends StatelessWidget {
   final EdgeInsets padding;
   final Color accent;
   final VoidCallback onClose;
+  final VoidCallback onToggleLyrics;
+  final bool lyrics;
+
+  /// 0 = cover, 1 = lyrics. Keeps the text fading out while the artwork
+  /// fades back in. Listened to inside, because this widget is cached as the
+  /// per-frame builder's `child` and would otherwise keep a stale value.
+  final Animation<double> lyricsFade;
   final ValueChanged<String> onOpenAlbum;
   final ValueChanged<String> onOpenArtist;
 
@@ -974,6 +1022,9 @@ class _FullPlayerContent extends StatelessWidget {
     required this.padding,
     required this.accent,
     required this.onClose,
+    required this.onToggleLyrics,
+    required this.lyrics,
+    required this.lyricsFade,
     required this.onOpenAlbum,
     required this.onOpenArtist,
   });
@@ -984,86 +1035,183 @@ class _FullPlayerContent extends StatelessWidget {
       type: MaterialType.transparency,
       child: Padding(
         padding: EdgeInsets.only(top: padding.top, bottom: padding.bottom),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _Reveal(
-              animation: animation,
-              interval: const Interval(0.18, 0.55, curve: Curves.easeOutCubic),
-              offset: 10,
-              child: SizedBox(
-                height: metrics.headerHeight,
-                child: _FullPlayerHeader(onClose: onClose),
-              ),
-            ),
-            SizedBox(height: metrics.coverSpace),
-            _CoverClearReveal(
-              animation: animation,
-              coverStart: coverStart,
-              coverEnd: coverEnd,
-              sectionTop:
-                  padding.top + metrics.headerHeight + metrics.coverSpace,
-              offset: 16,
-              child: SizedBox(
-                height: metrics.infoHeight,
-                child: _ContentColumn(
-                  width: metrics.sectionWidth,
-                  leftPadding: metrics.horizontalPadding,
-                  child: _FullPlayerTrackInfo(
-                    onOpenAlbum: onOpenAlbum,
-                    onOpenArtist: onOpenArtist,
-                  ),
-                ),
-              ),
-            ),
-            _Reveal(
-              animation: animation,
-              interval: const Interval(0.36, 0.78, curve: Curves.easeOutCubic),
-              offset: 14,
-              child: SizedBox(
-                height: metrics.progressHeight,
-                child: _ContentColumn(
-                  width: metrics.sectionWidth,
-                  leftPadding: metrics.horizontalPadding,
-                  child: _FullPlayerProgress(
-                    accent: accent,
-                    width: metrics.sectionWidth,
-                  ),
-                ),
-              ),
-            ),
-            _Reveal(
-              animation: animation,
-              interval: const Interval(0.44, 0.88, curve: Curves.easeOutCubic),
-              offset: 18,
-              child: SizedBox(
-                height: metrics.controlsHeight,
-                child: _ContentColumn(
-                  width: metrics.sectionWidth,
-                  leftPadding: metrics.horizontalPadding,
-                  child: _FullPlayerControls(accent: accent),
-                ),
-              ),
-            ),
-            _Reveal(
-              animation: animation,
-              interval: const Interval(0.52, 0.96, curve: Curves.easeOutCubic),
-              offset: 16,
-              child: SizedBox(
-                height: metrics.actionsHeight,
-                child: _ContentColumn(
-                  width: metrics.sectionWidth,
-                  leftPadding: metrics.horizontalPadding,
-                  child: _FullPlayerActions(accent: accent),
-                ),
-              ),
-            ),
-            // The height that is left over goes below the actions row, so the
-            // whole player stays one compact block instead of the controls
-            // being pinned to the bottom of the screen.
-            const Spacer(),
-            SizedBox(height: metrics.bottomGap),
-          ],
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            // The height the cover block leaves unused in cover mode. The
+            // lyrics pane grows into it, so both modes still share one layout
+            // and only the hero area changes size while they cross-fade.
+            final fixed =
+                metrics.headerHeight +
+                metrics.coverSpace +
+                metrics.infoHeight +
+                metrics.progressHeight +
+                metrics.controlsHeight +
+                metrics.actionsHeight +
+                metrics.bottomGap;
+            final spare = math.max(0, constraints.maxHeight - fixed);
+            return AnimatedBuilder(
+              animation: lyricsFade,
+              builder: (context, _) {
+                final coverFade = lyricsFade.value;
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _Reveal(
+                      animation: animation,
+                      interval: const Interval(
+                        0.18,
+                        0.55,
+                        curve: Curves.easeOutCubic,
+                      ),
+                      offset: 10,
+                      child: SizedBox(
+                        height: metrics.headerHeight,
+                        child: _FullPlayerHeader(
+                          onClose: onClose,
+                          onToggleLyrics: onToggleLyrics,
+                          lyrics: lyrics,
+                          accent: accent,
+                        ),
+                      ),
+                    ),
+                    SizedBox(
+                      height:
+                          metrics.coverSpace +
+                          metrics.infoHeight +
+                          spare * coverFade,
+                      child: Stack(
+                        children: [
+                          if (coverFade < 1)
+                            Opacity(
+                              opacity: 1 - coverFade,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  SizedBox(height: metrics.coverSpace),
+                                  SizedBox(
+                                    height: metrics.infoHeight,
+                                    child: _CoverClearReveal(
+                                      animation: animation,
+                                      coverStart: coverStart,
+                                      coverEnd: coverEnd,
+                                      sectionTop:
+                                          padding.top +
+                                          metrics.headerHeight +
+                                          metrics.coverSpace,
+                                      offset: 16,
+                                      child: _ContentColumn(
+                                        width: metrics.sectionWidth,
+                                        leftPadding: metrics.horizontalPadding,
+                                        child: _FullPlayerTrackInfo(
+                                          onOpenAlbum: onOpenAlbum,
+                                          onOpenArtist: onOpenArtist,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          if (coverFade > 0)
+                            Positioned.fill(
+                              child: IgnorePointer(
+                                ignoring: !lyrics,
+                                child: Opacity(
+                                  opacity: coverFade,
+                                  child: Padding(
+                                    padding: EdgeInsets.symmetric(
+                                      horizontal: metrics.horizontalPadding,
+                                    ),
+                                    child: _Reveal(
+                                      animation: animation,
+                                      interval: const Interval(
+                                        0.18,
+                                        0.55,
+                                        curve: Curves.easeOutCubic,
+                                      ),
+                                      offset: 10,
+                                      child: SignalBuilder(
+                                        builder: (context) {
+                                          final trackId =
+                                              trackMetadataSignal().id;
+                                          if (trackId == null) {
+                                            return const SizedBox.shrink();
+                                          }
+                                          return PlayerLyrics(
+                                            key: ValueKey(trackId),
+                                            trackId: trackId,
+                                            accent: accent,
+                                          );
+                                        },
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    _Reveal(
+                      animation: animation,
+                      interval: const Interval(
+                        0.36,
+                        0.78,
+                        curve: Curves.easeOutCubic,
+                      ),
+                      offset: 14,
+                      child: SizedBox(
+                        height: metrics.progressHeight,
+                        child: _ContentColumn(
+                          width: metrics.sectionWidth,
+                          leftPadding: metrics.horizontalPadding,
+                          child: _FullPlayerProgress(
+                            accent: accent,
+                            width: metrics.sectionWidth,
+                          ),
+                        ),
+                      ),
+                    ),
+                    _Reveal(
+                      animation: animation,
+                      interval: const Interval(
+                        0.44,
+                        0.88,
+                        curve: Curves.easeOutCubic,
+                      ),
+                      offset: 18,
+                      child: SizedBox(
+                        height: metrics.controlsHeight,
+                        child: _ContentColumn(
+                          width: metrics.sectionWidth,
+                          leftPadding: metrics.horizontalPadding,
+                          child: _FullPlayerControls(accent: accent),
+                        ),
+                      ),
+                    ),
+                    _Reveal(
+                      animation: animation,
+                      interval: const Interval(
+                        0.52,
+                        0.96,
+                        curve: Curves.easeOutCubic,
+                      ),
+                      offset: 16,
+                      child: SizedBox(
+                        height: metrics.actionsHeight,
+                        child: _ContentColumn(
+                          width: metrics.sectionWidth,
+                          leftPadding: metrics.horizontalPadding,
+                          child: _FullPlayerActions(accent: accent),
+                        ),
+                      ),
+                    ),
+                    SizedBox(height: metrics.bottomGap),
+                  ],
+                );
+              },
+            );
+          },
         ),
       ),
     );
@@ -1072,8 +1220,16 @@ class _FullPlayerContent extends StatelessWidget {
 
 class _FullPlayerHeader extends StatelessWidget {
   final VoidCallback onClose;
+  final VoidCallback onToggleLyrics;
+  final bool lyrics;
+  final Color accent;
 
-  const _FullPlayerHeader({required this.onClose});
+  const _FullPlayerHeader({
+    required this.onClose,
+    required this.onToggleLyrics,
+    required this.lyrics,
+    required this.accent,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1104,7 +1260,25 @@ class _FullPlayerHeader extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(width: 48),
+          SignalBuilder(
+            builder: (context) {
+              final hasTrack = trackMetadataSignal().id != null;
+              return SizedBox(
+                width: 48,
+                child: IconButton(
+                  onPressed: hasTrack ? onToggleLyrics : null,
+                  tooltip: 'Текст песни',
+                  icon: Icon(
+                    Icons.lyrics_rounded,
+                    size: 24,
+                    color: lyrics ? accent : onSurfaceVariant,
+                  ),
+                  padding: EdgeInsets.zero,
+                  visualDensity: VisualDensity.compact,
+                ),
+              );
+            },
+          ),
         ],
       ),
     );

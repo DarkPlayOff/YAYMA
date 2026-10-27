@@ -20,23 +20,6 @@ const Curve _lyricTransitionCurve = Curves.easeOutCubic;
 /// own short duration rather than [_lyricTransitionDuration].
 const Duration _karaokeWordDuration = Duration(milliseconds: 150);
 
-/// First index in [lines] whose time is past [currentMs], or `lines.length`
-/// if none. `lines` is time-sorted, so this binary-searches instead of
-/// scanning — called on every progress tick (~8/sec while playing).
-int _upperBoundByTime(List<LyricItem> lines, int currentMs) {
-  var lo = 0;
-  var hi = lines.length;
-  while (lo < hi) {
-    final mid = (lo + hi) >> 1;
-    if (lines[mid].time.inMilliseconds > currentMs) {
-      hi = mid;
-    } else {
-      lo = mid + 1;
-    }
-  }
-  return lo;
-}
-
 /// Shared type treatment for lyric text (plain and karaoke word rendering),
 /// which differ only in color, weight, and an optional highlight glow.
 TextStyle _lyricTextStyle({
@@ -123,7 +106,7 @@ class _LyricsWidgetState extends State<LyricsWidget> {
 
       // Lines are time-sorted, so a binary search for the first line past
       // `currentMs` is enough — this runs on every progress tick (~8/sec).
-      var activeIndex = _upperBoundByTime(lines, currentMs) - 1;
+      var activeIndex = upperBoundByTime(lines, currentMs) - 1;
 
       if (activeIndex == -2) {
         activeIndex = lines.length - 1;
