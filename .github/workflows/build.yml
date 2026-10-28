@@ -10,6 +10,7 @@ jobs:
 
   build-linux:
     runs-on: ubuntu-22.04
+    timeout-minutes: 60
     env:
       RUSTFLAGS: -C link-arg=-fuse-ld=lld
       CC: clang
@@ -24,18 +25,34 @@ jobs:
           sudo apt-get install -y build-essential cmake ninja-build pkg-config libgtk-3-dev libsecret-1-dev libsoup-3.0-dev libwebkit2gtk-4.1-dev libasound2-dev libkeybinder-3.0-dev curl git unzip clang lld libclang-dev llvm-dev libayatana-appindicator3-dev libdbus-1-dev
 
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+        # Same version as src/rust/rust-toolchain.toml, otherwise the FRB hook
+        # downloads a second toolchain on every run.
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.97.1
 
       - name: Setup Rust Cache
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: "src/rust -> src/target"
+          workspaces: "src/rust"
+
+      - name: Cache Rust Target
+        uses: actions/cache@v4
+        with:
+          # Cargo writes to the FRB native-assets build dir, not src/rust/target.
+          path: |
+            src/.dart_tool/hooks_runner/*/*/target
+            ${{ runner.temp }}/frb_native_assets_*
+          key: ${{ runner.os }}-linux-target-${{ hashFiles('src/rust/Cargo.lock', 'src/rust/rust-toolchain.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-linux-target-
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
           cache: true
+          pub-cache: true
 
       - name: Restore Bridge
         uses: ./.github/actions/restore-bridge
@@ -56,11 +73,14 @@ jobs:
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
+          # Artifacts are already compressed (apk/zip/dmg/tar.gz); re-gzipping costs minutes.
+          compression-level: 0
           name: linux_x64_release
           path: yayma-linux-*.tar.gz
 
   build-windows:
     runs-on: windows-latest
+    timeout-minutes: 90
     env:
       RUSTFLAGS: -C linker=lld-link.exe
       CC: clang
@@ -70,18 +90,34 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+        # Same version as src/rust/rust-toolchain.toml, otherwise the FRB hook
+        # downloads a second toolchain on every run.
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.97.1
 
       - name: Setup Rust Cache
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: "src/rust -> src/target"
+          workspaces: "src/rust"
+
+      - name: Cache Rust Target
+        uses: actions/cache@v4
+        with:
+          # Cargo writes to the FRB native-assets build dir, not src/rust/target.
+          path: |
+            src/.dart_tool/hooks_runner/*/*/target
+            ${{ runner.temp }}/frb_native_assets_*
+          key: ${{ runner.os }}-windows-target-${{ hashFiles('src/rust/Cargo.lock', 'src/rust/rust-toolchain.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-windows-target-
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
           cache: true
+          pub-cache: true
 
       - name: Restore Bridge
         uses: ./.github/actions/restore-bridge
@@ -99,12 +135,23 @@ jobs:
           $VERSION = $env:GITHUB_REF -replace 'refs/tags/v', ''
           if ($VERSION -eq $env:GITHUB_REF) { $VERSION = "manual" }
           "VERSION=$VERSION" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          Compress-Archive -Path "src\build\windows\x64\runner\Release\*" -DestinationPath "yayma-windows-x64-$VERSION.zip"
+          $zip = Join-Path $env:GITHUB_WORKSPACE "yayma-windows-x64-$VERSION.zip"
+          $sevenZip = @("$env:ProgramFiles\7-Zip\7z.exe", "${env:ProgramFiles(x86)}\7-Zip\7z.exe") | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $sevenZip) { throw "7-Zip not found on runner" }
+          Push-Location "src\build\windows\x64\runner\Release"
+          # 7z is multi-threaded; Compress-Archive is single-threaded and takes minutes here.
+          # No file args = add everything from the current dir, stored at archive root.
+          & $sevenZip a -tzip -mx=5 $zip
+          $code = $LASTEXITCODE
+          Pop-Location
+          if ($code -ne 0) { exit 1 }
         shell: powershell
 
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
+          # Artifacts are already compressed (apk/zip/dmg/tar.gz); re-gzipping costs minutes.
+          compression-level: 0
           name: windows_x64_release
           path: yayma-windows-*.zip
 
@@ -117,11 +164,14 @@ jobs:
       - name: Upload Installer
         uses: actions/upload-artifact@v4
         with:
+          # Artifacts are already compressed (apk/zip/dmg/tar.gz); re-gzipping costs minutes.
+          compression-level: 0
           name: windows_x64_installer
           path: dist\yayma-windows-setup-*.exe
 
   build-android:
     runs-on: ubuntu-latest
+    timeout-minutes: 90
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -129,7 +179,8 @@ jobs:
       - name: System Init
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential cmake ninja-build pkg-config libgtk-3-dev libsecret-1-dev libsoup-3.0-dev libwebkit2gtk-4.1-dev libasound2-dev curl git unzip clang lld libclang-dev llvm-dev libayatana-appindicator3-dev libdbus-1-dev
+          # Android target builds no desktop GUI/audio crates: those are cfg-gated out in src/rust/Cargo.toml.
+          sudo apt-get install -y build-essential cmake ninja-build pkg-config curl git unzip clang lld libclang-dev llvm-dev
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -138,20 +189,33 @@ jobs:
           java-version: '21'
 
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@master
         with:
+          toolchain: 1.97.1
           targets: aarch64-linux-android, armv7-linux-androideabi, x86_64-linux-android
 
       - name: Setup Rust Cache
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: "src/rust -> src/target"
+          workspaces: "src/rust"
+
+      - name: Cache Rust Target
+        uses: actions/cache@v4
+        with:
+          # Cargo writes to the FRB native-assets build dir, not src/rust/target.
+          path: |
+            src/.dart_tool/hooks_runner/*/*/target
+            ${{ runner.temp }}/frb_native_assets_*
+          key: ${{ runner.os }}-android-target-${{ hashFiles('src/rust/Cargo.lock', 'src/rust/rust-toolchain.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-android-target-
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
           cache: true
+          pub-cache: true
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -210,28 +274,47 @@ jobs:
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
+          # Artifacts are already compressed (apk/zip/dmg/tar.gz); re-gzipping costs minutes.
+          compression-level: 0
           name: android_release
           path: android_artifacts/yayma-android-*.apk
 
   build-macos:
     runs-on: macos-latest
+    timeout-minutes: 90
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+        # Same version as src/rust/rust-toolchain.toml, otherwise the FRB hook
+        # downloads a second toolchain on every run.
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.97.1
 
       - name: Setup Rust Cache
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: "src/rust -> src/target"
+          workspaces: "src/rust"
+
+      - name: Cache Rust Target
+        uses: actions/cache@v4
+        with:
+          # Cargo writes to the FRB native-assets build dir, not src/rust/target.
+          path: |
+            src/.dart_tool/hooks_runner/*/*/target
+            ${{ runner.temp }}/frb_native_assets_*
+          key: ${{ runner.os }}-macos-target-${{ hashFiles('src/rust/Cargo.lock', 'src/rust/rust-toolchain.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-macos-target-
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
           cache: true
+          pub-cache: true
 
       - name: Restore Bridge
         uses: ./.github/actions/restore-bridge
@@ -255,5 +338,7 @@ jobs:
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
+          # Artifacts are already compressed (apk/zip/dmg/tar.gz); re-gzipping costs minutes.
+          compression-level: 0
           name: macos_arm64_release
           path: yayma-macos-*.dmg

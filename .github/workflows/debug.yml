@@ -9,6 +9,7 @@ jobs:
 
   build-linux-debug:
     runs-on: ubuntu-22.04
+    timeout-minutes: 60
     env:
       RUSTFLAGS: -C link-arg=-fuse-ld=lld
       CC: clang
@@ -23,18 +24,34 @@ jobs:
           sudo apt-get install -y build-essential cmake ninja-build pkg-config libgtk-3-dev libsecret-1-dev libsoup-3.0-dev libwebkit2gtk-4.1-dev libasound2-dev libkeybinder-3.0-dev curl git unzip clang lld libclang-dev llvm-dev libayatana-appindicator3-dev libdbus-1-dev
 
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+        # Same version as src/rust/rust-toolchain.toml, otherwise the FRB hook
+        # downloads a second toolchain on every run.
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.97.1
 
       - name: Setup Rust Cache
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: "src/rust -> src/target"
+          workspaces: "src/rust"
+
+      - name: Cache Rust Target
+        uses: actions/cache@v4
+        with:
+          # Cargo writes to the FRB native-assets build dir, not src/rust/target.
+          path: |
+            src/.dart_tool/hooks_runner/*/*/target
+            ${{ runner.temp }}/frb_native_assets_*
+          key: ${{ runner.os }}-linux-debug-target-${{ hashFiles('src/rust/Cargo.lock', 'src/rust/rust-toolchain.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-linux-debug-target-
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
           cache: true
+          pub-cache: true
 
       - name: Restore Bridge
         uses: ./.github/actions/restore-bridge
@@ -53,11 +70,14 @@ jobs:
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
+          # Artifacts are already compressed; re-gzipping costs minutes.
+          compression-level: 0
           name: linux_debug_tar
           path: linux_debug.tar.gz
 
   build-windows-debug:
     runs-on: windows-latest
+    timeout-minutes: 90
     env:
       RUSTFLAGS: -C linker=lld-link.exe
       CC: clang
@@ -67,18 +87,34 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+        # Same version as src/rust/rust-toolchain.toml, otherwise the FRB hook
+        # downloads a second toolchain on every run.
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.97.1
 
       - name: Setup Rust Cache
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: "src/rust -> src/target"
+          workspaces: "src/rust"
+
+      - name: Cache Rust Target
+        uses: actions/cache@v4
+        with:
+          # Cargo writes to the FRB native-assets build dir, not src/rust/target.
+          path: |
+            src/.dart_tool/hooks_runner/*/*/target
+            ${{ runner.temp }}/frb_native_assets_*
+          key: ${{ runner.os }}-windows-debug-target-${{ hashFiles('src/rust/Cargo.lock', 'src/rust/rust-toolchain.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-windows-debug-target-
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
           cache: true
+          pub-cache: true
 
       - name: Restore Bridge
         uses: ./.github/actions/restore-bridge
@@ -93,11 +129,22 @@ jobs:
 
       - name: Archive
         run: |
-          Compress-Archive -Path "src\build\windows\x64\runner\Debug\*" -DestinationPath "windows_debug.zip"
+          $zip = Join-Path $env:GITHUB_WORKSPACE "windows_debug.zip"
+          $sevenZip = @("$env:ProgramFiles\7-Zip\7z.exe", "${env:ProgramFiles(x86)}\7-Zip\7z.exe") | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $sevenZip) { throw "7-Zip not found on runner" }
+          Push-Location "src\build\windows\x64\runner\Debug"
+          # 7z is multi-threaded; Compress-Archive is single-threaded and takes minutes here.
+          # No file args = add everything from the current dir, stored at archive root.
+          & $sevenZip a -tzip -mx=5 $zip
+          $code = $LASTEXITCODE
+          Pop-Location
+          if ($code -ne 0) { exit 1 }
         shell: powershell
 
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
+          # Artifacts are already compressed; re-gzipping costs minutes.
+          compression-level: 0
           name: windows_debug_zip
           path: windows_debug.zip

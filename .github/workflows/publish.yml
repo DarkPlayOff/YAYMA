@@ -13,6 +13,7 @@ jobs:
   create-release:
     needs: run-build
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
       contents: write
     steps:
@@ -56,6 +57,7 @@ jobs:
   update-aur-pkgbuild:
     needs: create-release
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
       contents: write
     steps:
@@ -95,6 +97,7 @@ jobs:
   update-nix-flake:
     needs: create-release
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     permissions:
       contents: write
     steps:

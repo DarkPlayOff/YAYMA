@@ -9,6 +9,7 @@ on:
 jobs:
   generate-bridge:
     runs-on: ubuntu-22.04
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -28,13 +29,28 @@ jobs:
           sudo apt-get install -y pkg-config libasound2-dev libdbus-1-dev
 
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.97.1
 
       - name: Setup Rust Cache
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: "src/rust -> src/rust/target"
           key: bridge-${{ env.FRB_VERSION }}
+
+      - name: Cache Codegen Tools
+        uses: actions/cache@v4
+        with:
+          # Only the codegen binaries, not ~/.cargo/bin itself: that dir holds the
+          # rustup shims installed by the step above and must not be overwritten.
+          path: |
+            ~/.cargo/bin/cargo-binstall*
+            ~/.cargo/bin/cargo-expand*
+            ~/.cargo/bin/flutter_rust_bridge_codegen*
+            ~/.cargo/.crates.toml
+            ~/.cargo/.crates2.json
+          key: bridge-tools-${{ runner.os }}-${{ env.FRB_VERSION }}-${{ hashFiles('src/rust/rust-toolchain.toml') }}
 
       - name: Install Tools
         run: |
@@ -49,6 +65,7 @@ jobs:
         with:
           channel: 'stable'
           cache: true
+          pub-cache: true
 
       - name: Generate Bridge
         working-directory: ./src
@@ -69,3 +86,4 @@ jobs:
           name: frb-bridge
           path: frb-bridge.tar.gz
           if-no-files-found: error
+          compression-level: 0
