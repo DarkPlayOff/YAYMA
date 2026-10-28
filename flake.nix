@@ -10,11 +10,11 @@
       systems = [ "x86_64-linux" ];
       forAllSystems = nixpkgs.lib.genAttrs systems;
 
-      version = "2.5.2";
+      version = "2.6.0";
       # URL: https://github.com/DarkPlayOff/YAYMA/releases/download/v${version}/yayma-linux-x64-${version}.tar.gz
       # Bump `version` and re-run `nix flake lock --update-input nixpkgs` + `nix store prefetch-file <url>`
       # to get the new sha256.
-      srcHash = "sha256-vuozwtQsRJdCmg3WIiZn/Gt7GnvQwYbGToWzhunbAwM=";
+      srcHash = "sha256-SkYTPTOWcowu1132FB2RfoXi7jKgbTyFEP88MK6ZCTk=";
     in
     {
       packages = forAllSystems (system:
