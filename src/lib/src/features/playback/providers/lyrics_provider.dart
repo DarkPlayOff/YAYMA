@@ -126,7 +126,7 @@ List<LyricItem> _toLyricItems(List<LyricsLineDto> lines) {
 
     final duration = nextTime - current.time;
 
-    if (duration > const Duration(seconds: 7)) {
+    if (duration > const Duration(seconds: 5)) {
       const textDuration = Duration(seconds: 4);
       result.add(
         LyricLine(
@@ -150,4 +150,18 @@ List<LyricItem> _toLyricItems(List<LyricsLineDto> lines) {
   }
 
   return result;
+}
+
+/// Appends the closing pause: the gap between the last sung line and the end
+/// of the track, when it is longer than 5 s.
+List<LyricItem> withOutroTimer(List<LyricItem> items, Duration trackDuration) {
+  final last = items.isEmpty ? null : items.last;
+  if (last is! LyricLine) return items;
+  final words = last.words;
+  final lineEnd = (words != null && words.isNotEmpty)
+      ? words.last.end
+      : last.time + const Duration(seconds: 4);
+  final gap = trackDuration - lineEnd;
+  if (gap <= const Duration(seconds: 5)) return items;
+  return [...items, LyricTimer(lineEnd, gap)];
 }

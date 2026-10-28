@@ -2,15 +2,18 @@
 // LyricsLine.kt (github.com/MetrolistGroup/Metrolist).
 
 import 'dart:async';
+import 'dart:io' show Platform;
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/rendering.dart'
     show RenderAbstractViewport, ScrollDirection;
 import 'package:flutter/scheduler.dart' show Ticker;
+import 'package:m3e_core/m3e_core.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/features/core/views/widgets/common_ui.dart';
+import 'package:yayma/src/features/core/views/widgets/lyrics_pause_indicator.dart';
 import 'package:yayma/src/features/playback/providers/lyrics_provider.dart';
 import 'package:yayma/src/features/playback/providers/playback_provider.dart';
 
@@ -33,6 +36,9 @@ class _PlayerLyricsState extends State<PlayerLyrics>
   final Map<int, GlobalKey> _keys = {};
 
   int _activeIndex = -1;
+
+  /// Index of the item playing right now: a line, or a pause between lines.
+  int _currentIndex = -1;
 
   /// Distance of the last auto-scroll: the cascade is scaled by it.
   double _scrollDelta = 0;
@@ -68,7 +74,7 @@ class _PlayerLyricsState extends State<PlayerLyrics>
     _cleanup = effect(() {
       final lyrics = lyricsSignal(widget.trackId).value;
       if (!lyrics.hasValue) return;
-      final items = lyrics.value!.items;
+      final items = _items(lyrics.value!.items);
       if (items.isEmpty) return;
       _itemCount = items.length;
 
@@ -100,13 +106,24 @@ class _PlayerLyricsState extends State<PlayerLyrics>
       final current = index < items.length && items[index] is LyricLine
           ? index
           : -1;
-      if (current == _activeIndex) return;
-      setState(() => _activeIndex = current);
+      if (current == _activeIndex && index == _currentIndex) return;
+      setState(() {
+        _activeIndex = current;
+        _currentIndex = index;
+      });
       if (_follow) {
         _cascade.forward(from: 0);
         _bringIntoView(index);
       }
     });
+  }
+
+  /// Lyrics with the closing pause appended: the track length lives in the
+  /// player state and only applies to the track that is actually playing.
+  List<LyricItem> _items(List<LyricItem> items) {
+    final track = playerStateSignal.value?.currentTrack;
+    if (track == null || track.id != widget.trackId) return items;
+    return withOutroTimer(items, Duration(milliseconds: track.durationMs));
   }
 
   void _onTick(Duration elapsed) {
@@ -126,7 +143,7 @@ class _PlayerLyricsState extends State<PlayerLyrics>
   void _snapToCurrentLine() {
     setState(() => _follow = true);
     _cascade.forward(from: 0);
-    _bringIntoView(_activeIndex < 0 ? 0 : _activeIndex);
+    _bringIntoView(_currentIndex < 0 ? 0 : _currentIndex);
   }
 
   void _jumpToLine(LyricItem item) {
@@ -211,7 +228,7 @@ class _PlayerLyricsState extends State<PlayerLyrics>
         final lyrics = lyricsSignal(widget.trackId).value;
         return lyrics.map(
           data: (result) {
-            final items = result.items;
+            final items = _items(result.items);
             if (items.isEmpty) {
               return Center(
                 child: Text(
@@ -275,10 +292,11 @@ class _PlayerLyricsState extends State<PlayerLyrics>
                                       clock: _clock,
                                       onTap: () => _jumpToLine(item),
                                     )
-                                  : _GapDots(
-                                      active: index == _activeIndex,
-                                      alpha: _lineAlpha(index),
+                                  : _GapIndicator(
+                                      timer: item as LyricTimer,
+                                      active: index == _currentIndex,
                                       accent: accent,
+                                      clock: _clock,
                                       onTap: () => _jumpToLine(item),
                                     ),
                             ),
@@ -613,43 +631,96 @@ List<_WordSpring> _wordSprings(List<LyricWord> words, double nowMs) {
   return springs;
 }
 
-/// Instrumental break: three small dots instead of a fake text line.
-class _GapDots extends StatelessWidget {
+/// Instrumental break: a Material shape counts the seconds down to the next
+/// line. Inactive gaps keep the same height, so the list does not shift when
+/// one starts.
+class _GapIndicator extends StatelessWidget {
+  final LyricTimer timer;
   final bool active;
-  final double alpha;
   final Color accent;
+  final ValueListenable<double> clock;
   final VoidCallback onTap;
 
-  const _GapDots({
+  const _GapIndicator({
+    required this.timer,
     required this.active,
-    required this.alpha,
     required this.accent,
+    required this.clock,
     required this.onTap,
   });
 
+  /// Matches a lyric line's height, so the shape reads as part of the text.
+  static const double _androidHeight = _LineRow._fontSize * 2;
+  static const double _compactHeight = 40;
+
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4),
-        child: Row(
-          children: [
-            for (var i = 0; i < 3; i++)
-              Container(
-                width: 5,
-                height: 5,
-                margin: const EdgeInsets.only(right: 5),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: accent.withValues(
-                    alpha: active ? alpha : alpha * 0.25,
+    if (Platform.isAndroid) return _buildAndroid();
+    if (!active) return const SizedBox(height: _compactHeight);
+    return SizedBox(
+      height: _compactHeight,
+      child: ValueListenableBuilder<double>(
+        valueListenable: clock,
+        builder: (context, ms, _) => LyricsPauseIndicator(
+          time: timer.time,
+          duration: timer.duration,
+          positionMs: ms,
+          color: accent,
+          onTap: onTap,
+        ),
+      ),
+    );
+  }
+
+  /// Android full-screen: a shape the size of a text line, flush with the left
+  /// edge, with the countdown drawn inside it.
+  Widget _buildAndroid() {
+    if (!active) return const SizedBox(height: _androidHeight);
+    return SizedBox(
+      height: _androidHeight,
+      child: ValueListenableBuilder<double>(
+        valueListenable: clock,
+        builder: (context, ms, _) {
+          final remaining = pauseRemaining(timer.time, timer.duration, ms);
+          return GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: onTap,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Opacity(
+                opacity: pauseFade(remaining),
+                child: SizedBox.square(
+                  dimension: _androidHeight,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      M3ELoadingIndicator(
+                        value: pauseProgress(timer.time, timer.duration, ms),
+                        color: accent.withValues(alpha: 0.22),
+                        constraints: const BoxConstraints.tightFor(
+                          width: _androidHeight,
+                          height: _androidHeight,
+                        ),
+                      ),
+                      Text(
+                        formatPauseRemaining(remaining),
+                        style: TextStyle(
+                          color: accent,
+                          fontSize: 24,
+                          // Bolder than the lyric text's w700 so the smaller
+                          // digits read with the same weight.
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.5,
+                          height: 1,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
-          ],
-        ),
+            ),
+          );
+        },
       ),
     );
   }

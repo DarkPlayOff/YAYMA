@@ -6,6 +6,7 @@ import 'package:m3e_core/m3e_core.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/features/core/views/widgets/common_ui.dart';
+import 'package:yayma/src/features/core/views/widgets/lyrics_pause_indicator.dart';
 import 'package:yayma/src/features/core/views/widgets/tab_visibility.dart';
 import 'package:yayma/src/features/playback/providers/lyrics_provider.dart';
 import 'package:yayma/src/features/playback/providers/playback_provider.dart';
@@ -649,107 +650,24 @@ class _KaraokeWordText extends StatelessWidget {
   }
 }
 
-class _LyricTimerWidget extends StatefulWidget {
+class _LyricTimerWidget extends StatelessWidget {
   final LyricTimer item;
   final bool isActive;
 
   const _LyricTimerWidget({required this.item, required this.isActive});
 
   @override
-  State<_LyricTimerWidget> createState() => _LyricTimerWidgetState();
-}
-
-class _LyricTimerWidgetState extends State<_LyricTimerWidget>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _pulseController;
-
-  @override
-  void initState() {
-    super.initState();
-    _pulseController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1000),
-    );
-    _syncPulse();
-  }
-
-  @override
-  void didUpdateWidget(_LyricTimerWidget oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.isActive != widget.isActive) _syncPulse();
-  }
-
-  /// Only the active line draws dots, so the other timer rows must not keep
-  /// a repeating ticker alive for an animation they never show.
-  void _syncPulse() {
-    if (widget.isActive && !_pulseController.isAnimating) {
-      _pulseController.repeat(reverse: true);
-    } else if (!widget.isActive && _pulseController.isAnimating) {
-      _pulseController.stop();
-    }
-  }
-
-  @override
-  void dispose() {
-    _pulseController.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
+    if (!isActive) return const SizedBox.shrink();
     return SignalBuilder(
       builder: (context) {
-        final cs = Theme.of(context).colorScheme;
         // No progress subscription while the hosting tab is hidden.
         final progress = visibleSignal(context, trackProgressSignal);
-        final currentMs = progress.positionMs.toInt();
-        final remainingMs =
-            (widget.item.time.inMilliseconds +
-                widget.item.duration.inMilliseconds) -
-            currentMs;
-        final showDots =
-            widget.isActive &&
-            remainingMs > 0 &&
-            (remainingMs / 1000).ceil() <= 5;
-
-        if (!showDots) return const SizedBox.shrink();
-
-        return Center(
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: List.generate(3, (index) {
-              final dotValue = (remainingMs / 1000) - (2 - index);
-              final active = dotValue > 0;
-
-              return AnimatedBuilder(
-                animation: _pulseController,
-                builder: (context, child) {
-                  final pulse = active
-                      ? (_pulseController.value * 0.15 + 1.0)
-                      : 1.0;
-                  return Transform.scale(scale: pulse, child: child);
-                },
-                child: Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 12),
-                  width: 14,
-                  height: 14,
-                  decoration: BoxDecoration(
-                    color: cs.onSurface.withValues(alpha: active ? 0.9 : 0.1),
-                    shape: BoxShape.circle,
-                    boxShadow: active
-                        ? [
-                            BoxShadow(
-                              color: cs.onSurface.withValues(alpha: 0.2),
-                              blurRadius: 8,
-                            ),
-                          ]
-                        : null,
-                  ),
-                ),
-              );
-            }),
-          ),
+        return LyricsPauseIndicator(
+          time: item.time,
+          duration: item.duration,
+          positionMs: progress.positionMs,
+          color: Theme.of(context).colorScheme.onSurface,
         );
       },
     );
