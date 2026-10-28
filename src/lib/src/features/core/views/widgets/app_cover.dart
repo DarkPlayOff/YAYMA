@@ -18,7 +18,12 @@ class CoverPlaceholder extends StatelessWidget {
   final double? size;
   final IconData? icon;
 
-  const CoverPlaceholder({super.key, this.circle = false, this.size, this.icon});
+  const CoverPlaceholder({
+    super.key,
+    this.circle = false,
+    this.size,
+    this.icon,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -204,7 +209,7 @@ class AppCover extends StatelessWidget {
     final u = effectiveUrl;
     if (u == null) return null;
     return () => unawaited(
-          FullscreenCoverDialog.show(context, u, heroTag: heroTag ?? u),
-        );
+      FullscreenCoverDialog.show(context, u, heroTag: heroTag ?? u),
+    );
   }
 }

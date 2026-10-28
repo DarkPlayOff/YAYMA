@@ -180,12 +180,14 @@ void _drainCoverExtractions() {
 
     _coverExtractionsActive++;
     unawaited(
-      _extractCoverScheme(entry.url).then((scheme) {
-        if (!entry.completer.isCompleted) entry.completer.complete(scheme);
-      }).whenComplete(() {
-        _coverExtractionsActive--;
-        _drainCoverExtractions();
-      }),
+      _extractCoverScheme(entry.url)
+          .then((scheme) {
+            if (!entry.completer.isCompleted) entry.completer.complete(scheme);
+          })
+          .whenComplete(() {
+            _coverExtractionsActive--;
+            _drainCoverExtractions();
+          }),
     );
   }
 }
@@ -201,14 +203,14 @@ Future<ColorScheme?> _prepareCoverScheme(String url) {
   // The identity check guards against evicting a fresher entry inserted
   // for the same url.
   unawaited(
-    future
-        .then<ColorScheme?>((scheme) => scheme, onError: (_) => null)
-        .then((scheme) {
-          if (scheme == null &&
-              identical(_preparedCoverSchemes.peek(url), future)) {
-            final _ = _preparedCoverSchemes.remove(url);
-          }
-        }),
+    future.then<ColorScheme?>((scheme) => scheme, onError: (_) => null).then((
+      scheme,
+    ) {
+      if (scheme == null &&
+          identical(_preparedCoverSchemes.peek(url), future)) {
+        final _ = _preparedCoverSchemes.remove(url);
+      }
+    }),
   );
   return future;
 }

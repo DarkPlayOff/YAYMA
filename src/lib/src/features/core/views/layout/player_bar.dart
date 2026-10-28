@@ -175,15 +175,11 @@ class _TrackInfoState extends State<_TrackInfo> {
                             valueListenable: _isCoverHovered,
                             builder: (context, hovered, _) {
                               return AnimatedOpacity(
-                                duration: const Duration(
-                                  milliseconds: 150,
-                                ),
+                                duration: const Duration(milliseconds: 150),
                                 opacity: hovered ? 1 : 0,
                                 child: Container(
                                   decoration: BoxDecoration(
-                                    color: Colors.black.withValues(
-                                      alpha: 0.45,
-                                    ),
+                                    color: Colors.black.withValues(alpha: 0.45),
                                     borderRadius: BorderRadius.circular(
                                       AppRadius.sm,
                                     ),
@@ -255,10 +251,7 @@ class _TrackInfoState extends State<_TrackInfo> {
                       ),
                     ],
                   ),
-                  ArtistNamesWidget(
-                    artists: meta.artists,
-                    maxLines: 1,
-                  ),
+                  ArtistNamesWidget(artists: meta.artists, maxLines: 1),
                 ],
               ),
             ),
@@ -431,15 +424,8 @@ class _VolumeAndQuality extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
           if (showVolume) ...[
-            Icon(
-              Icons.volume_up_rounded,
-              size: 18,
-              color: onSurfaceVariant,
-            ),
-            CommonVolumeSlider(
-              width: volumeWidth,
-              activeColor: accentColor,
-            ),
+            Icon(Icons.volume_up_rounded, size: 18, color: onSurfaceVariant),
+            CommonVolumeSlider(width: volumeWidth, activeColor: accentColor),
             const SizedBox(width: 8),
             const AudioDeviceButton(),
           ],

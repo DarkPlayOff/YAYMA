@@ -54,10 +54,7 @@ class _AudioQualitySheet extends StatelessWidget {
                     meta.codec == null
                         ? 'Выберите битрейт потока'
                         : 'Текущий поток: ${meta.codec!.toUpperCase()}',
-                    style: TextStyle(
-                      color: cs.onSurfaceVariant,
-                      fontSize: 12,
-                    ),
+                    style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12),
                   ),
                 ),
                 _QualityOption(
@@ -96,10 +93,7 @@ class _AudioQualitySheet extends StatelessWidget {
                   ),
                   subtitle: Text(
                     'Частоты, пресеты и эффекты',
-                    style: TextStyle(
-                      color: cs.onSurfaceVariant,
-                      fontSize: 12,
-                    ),
+                    style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12),
                   ),
                   trailing: Icon(
                     Icons.chevron_right_rounded,

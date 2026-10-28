@@ -57,6 +57,7 @@ class RecordedHotkey {
 class GlobalHotkeyBinding {
   final GlobalHotkeyAction action;
   final bool enabled;
+
   /// A `keyboard_types::Code` variant name ("Space", "ArrowLeft", "KeyL").
   final String key;
   final bool ctrl;
@@ -120,19 +121,17 @@ class GlobalHotkeyService {
     if (!isSupported) return;
     if (appContextSignal.value == null) return;
 
-    final settings =
-        await runRustFetch<rust.HotkeySettingsDto?>(
-          (ctx) => rust.getHotkeySettings(ctx: ctx),
-        );
+    final settings = await runRustFetch<rust.HotkeySettingsDto?>(
+      (ctx) => rust.getHotkeySettings(ctx: ctx),
+    );
     if (settings == null) return;
     _syncFromRust(settings);
   }
 
   static Future<void> setAllEnabled({required bool enabled}) async {
-    final settings =
-        await runRustFetch<rust.HotkeySettingsDto?>(
-          (ctx) => rust.setHotkeysEnabled(ctx: ctx, enabled: enabled),
-        );
+    final settings = await runRustFetch<rust.HotkeySettingsDto?>(
+      (ctx) => rust.setHotkeysEnabled(ctx: ctx, enabled: enabled),
+    );
     if (settings == null) return;
     _syncFromRust(settings);
   }
@@ -186,20 +185,18 @@ class GlobalHotkeyService {
   }
 
   static Future<void> resetDefaults() async {
-    final settings =
-        await runRustFetch<rust.HotkeySettingsDto?>(
-          (ctx) => rust.resetHotkeyDefaults(ctx: ctx),
-        );
+    final settings = await runRustFetch<rust.HotkeySettingsDto?>(
+      (ctx) => rust.resetHotkeyDefaults(ctx: ctx),
+    );
     if (settings == null) return;
     _syncFromRust(settings);
   }
 
   /// Unregister everything (called on app quit). Registrations die with the
   /// process anyway; this just makes the shutdown explicit.
-  static Future<void> dispose() =>
-      runRustAction((ctx) async {
-        await rust.disposeHotkeys(ctx: ctx);
-      });
+  static Future<void> dispose() => runRustAction((ctx) async {
+    await rust.disposeHotkeys(ctx: ctx);
+  });
 
   static String formatCombo({
     required String key,
@@ -236,11 +233,12 @@ class GlobalHotkeyService {
       'Comma' => ',',
       'Period' => '.',
       'Slash' => '/',
-      _ => key.startsWith('Key')
-          ? key.substring(3)
-          : key.startsWith('Digit')
-          ? key.substring(5)
-          : key,
+      _ =>
+        key.startsWith('Key')
+            ? key.substring(3)
+            : key.startsWith('Digit')
+            ? key.substring(5)
+            : key,
     };
   }
 

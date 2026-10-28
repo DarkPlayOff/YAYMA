@@ -140,9 +140,7 @@ class WindowPlacement {
   static Future<void> _migrateLegacy() async {
     try {
       final docs = await getApplicationDocumentsDirectory();
-      final legacy = File(
-        '${docs.path}${Platform.pathSeparator}$_fileName',
-      );
+      final legacy = File('${docs.path}${Platform.pathSeparator}$_fileName');
       if (!legacy.existsSync()) return;
       final target = await _file();
       if (target.existsSync()) {

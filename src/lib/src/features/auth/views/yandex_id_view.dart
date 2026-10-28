@@ -53,9 +53,7 @@ class _YandexIdViewState extends State<YandexIdView> {
   @override
   Widget build(BuildContext context) {
     if (!_isReady) {
-      return const Center(
-        child: M3ELoadingIndicator(),
-      );
+      return const Center(child: M3ELoadingIndicator());
     }
 
     if (widget.fullscreen) {

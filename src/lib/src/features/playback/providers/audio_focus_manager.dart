@@ -85,9 +85,7 @@ class AudioFocusManager {
     _transientGain = 100;
   }
 
-  static Future<void> _handleInterruption(
-    AudioInterruptionEvent event,
-  ) async {
+  static Future<void> _handleInterruption(AudioInterruptionEvent event) async {
     try {
       switch (event.type) {
         case AudioInterruptionType.duck:

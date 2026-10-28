@@ -42,10 +42,7 @@ class YaymaAudioHandler extends BaseAudioHandler {
           artist: meta.artists.map((a) => a.name).join(', '),
           duration: Duration(milliseconds: progress.durationMs.toInt()),
           artUri: artUri,
-          extras: {
-            'version': meta.version,
-            'codec': meta.codec,
-          },
+          extras: {'version': meta.version, 'codec': meta.codec},
         ),
       );
     });

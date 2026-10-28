@@ -64,9 +64,7 @@ class _CommonMediaCardState extends State<CommonMediaCard> {
                 builder: (context, pressed, _) {
                   return AnimatedScale(
                     scale: pressed ? 0.95 : (hovered ? 1.02 : 1.0),
-                    duration: Duration(
-                      milliseconds: pressed ? 90 : 220,
-                    ),
+                    duration: Duration(milliseconds: pressed ? 90 : 220),
                     curve: pressed ? Curves.easeOutCubic : Curves.easeOutBack,
                     child: Column(
                       crossAxisAlignment: widget.isCircle
@@ -91,11 +89,7 @@ class _CommonMediaCardState extends State<CommonMediaCard> {
                                       offset: const Offset(0, 14),
                                     ),
                                   ]
-                                : const [
-                                    BoxShadow(
-                                      color: Colors.transparent,
-                                    ),
-                                  ],
+                                : const [BoxShadow(color: Colors.transparent)],
                           ),
                           child: AnimatedScale(
                             duration: const Duration(milliseconds: 200),

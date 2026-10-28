@@ -51,8 +51,7 @@ class MiniPlateSurface {
   });
 
   /// Background colour of the plate.
-  Color get color =>
-      surfaceOverlay(colorScheme.surfaceContainerHighest);
+  Color get color => surfaceOverlay(colorScheme.surfaceContainerHighest);
 
   /// Opacity of the plate background.
   double get alpha => lyricsStyle ? 0.5 : 0.9;

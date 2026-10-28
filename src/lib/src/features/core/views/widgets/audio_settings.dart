@@ -81,10 +81,7 @@ class _AudioSettingsDialogState extends State<AudioSettingsDialog> {
                         padding: EdgeInsets.symmetric(horizontal: 20),
                         child: TabBarView(
                           physics: NeverScrollableScrollPhysics(),
-                          children: [
-                            _EqualizerView(),
-                            _EffectsView(),
-                          ],
+                          children: [_EqualizerView(), _EffectsView()],
                         ),
                       ),
                     ),
@@ -145,10 +142,7 @@ class _AudioSettingsDialogState extends State<AudioSettingsDialog> {
               height: 450,
               child: TabBarView(
                 physics: NeverScrollableScrollPhysics(),
-                children: [
-                  _EqualizerView(),
-                  _EffectsView(),
-                ],
+                children: [_EqualizerView(), _EffectsView()],
               ),
             ),
             actions: [
@@ -156,10 +150,7 @@ class _AudioSettingsDialogState extends State<AudioSettingsDialog> {
                 M3ETextButton(
                   onPressed: () =>
                       unawaited(PlaybackController.resetEqualizer()),
-                  child: Text(
-                    'Сбросить',
-                    style: TextStyle(color: cs.error),
-                  ),
+                  child: Text('Сбросить', style: TextStyle(color: cs.error)),
                 ),
               M3ETextButton(
                 onPressed: () => Navigator.pop(context),
@@ -275,11 +266,7 @@ class _EqualizerView extends StatelessWidget {
     );
   }
 
-  Widget _buildHeader(
-    BuildContext context,
-    Color accent,
-    bool enabled,
-  ) {
+  Widget _buildHeader(BuildContext context, Color accent, bool enabled) {
     final cs = Theme.of(context).colorScheme;
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 16),
@@ -324,9 +311,8 @@ class _EqualizerView extends StatelessWidget {
           ),
           Switch(
             value: enabled,
-            onChanged: (val) => unawaited(
-              PlaybackController.setEqualizerEnabled(enabled: val),
-            ),
+            onChanged: (val) =>
+                unawaited(PlaybackController.setEqualizerEnabled(enabled: val)),
             activeThumbColor: accent,
           ),
         ],

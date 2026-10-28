@@ -127,7 +127,10 @@ class UpdateService {
     );
   }
 
-  static Future<List<ApkAsset>> _fetchReleaseApks(String repo, String tag) async {
+  static Future<List<ApkAsset>> _fetchReleaseApks(
+    String repo,
+    String tag,
+  ) async {
     final client = HttpClient();
     try {
       final request = await client.getUrl(
