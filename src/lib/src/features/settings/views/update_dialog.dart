@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/services.dart';
 import 'package:m3e_core/m3e_core.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -162,9 +163,13 @@ class _UpdateDialogState extends State<UpdateDialog> {
       await UpdateService.installApk(path);
       if (mounted) setState(() => _isInstalling = false);
     } on Object catch (e) {
+      debugPrint('Update install failed: $e');
       if (mounted) {
         setState(() => _isInstalling = false);
-        showAppError('Не удалось запустить установку: $e');
+        // The platform message names the real cause ("No Activity found to
+        // handle Intent"), which is the only part a user can act on.
+        final reason = e is PlatformException ? e.message ?? e.code : '$e';
+        showAppError('Не удалось установить обновление. $reason');
       }
     }
   }

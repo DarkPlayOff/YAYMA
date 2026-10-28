@@ -31,17 +31,14 @@ dependencies:
   window_manager: ^0.5.2
 
 dev_dependencies:
-  # 2.16.2+ needs analyzer 14, which signals_lint 7.1.0 excludes (<14).
   build_runner: ^2.16.1
   flutter_launcher_icons: ^0.14.4
   flutter_lints: ^6.0.0
   flutter_test:
     sdk: flutter
-  # 4.0.2+ needs analyzer 14, which signals_lint 7.1.0 excludes (<14).
   freezed: ^4.0.1
 #  integration_test:
 #    sdk: flutter
-  signals_lint: ^7.1.0
   very_good_analysis: ^11.0.0
 
 flutter_launcher_icons:

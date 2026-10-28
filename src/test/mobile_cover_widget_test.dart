@@ -71,10 +71,10 @@ class _Player {
     current = start;
     _publish(current);
     await tester.pumpWidget(
-      MaterialApp(
+      const MaterialApp(
         home: MobileFullPlayer(
-          plateRect: const Rect.fromLTWH(0, 700, 360, 400),
-          coverRect: const Rect.fromLTWH(20, 100, 300, 300),
+          plateRect: Rect.fromLTWH(0, 700, 360, 400),
+          coverRect: Rect.fromLTWH(20, 100, 300, 300),
         ),
       ),
     );
@@ -156,8 +156,8 @@ class _Player {
 
   /// The central cover: the one at rest (or nearest to rest) on screen.
   _Cover get central {
-    final onScreen = covers.where((cover) => cover.opacity > 0.5).toList();
-    onScreen.sort((a, b) => a.rect.left.abs().compareTo(b.rect.left.abs()));
+    final onScreen = covers.where((cover) => cover.opacity > 0.5).toList()
+      ..sort((a, b) => a.rect.left.abs().compareTo(b.rect.left.abs()));
     return onScreen.first;
   }
 
@@ -181,7 +181,7 @@ class _Player {
   Future<void> settle({int frames = 400}) async {
     var still = 0;
     for (var i = 0; i < frames; i++) {
-      await pump(const Duration(milliseconds: 16));
+      await pump();
       if (_moving) {
         still = 0;
       } else if (++still >= 2) {
@@ -359,7 +359,7 @@ void main() {
 
     // The swipe commits, the slide towards the next cover is still running.
     await player.swipe(-140);
-    await player.pump(const Duration(milliseconds: 16));
+    await player.pump();
     final finger = Offset(80, player._coverY);
     expect(
       player.artAt(finger),
@@ -491,7 +491,7 @@ void main() {
         steps: 1 + random.nextInt(6),
       );
       await gesture.up();
-      await player.pump(const Duration(milliseconds: 16));
+      await player.pump();
       _expectSane(player, reason: 'step $step');
 
       // Playback applies the skip the gesture just asked for.

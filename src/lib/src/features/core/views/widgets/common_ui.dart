@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:m3e_core/m3e_core.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:signals_flutter/signals_flutter.dart';
+import 'package:yayma/src/features/core/services/app_error.dart';
 import 'package:yayma/src/features/core/theme/app_theme.dart';
 import 'package:yayma/src/features/core/theme/app_tokens.dart';
 import 'package:yayma/src/features/core/views/widgets/app_context_menu.dart';
@@ -96,15 +97,21 @@ class CommonLoadingWidget extends StatelessWidget {
   }
 }
 
+/// Shown when a screen failed to load. [error] is logged as-is; the screen
+/// only gets [humanizeError] text, never an internal message.
 class CommonErrorWidget extends StatelessWidget {
-  final String error;
+  final Object error;
   const CommonErrorWidget({required this.error, super.key});
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: Text(
-        'Ошибка: $error',
-        style: TextStyle(color: Theme.of(context).colorScheme.error),
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Text(
+          humanizeError(error),
+          textAlign: TextAlign.center,
+          style: TextStyle(color: Theme.of(context).colorScheme.error),
+        ),
       ),
     );
   }
@@ -453,6 +460,21 @@ class _AudioDeviceButtonState extends State<AudioDeviceButton> {
 
 typedef DataBuilder<T> = Widget Function(BuildContext context, T data);
 
+/// Renders screen-level async data held in a `FutureSignal`.
+///
+/// State here is split by *who reads it*, not by mechanism:
+/// * shared across screens (library, playback, settings) — module-level
+///   `Signal` next to its provider;
+/// * one screen's fetched data — `FutureSignal` + this widget, or plain
+///   signals when the user appends to the list (pagination, pull-to-refresh,
+///   as on the artist screen);
+/// * read only by the owning widget's `build`, per frame — `ValueNotifier`
+///   (hover, drag, playhead) or `setState` for one-shot changes (tab index,
+///   focus, dialog busy flag). A `Signal` would notify every watcher
+///   synchronously and needs disposal from `State`, which buys nothing when
+///   nothing else listens.
+///
+/// Rust mutations always go through `runRustAction`.
 class CommonAsyncView<T> extends StatelessWidget {
   final AsyncState<T> state;
   final DataBuilder<T> builder;
@@ -482,8 +504,8 @@ class CommonAsyncView<T> extends StatelessWidget {
       },
       loading: () => loading ?? const CommonLoadingWidget(),
       error: (Object e, _) => error != null
-          ? error!(e.toString())
-          : CommonErrorWidget(error: e.toString()),
+          ? error!(humanizeError(e))
+          : CommonErrorWidget(error: e),
     );
   }
 }

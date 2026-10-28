@@ -85,7 +85,7 @@ class _TrackDetailsDialogState extends State<TrackDetailsDialog> {
                 : _buildDetails(context, details),
           ),
           error: (Object e, _) =>
-              _buildSurface(context, CommonErrorWidget(error: e.toString())),
+              _buildSurface(context, CommonErrorWidget(error: e)),
         );
       },
     );

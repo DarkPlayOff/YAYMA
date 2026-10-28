@@ -1,3 +1,8 @@
+// Tests interleave actions and assertions on the same bench, so the cascade
+// rewrite this lint wants runs the bold steps together with the expectations
+// that must sit between them.
+// ignore_for_file: cascade_invocations
+
 import 'dart:math';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -65,7 +70,7 @@ class _Bench {
     swipe = CoverSwipeController(
       animation: animation,
       travel: () => _travel,
-      canAnimate: () => this.canAnimate,
+      canAnimate: () => canAnimate,
       isMounted: () => true,
       onNext: () {
         nextCalls++;
@@ -97,8 +102,8 @@ class _Bench {
   int prevCalls = 0;
   int changedCalls = 0;
 
-  /// Skips the fake playback applies on the next [commit] so the state catches
-  /// up in the same frame, like a fast local skip.
+  /// Skips the fake playback applies on the next `catchUp` so the state
+  /// catches up in the same frame, like a fast local skip.
   int pendingSkips = 0;
 
   /// Applies the skip the gesture just requested.

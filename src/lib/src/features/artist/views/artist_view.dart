@@ -7,6 +7,7 @@ import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/app/session.dart';
 import 'package:yayma/src/features/core/providers/navigation_provider.dart';
 import 'package:yayma/src/features/core/providers/notification_provider.dart';
+import 'package:yayma/src/features/core/services/app_error.dart';
 import 'package:yayma/src/features/core/views/widgets/app_cover.dart';
 import 'package:yayma/src/features/core/views/widgets/common_ui.dart';
 import 'package:yayma/src/features/core/views/widgets/horizontal_shelf.dart';
@@ -37,7 +38,7 @@ class _ArtistViewState extends State<ArtistView> {
   final FlutterSignal<List<SimpleAlbumDto>> _albums =
       signal<List<SimpleAlbumDto>>([]);
   final FlutterSignal<bool> _isLoading = signal<bool>(false);
-  final FlutterSignal<String?> _isError = signal<String?>(null);
+  final FlutterSignal<Object?> _isError = signal<Object?>(null);
   final FlutterSignal<int> _totalTracks = signal<int>(0);
   int _currentPage = 0;
   static const _pageSize = 30;
@@ -82,18 +83,21 @@ class _ArtistViewState extends State<ArtistView> {
 
   Future<void> _loadInitial() async {
     final id = widget.artistId;
-    if (id == null) return;
+    final ctx = appContextSignal.value;
+    if (id == null || ctx == null) return;
 
     _isLoading.value = true;
     _isError.value = null;
 
     try {
       final details = await rust.getArtistDetails(
-        ctx: appContextSignal.value!,
+        ctx: ctx,
         artistId: id,
         page: 0,
         pageSize: _pageSize,
       );
+      // A null response leaves the artist empty; the view renders its own
+      // "not found" state for that.
       if (details != null) {
         _artist.value = SimpleArtistDto(
           id: details.id,
@@ -106,11 +110,9 @@ class _ArtistViewState extends State<ArtistView> {
         _albums.value = details.albums;
         _totalTracks.value = details.totalTracks;
         _currentPage = 0;
-      } else {
-        _isError.value = 'Артист не найден';
       }
     } on Object catch (e) {
-      _isError.value = e.toString();
+      _isError.value = e;
     } finally {
       _isLoading.value = false;
     }
@@ -122,7 +124,8 @@ class _ArtistViewState extends State<ArtistView> {
 
   Future<void> _loadMore() async {
     final id = widget.artistId;
-    if (id == null) return;
+    final ctx = appContextSignal.value;
+    if (id == null || ctx == null) return;
 
     // Advance the counter only once the page actually arrives: bumping it
     // before the request skipped that page forever after one failure.
@@ -131,7 +134,7 @@ class _ArtistViewState extends State<ArtistView> {
 
     try {
       final details = await rust.getArtistDetails(
-        ctx: appContextSignal.value!,
+        ctx: ctx,
         artistId: id,
         page: page,
         pageSize: _pageSize,
@@ -143,7 +146,7 @@ class _ArtistViewState extends State<ArtistView> {
       }
     } on Object catch (e) {
       debugPrint('Error loading more tracks: $e');
-      showAppError('Не удалось загрузить треки исполнителя');
+      showAppError(humanizeError(e));
     } finally {
       _isLoading.value = false;
     }

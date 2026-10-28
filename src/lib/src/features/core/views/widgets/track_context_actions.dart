@@ -6,6 +6,7 @@ import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/app/session.dart';
 import 'package:yayma/src/features/core/providers/navigation_provider.dart';
 import 'package:yayma/src/features/core/providers/notification_provider.dart';
+import 'package:yayma/src/features/core/services/app_error.dart';
 import 'package:yayma/src/features/core/services/rust_bridge.dart';
 import 'package:yayma/src/features/core/views/widgets/app_cover.dart';
 import 'package:yayma/src/features/core/views/widgets/audio_quality_sheet.dart';
@@ -206,11 +207,7 @@ class TrackContextActions {
       final kind = int.tryParse(kindStr);
       if (kind != null) {
         final success = await addTrackToPlaylistAction(kind, trackId, albumId);
-        if (success) {
-          showAppSuccess('Добавлено в плейлист');
-        } else {
-          showAppError('Ошибка при добавлении');
-        }
+        if (!success) showAppError('Ошибка при добавлении');
       }
       return;
     }
@@ -253,7 +250,7 @@ class TrackContextActions {
             showAppSuccess('Трек удален из загрузок');
             unawaited(refreshDownloadedTracks());
           } on Object catch (e) {
-            showAppError('Ошибка: $e');
+            showAppError(humanizeError(e));
           }
         }
       case 'download_files':
@@ -313,7 +310,7 @@ class TrackContextActions {
         showAppSuccess('Трек сохранен: $path');
       }
     } on Object catch (e) {
-      showAppError('Ошибка: $e');
+      showAppError(humanizeError(e));
     } finally {
       final newSet = {...downloadingTracksSignal.value}..remove(trackId);
       downloadingTracksSignal.value = newSet;

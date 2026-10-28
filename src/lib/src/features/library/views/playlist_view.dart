@@ -8,6 +8,7 @@ import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/app/session.dart';
 import 'package:yayma/src/features/core/providers/navigation_provider.dart';
 import 'package:yayma/src/features/core/providers/notification_provider.dart';
+import 'package:yayma/src/features/core/services/app_error.dart';
 import 'package:yayma/src/features/core/theme/app_tokens.dart';
 import 'package:yayma/src/features/core/views/widgets/app_context_menu.dart';
 import 'package:yayma/src/features/core/views/widgets/app_cover.dart';
@@ -117,9 +118,7 @@ class _PlaylistViewState extends State<PlaylistView> {
         }
 
         if (state.hasError && meta == null) {
-          return Center(
-            child: CommonErrorWidget(error: state.error.toString()),
-          );
+          return Center(child: CommonErrorWidget(error: state.error!));
         }
 
         if (meta == null) {
@@ -290,7 +289,7 @@ class _PlaylistContentState extends State<_PlaylistContent> {
       }
     } on Object catch (e) {
       if (!mounted) return;
-      showAppError('Ошибка при скачивании плейлиста: $e');
+      showAppError('Ошибка при скачивании плейлиста: ${humanizeError(e)}');
     } finally {
       if (mounted) setState(() => _isDownloading = false);
     }

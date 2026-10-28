@@ -5,9 +5,11 @@ import 'package:yayma/src/app/session.dart';
 import 'package:yayma/src/features/core/providers/notification_provider.dart';
 import 'package:yayma/src/features/core/services/debouncer.dart';
 import 'package:yayma/src/features/core/services/rust_bridge.dart';
+import 'package:yayma/src/features/core/utils/track_ids.dart';
 import 'package:yayma/src/rust/api/content.dart';
 import 'package:yayma/src/rust/api/library.dart';
 import 'package:yayma/src/rust/api/models.dart';
+import 'package:yayma/src/rust/app/context.dart';
 
 final FlutterSignal<List<SimpleTrackDto>> likedTracksSignal =
     signal<List<SimpleTrackDto>>([]);
@@ -89,11 +91,7 @@ Future<void> _loadMembership(String trackId) async {
   // track list costs a `fetch_tracks(50)` round trip per 50 tracks each, and
   // only the track ids are needed here.
   final containing = await runRustFetch(
-    (c) => getPlaylistsContainingTrack(
-      ctx: c,
-      kinds: kinds,
-      trackId: trackId,
-    ),
+    (c) => getPlaylistsContainingTrack(ctx: c, kinds: kinds, trackId: trackId),
     notifyErrors: false,
   );
   if (containing == null) {
@@ -207,81 +205,68 @@ Future<void> refreshDislikedTracks() async {
   isDislikedTracksLoadingSignal.value = false;
 }
 
-Future<bool> addLikedAlbumAction(String albumId) async {
-  final id = int.tryParse(albumId);
-  if (id == null) return false;
-
-  final success = await runRustAction(
-    (ctx) => addLikedAlbum(ctx: ctx, albumId: id),
-  );
-  return success;
+/// Runs a like/dislike mutation after parsing the id Rust expects. A malformed
+/// id returns false without a request or an error notification.
+Future<bool> _runIdAction<T>(
+  String rawId,
+  T? Function(String id) parse,
+  Future<bool> Function(AppContext ctx, T id) action,
+) {
+  final id = parse(rawId);
+  if (id == null) return Future.value(false);
+  return runRustAction((ctx) => action(ctx, id));
 }
 
-Future<bool> removeLikedAlbumAction(String albumId) async {
-  final id = int.tryParse(albumId);
-  if (id == null) return false;
+String? _nonEmpty(String id) => id.isEmpty ? null : id;
 
-  final success = await runRustAction(
-    (ctx) => removeLikedAlbum(ctx: ctx, albumId: id),
-  );
-  return success;
-}
+Future<bool> addLikedAlbumAction(String albumId) => _runIdAction(
+  albumId,
+  int.tryParse,
+  (ctx, id) => addLikedAlbum(ctx: ctx, albumId: id),
+);
 
-Future<bool> addLikedArtistAction(String artistId) async {
-  if (artistId.isEmpty) return false;
+Future<bool> removeLikedAlbumAction(String albumId) => _runIdAction(
+  albumId,
+  int.tryParse,
+  (ctx, id) => removeLikedAlbum(ctx: ctx, albumId: id),
+);
 
-  final success = await runRustAction(
-    (ctx) => addLikedArtist(ctx: ctx, artistId: artistId),
-  );
-  return success;
-}
+Future<bool> addLikedArtistAction(String artistId) => _runIdAction(
+  artistId,
+  _nonEmpty,
+  (ctx, id) => addLikedArtist(ctx: ctx, artistId: id),
+);
 
-Future<bool> removeLikedArtistAction(String artistId) async {
-  if (artistId.isEmpty) return false;
+Future<bool> removeLikedArtistAction(String artistId) => _runIdAction(
+  artistId,
+  _nonEmpty,
+  (ctx, id) => removeLikedArtist(ctx: ctx, artistId: id),
+);
 
-  final success = await runRustAction(
-    (ctx) => removeLikedArtist(ctx: ctx, artistId: artistId),
-  );
-  return success;
-}
+Future<bool> addDislikedArtistAction(String artistId) => _runIdAction(
+  artistId,
+  _nonEmpty,
+  (ctx, id) => addDislikedArtist(ctx: ctx, artistId: id),
+);
 
-Future<bool> addDislikedArtistAction(String artistId) async {
-  if (artistId.isEmpty) return false;
+Future<bool> removeDislikedArtistAction(String artistId) => _runIdAction(
+  artistId,
+  _nonEmpty,
+  (ctx, id) => removeDislikedArtist(ctx: ctx, artistId: id),
+);
 
-  final success = await runRustAction(
-    (ctx) => addDislikedArtist(ctx: ctx, artistId: artistId),
-  );
-  return success;
-}
+Future<bool> addLikedPlaylistAction(String ownerUid, int kind) => _runIdAction(
+  ownerUid,
+  BigInt.tryParse,
+  (ctx, uid) => addLikedPlaylist(ctx: ctx, ownerUid: uid, kind: kind),
+);
 
-Future<bool> removeDislikedArtistAction(String artistId) async {
-  if (artistId.isEmpty) return false;
-
-  final success = await runRustAction(
-    (ctx) => removeDislikedArtist(ctx: ctx, artistId: artistId),
-  );
-  return success;
-}
-
-Future<bool> addLikedPlaylistAction(String ownerUid, int kind) async {
-  final uid = BigInt.tryParse(ownerUid);
-  if (uid == null) return false;
-
-  final success = await runRustAction(
-    (ctx) => addLikedPlaylist(ctx: ctx, ownerUid: uid, kind: kind),
-  );
-  return success;
-}
-
-Future<bool> removeLikedPlaylistAction(String ownerUid, int kind) async {
-  final uid = BigInt.tryParse(ownerUid);
-  if (uid == null) return false;
-
-  final success = await runRustAction(
-    (ctx) => removeLikedPlaylist(ctx: ctx, ownerUid: uid, kind: kind),
-  );
-  return success;
-}
+Future<bool> removeLikedPlaylistAction(String ownerUid, int kind) =>
+    _runIdAction(
+      ownerUid,
+      BigInt.tryParse,
+      (ctx, uid) => removeLikedPlaylist(ctx: ctx, ownerUid: uid, kind: kind),
+    );
 
 Future<void> refreshLikedTracks({String? query, bool force = false}) async {
   if (!force &&
@@ -457,7 +442,7 @@ bool applyLikeOptimistic({
   SimpleTrackDto? track,
   bool? liked,
 }) {
-  final baseId = trackId.split(':').first;
+  final baseId = baseTrackId(trackId);
   // Prefer the source DTO's authoritative flag (the queue DTO reflects the
   // server's liked state); fall back to the local caches. Without this, a
   // track liked server-side but absent from the not-yet-loaded liked caches

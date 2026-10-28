@@ -12,6 +12,7 @@ import 'package:yayma/src/features/core/providers/navigation_provider.dart';
 import 'package:yayma/src/features/core/providers/notification_provider.dart';
 import 'package:yayma/src/features/core/providers/visual_effects_provider.dart';
 import 'package:yayma/src/features/core/services/global_hotkey_service.dart';
+import 'package:yayma/src/features/core/services/rust_bridge.dart';
 import 'package:yayma/src/features/core/theme/app_tokens.dart';
 import 'package:yayma/src/features/core/views/widgets/common_ui.dart';
 import 'package:yayma/src/features/core/views/widgets/responsive.dart';
@@ -91,82 +92,75 @@ class _SettingsViewState extends State<SettingsView> {
   }
 
   Future<void> _toggleDiscordRpc(bool enabled) async {
-    final ctx = appContextSignal.value;
-    if (ctx != null) {
-      await simple.setDiscordRpcEnabled(ctx: ctx, enabled: enabled);
-      unawaited(_discordRpcSignal.refresh());
-    }
+    final ok = await runRustAction(
+      (ctx) => simple.setDiscordRpcEnabled(ctx: ctx, enabled: enabled),
+    );
+    if (ok) unawaited(_discordRpcSignal.refresh());
   }
 
   Future<void> _toggleCustomTitlebar(bool enabled) async {
-    final ctx = appContextSignal.value;
-    if (ctx != null) {
-      await simple.setCustomTitlebarEnabled(ctx: ctx, enabled: enabled);
-      unawaited(_customTitlebarSignal.refresh());
-      showAppSuccess('Изменения вступят в силу после перезапуска приложения');
-    }
+    final ok = await runRustAction(
+      (ctx) => simple.setCustomTitlebarEnabled(ctx: ctx, enabled: enabled),
+    );
+    if (!ok) return;
+    unawaited(_customTitlebarSignal.refresh());
+    showAppSuccess('Изменения вступят в силу после перезапуска приложения');
   }
 
   Future<void> _toggleAutoHideNavbar(bool enabled) async {
-    final ctx = appContextSignal.value;
-    if (ctx != null) {
-      await simple.setAutoHideNavbarEnabled(ctx: ctx, enabled: enabled);
-      autoHideNavbarSignal.value = enabled;
-      unawaited(_autoHideNavbarSignal.refresh());
-    }
+    final ok = await runRustAction(
+      (ctx) => simple.setAutoHideNavbarEnabled(ctx: ctx, enabled: enabled),
+    );
+    if (!ok) return;
+    autoHideNavbarSignal.value = enabled;
+    unawaited(_autoHideNavbarSignal.refresh());
   }
 
   Future<void> _toggleCloseToTray(bool enabled) async {
-    final ctx = appContextSignal.value;
-    if (ctx != null) {
-      await simple.setCloseToTrayEnabled(ctx: ctx, enabled: enabled);
-      closeToTraySignal.value = enabled;
-      unawaited(_closeToTraySignal.refresh());
-    }
+    final ok = await runRustAction(
+      (ctx) => simple.setCloseToTrayEnabled(ctx: ctx, enabled: enabled),
+    );
+    if (!ok) return;
+    closeToTraySignal.value = enabled;
+    unawaited(_closeToTraySignal.refresh());
   }
 
   Future<void> _toggleUpdateCheck(bool enabled) async {
-    final ctx = appContextSignal.value;
-    if (ctx != null) {
-      await simple.setUpdateCheckEnabled(ctx: ctx, enabled: enabled);
-      unawaited(_updateCheckSignal.refresh());
-    }
+    final ok = await runRustAction(
+      (ctx) => simple.setUpdateCheckEnabled(ctx: ctx, enabled: enabled),
+    );
+    if (ok) unawaited(_updateCheckSignal.refresh());
   }
 
   Future<void> _toggleVibeVisibility(bool enabled) async {
     vibeVisibleSignal.value = enabled;
-    final ctx = appContextSignal.value;
-    if (ctx != null) {
-      await simple.setVibeAnimationEnabled(ctx: ctx, enabled: enabled);
-    }
+    await runRustAction(
+      (ctx) => simple.setVibeAnimationEnabled(ctx: ctx, enabled: enabled),
+    );
   }
 
   Future<void> _saveVibeRenderScale(double scale) async {
     final normalized = scale.clamp(minVibeRenderScale, maxVibeRenderScale);
     vibeRenderScaleSignal.value = normalized;
-    final ctx = appContextSignal.value;
-    if (ctx != null) {
-      await simple.setVibeRenderScale(ctx: ctx, scale: normalized);
-    }
+    await runRustAction(
+      (ctx) => simple.setVibeRenderScale(ctx: ctx, scale: normalized),
+    );
   }
 
   Future<void> _toggleBlurEffects(bool enabled) async {
     blurEffectsEnabledSignal.value = enabled;
-    final ctx = appContextSignal.value;
-    if (ctx != null) {
-      await simple.setBlurEffectsEnabled(ctx: ctx, enabled: enabled);
-    }
+    await runRustAction(
+      (ctx) => simple.setBlurEffectsEnabled(ctx: ctx, enabled: enabled),
+    );
   }
 
   Future<void> _pickPath() async {
     final result = await FilePicker.getDirectoryPath();
-    if (result != null) {
-      final ctx = appContextSignal.value;
-      if (ctx != null) {
-        await rust.setDownloadPath(ctx: ctx, path: result);
-        unawaited(_pathSignal.refresh());
-      }
-    }
+    if (result == null) return;
+    final ok = await runRustAction(
+      (ctx) => rust.setDownloadPath(ctx: ctx, path: result),
+    );
+    if (ok) unawaited(_pathSignal.refresh());
   }
 
   String _formatBytes(int bytes) {
@@ -182,17 +176,15 @@ class _SettingsViewState extends State<SettingsView> {
   }
 
   Future<void> _clearCache() async {
-    final ctx = appContextSignal.value;
-    if (ctx == null) return;
-    await simple.clearCache(ctx: ctx);
+    final ok = await runRustAction((ctx) => simple.clearCache(ctx: ctx));
+    if (!ok) return;
     unawaited(_cacheSizeSignal.refresh());
     showAppSuccess('Кэш успешно очищен');
   }
 
   Future<void> _clearTrackCache() async {
-    final ctx = appContextSignal.value;
-    if (ctx == null) return;
-    await simple.clearTrackCache(ctx: ctx);
+    final ok = await runRustAction((ctx) => simple.clearTrackCache(ctx: ctx));
+    if (!ok) return;
     unawaited(_trackCacheSizeSignal.refresh());
     // Also notify the downloaded tracks signal
     unawaited(refreshDownloadedTracks());

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:yayma/src/app/init.dart' as app_init;
 import 'package:yayma/src/app/session.dart';
 import 'package:yayma/src/features/core/providers/notification_provider.dart';
+import 'package:yayma/src/features/core/services/app_error.dart';
 import 'package:yayma/src/rust/app/context.dart';
 
 /// Executes a Rust action safely, catches errors and shows a notification.
@@ -41,13 +42,11 @@ Future<T?> runRustFetch<T>(
 }
 
 void _handleRustError(Object e, bool notifyErrors) {
-  final errorStr = e.toString();
-  if (errorStr.contains('Invalid token or session expired') ||
-      errorStr.contains('Unauthorized')) {
+  if (isSessionExpired(e)) {
     // Auth failures are always surfaced: the session must be re-established.
-    showAppError('Сессия истекла. Пожалуйста, войдите снова.');
+    showAppError(humanizeError(e));
     unawaited(app_init.AppInit.logout());
   } else if (notifyErrors) {
-    showAppError(errorStr);
+    showAppError(humanizeError(e));
   }
 }

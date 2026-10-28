@@ -45,10 +45,7 @@ class AddToPlaylistDialog extends SignalWidget {
       rebuildOn: version,
       onSelected: (value) async {
         if (value == 'create_playlist') {
-          final kind = await _createPlaylistAndAddTrack(context, track);
-          if (kind != null) {
-            showAppSuccess('Трек добавлен в плейлист');
-          }
+          await _createPlaylistAndAddTrack(context, track);
           return;
         }
         if (!value.startsWith('add_to_')) return;
@@ -59,11 +56,7 @@ class AddToPlaylistDialog extends SignalWidget {
           track.id,
           track.albumId,
         );
-        if (success) {
-          showAppSuccess('Трек добавлен в плейлист');
-        } else {
-          showAppError('Ошибка при добавлении трека');
-        }
+        if (!success) showAppError('Ошибка при добавлении трека');
       },
       actionsBuilder: () {
         final membershipKinds =
@@ -95,24 +88,24 @@ class AddToPlaylistDialog extends SignalWidget {
   }
 
   /// Creates a private playlist and immediately adds track [track] to it.
-  static Future<int?> _createPlaylistAndAddTrack(
+  static Future<void> _createPlaylistAndAddTrack(
     BuildContext context,
     SimpleTrackDto track,
   ) async {
     final trimmed = await _promptPlaylistTitle(context);
-    if (trimmed == null || trimmed.isEmpty) return null;
+    if (trimmed == null || trimmed.isEmpty) return;
 
     final existingKinds = playlistsSignal.value.map((p) => p.kind).toSet();
     final success = await createPlaylistAction(trimmed, isPublic: false);
     if (!success) {
       showAppError('Ошибка при создании плейлиста');
-      return null;
+      return;
     }
 
     final created = playlistsSignal.value
         .where((p) => !existingKinds.contains(p.kind))
         .toList();
-    if (created.isEmpty) return null;
+    if (created.isEmpty) return;
 
     showAppSuccess("Создан плейлист '$trimmed'");
     final added = await addTrackToPlaylistAction(
@@ -121,7 +114,6 @@ class AddToPlaylistDialog extends SignalWidget {
       track.albumId,
     );
     if (!added) showAppError('Ошибка при добавлении трека');
-    return created.first.kind;
   }
 
   @override
@@ -186,9 +178,7 @@ class AddToPlaylistDialog extends SignalWidget {
 
                       if (context.mounted) {
                         Navigator.pop(context);
-                        if (success) {
-                          showAppSuccess("Трек добавлен в '${playlist.title}'");
-                        } else {
+                        if (!success) {
                           showAppError('Ошибка при добавлении трека');
                         }
                       }

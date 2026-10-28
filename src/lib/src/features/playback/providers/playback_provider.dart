@@ -9,10 +9,12 @@ import 'package:yayma/src/app/init.dart';
 import 'package:yayma/src/app/session.dart';
 import 'package:yayma/src/features/core/providers/notification_provider.dart';
 import 'package:yayma/src/features/core/providers/visual_effects_provider.dart';
+import 'package:yayma/src/features/core/services/app_error.dart';
 import 'package:yayma/src/features/core/services/debouncer.dart';
 import 'package:yayma/src/features/core/services/rust_bridge.dart';
 import 'package:yayma/src/features/core/theme/app_theme.dart';
 import 'package:yayma/src/features/core/theme/cover_palette.dart';
+import 'package:yayma/src/features/core/utils/track_ids.dart';
 import 'package:yayma/src/features/library/providers/library_provider.dart';
 import 'package:yayma/src/rust/api/audio_fx.dart' as rust;
 import 'package:yayma/src/rust/api/library.dart' as rust;
@@ -123,12 +125,14 @@ Future<void> _initPlaybackUnsafe() async {
       case rust.AppEvent_Notification(field1: final message):
         showAppWarning(message);
       case rust.AppEvent_Error(field0: final message):
-        showAppError(message);
-        if (message.contains('Unauthorized') ||
-            message.contains('Invalid token') ||
-            message.contains('session expired') ||
-            message.contains('401')) {
+        if (isSessionExpired(message)) {
+          showAppError(humanizeError(message));
           unawaited(AppInit.logout());
+        } else {
+          // Rust sends the actionable reason here ("Buffering timed out after
+          // 15s", "Failed to play track: …"), so keep it instead of replacing
+          // it with a generic line.
+          showAppError('Ошибка воспроизведения: $message');
         }
       case rust.AppEvent_TrackDownloadStarted(field0: final trackId):
         downloadingTracksSignal.value = {
@@ -539,6 +543,7 @@ class PlaybackController {
       if (wasPlaying && !ok) _userPausePending = false;
     });
   }
+
   static Future<void> next() => runRustAction((ctx) => rust.playNext(ctx: ctx));
   static Future<void> prev() => runRustAction((ctx) => rust.playPrev(ctx: ctx));
 
@@ -555,17 +560,14 @@ class PlaybackController {
     // Optimistic list update (instant); the Rust stream reconciles after.
     // Unlike works by id; insertion needs the DTO: current queue first,
     // then the liked cache (re-like).
-    final baseId = trackId.split(':').first;
+    final baseId = baseTrackId(trackId);
     SimpleTrackDto? dto;
-    try {
-      final queue = queueTracksSignal.value.value ?? const <SimpleTrackDto>[];
-      for (final t in queue) {
-        if (t.id.split(':').first == baseId) {
-          dto = t;
-          break;
-        }
+    for (final t in queueTracksSignal.value.value ?? const <SimpleTrackDto>[]) {
+      if (baseTrackId(t.id) == baseId) {
+        dto = t;
+        break;
       }
-    } on Object catch (_) {}
+    }
     dto ??= findLikedDto(baseId);
     final applied = applyLikeOptimistic(trackId: trackId, track: dto);
     final confirmed = await runRustAction(

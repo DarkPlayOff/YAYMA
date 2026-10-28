@@ -8,6 +8,7 @@ import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/app/session.dart';
 import 'package:yayma/src/features/core/providers/navigation_provider.dart';
 import 'package:yayma/src/features/core/providers/notification_provider.dart';
+import 'package:yayma/src/features/core/services/app_error.dart';
 import 'package:yayma/src/features/core/views/widgets/common_ui.dart';
 import 'package:yayma/src/features/core/views/widgets/download_menu.dart';
 import 'package:yayma/src/features/core/views/widgets/responsive.dart';
@@ -148,7 +149,7 @@ class _AlbumViewState extends State<AlbumView> {
       }
     } on Object catch (e) {
       if (!mounted) return;
-      showAppError('Ошибка при скачивании: $e');
+      showAppError('Ошибка при скачивании: ${humanizeError(e)}');
     } finally {
       _isDownloadingAlbum.value = false;
     }

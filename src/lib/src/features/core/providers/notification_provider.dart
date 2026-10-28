@@ -22,16 +22,7 @@ final FlutterSignal<AppNotification?> appNotificationSignal =
     signal<AppNotification?>(null);
 
 void showAppError(String message) {
-  var msg = message;
-  final lowerMsg = message.toLowerCase();
-  if (lowerMsg.contains('networkerror') ||
-      lowerMsg.contains('network error') ||
-      lowerMsg.contains('connection error') ||
-      lowerMsg.contains('timed out') ||
-      lowerMsg.contains('timeout')) {
-    msg = 'Отсутствует подключение к сети. Проверьте интернет-соединение.';
-  }
-  appNotificationSignal.value = AppNotification(message: msg);
+  appNotificationSignal.value = AppNotification(message: message);
 }
 
 void showAppWarning(String message) {
@@ -75,16 +66,10 @@ class _GlobalNotificationListenerState extends State<GlobalNotificationListener>
       duration: const Duration(milliseconds: 600),
       vsync: this,
     );
-    _offsetAnimation =
-        Tween<Offset>(
-          begin: const Offset(0, -2),
-          end: Offset.zero,
-        ).animate(
-          CurvedAnimation(
-            parent: _controller,
-            curve: Curves.easeOutBack,
-          ),
-        );
+    _offsetAnimation = Tween<Offset>(
+      begin: const Offset(0, -2),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutBack));
 
     _notificationEffect = effect(() {
       final notif = appNotificationSignal.value;

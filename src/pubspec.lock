@@ -9,14 +9,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "103.0.0"
-  analysis_server_plugin:
-    dependency: transitive
-    description:
-      name: analysis_server_plugin
-      sha256: c58b2a05b260a023eefd0848496ff6b113a318c6c95dad4215165a4bd54ae600
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.3.18"
   analyzer:
     dependency: transitive
     description:
@@ -33,14 +25,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.3.4"
-  analyzer_plugin:
-    dependency: transitive
-    description:
-      name: analyzer_plugin
-      sha256: c2a75baf1657171cc7872db96a12b07e385873cf7a73f2b4f7638e9d0701ee53
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.14.12"
   android_file_picker:
     dependency: transitive
     description:
@@ -925,14 +909,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "7.1.0"
-  signals_lint:
-    dependency: "direct dev"
-    description:
-      name: signals_lint
-      sha256: "5af06c4aee695c57a6609cf41dc3ef27495a50637de0cbc03bdf7fce4e738683"
-      url: "https://pub.dev"
-    source: hosted
-    version: "7.1.0"
   sky_engine:
     dependency: transitive
     description: flutter
@@ -1314,14 +1290,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.1.4"
-  yaml_edit:
-    dependency: transitive
-    description:
-      name: yaml_edit
-      sha256: "07c9e63ba42519745182b88ca12264a7ba2484d8239958778dfe4d44fe760488"
-      url: "https://pub.dev"
-    source: hosted
-    version: "2.2.4"
 sdks:
   dart: ">=3.13.0 <4.0.0"
   flutter: ">=3.47.0"

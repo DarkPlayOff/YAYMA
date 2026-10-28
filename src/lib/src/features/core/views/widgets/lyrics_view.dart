@@ -283,7 +283,7 @@ class _LyricsWidgetState extends State<LyricsWidget> {
               );
             },
             loading: () => const _LyricsLoadingIndicator(),
-            error: (Object e, _) => CommonErrorWidget(error: e.toString()),
+            error: (Object e, _) => CommonErrorWidget(error: e),
           ),
         );
       },
@@ -765,7 +765,7 @@ class _LyricsReaderDialogState extends State<LyricsReaderDialog> {
               );
             },
             loading: () => const CommonLoadingWidget(),
-            error: (Object e, _) => CommonErrorWidget(error: e.toString()),
+            error: (Object e, _) => CommonErrorWidget(error: e),
           );
         }
 

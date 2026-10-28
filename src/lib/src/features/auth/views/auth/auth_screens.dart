@@ -12,6 +12,7 @@ import 'package:window_manager/window_manager.dart';
 import 'package:yayma/src/app/init.dart';
 import 'package:yayma/src/app/session.dart';
 import 'package:yayma/src/features/core/providers/navigation_provider.dart';
+import 'package:yayma/src/features/core/services/app_error.dart';
 import 'package:yayma/src/features/core/views/layout.dart';
 import 'package:yayma/src/features/core/views/widgets/smooth_scroll.dart';
 import 'package:yayma/src/features/settings/services/update_service.dart';
@@ -80,8 +81,8 @@ class _RootScreenState extends State<RootScreen> {
             }
             return const LoginScreen();
           },
-          error: (dynamic e, dynamic _) =>
-              Scaffold(body: Center(child: Text('Ошибка: $e'))),
+          error: (Object e, _) =>
+              Scaffold(body: Center(child: Text(humanizeError(e)))),
           loading: () =>
               const Scaffold(body: Center(child: M3ELoadingIndicator())),
         );
@@ -568,7 +569,7 @@ class _YandexDeviceLoginDialogState extends State<YandexDeviceLoginDialog> {
       }
     } on Object catch (e) {
       setState(() {
-        _error = 'Ошибка сети: $e';
+        _error = humanizeError(e);
         _isLoading = false;
       });
     } finally {
