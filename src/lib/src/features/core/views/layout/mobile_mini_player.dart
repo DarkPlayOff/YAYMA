@@ -32,6 +32,7 @@ class _MobileMiniPlayerState extends State<MobileMiniPlayer> {
   MobileFullPlayerController? _expandController;
   Rect? _dragPlateRect;
   double _expandStartY = 0;
+  bool _rectSyncScheduled = false;
 
   bool _openFullPlayer() {
     if (trackMetadataSignal.peek().id == null) return false;
@@ -269,9 +270,13 @@ class _MobileMiniPlayerState extends State<MobileMiniPlayer> {
         // bottom corners of the plate instead of hugging them.
         const progressInset = MiniPlateLayout.sideInset;
 
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) _syncPlateRect();
-        });
+        if (!_rectSyncScheduled) {
+          _rectSyncScheduled = true;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _rectSyncScheduled = false;
+            if (mounted) _syncPlateRect();
+          });
+        }
 
         return Opacity(
           // The full player draws a collapsed copy of the plate while it

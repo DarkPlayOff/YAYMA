@@ -41,6 +41,7 @@ PlaybackState _state(
     isShuffled: false,
     queueCount: ids.length,
     queueIndex: index < 0 ? 0 : index,
+    queueRevision: 0,
     currentTrack: _track(trackId),
     currentWaveSeeds: const [],
   );

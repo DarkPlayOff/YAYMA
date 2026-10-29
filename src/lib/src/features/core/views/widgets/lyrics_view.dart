@@ -109,9 +109,7 @@ class _LyricsWidgetState extends State<LyricsWidget> {
       // `currentMs` is enough — this runs on every progress tick (~8/sec).
       var activeIndex = upperBoundByTime(lines, currentMs) - 1;
 
-      if (activeIndex == -2) {
-        activeIndex = lines.length - 1;
-      } else if (activeIndex < 0) {
+      if (activeIndex < 0) {
         activeIndex = 0;
       }
 

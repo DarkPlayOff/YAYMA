@@ -1,5 +1,5 @@
 import 'package:signals_flutter/signals_flutter.dart';
-import 'package:yayma/src/features/core/services/rust_bridge.dart';
+import 'package:yayma/src/app/session.dart';
 import 'package:yayma/src/features/core/utils/lru_map.dart';
 import 'package:yayma/src/rust/api/content.dart';
 import 'package:yayma/src/rust/api/models.dart';
@@ -61,6 +61,13 @@ final LruMap<String, FutureSignal<LyricsResult>> _lyricsCache = LruMap(
   maximumSize: _maxLyricsCacheSize,
 );
 
+/// Last transport failure per track, so a failed fetch is retried on a later
+/// read instead of being pinned as "no lyrics" for the whole session.
+final Map<String, DateTime> _lyricsFailedAt = {};
+
+/// How long a failed fetch stays cached before [lyricsSignal] retries it.
+const Duration _lyricsRetryDelay = Duration(seconds: 20);
+
 /// Drops every cached lyrics fetch so the next [lyricsSignal] read refetches
 /// from Rust. Call this when the set of enabled lyrics providers changes —
 /// otherwise a track's lyrics stay pinned to whatever source answered
@@ -68,17 +75,30 @@ final LruMap<String, FutureSignal<LyricsResult>> _lyricsCache = LruMap(
 /// Also call from logout to avoid leaking per-user data.
 void clearLyricsCache() {
   _lyricsCache.clear();
+  _lyricsFailedAt.clear();
 }
 
 FutureSignal<LyricsResult> lyricsSignal(String trackId) {
   final existing = _lyricsCache[trackId];
-  if (existing != null) return existing;
+  final failedAt = _lyricsFailedAt[trackId];
+  if (existing != null &&
+      (failedAt == null ||
+          DateTime.now().difference(failedAt) < _lyricsRetryDelay)) {
+    return existing;
+  }
+  _lyricsFailedAt.remove(trackId);
   final created = futureSignal<LyricsResult>(() async {
-    final result = await runRustFetch(
-      (ctx) => getLyrics(ctx: ctx, trackId: trackId),
-    );
-    if (result == null) return LyricsResult([], '');
-    return LyricsResult(_toLyricItems(result.lines), result.providerName);
+    final ctx = appContextSignal.value;
+    // No context yet is not a provider failure: don't cache it as one.
+    if (ctx == null) return LyricsResult([], '');
+    try {
+      final result = await getLyrics(ctx: ctx, trackId: trackId);
+      if (result == null) return LyricsResult([], '');
+      return LyricsResult(_toLyricItems(result.lines), result.providerName);
+    } on Object {
+      _lyricsFailedAt[trackId] = DateTime.now();
+      rethrow;
+    }
   });
   _lyricsCache[trackId] = created;
   return created;
@@ -127,21 +147,26 @@ List<LyricItem> _toLyricItems(List<LyricsLineDto> lines) {
     final duration = nextTime - current.time;
 
     if (duration > const Duration(seconds: 5)) {
-      const textDuration = Duration(seconds: 4);
+      final words = current.words;
+      // Word timings can span most of a long gap: end the line when the last
+      // word is sung instead of stopping the karaoke cursor after 4 s.
+      final sung = (words != null && words.isNotEmpty)
+          ? words.last.end - current.time
+          : const Duration(seconds: 4);
+      final textDuration = sung < Duration.zero
+          ? Duration.zero
+          : (sung > duration ? duration : sung);
       result.add(
-        LyricLine(
-          current.time,
-          current.text,
-          textDuration,
-          words: current.words,
-        ),
+        LyricLine(current.time, current.text, textDuration, words: words),
       );
 
       final timerStart = current.time + textDuration;
       final timerDuration =
           duration - textDuration - const Duration(seconds: 1);
 
-      result.add(LyricTimer(timerStart, timerDuration));
+      if (timerDuration > Duration.zero) {
+        result.add(LyricTimer(timerStart, timerDuration));
+      }
     } else {
       result.add(
         LyricLine(current.time, current.text, duration, words: current.words),

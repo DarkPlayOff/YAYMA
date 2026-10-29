@@ -2,7 +2,7 @@ use foldhash::HashMap;
 use parking_lot::RwLock;
 use rodio::Source;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU8, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU64, Ordering};
 use tokio::sync::Mutex;
 use yandex_music::model::track::Track;
 
@@ -42,6 +42,9 @@ pub struct AudioController {
     // before it is treated as a normal end/error.
     stream_error_retries: Arc<AtomicU8>,
     reload_in_flight: Arc<AtomicU8>,
+    // Set by an explicit pause and cleared by resume/new track. A stream that
+    // finishes preparing after the user hit pause must not start playing.
+    pause_requested: Arc<AtomicBool>,
     transient_volume_gain: Arc<AtomicU8>,
     signals: AudioSignals,
     effect_handles: Arc<RwLock<HashMap<String, EffectHandle>>>,
@@ -64,6 +67,7 @@ impl Clone for AudioController {
             playback_generation: self.playback_generation.clone(),
             stream_error_retries: self.stream_error_retries.clone(),
             reload_in_flight: self.reload_in_flight.clone(),
+            pause_requested: self.pause_requested.clone(),
             transient_volume_gain: self.transient_volume_gain.clone(),
             signals: self.signals.clone(),
             effect_handles: self.effect_handles.clone(),
@@ -105,6 +109,7 @@ impl AudioController {
             playback_generation: Arc::new(AtomicU64::new(0)),
             stream_error_retries: Arc::new(AtomicU8::new(0)),
             reload_in_flight: Arc::new(AtomicU8::new(0)),
+            pause_requested: Arc::new(AtomicBool::new(false)),
             transient_volume_gain: Arc::new(AtomicU8::new(100)),
             signals,
             effect_handles: Arc::new(RwLock::new(effect_handles)),
@@ -267,6 +272,7 @@ impl AudioController {
         if !soft_reload {
             self.stream_error_retries.store(0, Ordering::SeqCst);
             self.reload_in_flight.store(0, Ordering::SeqCst);
+            self.pause_requested.store(false, Ordering::SeqCst);
             self.signals.is_stopped.set(false);
             self.signals.set_current_track(Some(track.clone()));
         }
@@ -287,6 +293,7 @@ impl AudioController {
         self.apply_volume();
 
         let generation = self.playback_generation.clone();
+        let pause_requested = self.pause_requested.clone();
         let task = tokio::spawn(async move {
             match stream_manager.create_stream_session(&track_clone).await {
                 Ok(prepared) => {
@@ -443,7 +450,9 @@ impl AudioController {
 
                     signals.set_buffering(false);
 
-                    if start_paused {
+                    // Pausing while the stream was still being prepared must not
+                    // be undone by the session landing ready a moment later.
+                    if start_paused || pause_requested.load(Ordering::SeqCst) {
                         engine.pause();
                         signals.set_playing(false);
                     } else {
@@ -459,7 +468,7 @@ impl AudioController {
                     {
                         stream_error_retries.fetch_add(1, Ordering::SeqCst);
                         signals.set_buffering(true);
-                        if !start_paused {
+                        if !start_paused && !pause_requested.load(Ordering::SeqCst) {
                             signals.set_playing(true);
                         }
                         if tx.try_send(AudioMessage::ReloadCurrentTrack).is_err() {
@@ -505,6 +514,7 @@ impl AudioController {
     }
 
     pub(crate) async fn pause(&self) {
+        self.pause_requested.store(true, Ordering::SeqCst);
         self.engine.pause();
         self.signals.set_playing(false);
     }
@@ -513,6 +523,7 @@ impl AudioController {
         if self.engine.is_empty() && self.signals.current_track.get().is_none() {
             return;
         }
+        self.pause_requested.store(false, Ordering::SeqCst);
         self.engine.play();
         self.signals.set_playing(true);
     }

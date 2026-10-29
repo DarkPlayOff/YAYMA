@@ -244,6 +244,10 @@ impl QueueSignals {
     fn raw_queue_length_handle(&self) -> Signal<usize> {
         self.inner.queue_length.clone()
     }
+
+    fn raw_queue_revision_handle(&self) -> Signal<u32> {
+        self.inner.queue_revision.clone()
+    }
 }
 
 pub struct QueueManager {
@@ -427,6 +431,7 @@ impl QueueManager {
         let handles = WaveExtensionHandles {
             queue: self.signals.raw_queue_handle(),
             queue_length: self.signals.raw_queue_length_handle(),
+            queue_revision: self.signals.raw_queue_revision_handle(),
             wave_session: self.fetch.wave_session_arc(),
             wave_batch_ids: self.fetch.wave_batch_ids_arc(),
             playback_context: self.playback_context.clone(),

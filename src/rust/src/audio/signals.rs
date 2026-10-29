@@ -28,6 +28,9 @@ pub struct AudioSignals {
     pub history: Signal<Vector<Track>>,
     pub queue_index: Signal<usize>,
     pub queue_length: Signal<usize>,
+    /// Bumped on every queue replacement/reorder so the UI can tell two
+    /// same-length queues apart (queue length alone does not change).
+    pub queue_revision: Signal<u32>,
     pub repeat_mode: Signal<RepeatMode>,
     pub is_shuffled: Signal<bool>,
     pub current_wave_seeds: Signal<Vec<String>>,
@@ -73,6 +76,7 @@ impl AudioSignals {
             history: Signal::new(Vector::new()),
             queue_index: Signal::new(0),
             queue_length: Signal::new(0),
+            queue_revision: Signal::new(0),
             repeat_mode: Signal::new(RepeatMode::None),
             is_shuffled: Signal::new(false),
             current_wave_seeds: Signal::new(Vec::new()),
@@ -146,6 +150,8 @@ impl AudioSignals {
         self.history.set(history);
         self.queue_index.set(index);
         self.queue_length.set(queue.len());
+        self.queue_revision
+            .update(|revision| *revision = revision.wrapping_add(1));
         self.changed.send_replace(());
     }
 
@@ -189,5 +195,23 @@ impl AudioSignals {
 impl Default for AudioSignals {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn set_queue_bumps_revision() {
+        let signals = AudioSignals::new();
+        assert_eq!(signals.queue_revision.get(), 0);
+
+        signals.set_queue(Vector::new(), Vector::new(), 0);
+        assert_eq!(signals.queue_revision.get(), 1);
+
+        // A same-length replacement must still be observable.
+        signals.set_queue(Vector::new(), Vector::new(), 0);
+        assert_eq!(signals.queue_revision.get(), 2);
     }
 }

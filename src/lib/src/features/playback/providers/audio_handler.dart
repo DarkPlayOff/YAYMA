@@ -31,16 +31,15 @@ class YaymaAudioHandler extends BaseAudioHandler {
           localCoverUriSignal().value ??
           (meta.coverUrl != null ? Uri.parse(meta.coverUrl!) : null);
 
-      // Use peek() to avoid rebuilding the notification every time the duration ticks
-      final progress = trackProgressSignal.peek();
-
+      // Duration comes from the track itself: the progress snapshot still
+      // belongs to the previous track for a moment after a switch.
       mediaItem.add(
         MediaItem(
           id: meta.id!,
-          album: meta.albumId,
+          album: meta.album,
           title: meta.title,
           artist: meta.artists.map((a) => a.name).join(', '),
-          duration: Duration(milliseconds: progress.durationMs.toInt()),
+          duration: Duration(milliseconds: meta.durationMs),
           artUri: artUri,
           extras: {'version': meta.version, 'codec': meta.codec},
         ),

@@ -92,6 +92,7 @@ class _Player {
       isShuffled: false,
       queueCount: _ids.length,
       queueIndex: _ids.indexOf(id),
+      queueRevision: 0,
       currentTrack: _track(id),
       currentWaveSeeds: const [],
     );

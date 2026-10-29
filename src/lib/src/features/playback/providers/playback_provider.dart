@@ -42,6 +42,10 @@ StreamSubscription<rust.AppEvent>? _eventSub;
 /// Deduplicates concurrent [initPlayback] calls (login + auto-login racing).
 Future<void>? _initPlaybackFuture;
 
+/// Track the last progress snapshot belongs to. Used to tell a real track
+/// change from a pause/like/volume update that must not reset the position.
+String? _progressTrackId;
+
 Future<void> initPlayback() {
   final ongoing = _initPlaybackFuture;
   if (ongoing != null) return ongoing;
@@ -65,6 +69,7 @@ Future<void> initPlayback() {
 /// [initPlayback] starts clean. Idempotent.
 Future<void> disposePlayback() async {
   _initPlaybackFuture = null;
+  _progressTrackId = null;
   await _eventSub?.cancel();
   _eventSub = null;
 
@@ -108,10 +113,24 @@ Future<void> _initPlaybackUnsafe() async {
   _eventSub = null;
 
   // Initialize app event stream
-  _eventSub = rust.appEventStream(ctx: ctx).listen((event) {
+  final subscription = rust.appEventStream(ctx: ctx).listen((event) {
     switch (event) {
       case rust.AppEvent_PlaybackStateChanged(field0: final state):
         playerStateSignal.value = state;
+        final trackId = state.currentTrack?.id;
+        if (trackId != _progressTrackId) {
+          // Progress events belong to one track and stop while it is swapped;
+          // snap to the new track's duration so the seek bar, notification and
+          // lyrics stop showing the previous track's values.
+          _progressTrackId = trackId;
+          final track = state.currentTrack;
+          playerProgressSignal.value = track == null
+              ? null
+              : PlaybackProgressDto(
+                  positionMs: 0,
+                  durationMs: track.durationMs,
+                );
+        }
       case rust.AppEvent_PlaybackProgress(field0: final progress):
         playerProgressSignal.value = progress;
       case rust.AppEvent_VibeTick(field0: final tick):
@@ -154,9 +173,21 @@ Future<void> _initPlaybackUnsafe() async {
         break;
     }
   });
+  _eventSub = subscription;
 
-  audioQualitySignal.value = await rust.getAudioQuality(ctx: ctx);
+  final quality = await rust.getAudioQuality(ctx: ctx);
 
+  // A logout (or a login as another account) may have landed while awaiting.
+  // Installing effects and theme now would bind them to the dead context.
+  if (!identical(appContextSignal.value, ctx)) {
+    // Cancel only our own subscription: a new init may have replaced it
+    // while this one was awaiting.
+    await subscription.cancel();
+    if (identical(_eventSub, subscription)) _eventSub = null;
+    return;
+  }
+
+  audioQualitySignal.value = quality;
   activateCoverTheme();
   _activateEffects();
 }
@@ -287,8 +318,10 @@ final FlutterComputed<
     String title,
     String? version,
     List<TrackArtistDto> artists,
-    String? coverUrl,
+    String? album,
     String? albumId,
+    String? coverUrl,
+    int durationMs,
     String? codec,
   })
 >
@@ -299,8 +332,10 @@ trackMetadataSignal = computed(() {
     title: state?.currentTrack?.title ?? 'Тишина',
     version: state?.currentTrack?.version,
     artists: state?.currentTrack?.artists ?? [],
-    coverUrl: state?.currentTrack?.coverUrl,
+    album: state?.currentTrack?.album,
     albumId: state?.currentTrack?.albumId,
+    coverUrl: state?.currentTrack?.coverUrl,
+    durationMs: state?.currentTrack?.durationMs ?? 0,
     codec: state?.codec,
   );
 }, options: const ComputedOptions(name: 'trackMetadataSignal'));
@@ -348,16 +383,31 @@ final FutureSignal<Uri?> localCoverUriSignal = computedAsync(() async {
   return Uri.parse(url); // Fallback to remote if not yet cached
 }, options: const AsyncSignalOptions(name: 'localCoverUriSignal'));
 
+// Queue shape only: recomputed when the queue size or order changes, not on
+// every pause/volume/like, each of which would otherwise copy the whole queue
+// over FFI and query the DB again.
+final FlutterComputed<int> queueCountSignal = computed(
+  () => playerStateSignal.value?.queueCount ?? 0,
+  options: const ComputedOptions(name: 'queueCountSignal'),
+);
+
+// Queue identity only: bumped by Rust whenever the queue is replaced or
+// reordered. Count alone misses a replacement with the same queue length.
+final FlutterComputed<int> queueRevisionSignal = computed(
+  () => playerStateSignal.value?.queueRevision ?? 0,
+  options: const ComputedOptions(name: 'queueRevisionSignal'),
+);
+
 // Signal for queue tracks
 final FutureSignal<List<SimpleTrackDto>> queueTracksSignal = computedAsync(
   () async {
     final ctx = appContextSignal();
-    final state = playerStateSignal();
-    if (ctx == null || state == null) return const [];
+    final queueCount = queueCountSignal();
+    if (ctx == null || queueCount == 0) return const [];
 
-    // Depend on key queue parameters to re-trigger when queue changes
-    final _ = state.queueCount;
-    final _ = state.isShuffled;
+    // Refetch when the queue itself changes, including a same-length swap
+    // (album A → album B) and a shuffle that reorders the same tracks.
+    final _ = queueRevisionSignal();
 
     return await rust.getQueue(ctx: ctx);
   },
@@ -389,6 +439,11 @@ final FlutterComputed<SimpleTrackDto?> nextTrackSignal = computed(() {
 
   final index = state.queueIndex;
   final repeatMode = state.repeatMode;
+
+  // Repeat-one replays this track, so the "next" preview is the current one.
+  if (repeatMode == RepeatModeDto.single && index < queue.length) {
+    return queue[index];
+  }
 
   if (index + 1 < queue.length) {
     return queue[index + 1];
@@ -523,16 +578,16 @@ class PlaybackController {
   static Future<void> playAlbum(int albumId) =>
       runRustAction((ctx) => rust.playAlbum(ctx: ctx, albumId: albumId));
   static Future<void> togglePlay() {
-    // A pause the user asked for must not wait out the track-switch debounce.
-    final wasPlaying = stablePlayingSignal.peek();
-    if (wasPlaying) _userPausePending = true;
-    return runRustAction((ctx) => rust.togglePlayPause(ctx: ctx)).then((ok) {
-      // The pause may have failed; don't let the flag eat the next transition.
-      if (wasPlaying && !ok) _userPausePending = false;
-    });
+    // Decide from what the button shows, not from Rust's momentary flag: while
+    // a track is being swapped Rust reports isPlaying=false, so a plain toggle
+    // would resume instead of pausing the track the user is looking at.
+    if (stablePlayingSignal.peek()) return pause();
+    _userPausePending = false;
+    return runRustAction((ctx) => rust.play(ctx: ctx));
   }
 
   static Future<void> play() {
+    _userPausePending = false;
     return runRustAction((ctx) => rust.play(ctx: ctx));
   }
 

@@ -280,6 +280,9 @@ pub struct PlaybackState {
     pub is_shuffled: bool,
     pub queue_count: u32,
     pub queue_index: u32,
+    /// Changes whenever the queue is replaced or reordered, even when the new
+    /// queue has the same length as the old one.
+    pub queue_revision: u32,
     pub current_track: Option<SimpleTrackDto>,
     pub current_wave_seeds: Vec<String>,
     pub codec: Option<String>,
@@ -611,12 +614,24 @@ pub enum AppError {
     Unknown(String),
 }
 
+/// Only the music API host answers 401 for a bad token. A 401 from a CDN or
+/// avatar host means the URL is stale, not that the session died — treating it
+/// as an auth failure logged users out mid-track.
+const AUTH_HOST: &str = "api.music.yandex.net";
+
+/// True when [url] is (or cannot be determined to be anything but) the auth
+/// host; an unknown URL keeps the previous, conservative behaviour.
+fn is_auth_host(url: Option<&reqwest::Url>) -> bool {
+    url.and_then(|u| u.host_str())
+        .is_none_or(|host| host == AUTH_HOST)
+}
+
 impl From<yandex_music::error::ClientError> for AppError {
     fn from(err: yandex_music::error::ClientError) -> Self {
         match err {
             yandex_music::error::ClientError::RequestError { error } => {
                 let s = error.to_string();
-                if s.contains("401") {
+                if s.contains("401") && is_auth_host(error.url()) {
                     AppError::Unauthorized
                 } else if s.contains("404") {
                     AppError::NotFound(s)
@@ -648,7 +663,7 @@ impl From<rusqlite::Error> for AppError {
 impl From<reqwest::Error> for AppError {
     fn from(err: reqwest::Error) -> Self {
         let s = err.to_string();
-        if s.contains("401") {
+        if s.contains("401") && is_auth_host(err.url()) {
             AppError::Unauthorized
         } else if s.contains("404") {
             AppError::NotFound(s)
@@ -671,7 +686,11 @@ impl From<std::io::Error> for AppError {
 impl From<Box<dyn std::error::Error + Send + Sync>> for AppError {
     fn from(err: Box<dyn std::error::Error + Send + Sync>) -> Self {
         let s = err.to_string();
-        if s.contains("401") || s.contains("unauthorized") {
+        // Same host rule as above, for errors that still carry their request.
+        let auth_401 = err
+            .downcast_ref::<reqwest::Error>()
+            .map_or(true, |e| is_auth_host(e.url()));
+        if (s.contains("401") || s.contains("unauthorized")) && auth_401 {
             AppError::Unauthorized
         } else if s.contains("404") || s.contains("not found") {
             AppError::NotFound(s)

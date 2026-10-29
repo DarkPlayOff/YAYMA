@@ -22,6 +22,7 @@ pub(crate) fn get_playback_state_internal<S: std::hash::BuildHasher>(
         is_shuffled: signals.is_shuffled.get(),
         queue_count: signals.queue_length.get() as u32,
         queue_index: signals.queue_index.get() as u32,
+        queue_revision: signals.queue_revision.get(),
         current_wave_seeds: signals.current_wave_seeds.get(),
         codec: signals.codec.get(),
         current_track: current_track

@@ -484,6 +484,7 @@ impl FetchState {
 pub struct WaveExtensionHandles {
     pub queue: Signal<Vector<Track>>,
     pub queue_length: Signal<usize>,
+    pub queue_revision: Signal<u32>,
     pub wave_session: Arc<Mutex<Option<Session>>>,
     pub wave_batch_ids: Arc<Mutex<HashMap<String, String>>>,
     pub playback_context: Arc<Mutex<crate::audio::queue::PlaybackContext>>,
@@ -535,6 +536,8 @@ impl WaveExtensionHandles {
         self.queue.update(|q| q.extend(visible));
         self.queue_length
             .set(self.queue.with(|q: &Vector<Track>| q.len()));
+        self.queue_revision
+            .update(|revision| *revision = revision.wrapping_add(1));
     }
 }
 
