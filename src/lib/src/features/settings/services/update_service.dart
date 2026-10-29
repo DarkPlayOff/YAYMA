@@ -131,7 +131,8 @@ class UpdateService {
     String repo,
     String tag,
   ) async {
-    final client = HttpClient();
+    final client = HttpClient()
+      ..connectionTimeout = const Duration(seconds: 15);
     try {
       final request = await client.getUrl(
         Uri.parse('https://api.github.com/repos/$repo/releases/tags/$tag'),
@@ -188,7 +189,8 @@ class UpdateService {
     ApkAsset asset, {
     DownloadProgressCallback? onProgress,
   }) async {
-    final client = HttpClient();
+    final client = HttpClient()
+      ..connectionTimeout = const Duration(seconds: 15);
     try {
       final request = await client.getUrl(asset.url);
       request.headers.set('User-Agent', 'yayma-app');
@@ -209,7 +211,11 @@ class UpdateService {
             ? response.contentLength
             : asset.size;
         var received = 0;
-        await for (final chunk in response) {
+        // A stalled transfer would otherwise keep the progress dialog up
+        // forever: no chunk for 30 s aborts the download.
+        await for (final chunk in response.timeout(
+          const Duration(seconds: 30),
+        )) {
           sink.add(chunk);
           received += chunk.length;
           onProgress?.call(total > 0 ? (received / total).clamp(0, 1) : null);

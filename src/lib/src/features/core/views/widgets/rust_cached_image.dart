@@ -49,6 +49,11 @@ class RustCachedImage extends StatefulWidget {
   final int? cacheWidth;
   final int? cacheHeight;
 
+  /// Drops the resolved paths without touching the Rust-side cache. Called
+  /// after "clear cache", otherwise every image keeps pointing at a file that
+  /// no longer exists until the app restarts.
+  static void clearPathCache() => _RustCachedImageState._pathCache.clear();
+
   const RustCachedImage({
     required this.imageUrl,
     super.key,
@@ -73,6 +78,7 @@ class _RustCachedImageState extends State<RustCachedImage> {
   String? _resolvedPath;
   late bool _isLoading;
   String? _lastUrl;
+  bool _reloadOnErrorRequested = false;
 
   @override
   void initState() {
@@ -82,6 +88,11 @@ class _RustCachedImageState extends State<RustCachedImage> {
 
   void _initPath() {
     final url = widget.imageUrl;
+    // Set before the cache lookup: the guard in _resolvePathAsync compares
+    // against it, and a cache hit must still claim this URL as the current one.
+    _lastUrl = url;
+    _reloadOnErrorRequested = false;
+
     if (url == null || url.isEmpty) {
       _resolvedPath = null;
       _isLoading = false;
@@ -100,8 +111,24 @@ class _RustCachedImageState extends State<RustCachedImage> {
     // download takes.
     _resolvedPath = null;
     _isLoading = true;
-    _lastUrl = url;
     unawaited(_resolvePathAsync(url));
+  }
+
+  /// The cached path pointed at a file that no longer exists (cache cleared,
+  /// file removed by hand): forget it and resolve once more.
+  void _reloadAfterFileError() {
+    final url = widget.imageUrl;
+    if (_reloadOnErrorRequested || url == null) return;
+    _reloadOnErrorRequested = true;
+    _pathCache.remove(url);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _lastUrl != url) return;
+      setState(() {
+        _resolvedPath = null;
+        _isLoading = true;
+      });
+      unawaited(_resolvePathAsync(url));
+    });
   }
 
   Future<void> _resolvePathAsync(String url) async {
@@ -201,9 +228,11 @@ class _RustCachedImageState extends State<RustCachedImage> {
             ],
           );
         },
-        errorBuilder: (context, error, stackTrace) =>
-            widget.errorWidget ??
-            _ImageError(width: widget.width, height: widget.height),
+        errorBuilder: (context, error, stackTrace) {
+          _reloadAfterFileError();
+          return widget.errorWidget ??
+              _ImageError(width: widget.width, height: widget.height);
+        },
       );
     } else if (_isLoading) {
       content =

@@ -16,6 +16,7 @@ import 'package:yayma/src/features/core/services/rust_bridge.dart';
 import 'package:yayma/src/features/core/theme/app_tokens.dart';
 import 'package:yayma/src/features/core/views/widgets/common_ui.dart';
 import 'package:yayma/src/features/core/views/widgets/responsive.dart';
+import 'package:yayma/src/features/core/views/widgets/rust_cached_image.dart';
 import 'package:yayma/src/features/core/views/widgets/smooth_scroll.dart';
 import 'package:yayma/src/features/library/providers/library_provider.dart';
 import 'package:yayma/src/features/settings/views/lyrics_providers_dialog.dart';
@@ -178,6 +179,7 @@ class _SettingsViewState extends State<SettingsView> {
   Future<void> _clearCache() async {
     final ok = await runRustAction((ctx) => simple.clearCache(ctx: ctx));
     if (!ok) return;
+    RustCachedImage.clearPathCache();
     unawaited(_cacheSizeSignal.refresh());
     showAppSuccess('Кэш успешно очищен');
   }
