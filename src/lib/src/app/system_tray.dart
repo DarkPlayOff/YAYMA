@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/services.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
@@ -30,16 +31,22 @@ class SystemTrayManager with WindowListener {
   Menu? _menu;
   MenuItem? _pauseItem;
 
+  /// The runner asks for a real quit here when the console is closed or Ctrl+C
+  /// is pressed; WM_CLOSE cannot be used because close-to-tray intercepts it.
+  static const MethodChannel _lifecycleChannel =
+      MethodChannel('yayma/lifecycle');
+
   /// Whether the tray is supported on the current platform.
   static bool get isSupported => Platform.isWindows;
 
   Future<void> initialize() async {
-    if (_initialized || !isSupported) return;
-    _initialized = true;
+    // Registered before the bail-outs below: quitting must work even when the
+    // tray icon could not be created.
+    _lifecycleChannel.setMethodCallHandler((call) async {
+      if (call.method == 'quit') await quit();
+    });
 
-    // Intercept the window close button so it hides to tray instead of exiting.
-    await windowManager.setPreventClose(true);
-    windowManager.addListener(this);
+    if (_initialized || !isSupported) return;
 
     final trayIcon = TrayIcon.create();
     if (trayIcon == null) return;
@@ -55,7 +62,11 @@ class SystemTrayManager with WindowListener {
       });
 
     final menu = Menu.create();
-    if (menu == null) return;
+    if (menu == null) {
+      trayIcon.dispose();
+      _trayIcon = null;
+      return;
+    }
     _menu = menu;
     _pauseItem = _menuItem('Пауза', PlaybackController.togglePlay);
     menu
@@ -65,7 +76,7 @@ class SystemTrayManager with WindowListener {
       ..addItem(_menuItem('Предыдущий трек', PlaybackController.prev))
       ..addItem(_menuItem('Следующий трек', PlaybackController.next))
       ..addSeparator()
-      ..addItem(_menuItem('Закрыть', _quit));
+      ..addItem(_menuItem('Закрыть', quit));
     trayIcon
       ..setContextMenu(menu)
       ..setVisible(true);
@@ -76,6 +87,12 @@ class SystemTrayManager with WindowListener {
       final isPlaying = isPlayingSignal();
       _pauseItem?.label = isPlaying ? 'Пауза' : 'Возобновить';
     });
+
+    // Only claim close-to-tray once the icon really exists; otherwise closing
+    // the window would hide the app with no way to bring it back.
+    await windowManager.setPreventClose(true);
+    windowManager.addListener(this);
+    _initialized = true;
   }
 
   /// Menu item that runs [onClick] on every click.
@@ -91,7 +108,9 @@ class SystemTrayManager with WindowListener {
     await windowManager.focus();
   }
 
-  Future<void> _quit() async {
+  /// Quits the app: saves the window placement, releases the hotkeys and tray,
+  /// then closes the window for real (close-to-tray no longer applies).
+  Future<void> quit() async {
     _quitting = true;
     _menuEffect?.call();
     _menuEffect = null;
@@ -118,7 +137,7 @@ class SystemTrayManager with WindowListener {
       // Hide to tray rather than terminating the process.
       unawaited(WindowPlacement.saveNow().then((_) => windowManager.hide()));
     } else {
-      unawaited(_quit());
+      unawaited(quit());
     }
   }
 }

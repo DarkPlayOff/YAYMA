@@ -5,6 +5,26 @@
 #include "flutter_window.h"
 #include "utils.h"
 
+namespace {
+
+HWND g_main_window = nullptr;
+
+BOOL WINAPI OnConsoleCtrl(DWORD type) {
+  if (!g_main_window) {
+    return FALSE;
+  }
+  ::PostMessageW(g_main_window, FlutterWindow::kQuitRequestMessage, 0, 0);
+  if (type == CTRL_CLOSE_EVENT || type == CTRL_LOGOFF_EVENT ||
+      type == CTRL_SHUTDOWN_EVENT) {
+    // The system kills the process once this handler returns; wait a bit so the
+    // normal close path can finish first.
+    ::WaitForSingleObject(::GetCurrentProcess(), 4000);
+  }
+  return TRUE;
+}
+
+}  // namespace
+
 int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
                       _In_ wchar_t *command_line, _In_ int show_command) {
   // Prevent multiple instances from running simultaneously
@@ -44,6 +64,9 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
     return EXIT_FAILURE;
   }
   window.SetQuitOnClose(true);
+
+  g_main_window = window.GetHandle();
+  ::SetConsoleCtrlHandler(OnConsoleCtrl, TRUE);
 
   ::MSG msg;
   while (::GetMessage(&msg, nullptr, 0, 0)) {

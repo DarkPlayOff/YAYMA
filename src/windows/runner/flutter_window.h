@@ -3,6 +3,8 @@
 
 #include <flutter/dart_project.h>
 #include <flutter/flutter_view_controller.h>
+#include <flutter/method_channel.h>
+#include <flutter/standard_method_codec.h>
 
 #include <memory>
 
@@ -14,6 +16,10 @@ class FlutterWindow : public Win32Window {
   // Creates a new FlutterWindow hosting a Flutter view running |project|.
   explicit FlutterWindow(const flutter::DartProject& project);
   virtual ~FlutterWindow();
+
+  // Posted by the console handler in main.cpp to ask Dart to quit. It cannot be
+  // WM_CLOSE: close-to-tray intercepts that and only hides the window.
+  static constexpr UINT kQuitRequestMessage = WM_APP + 1;
 
  protected:
   // Win32Window:
@@ -28,6 +34,10 @@ class FlutterWindow : public Win32Window {
 
   // The Flutter instance hosted by this window.
   std::unique_ptr<flutter::FlutterViewController> flutter_controller_;
+
+  // Used to ask Dart for a full quit (see kQuitRequestMessage).
+  std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>>
+      lifecycle_channel_;
 };
 
 #endif  // RUNNER_FLUTTER_WINDOW_H_
