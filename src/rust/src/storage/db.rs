@@ -1,4 +1,3 @@
-use super::migration::{merge_foreign_tables, stash_foreign_tables};
 use crate::api::models::{AppError, TrackArtistDto};
 use rusqlite::{Connection, OptionalExtension, params};
 use std::collections::HashMap;
@@ -76,9 +75,8 @@ const CREATE_INDEXES: &[&str] = &[
 
 impl AppDatabase {
     pub async fn init(base_path: Option<PathBuf>) -> DbResult<Self> {
-        // Sync SQLite I/O (open + one-time migration) must not stall the executor.
+        // Sync SQLite I/O (open + schema creation) must not stall the executor.
         tokio::task::block_in_place(|| {
-            // Same file the toasty backend used, so in-place migration is possible.
             let db_path = if let Some(path) = base_path {
                 std::fs::create_dir_all(&path).ok();
                 path.join("yamusic_v2.db")
@@ -101,10 +99,6 @@ impl AppDatabase {
             conn.pragma_update(None, "temp_store", "MEMORY")?;
             conn.pragma_update(None, "foreign_keys", "ON")?;
 
-            // Phase 1: move foreign tables aside so CREATE below can't
-            // silently reuse a wrong schema under our names.
-            stash_foreign_tables(&conn);
-
             for m in [
                 CREATE_APP_SETTINGS,
                 CREATE_LIKED_TRACKS,
@@ -118,71 +112,8 @@ impl AppDatabase {
                 conn.execute(idx, [])?;
             }
 
-            // Phase 3: merge the stashed leftovers into the fresh schema.
-            merge_foreign_tables(&conn);
-
-            let mut db = Self { conn };
-            db.import_liked_from_settings();
-            Ok(db)
+            Ok(Self { conn })
         })
-    }
-
-    /// One-time import: toasty kept liked tracks as a JSON array in settings.
-    /// Moves them into the dedicated table, then removes the key.
-    fn import_liked_from_settings(&mut self) {
-        let raw: Option<String> = self
-            .conn
-            .query_row(
-                "SELECT value FROM app_settings WHERE key = 'liked_tracks'",
-                [],
-                |r| r.get(0),
-            )
-            .optional()
-            .unwrap_or(None)
-            .flatten();
-        let Some(raw) = raw else { return };
-        let ids: Vec<String> = match serde_json::from_str(&raw) {
-            Ok(v) => v,
-            Err(e) => {
-                tracing::warn!("Failed to parse legacy liked_tracks setting: {}", e);
-                return;
-            }
-        };
-        if ids.is_empty() {
-            let _ = self
-                .conn
-                .execute("DELETE FROM app_settings WHERE key = 'liked_tracks'", []);
-            return;
-        }
-        let tx = match self.conn.transaction() {
-            Ok(tx) => tx,
-            Err(e) => {
-                tracing::warn!("Liked tracks import failed: {}", e);
-                return;
-            }
-        };
-        let mut ok = true;
-        for id in &ids {
-            if tx
-                .execute(
-                    "INSERT OR IGNORE INTO liked_tracks (track_id) VALUES (?1)",
-                    params![id],
-                )
-                .is_err()
-            {
-                ok = false;
-                break;
-            }
-        }
-        if ok {
-            ok = tx
-                .execute("DELETE FROM app_settings WHERE key = 'liked_tracks'", [])
-                .is_ok()
-                && tx.commit().is_ok();
-        }
-        if !ok {
-            tracing::warn!("Liked tracks import failed, keeping settings copy");
-        }
     }
 
     pub async fn save_auth_token(&mut self, token: &str, user_id: u64) -> DbResult<()> {
