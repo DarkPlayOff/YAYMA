@@ -299,21 +299,26 @@ class _RootBucket extends StatelessWidget {
   }
 
   List<Widget> _buildWindowStack(List<NavState> stack) {
-    return stack.asMap().entries.map((entry) {
-      final index = entry.key;
-      final state = entry.value;
-      final isLast = index == stack.length - 1;
-      final isHome = state.section == AppSection.home;
+    // The tab root stays built forever (switching tabs keeps its state), plus
+    // at most two screens pushed on top of it. Anything deeper needs more than
+    // two back presses and would otherwise stay mounted - rebuilding on every
+    // signal tick - for the life of the tab.
+    final firstPushed = stack.length > 2 ? stack.length - 2 : 1;
+    return stack
+        .asMap()
+        .entries
+        .where((entry) => entry.key == 0 || entry.key >= firstPushed)
+        .map((entry) {
+          final index = entry.key;
+          final state = entry.value;
+          final isLast = index == stack.length - 1;
+          final isHome = state.section == AppSection.home;
 
-      // Keep only the current and previous screens in the tab stack
-      final isDeeplyHidden = index < stack.length - 2;
-
-      return Offstage(
-        key: ValueKey('win_${state.section}_${state.id}_$index'),
-        offstage: isDeeplyHidden,
-        child: TickerMode(
-          enabled: !isDeeplyHidden,
-          child: AnimatedOpacity(
+          return AnimatedOpacity(
+            // Keyed by destination, not stack position, so pushing a screen
+            // keeps the previous one's state (scroll offset) instead of
+            // rebuilding it from scratch.
+            key: ValueKey('win_${state.section}_${state.id}'),
             duration: const Duration(milliseconds: 500),
             opacity: isLast ? 1.0 : 0.0,
             curve: Curves.easeInOutCubic,
@@ -329,14 +334,13 @@ class _RootBucket extends StatelessWidget {
                 curve: Curves.easeOutCubic,
                 child: IgnorePointer(
                   ignoring: !isLast,
-                  child: _WindowContent(state: state, index: index),
+                  child: _WindowContent(state: state),
                 ),
               ),
             ),
-          ),
-        ),
-      );
-    }).toList();
+          );
+        })
+        .toList();
   }
 }
 
@@ -386,9 +390,8 @@ class _AnimatedPlayerBar extends StatelessWidget {
 
 class _WindowContent extends StatelessWidget {
   final NavState state;
-  final int index;
 
-  const _WindowContent({required this.state, required this.index});
+  const _WindowContent({required this.state});
 
   @override
   Widget build(BuildContext context) {
@@ -426,8 +429,8 @@ class _WindowContent extends StatelessWidget {
         }
 
         final key = state.section == AppSection.account
-            ? ValueKey('account_$index')
-            : PageStorageKey('scroll_${state.section}_${state.id}_$index');
+            ? ValueKey('account_${state.section}')
+            : PageStorageKey('scroll_${state.section}_${state.id}');
 
         final child = KeyedSubtree(
           key: key,

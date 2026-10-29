@@ -551,6 +551,7 @@ class _YandexDeviceLoginDialogState extends State<YandexDeviceLoginDialog> {
       final response = await request.close();
       final body = await response.transform(utf8.decoder).join();
 
+      if (!mounted) return;
       if (response.statusCode == 200) {
         final data = jsonDecode(body) as Map<String, dynamic>;
         setState(() {
@@ -568,6 +569,7 @@ class _YandexDeviceLoginDialogState extends State<YandexDeviceLoginDialog> {
         });
       }
     } on Object catch (e) {
+      if (!mounted) return;
       setState(() {
         _error = humanizeError(e);
         _isLoading = false;
@@ -578,6 +580,7 @@ class _YandexDeviceLoginDialogState extends State<YandexDeviceLoginDialog> {
   }
 
   void _startPolling() {
+    _timer?.cancel();
     _timer = Timer.periodic(Duration(seconds: _interval), (timer) {
       unawaited(_pollToken());
     });
@@ -612,6 +615,7 @@ class _YandexDeviceLoginDialogState extends State<YandexDeviceLoginDialog> {
         final error = data['error'] as String?;
         if (error != 'authorization_pending') {
           _timer?.cancel();
+          if (!mounted) return;
           setState(() {
             _error =
                 data['error_description'] as String? ??

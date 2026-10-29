@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:ui' show PlatformDispatcher;
 
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
@@ -17,6 +18,17 @@ import 'package:yayma/src/features/playback/providers/playback_provider.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Without these an exception during init or in a detached future only
+  // reaches the console, leaving the user on a spinner with no explanation.
+  FlutterError.onError = (details) {
+    FlutterError.presentError(details);
+    debugPrint('Uncaught Flutter error: ${details.exception}');
+  };
+  PlatformDispatcher.instance.onError = (error, stack) {
+    debugPrint('Uncaught async error: $error\n$stack');
+    return true;
+  };
 
   final isDesktop = Platform.isWindows || Platform.isLinux || Platform.isMacOS;
   if (!isDesktop) {
@@ -44,7 +56,6 @@ Future<void> main() async {
   Future<void>? windowReady;
   if (isDesktop) {
     final isCustom = customTitlebarSignal.value;
-    customTitlebarSignal.value = isCustom;
 
     final savedBounds = await WindowPlacement.loadBounds();
     final savedMaximized = await WindowPlacement.loadMaximized();

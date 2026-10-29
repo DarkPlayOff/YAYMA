@@ -1,15 +1,20 @@
 import 'package:material_ui/material_ui.dart';
+import 'package:yayma/src/rust/api/models.dart';
 
 /// Whether [error] means the session is no longer valid.
 ///
-/// The Rust layer reports auth failures as messages carrying
-/// "invalid token" / "unauthorized" (see `AppError` in
-/// `rust/src/api/models.rs`); there is no typed error across the bridge yet.
+/// The bridge carries a typed `AppError`, so match the two auth variants
+/// instead of scanning messages: a stale stream URL returning 401 used to
+/// parse as "unauthorized" and log the user out mid-track.
 bool isSessionExpired(Object error) {
+  if (error is AppError_Unauthorized || error is AppError_InvalidToken) {
+    return true;
+  }
+  // Fallback for errors that lose their type crossing the bridge (panics,
+  // boxed errors): only the exact auth wording counts, not a bare "401".
   final message = error.toString().toLowerCase();
-  return message.contains('invalid token') ||
-      message.contains('unauthorized') ||
-      message.contains('session expired');
+  return message.contains('invalid token or session expired') ||
+      message.contains('invalid token');
 }
 
 /// Russian text for [error] that is safe to show to the user.

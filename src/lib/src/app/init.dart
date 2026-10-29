@@ -22,88 +22,41 @@ import 'package:yayma/src/rust/frb_generated.dart';
 
 /// Centralized application initialization module
 class AppInit {
+  /// Bumped on every login/logout. An async step that finishes after the
+  /// session changed compares its captured value and drops its result, so a
+  /// slow init can't write the previous account's data into the new session.
+  static int _authEpoch = 0;
+
   static Future<void> initialize() async {
-    SignalsObserver.instance = null;
-
-    await RustLib.init();
-
-    unawaited(UpdateService.cleanupDownloadedApk());
-
-    if (Platform.isAndroid) {
-      await _initAudioService();
-    }
-
-    final appDir = await _resolveDataDir();
-    await simple.initAppInfrastructure(basePath: appDir.path);
-
     try {
-      final settings = await simple.getInitialSettings();
-      autoHideNavbarSignal.value = settings.autoHideNavbar;
-      closeToTraySignal.value = settings.closeToTray;
-      customTitlebarSignal.value = settings.customTitlebar;
-      vibeVisibleSignal.value = settings.vibeAnimationEnabled;
-      vibeRenderScaleSignal.value = settings.vibeRenderScale;
-      blurEffectsEnabledSignal.value = settings.blurEffectsEnabled;
-    } on Object catch (_) {}
+      SignalsObserver.instance = null;
 
-    unawaited(_initializeAuthAndServices());
-  }
+      await RustLib.init();
 
-  /// Rust backend storage (yamusic_v2.db, http/track caches) lives in the
-  /// platform application-support directory, not Documents. One-time move
-  /// for installs predating this: the auth token is stored inside the DB,
-  /// so moving without migration would log every user out and orphan
-  /// downloaded tracks.
-  static Future<Directory> _resolveDataDir() async {
-    final support = await getApplicationSupportDirectory();
-    await _migrateLegacyDataDir(support);
-    return support;
-  }
+      unawaited(UpdateService.cleanupDownloadedApk());
 
-  static Future<void> _migrateLegacyDataDir(Directory support) async {
-    try {
-      final docs = await getApplicationDocumentsDirectory();
-      if (docs.path == support.path) return;
-      final legacyDb = File(
-        '${docs.path}${Platform.pathSeparator}yamusic_v2.db',
-      );
-      if (!legacyDb.existsSync()) return;
-      final targetDb = File(
-        '${support.path}${Platform.pathSeparator}yamusic_v2.db',
-      );
-      if (targetDb.existsSync()) return;
-      await support.create(recursive: true);
-      for (final name in [
-        'yamusic_v2.db',
-        'yamusic_v2.db-wal',
-        'yamusic_v2.db-shm',
-        'http_cache',
-        'offline_tracks',
-      ]) {
-        await _moveEntity(docs.path, support.path, name);
+      if (Platform.isAndroid) {
+        await _initAudioService();
       }
-    } on Object {
-      // Migration is best-effort only; worst case the app starts fresh.
-    }
-  }
 
-  static Future<void> _moveEntity(
-    String fromDir,
-    String toDir,
-    String name,
-  ) async {
-    try {
-      final srcDir = Directory('$fromDir${Platform.pathSeparator}$name');
-      if (srcDir.existsSync()) {
-        await srcDir.rename('$toDir${Platform.pathSeparator}$name');
-        return;
-      }
-      final srcFile = File('$fromDir${Platform.pathSeparator}$name');
-      if (srcFile.existsSync()) {
-        await srcFile.rename('$toDir${Platform.pathSeparator}$name');
-      }
-    } on Object {
-      // Best-effort per entry.
+      final appDir = await getApplicationSupportDirectory();
+      await simple.initAppInfrastructure(basePath: appDir.path);
+
+      try {
+        final settings = await simple.getInitialSettings();
+        autoHideNavbarSignal.value = settings.autoHideNavbar;
+        closeToTraySignal.value = settings.closeToTray;
+        customTitlebarSignal.value = settings.customTitlebar;
+        vibeVisibleSignal.value = settings.vibeAnimationEnabled;
+        vibeRenderScaleSignal.value = settings.vibeRenderScale;
+        blurEffectsEnabledSignal.value = settings.blurEffectsEnabled;
+      } on Object catch (_) {}
+
+      unawaited(_initializeAuthAndServices());
+    } on Object catch (e, st) {
+      // RootScreen renders AsyncError, so a failed startup surfaces a message
+      // instead of spinning forever.
+      authSignal.value = AsyncError(e, st);
     }
   }
 
@@ -128,51 +81,66 @@ class AppInit {
   }
 
   static Future<void> _initializeAuthAndServices() async {
-    final context = await tryAutoLogin();
-    appContextSignal.value = context;
+    final epoch = _authEpoch;
+    try {
+      final context = await tryAutoLogin();
+      if (epoch != _authEpoch) return;
+      appContextSignal.value = context;
 
-    if (context == null) {
-      authSignal.value = const AsyncData(false);
-      return;
+      if (context == null) {
+        authSignal.value = const AsyncData(false);
+        return;
+      }
+
+      // Initialize playback locally before showing UI
+      await initPlayback();
+      if (epoch != _authEpoch) return;
+
+      // Fetch network-dependent data in the background
+      unawaited(_loadAccountInfo(context, epoch));
+      unawaited(initLibrary());
+
+      authSignal.value = const AsyncData(true);
+    } on Object catch (e, st) {
+      if (epoch != _authEpoch) return;
+      authSignal.value = AsyncError(e, st);
     }
-
-    // Initialize playback locally before showing UI
-    await initPlayback();
-
-    // Fetch network-dependent data in the background
-    unawaited(_loadAccountInfo(context));
-    unawaited(initLibrary());
-
-    authSignal.value = const AsyncData(true);
   }
 
-  static Future<void> _loadAccountInfo(AppContext context) async {
+  static Future<void> _loadAccountInfo(AppContext context, int epoch) async {
     try {
       final account = await getAccountInfo(ctx: context);
+      if (epoch != _authEpoch) return;
       accountSignal.value = account;
     } on Exception {
+      if (epoch != _authEpoch) return;
       accountSignal.value = null;
     }
   }
 
   static Future<void> login(String token) async {
+    final epoch = ++_authEpoch;
     authSignal.value = const AsyncLoading();
     try {
       final context = await loginWithToken(token: token);
+      if (epoch != _authEpoch) return;
       appContextSignal.value = context;
 
       await initPlayback();
+      if (epoch != _authEpoch) return;
 
-      unawaited(_loadAccountInfo(context));
+      unawaited(_loadAccountInfo(context, epoch));
       unawaited(initLibrary());
 
       authSignal.value = const AsyncData(true);
     } on Object catch (e, st) {
+      if (epoch != _authEpoch) return;
       authSignal.value = AsyncError(e, st);
     }
   }
 
   static Future<void> logout() async {
+    _authEpoch++;
     await PlaybackController.stop();
     await disposePlayback();
     await disposeLibrary();
@@ -181,6 +149,8 @@ class AppInit {
     await clearToken();
     accountSignal.value = null;
     appContextSignal.value = null;
+    // Drop the previous account's open album/playlist stack.
+    resetNavigation();
     authSignal.value = const AsyncData(false);
   }
 }

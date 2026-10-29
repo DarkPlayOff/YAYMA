@@ -18,7 +18,7 @@ Future<bool> runRustAction(
     if (result is bool) return result;
     return true;
   } on Object catch (e) {
-    _handleRustError(e, true);
+    _handleRustError(e, ctx, true);
     return false;
   }
 }
@@ -36,13 +36,16 @@ Future<T?> runRustFetch<T>(
   try {
     return await fetcher(ctx);
   } on Object catch (e) {
-    _handleRustError(e, notifyErrors);
+    _handleRustError(e, ctx, notifyErrors);
     return null;
   }
 }
 
-void _handleRustError(Object e, bool notifyErrors) {
+void _handleRustError(Object e, AppContext ctx, bool notifyErrors) {
   if (isSessionExpired(e)) {
+    // A request that started before the last login/logout must not tear down
+    // the session that replaced it.
+    if (!identical(appContextSignal.value, ctx)) return;
     // Auth failures are always surfaced: the session must be re-established.
     showAppError(humanizeError(e));
     unawaited(app_init.AppInit.logout());

@@ -113,8 +113,30 @@ void navigateTo(AppSection section, [String? id]) {
   final newStacks = Map<AppSection, List<NavState>>.from(
     rootStacksSignal.value,
   );
-  newStacks[activeRoot] = List.unmodifiable([...currentStack, newState]);
+
+  // Navigating to a screen that is already in this stack (artist -> album ->
+  // artist) pops back to it instead of pushing a duplicate that can never be
+  // reached again.
+  final existingIndex = currentStack.indexOf(newState);
+  if (existingIndex >= 0) {
+    newStacks[activeRoot] = List.unmodifiable(
+      currentStack.sublist(0, existingIndex + 1),
+    );
+  } else {
+    newStacks[activeRoot] = List.unmodifiable([...currentStack, newState]);
+  }
   rootStacksSignal.value = newStacks;
+}
+
+/// Resets every tab to its root screen. Used on logout so the next account
+/// does not land on the previous one's album or playlist.
+void resetNavigation() {
+  currentRootSignal.value = Platform.isAndroid
+      ? AppSection.liked
+      : AppSection.home;
+  rootStacksSignal.value = {
+    for (final root in rootSections) root: [NavState(root)],
+  };
 }
 
 /// Returns to the previous page (Pop)
