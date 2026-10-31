@@ -59,8 +59,7 @@ class _SearchViewState extends State<SearchView> {
         // No subscription while the tab is hidden; results arriving in
         // the background don't rebuild it, they are picked up on open.
         final searchResultsAsync = visibleSignal(context, searchResultsSignal);
-        final screenWidth = MediaQuery.sizeOf(context).width;
-        final isNarrow = screenWidth < 600;
+        final isNarrow = context.isNarrow;
         final results = searchResultsAsync.value;
         final noResults =
             results != null &&

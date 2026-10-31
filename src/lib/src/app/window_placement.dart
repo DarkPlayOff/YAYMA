@@ -17,6 +17,9 @@ class WindowPlacement {
 
   static const String _fileName = 'window_geometry.json';
   static const Size defaultSize = Size(1280, 720);
+
+  /// The desktop shell never shows the touch layout, so this stays above
+  /// `compactBreakpoint`. Enforced by test/window_min_size_test.dart.
   static const Size minimumSize = Size(800, 600);
 
   /// How much of the window must land on a visible display area to keep

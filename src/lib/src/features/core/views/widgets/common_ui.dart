@@ -204,14 +204,13 @@ class CommonDetailHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.sizeOf(context).width;
-    final isNarrow = screenWidth < 600;
+    final isNarrow = context.isNarrow;
     final scheme = Theme.of(context).colorScheme;
     final onSurface = scheme.onSurface;
     final onSurfaceVariant = scheme.onSurfaceVariant;
 
     final actualCoverSize = isNarrow
-        ? (screenWidth - 80).clamp(150.0, 200.0)
+        ? (context.screenWidth - 80).clamp(150.0, 200.0)
         : coverSize;
 
     final titleWidget = Text(
@@ -296,7 +295,7 @@ class CommonDetailHeader extends StatelessWidget {
     );
 
     return Padding(
-      padding: EdgeInsets.all(isNarrow ? 20 : 40),
+      padding: EdgeInsets.all(context.horizontalPadding),
       child: isNarrow
           ? Column(
               children: [

@@ -4,6 +4,7 @@ import 'package:yayma/src/features/core/providers/navigation_provider.dart';
 import 'package:yayma/src/features/core/theme/app_tokens.dart';
 import 'package:yayma/src/features/core/views/widgets/app_cover.dart';
 import 'package:yayma/src/features/core/views/widgets/hover_scale.dart';
+import 'package:yayma/src/features/core/views/widgets/responsive.dart';
 import 'package:yayma/src/features/core/views/widgets/tab_visibility.dart';
 import 'package:yayma/src/features/playback/providers/playback_provider.dart';
 
@@ -25,7 +26,7 @@ class _HomeCoverWidgetState extends State<HomeCoverWidget> {
         final isPlaying = visibleSignal(context, isPlayingSignal);
         final height = MediaQuery.of(context).size.height;
         final width = MediaQuery.of(context).size.width;
-        final isNarrow = width < 600;
+        final isNarrow = context.isNarrow;
 
         var size = showLyrics ? 320.0 : 420.0;
         if (height < 800) size = showLyrics ? 280.0 : 360.0;

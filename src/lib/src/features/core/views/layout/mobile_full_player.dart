@@ -872,10 +872,13 @@ class _FullPlayerMetrics {
     final controlsHeight = compact ? 76.0 : 88.0;
     final actionsHeight = compact ? 52.0 : 58.0;
     final bottomGap = compact ? 4.0 : 8.0;
-    final horizontalPadding = size.width < 420 ? 20.0 : 28.0;
-    final sectionWidth = math.min<double>(
-      size.width - horizontalPadding * 2,
-      520,
+    final minPadding = size.width < 420 ? 20.0 : 28.0;
+    final sectionWidth = math.min<double>(size.width - minPadding * 2, 520);
+    // On wide windows (tablets, landscape) the phone-wide column is centred
+    // instead of hugging the left edge while the header above it is centred.
+    final horizontalPadding = math.max<double>(
+      minPadding,
+      (size.width - sectionWidth) / 2,
     );
     final safeHeight = math.max<double>(
       0,
@@ -904,14 +907,12 @@ class _FullPlayerMetrics {
     // cover; the height that is left over goes between the title and the
     // progress bar, so the controls stay anchored to the bottom.
     final coverTop = padding.top + headerHeight + coverTopGap;
+    // The cover is centred in the section: it is height-limited on wide
+    // windows and would otherwise hang on the left of a centred column.
+    final coverLeft = horizontalPadding + (sectionWidth - coverSide) / 2;
 
     return _FullPlayerMetrics(
-      coverRect: Rect.fromLTWH(
-        horizontalPadding,
-        coverTop,
-        coverSide,
-        coverSide,
-      ),
+      coverRect: Rect.fromLTWH(coverLeft, coverTop, coverSide, coverSide),
       coverSpace: coverSide + coverGap + coverTopGap,
       headerHeight: headerHeight,
       infoHeight: infoHeight,

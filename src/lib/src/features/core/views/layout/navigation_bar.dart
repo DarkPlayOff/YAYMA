@@ -11,6 +11,7 @@ import 'package:yayma/src/features/core/providers/navigation_provider.dart';
 import 'package:yayma/src/features/core/providers/visual_effects_provider.dart';
 import 'package:yayma/src/features/core/theme/app_tokens.dart';
 import 'package:yayma/src/features/core/views/widgets/common_ui.dart';
+import 'package:yayma/src/features/core/views/widgets/responsive.dart';
 import 'package:yayma/src/features/core/views/widgets/rust_cached_image.dart';
 import 'package:yayma/src/features/playback/providers/playback_provider.dart';
 import 'package:yayma/src/features/playback/providers/wave_provider.dart';
@@ -91,7 +92,7 @@ class _FloatingNavBarState extends State<FloatingNavBar>
             _isNavbarHovered ||
             _isHovered ||
             _isAccountMenuOpen;
-        final isNarrow = MediaQuery.sizeOf(context).width < 600;
+        final isNarrow = context.isNarrow;
         // Edge-to-edge: app draws behind the Android system navigation bar,
         // so lift the floating navbar above the 3-button/gesture bar.
         // viewPadding stays stable when the keyboard opens.
@@ -357,7 +358,7 @@ class _AccountMenuDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isNarrow = MediaQuery.sizeOf(context).width < 600;
+    final isNarrow = context.isNarrow;
 
     return Dialog(
       alignment: isNarrow ? Alignment.bottomCenter : Alignment.centerLeft,
@@ -586,7 +587,7 @@ class _WaveOverlayState extends State<_WaveOverlay>
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.sizeOf(context).width;
-    final isNarrow = screenWidth < 600;
+    final isNarrow = context.isNarrow;
 
     return Positioned(
       width: isNarrow ? screenWidth - 48 : 480,

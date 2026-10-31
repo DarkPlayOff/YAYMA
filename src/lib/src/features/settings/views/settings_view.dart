@@ -195,8 +195,7 @@ class _SettingsViewState extends State<SettingsView> {
 
   @override
   Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.sizeOf(context).width;
-    final isNarrow = screenWidth < 600;
+    final isNarrow = context.isNarrow;
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -206,9 +205,9 @@ class _SettingsViewState extends State<SettingsView> {
           SliverToBoxAdapter(
             child: Padding(
               padding: EdgeInsets.fromLTRB(
-                isNarrow ? 20 : 40,
+                context.horizontalPadding,
                 isNarrow ? 20 : 60,
-                isNarrow ? 20 : 40,
+                context.horizontalPadding,
                 isNarrow ? 20 : 40,
               ),
               child: const CommonPageTitle(title: 'Настройки'),

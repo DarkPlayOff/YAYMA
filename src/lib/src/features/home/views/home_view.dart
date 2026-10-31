@@ -70,29 +70,36 @@ class HomeView extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
           child: isNarrow && !showLyrics
-              ? Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Center(child: HomeCoverWidget()),
-                    SizedBox(height: spacing.vertical * 1.5),
-                    _HomeTrackHeader(
-                      small: height < 750,
-                      isNarrow: true,
-                      maxWidth: narrowContentWidth,
-                    ),
-                    const SizedBox(height: 8),
-                    SizedBox(
-                      width: narrowContentWidth,
-                      child: CommonProgressSlider(maxWidth: narrowContentWidth),
-                    ),
-                    const SizedBox(height: 12),
-                    _HomeMainControls(
-                      showLyrics: showLyrics,
-                      small: height < 750,
-                      isNarrow: true,
-                    ),
-                  ],
+              // Scales down on short windows (phone landscape) instead of
+              // overflowing; the desktop branch below already does this.
+              ? FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Center(child: HomeCoverWidget()),
+                      SizedBox(height: spacing.vertical * 1.5),
+                      _HomeTrackHeader(
+                        small: height < 750,
+                        isNarrow: true,
+                        maxWidth: narrowContentWidth,
+                      ),
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        width: narrowContentWidth,
+                        child: CommonProgressSlider(
+                          maxWidth: narrowContentWidth,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      _HomeMainControls(
+                        showLyrics: showLyrics,
+                        small: height < 750,
+                        isNarrow: true,
+                      ),
+                    ],
+                  ),
                 )
               : FittedBox(
                   fit: BoxFit.scaleDown,

@@ -13,6 +13,7 @@ import 'package:yayma/src/features/core/views/widgets/app_cover.dart';
 import 'package:yayma/src/features/core/views/widgets/common_ui.dart';
 import 'package:yayma/src/features/core/views/widgets/download_menu.dart';
 import 'package:yayma/src/features/core/views/widgets/media_card.dart';
+import 'package:yayma/src/features/core/views/widgets/responsive.dart';
 import 'package:yayma/src/features/core/views/widgets/smooth_scroll.dart';
 import 'package:yayma/src/features/core/views/widgets/tab_visibility.dart';
 import 'package:yayma/src/features/core/views/widgets/track_tile.dart';
@@ -186,17 +187,16 @@ class _LibraryViewState extends State<LibraryView>
 
   @override
   Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.sizeOf(context).width;
-    final isNarrow = screenWidth < 600;
+    final isNarrow = context.isNarrow;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
           padding: EdgeInsets.fromLTRB(
-            isNarrow ? 20 : 40,
+            context.horizontalPadding,
             isNarrow ? 16 : 40,
-            isNarrow ? 20 : 40,
+            context.horizontalPadding,
             isNarrow ? 8 : 20,
           ),
           child: Row(
@@ -226,7 +226,7 @@ class _LibraryViewState extends State<LibraryView>
           controller: _tabController,
           isScrollable: true,
           tabAlignment: TabAlignment.start,
-          padding: EdgeInsets.symmetric(horizontal: isNarrow ? 20 : 40),
+          padding: EdgeInsets.symmetric(horizontal: context.horizontalPadding),
           indicator: UnderlineTabIndicator(
             borderRadius: BorderRadius.circular(4),
             borderSide: BorderSide(
@@ -399,7 +399,7 @@ class _LikedTracksTabState extends State<_LikedTracksTab> {
 
   @override
   Widget build(BuildContext context) {
-    final isNarrow = MediaQuery.sizeOf(context).width < 600;
+    final isNarrow = context.isNarrow;
 
     return SmoothScroll(
       child: SignalBuilder(
@@ -424,9 +424,9 @@ class _LikedTracksTabState extends State<_LikedTracksTab> {
 
     return Padding(
       padding: EdgeInsets.fromLTRB(
-        isNarrow ? 20 : 40,
+        context.horizontalPadding,
         8,
-        isNarrow ? 20 : 40,
+        context.horizontalPadding,
         16,
       ),
       child: Row(
@@ -537,9 +537,9 @@ class _LikedTracksTabState extends State<_LikedTracksTab> {
 
     return Padding(
       padding: EdgeInsets.fromLTRB(
-        isNarrow ? 20 : 40,
+        context.horizontalPadding,
         0,
-        isNarrow ? 20 : 40,
+        context.horizontalPadding,
         8,
       ),
       child: Text(
@@ -725,8 +725,7 @@ class _PlaylistsTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.sizeOf(context).width;
-    final isNarrow = screenWidth < 600;
+    final isNarrow = context.isNarrow;
 
     final body = SignalBuilder(
       builder: (context) {
@@ -764,9 +763,9 @@ class _PlaylistsTab extends StatelessWidget {
             addAutomaticKeepAlives: false,
             scrollCacheExtent: const ScrollCacheExtent.pixels(500),
             padding: EdgeInsets.fromLTRB(
-              isNarrow ? 20 : 40,
-              isNarrow ? 20 : 40,
-              isNarrow ? 20 : 40,
+              context.horizontalPadding,
+              context.horizontalPadding,
+              context.horizontalPadding,
               140,
             ),
             gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
@@ -804,7 +803,7 @@ class _DislikedTracksTabState extends State<_DislikedTracksTab> {
 
   @override
   Widget build(BuildContext context) {
-    final isNarrow = MediaQuery.sizeOf(context).width < 600;
+    final isNarrow = context.isNarrow;
 
     final body = SignalBuilder(
       builder: (context) {
@@ -884,8 +883,7 @@ class _LikedAlbumsTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.sizeOf(context).width;
-    final isNarrow = screenWidth < 600;
+    final isNarrow = context.isNarrow;
 
     final body = SignalBuilder(
       builder: (context) {
@@ -973,8 +971,7 @@ class _LikedArtistsTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.sizeOf(context).width;
-    final isNarrow = screenWidth < 600;
+    final isNarrow = context.isNarrow;
 
     final body = SignalBuilder(
       builder: (context) {

@@ -13,6 +13,7 @@ import 'package:yayma/src/features/core/views/layout/background.dart';
 import 'package:yayma/src/features/core/views/layout/mobile_full_player.dart';
 import 'package:yayma/src/features/core/views/layout/navigation_bar.dart';
 import 'package:yayma/src/features/core/views/layout/player_bar.dart';
+import 'package:yayma/src/features/core/views/widgets/responsive.dart';
 import 'package:yayma/src/features/core/views/widgets/tab_visibility.dart';
 import 'package:yayma/src/features/home/views/home_view.dart';
 import 'package:yayma/src/features/library/views/library_view.dart';
@@ -43,10 +44,9 @@ class _AppLayoutState extends State<AppLayout> {
             Platform.isWindows || Platform.isLinux || Platform.isMacOS;
         final isCustomTitlebar = isDesktop && customTitlebarSignal.value;
 
-        final screenWidth = MediaQuery.sizeOf(context).width;
         // Use the touch layout for all Android form factors, including
         // tablets. A large Android screen must not select the desktop navbar.
-        final isNarrow = Platform.isAndroid || screenWidth < 600;
+        final isNarrow = context.isNarrow;
 
         return PopScope(
           canPop: !canGoBackSignal.value,
@@ -212,7 +212,7 @@ class _AppLayoutState extends State<AppLayout> {
           return const SizedBox.shrink();
         }
         return Align(
-          alignment: MediaQuery.sizeOf(context).width < 600
+          alignment: context.isNarrow
               ? Alignment.bottomCenter
               : Alignment.centerLeft,
           child: ValueListenableBuilder<double>(
@@ -399,8 +399,7 @@ class _WindowContent extends StatelessWidget {
       builder: (context) {
         final isHome = state.section == AppSection.home;
         final showLyrics = showLyricsSignal.value;
-        final screenWidth = MediaQuery.sizeOf(context).width;
-        final isNarrow = Platform.isAndroid || screenWidth < 600;
+        final isNarrow = context.isNarrow;
 
         // Bottom padding calculation to avoid overlap with PlayerBar and NavBar
         // We only apply it to the browser (yandexId) and settings (account) to prevent them from being covered,
@@ -417,7 +416,7 @@ class _WindowContent extends StatelessWidget {
           }
           // Keep webview/settings content above the Android system buttons.
           bottomPadding += MediaQuery.viewPaddingOf(context).bottom;
-        } else if (isHome && screenWidth < 600) {
+        } else if (isHome && isNarrow) {
           // Home is centered non-scrollable content: its bottom row
           // (wave settings, repeat, quality) must stay above the floating
           // navbar. Navbar top sits at 64 (height) + 12 (gap) +

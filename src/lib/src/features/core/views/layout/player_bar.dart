@@ -12,6 +12,7 @@ import 'package:yayma/src/features/core/views/widgets/app_cover.dart';
 import 'package:yayma/src/features/core/views/widgets/common_ui.dart';
 import 'package:yayma/src/features/core/views/widgets/hover_scale.dart';
 import 'package:yayma/src/features/core/views/widgets/quality_selector.dart';
+import 'package:yayma/src/features/core/views/widgets/responsive.dart';
 import 'package:yayma/src/features/core/views/widgets/track_elements.dart';
 import 'package:yayma/src/features/playback/providers/playback_provider.dart';
 import 'package:yayma/src/rust/api/models.dart';
@@ -45,7 +46,9 @@ class PlayerBar extends StatelessWidget {
         return LayoutBuilder(
           builder: (context, constraints) {
             final width = constraints.maxWidth;
-            if (width < 600) {
+            // Touch layout: Android only, since the desktop window minimum is
+            // wider than the compact breakpoint.
+            if (context.isNarrow) {
               return const MobileMiniPlayer();
             }
 
@@ -53,17 +56,15 @@ class PlayerBar extends StatelessWidget {
             double coverSize = 75;
             double volumeWidth = 120;
 
-            if (width < 1100) {
+            // Only reachable from 800dp up: the desktop window minimum is
+            // 800x600, so there is no step below 900.
+            if (width < wideBreakpoint) {
               coverSize = 64;
               volumeWidth = 100;
             }
-            if (width < 900) {
+            if (width < mediumBreakpoint) {
               coverSize = 56;
               volumeWidth = 80;
-            }
-            if (width < 750) {
-              coverSize = 48;
-              volumeWidth = 60;
             }
 
             return AnimatedContainer(
