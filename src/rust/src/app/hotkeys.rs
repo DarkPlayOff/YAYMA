@@ -24,8 +24,8 @@ use {
     crate::api::library,
     crate::audio::commands::AudioMessage,
     std::str::FromStr,
-    std::sync::mpsc,
     std::sync::OnceLock,
+    std::sync::mpsc,
     std::time::Duration,
     wayclip_global_hotkey::hotkey::{Code, HotKey, Modifiers},
     wayclip_global_hotkey::{GlobalHotKeyEvent, GlobalHotKeyManager},
@@ -131,12 +131,19 @@ fn merge_with_defaults(mut persisted: HotkeySettings) -> HotkeySettings {
             persisted.bindings.push(def.clone());
         }
     }
-    let order: Vec<&str> = defaults.bindings.iter().map(|b| b.action.as_str()).collect();
+    let order: Vec<&str> = defaults
+        .bindings
+        .iter()
+        .map(|b| b.action.as_str())
+        .collect();
     persisted
         .bindings
         .retain(|b| HotkeyAction::from_name(&b.action).is_some());
     persisted.bindings.sort_by_key(|b| {
-        order.iter().position(|a| *a == b.action).unwrap_or(usize::MAX)
+        order
+            .iter()
+            .position(|a| *a == b.action)
+            .unwrap_or(usize::MAX)
     });
     persisted
 }
@@ -221,7 +228,7 @@ async fn load_settings(ctx: &AppContext) -> HotkeySettings {
 async fn persist_settings(ctx: &AppContext, settings: &HotkeySettings) {
     let mut db = ctx.core.db.lock().await;
     if let Err(e) = db.save_setting(SETTINGS_KEY, settings).await {
-        tracing::error!("Failed to persist hotkey settings: {:?}", e);
+        tracing::error!(error = ?e, "persist_hotkey_settings_failed");
     }
 }
 
@@ -379,7 +386,7 @@ fn manager_loop(rx: mpsc::Receiver<ManagerCmd>) {
     let manager = match GlobalHotKeyManager::new() {
         Ok(manager) => manager,
         Err(e) => {
-            tracing::error!("Failed to create global hotkey manager: {e}");
+            tracing::error!(error = %e, "create_global_hotkey_manager_failed");
             return;
         }
     };
@@ -396,7 +403,7 @@ fn manager_loop(rx: mpsc::Receiver<ManagerCmd>) {
             Ok(ManagerCmd::Apply(hotkeys)) => {
                 for old in &registered {
                     if let Err(e) = manager.unregister(*old) {
-                        tracing::debug!("Hotkey unregister failed: {e}");
+                        tracing::debug!(error = %e, "hotkey_unregister_failed");
                     }
                 }
                 registered.clear();
@@ -404,7 +411,7 @@ fn manager_loop(rx: mpsc::Receiver<ManagerCmd>) {
                     match manager.register(hotkey) {
                         Ok(()) => registered.push(hotkey),
                         // The combo may already belong to another application.
-                        Err(e) => tracing::warn!("Hotkey register failed: {e}"),
+                        Err(e) => tracing::warn!(error = %e, "hotkey_register_failed"),
                     }
                 }
             }

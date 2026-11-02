@@ -148,14 +148,20 @@ pub fn spawn_settings_worker(ctx: AppContext, mut shutdown_rx: watch::Receiver<b
 
                     let mut db = ctx.core.db.lock().await;
 
-                    if let Some(bands) = eq_bands {
-                        let _ = db.save_equalizer(eq_enabled, &bands).await;
+                    if let Some(bands) = eq_bands
+                        && let Err(e) = db.save_equalizer(eq_enabled, &bands).await
+                    {
+                        tracing::error!(error = ?e, "persist_equalizer_failed");
                     }
 
-                    let _ = db.save_setting("audio_quality", &quality).await;
+                    if let Err(e) = db.save_setting("audio_quality", &quality).await {
+                        tracing::error!(error = ?e, "persist_audio_quality_failed");
+                    }
 
                     for (id, enabled, params) in effects {
-                        let _ = db.save_effect(&id, enabled, &params).await;
+                        if let Err(e) = db.save_effect(&id, enabled, &params).await {
+                            tracing::error!(effect_id = %id, error = ?e, "persist_effect_failed");
+                        }
                     }
                 }
                 _ = shutdown_rx.changed() => {

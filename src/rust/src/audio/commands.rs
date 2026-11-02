@@ -61,5 +61,16 @@ pub enum AudioMessage {
     // Internal/Other
     ReloadCurrentTrack,
     TrackEnded,
+    /// Monitor request (throttled): with the current track nearing its end,
+    /// park the prewarmed next session on the second engine player so the
+    /// boundary swap is seamless.
+    PreheatNext,
+    /// Fired by the boundary watch thread within milliseconds of the current
+    /// source's last sample. Handlers filter stale firings (player stopped by
+    /// skip/seek) via the preheat state and the engine emptiness.
+    BoundaryCrossed,
+    /// Monitor request: the configured crossfade window has been reached with
+    /// a preheated next session parked — start the overlap transition.
+    BeginCrossfade,
     RecreateStream,
 }

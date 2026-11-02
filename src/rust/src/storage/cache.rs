@@ -179,17 +179,18 @@ impl HttpCache {
         // a truncated file as valid forever.
         let mut file = fs::File::create(&file_path).await?;
         let mut response = response;
-        while let Some(chunk) = tokio::time::timeout(
-            std::time::Duration::from_secs(30),
-            response.chunk(),
-        )
-        .await
-        .map_err(|_| {
-            Box::<dyn std::error::Error + Send + Sync>::from("http cache chunk timed out")
-        })?
-        .map_err(|e| {
-            Box::<dyn std::error::Error + Send + Sync>::from(format!("http cache chunk failed: {e}"))
-        })? {
+        while let Some(chunk) =
+            tokio::time::timeout(std::time::Duration::from_secs(30), response.chunk())
+                .await
+                .map_err(|_| {
+                    Box::<dyn std::error::Error + Send + Sync>::from("http cache chunk timed out")
+                })?
+                .map_err(|e| {
+                    Box::<dyn std::error::Error + Send + Sync>::from(format!(
+                        "http cache chunk failed: {e}"
+                    ))
+                })?
+        {
             tokio::io::AsyncWriteExt::write_all(&mut file, &chunk).await?;
         }
         tokio::io::AsyncWriteExt::flush(&mut file).await?;

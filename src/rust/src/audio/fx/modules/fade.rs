@@ -132,7 +132,11 @@ mod tests {
         let mut l = [1.0f32; 1];
         let mut r = [1.0f32; 1];
         fx.process(&mut l, &mut r);
-        assert!((l[0] - 0.5).abs() < 1e-4, "late fade-out ramp gain {}", l[0]);
+        assert!(
+            (l[0] - 0.5).abs() < 1e-4,
+            "late fade-out ramp gain {}",
+            l[0]
+        );
     }
 
     #[test]

@@ -12,6 +12,7 @@ import 'package:yayma/src/app/window_placement.dart';
 import 'package:yayma/src/features/auth/views/auth/auth_screens.dart';
 import 'package:yayma/src/features/core/providers/navigation_provider.dart';
 import 'package:yayma/src/features/core/providers/notification_provider.dart';
+import 'package:yayma/src/features/core/services/app_logger.dart';
 import 'package:yayma/src/features/core/services/global_hotkey_service.dart';
 import 'package:yayma/src/features/core/theme/app_theme.dart';
 import 'package:yayma/src/features/playback/providers/playback_provider.dart';
@@ -24,9 +25,21 @@ Future<void> main() async {
   FlutterError.onError = (details) {
     FlutterError.presentError(details);
     debugPrint('Uncaught Flutter error: ${details.exception}');
+    // Short stack excerpt keeps the single log line readable.
+    final stackExcerpt = details.stack
+        ?.toString()
+        .split('\n')
+        .take(4)
+        .join(' ');
+    appLog(
+      AppLogLevel.error,
+      'Uncaught Flutter error: ${details.exception}'
+      '${stackExcerpt == null ? '' : ' | stack: $stackExcerpt'}',
+    );
   };
   PlatformDispatcher.instance.onError = (error, stack) {
     debugPrint('Uncaught async error: $error\n$stack');
+    appLog(AppLogLevel.error, 'Uncaught async error: $error');
     return true;
   };
 

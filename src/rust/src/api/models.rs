@@ -46,6 +46,8 @@ pub struct InitialSettingsDto {
     pub vibe_animation_enabled: bool,
     pub vibe_render_scale: f64,
     pub blur_effects_enabled: bool,
+    /// Crossfade toggle: on = fixed-length overlap, off = strict gapless.
+    pub crossfade_enabled: bool,
 }
 
 impl Default for InitialSettingsDto {
@@ -57,6 +59,7 @@ impl Default for InitialSettingsDto {
             vibe_animation_enabled: true,
             vibe_render_scale: 0.50,
             blur_effects_enabled: true,
+            crossfade_enabled: true,
         }
     }
 }

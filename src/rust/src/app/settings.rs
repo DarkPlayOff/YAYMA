@@ -50,6 +50,15 @@ pub async fn load_persisted_settings(ctx: &AppContext) {
     let vibe_enabled = parse_setting::<bool>(&settings, "vibe_animation_enabled").unwrap_or(true);
     ctx.audio.signals.vibe_enabled.set(vibe_enabled);
 
+    // Crossfade toggle: a fixed overlap window when on, strict gapless when
+    // off.
+    let crossfade_enabled = parse_setting::<bool>(&settings, "crossfade_enabled").unwrap_or(true);
+    ctx.audio.signals.crossfade_ms.set(if crossfade_enabled {
+        crate::audio::signals::USER_CROSSFADE_MS
+    } else {
+        0
+    });
+
     if let Some(device) = parse_setting::<String>(&settings, "audio_device")
         && !device.is_empty()
     {

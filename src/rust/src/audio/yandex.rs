@@ -1,4 +1,4 @@
-use crate::audio::queue::{clean_wave_seed, PlaybackContext};
+use crate::audio::queue::{PlaybackContext, clean_wave_seed};
 use crate::audio::signals::AudioSignals;
 use crate::http::ApiService;
 use im::Vector;
@@ -62,8 +62,8 @@ impl YandexProvider {
                     Some(idx) if idx >= crate::audio::fetcher::FETCH_BATCH_SIZE => {
                         let half = crate::audio::fetcher::FETCH_BATCH_SIZE / 2;
                         let start = idx.saturating_sub(half);
-                        let end = (start + crate::audio::fetcher::FETCH_BATCH_SIZE)
-                            .min(partial.len());
+                        let end =
+                            (start + crate::audio::fetcher::FETCH_BATCH_SIZE).min(partial.len());
                         (start, partial[start..end].to_vec())
                     }
                     _ => (
@@ -83,9 +83,8 @@ impl YandexProvider {
                     .await;
                     if !initial.is_empty() {
                         // Trim context so pending-ids math stays correct.
-                        playlist.tracks = Some(PlaylistTracks::Partial(
-                            partial[window_start..].to_vec(),
-                        ));
+                        playlist.tracks =
+                            Some(PlaylistTracks::Partial(partial[window_start..].to_vec()));
                         let index_in_window = track_id
                             .as_ref()
                             .and_then(|tid| initial.iter().position(|t| &t.id == tid))
@@ -95,9 +94,9 @@ impl YandexProvider {
                                 })
                             })
                             .unwrap_or(0);
-                        let found = track_id.as_ref().is_none_or(|tid| {
-                            initial.iter().any(|t| &t.id == tid)
-                        });
+                        let found = track_id
+                            .as_ref()
+                            .is_none_or(|tid| initial.iter().any(|t| &t.id == tid));
                         if found {
                             return Ok((
                                 PlaybackContext::Playlist(playlist),

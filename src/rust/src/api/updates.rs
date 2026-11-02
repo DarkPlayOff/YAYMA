@@ -45,19 +45,29 @@ fn is_newer_version(current: &str, latest: &str) -> bool {
 }
 
 pub async fn check_for_updates() -> Option<AppUpdateInfoDto> {
-    let client = reqwest::Client::builder()
-        .user_agent("yayma-app")
-        .build()
-        .ok()?;
+    let client = match reqwest::Client::builder().user_agent("yayma-app").build() {
+        Ok(client) => client,
+        Err(e) => {
+            tracing::warn!(error = %e, "update_check_client_failed");
+            return None;
+        }
+    };
 
-    let res = client
+    let res = match client
         .get("https://api.github.com/repos/DarkPlayOff/YAYMA/releases/latest")
         .header("Accept", "application/vnd.github.v3+json")
         .send()
         .await
-        .ok()?;
+    {
+        Ok(res) => res,
+        Err(e) => {
+            tracing::warn!(error = %e, "update_check_request_failed");
+            return None;
+        }
+    };
 
     if !res.status().is_success() {
+        tracing::warn!(status = %res.status(), "update_check_request_rejected");
         return None;
     }
 
@@ -68,9 +78,19 @@ pub async fn check_for_updates() -> Option<AppUpdateInfoDto> {
         html_url: String,
     }
 
-    let release: GithubRelease = res.json().await.ok()?;
+    let release: GithubRelease = match res.json().await {
+        Ok(release) => release,
+        Err(e) => {
+            tracing::warn!(error = %e, "update_check_parse_failed");
+            return None;
+        }
+    };
     let current_version = crate::api::simple::get_app_version();
     let has_update = is_newer_version(&current_version, &release.tag_name);
+
+    if has_update {
+        tracing::info!(version = %release.tag_name, "update_available");
+    }
 
     Some(AppUpdateInfoDto {
         latest_version: release.tag_name,

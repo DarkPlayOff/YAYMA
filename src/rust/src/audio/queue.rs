@@ -381,7 +381,8 @@ impl QueueManager {
                     let hidden: Vec<Track> = tracks.into_iter().skip(visible_count).collect();
 
                     self.signals.set_queue(visible);
-                    self.signals.set_index(start_index.min(visible_count.saturating_sub(1).max(0)));
+                    self.signals
+                        .set_index(start_index.min(visible_count.saturating_sub(1).max(0)));
                     for t in hidden {
                         self.wave_buffer.push_back(t);
                     }
@@ -457,6 +458,28 @@ impl QueueManager {
     /// current track is returned again so it replays from the start.
     pub async fn get_next_track(&mut self) -> Option<Track> {
         self.next_track(false).await
+    }
+
+    /// The track the gapless preheat should park: the queue successor of the
+    /// current track under the active repeat policy. Purely observational —
+    /// nothing advances. `RepeatMode::Single` returns `None` (the replay needs
+    /// a fresh session of the same track, so the poll fallback handles it).
+    pub fn peek_gapless_next(&self) -> Option<Track> {
+        let queue = self.signals.queue();
+        if queue.is_empty() {
+            return None;
+        }
+        let repeat = self.signals.repeat_mode();
+        if repeat == RepeatMode::Single {
+            return None;
+        }
+        let next = self.signals.index() + 1;
+        if next < queue.len() {
+            queue.get(next).cloned()
+        } else {
+            PlaybackPolicy::repeat_wrap_index(repeat, queue.len())
+                .and_then(|wrapped| queue.get(wrapped).cloned())
+        }
     }
 
     /// Next track for a user-initiated skip: advances past the current
@@ -538,7 +561,8 @@ impl QueueManager {
             if let Some(session) = session {
                 // Page response: keep the created session stable, only
                 // remember which batch delivered these tracks.
-                self.fetch.remember_wave_batch(&session.batch_id, &new_tracks);
+                self.fetch
+                    .remember_wave_batch(&session.batch_id, &new_tracks);
             }
             if !new_tracks.is_empty() {
                 self.wave_append(new_tracks);
@@ -774,8 +798,7 @@ impl QueueManager {
         let clean: Vec<String> = seeds.iter().map(|s| clean_wave_seed(s)).collect();
         match self.api.create_session(clean).await {
             Ok(session) => {
-                let tracks: Vec<Track> =
-                    session.sequence.iter().map(|s| s.track.clone()).collect();
+                let tracks: Vec<Track> = session.sequence.iter().map(|s| s.track.clone()).collect();
                 if tracks.is_empty() {
                     error!("wave_session_recreate_empty");
                     return;
@@ -803,10 +826,8 @@ impl QueueManager {
         if failed.is_empty() {
             return;
         }
-        self.wave_feedbacks = fetch_policy::merge_failed_feedbacks(
-            std::mem::take(&mut self.wave_feedbacks),
-            failed,
-        );
+        self.wave_feedbacks =
+            fetch_policy::merge_failed_feedbacks(std::mem::take(&mut self.wave_feedbacks), failed);
     }
 
     /// Per-track `batchId` for immediate (`/feedback`) wave feedbacks.
@@ -1053,6 +1074,39 @@ mod tests {
         q.toggle_repeat_mode(); // None -> All
         q.toggle_repeat_mode(); // All -> Single
         assert_eq!(q.get_next_track().await.unwrap().id, "t1");
+    }
+
+    #[tokio::test]
+    async fn gapless_peek_returns_successor_without_advancing() {
+        let mut q = manager().await;
+        q.load(PlaybackContext::Standalone, standalone(3), 0).await;
+        assert_eq!(q.peek_gapless_next().unwrap().id, "t1");
+        // Pure peek: the queue cursor must not have moved.
+        assert_eq!(q.get_next_track().await.unwrap().id, "t1");
+    }
+
+    #[tokio::test]
+    async fn gapless_peek_under_repeat_single_is_none() {
+        let mut q = manager().await;
+        q.load(PlaybackContext::Standalone, standalone(3), 1).await;
+        q.toggle_repeat_mode(); // None -> All
+        q.toggle_repeat_mode(); // All -> Single
+        assert!(q.peek_gapless_next().is_none());
+    }
+
+    #[tokio::test]
+    async fn gapless_peek_wraps_under_repeat_all() {
+        let mut q = manager().await;
+        q.load(PlaybackContext::Standalone, standalone(2), 1).await;
+        q.toggle_repeat_mode(); // None -> All
+        assert_eq!(q.peek_gapless_next().unwrap().id, "t0");
+    }
+
+    #[tokio::test]
+    async fn gapless_peek_at_tail_without_repeat_is_none() {
+        let mut q = manager().await;
+        q.load(PlaybackContext::Standalone, standalone(2), 1).await;
+        assert!(q.peek_gapless_next().is_none());
     }
 
     #[tokio::test]

@@ -196,12 +196,7 @@ mod tests {
             unit: "",
         }]));
         params.set_enabled(enabled);
-        chain.add_effect(
-            "gain",
-            "Gain",
-            Box::new(GainEffect { gain }),
-            params,
-        );
+        chain.add_effect("gain", "Gain", Box::new(GainEffect { gain }), params);
         chain
     }
 

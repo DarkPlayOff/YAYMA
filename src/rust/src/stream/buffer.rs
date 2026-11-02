@@ -330,10 +330,7 @@ impl BufferState {
         self.buffering_base = self.buffering_base.max(pos);
 
         // Drop fully consumed segments, keeping at most one for seek-back history.
-        let first_live = self
-            .segments
-            .iter()
-            .position(|s| s.end_pos() > safe_pos);
+        let first_live = self.segments.iter().position(|s| s.end_pos() > safe_pos);
         match first_live {
             Some(idx) if idx > 1 => {
                 self.segments.drain(0..idx - 1);

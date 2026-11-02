@@ -61,7 +61,10 @@ impl StereoBiquad {
     }
 
     pub fn update(&mut self, ftype: FilterType, freq: f32, q: f32, gain_db: f32, sample_rate: f32) {
-        debug_assert!(sample_rate >= 8000.0, "StereoBiquad::update bad sample_rate {sample_rate}");
+        debug_assert!(
+            sample_rate >= 8000.0,
+            "StereoBiquad::update bad sample_rate {sample_rate}"
+        );
         let sample_rate = sample_rate.max(8000.0);
         let freq = if freq.is_finite() { freq } else { 1000.0 };
         let q = if q.is_finite() { q } else { 0.707 };

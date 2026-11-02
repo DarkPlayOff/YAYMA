@@ -23,21 +23,22 @@ pub async fn restore_saved_state(ctx: &AppContext) -> Option<SavedStateDto> {
 }
 
 pub async fn clear_token() {
+    tracing::info!("user_logout");
     if let Err(e) = TokenProvider::delete().await {
-        tracing::error!("Failed to delete auth token: {:?}", e);
+        tracing::error!(error = ?e, "delete_auth_token_failed");
     }
     // Drop the persisted liked-tracks revision so the next account starts
     // with a full snapshot instead of someone else's revision.
     if let Ok(database) = crate::app::get_database().await {
         let mut db = database.lock().await;
         if let Err(e) = db.delete_setting("liked_tracks_revision").await {
-            tracing::error!("Failed to delete liked revision: {:?}", e);
+            tracing::error!(error = ?e, "delete_liked_revision_failed");
         }
         if let Err(e) = db
             .delete_setting(crate::api::library::DISLIKED_TRACKS_KEY)
             .await
         {
-            tracing::error!("Failed to delete disliked tracks: {:?}", e);
+            tracing::error!(error = ?e, "delete_disliked_tracks_failed");
         }
     }
 }
@@ -48,12 +49,14 @@ pub async fn login_with_token(token: String) -> Result<AppContext, AppError> {
         .map_err(|_| AppError::InvalidToken)?;
 
     if let Err(e) = TokenProvider::store(&token, user_id).await {
-        tracing::error!("Failed to store auth token during login: {:?}", e);
+        tracing::error!(error = ?e, "store_auth_token_failed");
     }
 
     let api = ApiService::new(token, Some(user_id))
         .await
         .map_err(|e| AppError::ApiError(e.to_string()))?;
+
+    tracing::info!(user_id = user_id, "user_login");
 
     initialize_app(api)
         .await
@@ -67,6 +70,7 @@ pub async fn try_auto_login() -> Option<AppContext> {
     if let Ok(api) = ApiService::new(token.clone(), Some(user_id)).await
         && let Ok(ctx) = initialize_app(api).await
     {
+        tracing::info!(user_id = user_id, "user_login");
         return Some(ctx);
     }
 
@@ -90,12 +94,12 @@ pub async fn get_account_info(ctx: &AppContext) -> Option<UserAccountDto> {
                 Ok(fresh) => {
                     let mut db = ctx_clone.core.db.lock().await;
                     if let Err(e) = db.save_setting("account_info", &fresh).await {
-                        tracing::error!("Failed to cache account info: {:?}", e);
+                        tracing::error!(error = ?e, "cache_account_info_failed");
                     }
                     ctx_clone.send_event(crate::api::simple::AppEvent::AccountUpdated(fresh));
                 }
                 Err(e) => {
-                    tracing::error!("Failed to refresh account info: {:?}", e);
+                    tracing::error!(error = ?e, "refresh_account_info_failed");
                 }
             }
         });
@@ -107,12 +111,12 @@ pub async fn get_account_info(ctx: &AppContext) -> Option<UserAccountDto> {
         Ok(account) => {
             let mut db = ctx.core.db.lock().await;
             if let Err(e) = db.save_setting("account_info", &account).await {
-                tracing::error!("Failed to cache account info: {:?}", e);
+                tracing::error!(error = ?e, "cache_account_info_failed");
             }
             Some(account)
         }
         Err(e) => {
-            tracing::error!("Failed to fetch account info: {:?}", e);
+            tracing::error!(error = ?e, "fetch_account_info_failed");
             None
         }
     }

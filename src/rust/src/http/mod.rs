@@ -31,7 +31,8 @@ use yandex_music::{
             change_playlist_visibility::ChangePlaylistVisibilityOptions,
             create_playlist::CreatePlaylistOptions, delete_playlist::DeletePlaylistOptions,
             get_all_playlists::GetAllPlaylistsOptions, get_playlists::GetPlaylistsOptions,
-            modify_playlist::ModifyPlaylistOptions, remove_liked_playlist::RemoveLikedPlaylistOptions,
+            modify_playlist::ModifyPlaylistOptions,
+            remove_liked_playlist::RemoveLikedPlaylistOptions,
             rename_playlist::RenamePlaylistOptions,
         },
         rotor::{
@@ -1116,14 +1117,13 @@ mod tests {
 
     #[test]
     fn disliked_tracks_sort_newest_first_and_stable_on_ties() {
-        let mut tracks: Vec<yandex_music::model::track::PartialTrack> = serde_json::from_value(
-            json!([
+        let mut tracks: Vec<yandex_music::model::track::PartialTrack> =
+            serde_json::from_value(json!([
                 {"id": 3, "timestamp": "2026-01-01T00:00:00+00:00"},
                 {"id": 1, "timestamp": "2026-03-01T00:00:00+00:00"},
                 {"id": 2, "timestamp": "2026-01-01T00:00:00+00:00"},
-            ]),
-        )
-        .unwrap();
+            ]))
+            .unwrap();
 
         sort_disliked_tracks(&mut tracks);
 

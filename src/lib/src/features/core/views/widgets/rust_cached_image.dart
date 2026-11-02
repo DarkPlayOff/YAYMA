@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/scheduler.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:yayma/src/app/session.dart';
+import 'package:yayma/src/features/core/services/app_logger.dart';
 import 'package:yayma/src/features/core/utils/lru_map.dart';
 import 'package:yayma/src/rust/api/simple.dart';
 
@@ -154,7 +155,9 @@ class _RustCachedImageState extends State<RustCachedImage> {
           _isLoading = false;
         });
       }
-    } on Object catch (_) {
+    } on Object catch (e) {
+      // Network/cache churn is expected here, so keep it at debug level.
+      appLog(AppLogLevel.debug, 'cover path resolve failed: $e');
       if (mounted && _lastUrl == url) {
         setState(() {
           _resolvedPath = null;

@@ -23,8 +23,9 @@ pub struct SmtcManager {
 impl SmtcManager {
     pub fn new(
         cmd_tx: mpsc::UnboundedSender<AudioMessage>,
-        #[cfg_attr(not(target_os = "windows"), allow(unused_variables))]
-        http_cache: std::sync::Arc<crate::storage::cache::HttpCache>,
+        #[cfg_attr(not(target_os = "windows"), allow(unused_variables))] http_cache: std::sync::Arc<
+            crate::storage::cache::HttpCache,
+        >,
     ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         #[cfg(target_os = "windows")]
         unsafe {
@@ -134,7 +135,7 @@ impl SmtcManager {
         };
 
         if let Err(e) = self.controls.set_metadata(metadata) {
-            tracing::error!("Failed to update SMTC metadata: {:?}", e);
+            tracing::error!(error = ?e, "smtc_metadata_update_failed");
         }
     }
 
@@ -146,7 +147,7 @@ impl SmtcManager {
         };
 
         if let Err(e) = self.controls.set_playback(status) {
-            tracing::error!("Failed to update SMTC playback status: {:?}", e);
+            tracing::error!(error = ?e, "smtc_playback_status_update_failed");
         }
     }
 }

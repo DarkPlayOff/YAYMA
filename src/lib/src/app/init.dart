@@ -8,6 +8,7 @@ import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/app/session.dart';
 import 'package:yayma/src/features/core/providers/navigation_provider.dart';
 import 'package:yayma/src/features/core/providers/visual_effects_provider.dart';
+import 'package:yayma/src/features/core/services/app_logger.dart';
 import 'package:yayma/src/features/library/providers/library_provider.dart';
 import 'package:yayma/src/features/playback/providers/audio_focus_manager.dart';
 import 'package:yayma/src/features/playback/providers/audio_handler.dart';
@@ -50,7 +51,11 @@ class AppInit {
         vibeVisibleSignal.value = settings.vibeAnimationEnabled;
         vibeRenderScaleSignal.value = settings.vibeRenderScale;
         blurEffectsEnabledSignal.value = settings.blurEffectsEnabled;
-      } on Object catch (_) {}
+        crossfadeEnabledSignal.value = settings.crossfadeEnabled;
+      } on Object catch (e) {
+        // Defaults are fine, but the failure should be visible in the log.
+        appLog(AppLogLevel.warn, 'initial settings load failed: $e');
+      }
 
       unawaited(_initializeAuthAndServices());
     } on Object catch (e, st) {

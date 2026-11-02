@@ -42,6 +42,7 @@ serde = { version = "1.0.229", features = ["derive"] }
 
 # Logging
 tracing = "0.1.44"
+tracing-appender = "0.2"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 directories = "6.0.0"
 

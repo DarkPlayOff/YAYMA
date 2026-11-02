@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:m3e_core/m3e_core.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:yayma/src/features/core/services/app_logger.dart';
 import 'package:yayma/src/features/core/views/widgets/fullscreen_cover.dart';
 import 'package:yayma/src/features/core/views/widgets/hover_scale.dart';
 import 'package:yayma/src/features/core/views/widgets/rust_cached_image.dart';
@@ -106,7 +107,9 @@ class AppCover extends StatelessWidget {
       if (localUri!.scheme == 'file') {
         try {
           localFile = File.fromUri(localUri!);
-        } on Object catch (_) {
+        } on Object catch (e) {
+          // Malformed local URI: fall back to the placeholder quietly.
+          appLog(AppLogLevel.debug, 'local cover URI parse failed: $e');
           localFile = null;
         }
       } else {

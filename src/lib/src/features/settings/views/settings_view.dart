@@ -5,6 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/services.dart';
 import 'package:m3e_core/m3e_core.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:yayma/src/app/session.dart';
@@ -19,6 +20,7 @@ import 'package:yayma/src/features/core/views/widgets/responsive.dart';
 import 'package:yayma/src/features/core/views/widgets/rust_cached_image.dart';
 import 'package:yayma/src/features/core/views/widgets/smooth_scroll.dart';
 import 'package:yayma/src/features/library/providers/library_provider.dart';
+import 'package:yayma/src/features/playback/providers/playback_provider.dart';
 import 'package:yayma/src/features/settings/views/lyrics_providers_dialog.dart';
 import 'package:yayma/src/rust/api/content.dart' as rust;
 import 'package:yayma/src/rust/api/simple.dart' as simple;
@@ -193,6 +195,17 @@ class _SettingsViewState extends State<SettingsView> {
     showAppSuccess('Скачанные треки успешно удалены');
   }
 
+  Future<void> _openLogFolder() async {
+    // The log file lives in the same app-support directory Dart passes to
+    // initAppInfrastructure, so the folder is opened without a Rust roundtrip.
+    final dir = await getApplicationSupportDirectory();
+    final opened = await launchUrl(
+      Uri.file(dir.path),
+      mode: LaunchMode.externalApplication,
+    );
+    if (!opened) showAppError('Не удалось открыть папку с логами');
+  }
+
   @override
   Widget build(BuildContext context) {
     final isNarrow = context.isNarrow;
@@ -222,6 +235,8 @@ class _SettingsViewState extends State<SettingsView> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   ..._buildDownloadsAndEffects(isNarrow),
+                  const SizedBox(height: 32),
+                  ..._buildPlayback(),
                   if (context.isDesktop) ...[
                     const SizedBox(height: 32),
                     ..._buildDesktopAppearance(),
@@ -337,6 +352,35 @@ class _SettingsViewState extends State<SettingsView> {
     ];
   }
 
+  List<Widget> _buildPlayback() {
+    return [
+      const _SectionTitle(title: 'Воспроизведение'),
+      const SizedBox(height: 20),
+      SignalBuilder(
+        builder: (context) {
+          final enabled = crossfadeEnabledSignal.value;
+          return _SettingItem(
+            title: 'Кроссфейд',
+            subtitle: 'Плавный переход между треками',
+            icon: Icons.graphic_eq_rounded,
+            onTap: () => unawaited(_saveCrossfade(!enabled)),
+            trailing: Switch(
+              value: enabled,
+              onChanged: (value) => unawaited(_saveCrossfade(value)),
+            ),
+          );
+        },
+      ),
+    ];
+  }
+
+  Future<void> _saveCrossfade(bool enabled) async {
+    crossfadeEnabledSignal.value = enabled;
+    await runRustAction(
+      (ctx) => simple.setCrossfade(ctx: ctx, enabled: enabled),
+    );
+  }
+
   List<Widget> _buildDesktopAppearance() {
     return [
       const _SectionTitle(title: 'Горячие клавиши'),
@@ -426,6 +470,13 @@ class _SettingsViewState extends State<SettingsView> {
             ),
           );
         },
+      ),
+      const SizedBox(height: 8),
+      _SettingItem(
+        title: 'Открыть папку логов',
+        subtitle: 'Открыть папку с файлом журнала приложения для диагностики',
+        icon: Icons.folder_open_rounded,
+        onTap: () => unawaited(_openLogFolder()),
       ),
     ];
   }

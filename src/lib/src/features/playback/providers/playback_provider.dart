@@ -37,6 +37,11 @@ final FlutterSignal<AudioQuality> audioQualitySignal = signal<AudioQuality>(
   AudioQuality.normal,
 );
 
+/// Crossfade toggle: on = fixed-length overlap between tracks, off = strict
+/// gapless transition without overlap. Mirrors the persisted Rust setting;
+/// the audio engine reads the same value through its own signals.
+final FlutterSignal<bool> crossfadeEnabledSignal = signal(true);
+
 StreamSubscription<rust.AppEvent>? _eventSub;
 
 /// Deduplicates concurrent [initPlayback] calls (login + auto-login racing).

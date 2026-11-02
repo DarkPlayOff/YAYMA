@@ -74,7 +74,10 @@ impl Effect for OverdriveEffect {
             self.dry_l[..len].copy_from_slice(&left[offset..offset + len]);
             self.dry_r[..len].copy_from_slice(&right[offset..offset + len]);
 
-            let (wl, wr) = (&mut left[offset..offset + len], &mut right[offset..offset + len]);
+            let (wl, wr) = (
+                &mut left[offset..offset + len],
+                &mut right[offset..offset + len],
+            );
             self.pre_filter.process_block(wl, wr);
 
             for (l, r) in wl.iter_mut().zip(wr.iter_mut()) {

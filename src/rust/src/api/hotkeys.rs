@@ -74,7 +74,11 @@ pub async fn set_hotkey_binding(
 
     let mut settings = hotkeys::settings_snapshot();
     if let Some(conflict) = settings.bindings.iter().find(|b| {
-        b.action != action && b.key == key && b.ctrl == ctrl && b.alt == alt && b.shift == shift
+        b.action != action
+            && b.key == key
+            && b.ctrl == ctrl
+            && b.alt == alt
+            && b.shift == shift
             && b.meta == meta
     }) {
         return reject(Some(conflict.action.clone()), false);

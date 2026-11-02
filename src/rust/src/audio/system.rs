@@ -1,9 +1,9 @@
 use crate::audio::cache::UrlCache;
 use crate::{
     audio::{
-        commands::AudioMessage, controller::AudioController,
-        fetcher::is_usable_wave_session, playback::PlaybackEngine, progress::TrackProgress,
-        queue::QueueManager, queue::as_wave_seed, signals::AudioSignals, state::SystemState,
+        commands::AudioMessage, controller::AudioController, fetcher::is_usable_wave_session,
+        playback::PlaybackEngine, progress::TrackProgress, queue::QueueManager,
+        queue::as_wave_seed, signals::AudioSignals, state::SystemState,
         stream_manager::StreamManager, yandex::YandexProvider,
     },
     http::{ApiService, LikedTracksSync, SessionExt},
@@ -16,9 +16,9 @@ use parking_lot::RwLock as PRwLock;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
-use tokio::sync::{RwLock, mpsc};
 #[cfg(not(any(target_os = "android")))]
 use tokio::sync::Mutex;
+use tokio::sync::{RwLock, mpsc};
 use yandex_music::model::track::Track;
 
 #[path = "system_loading.rs"]
@@ -138,8 +138,11 @@ impl AudioSystem {
         {
             let mut db = db.lock().await;
             if let Ok(ids) = db.load_liked_tracks().await {
-                let revision: Option<u64> =
-                    db.load_setting("liked_tracks_revision").await.ok().flatten();
+                let revision: Option<u64> = db
+                    .load_setting("liked_tracks_revision")
+                    .await
+                    .ok()
+                    .flatten();
                 let disliked: Vec<String> = db
                     .load_setting(crate::api::library::DISLIKED_TRACKS_KEY)
                     .await
@@ -434,7 +437,7 @@ impl AudioSystem {
     async fn recreate_stream(&mut self) {
         let device = self.signals.selected_device.get();
         if let Err(e) = self.controller.recreate_engine(device.as_deref()) {
-            tracing::error!("Failed to recreate stream: {}", e);
+            tracing::error!(error = %e, "recreate_stream_failed");
         } else {
             self.reload_track().await;
         }
@@ -504,7 +507,46 @@ impl AudioSystem {
             AudioMessage::TrackEnded => {
                 self.on_track_ended().await;
             }
-            AudioMessage::Seek(dur) => self.controller.seek(dur).await,
+            AudioMessage::PreheatNext => {
+                // Re-peeking keeps a stale request after a skip or queue edit
+                // harmless; arming is idempotent and never blocks.
+                if let Some(next) = self.queue.peek_gapless_next() {
+                    self.controller.preheat_next(next);
+                }
+            }
+            AudioMessage::BoundaryCrossed => {
+                // The boundary watch thread fired at the sample-accurate end of
+                // the current source. A live firing arrives with the preheat
+                // still parked and the engine drained; claiming buffering first
+                // silences the monitor's empty-poll TrackEnded fallback for the
+                // rest of the advance (the swap clears it, play_track sets its
+                // own claim, the wave fetch keeps it). Stale firings — player
+                // stopped early by a skip/seek — see a non-empty engine or no
+                // preheat and are ignored here.
+                if self.controller.has_preheat() && self.controller.engine_is_empty() {
+                    let position_ms = self.signals.position_ms.get() as u128;
+                    let duration_ms = self.signals.duration_ms.get() as u128;
+                    let ended_early =
+                        duration_ms > 0 && position_ms.saturating_add(1_000) < duration_ms;
+                    if !ended_early {
+                        // Claim buffering for the whole advance: the queue
+                        // step may await a wave page fetch longer than the
+                        // monitor's swap grace, and a poll-fired TrackEnded
+                        // landing mid-advance would double-advance.
+                        self.signals.set_buffering(true);
+                        self.advance_queue(AdvanceReason::TrackEnded).await;
+                        return;
+                    }
+                    // The stream truncated mid-track with a preheat parked:
+                    // the ended-early reload path owns recovery, hand the
+                    // boundary over to it (play_track's stop drops the slot).
+                    self.controller.drop_preheat();
+                }
+            }
+            AudioMessage::Seek(dur) => {
+                tracing::debug!(position_ms = dur.as_millis() as u64, "seek");
+                self.controller.seek(dur).await;
+            }
             AudioMessage::SetVolume(vol) => self.controller.set_volume(vol as f32 / 100.0),
             AudioMessage::SetTransientVolumeGain(gain) => {
                 self.controller.set_transient_volume_gain(gain)
@@ -570,12 +612,10 @@ impl AudioSystem {
                 );
             }
             AudioMessage::PlayLikedTrack(tid) => {
-                self.spawn_single_track_with_offline(
-                    system_loading::SingleTrackSource::Liked,
-                    tid,
-                );
+                self.spawn_single_track_with_offline(system_loading::SingleTrackSource::Liked, tid);
             }
             AudioMessage::StartWave(seeds) => {
+                tracing::info!(seeds = seeds.len(), "wave_session_started");
                 let generation = self.begin_context_change();
                 let yandex = self.yandex.clone();
                 self.spawn_fetch_context(generation, move || async move {
@@ -650,13 +690,33 @@ impl AudioSystem {
                     }
                 }
             }
+            AudioMessage::BeginCrossfade => {
+                // The monitor reached the configured fade window with a
+                // preheat parked. The engine is NOT empty here (the old track
+                // still plays into the fade), so there is no empty-poll
+                // hazard and no buffering claim is needed. Mark the request
+                // so the unified advance promotes with an overlap, then clear
+                // it whatever the advance decided (a queue mismatch falls
+                // back to the cold path without a stale marker).
+                if self.controller.can_begin_crossfade() {
+                    self.controller.request_crossfade();
+                    self.advance_queue(AdvanceReason::TrackEnded).await;
+                    self.controller.clear_crossfade_request();
+                }
+            }
             AudioMessage::SetAudioDevice(device_name) => {
+                let changed = self.signals.selected_device.get() != device_name;
                 self.signals.selected_device.set(device_name.clone());
+                if changed {
+                    tracing::info!(device = ?device_name, "audio_device_changed");
+                }
                 // Don't hold the actor on a DB write; persist in background.
                 let db = self.db.clone();
                 tokio::spawn(async move {
                     let mut db = db.lock().await;
-                    let _ = db.save_setting("audio_device", &device_name).await;
+                    if let Err(e) = db.save_setting("audio_device", &device_name).await {
+                        tracing::error!(error = ?e, "persist_audio_device_failed");
+                    }
                 });
                 self.recreate_stream().await;
             }
@@ -698,9 +758,21 @@ impl AudioSystem {
             if self.queue.in_wave() {
                 self.send_wave_track_started(&next_track);
             }
-            self.controller
-                .play_track(next_track, false, Duration::ZERO, false)
-                .await;
+            // A preheated swap keeps the audio pipeline intact across the
+            // boundary (gapless); with a pending crossfade request the
+            // outgoing track fades out over the overlap instead of being cut;
+            // anything else cold-starts the next track through play_track.
+            if self.controller.can_activate_preheat(&next_track.id) {
+                if self.controller.take_crossfade_request() {
+                    self.controller.begin_crossfade(next_track);
+                } else {
+                    self.controller.activate_preheat(next_track);
+                }
+            } else {
+                self.controller
+                    .play_track(next_track, false, Duration::ZERO, false)
+                    .await;
+            }
         } else {
             // Queue ended, start "My Wave"
             let yandex = self.yandex.clone();
@@ -773,7 +845,14 @@ impl AudioSystem {
                     "wave_feedback_failed"
                 );
             } else {
-                tracing::info!(feedback_type, "wave_feedback_sent");
+                // Routine per-track protocol traffic: debug keeps the file log
+                // readable while failures still surface as warn above.
+                tracing::debug!(
+                    feedback_type,
+                    track_id = track_id.as_deref().unwrap_or("-"),
+                    batch_id = batch_id.as_deref().unwrap_or("-"),
+                    "wave_feedback_sent"
+                );
             }
         });
     }
@@ -841,7 +920,7 @@ impl AudioSystem {
             Ok(outcome) => {
                 let (new_revision, count, ids) = match outcome {
                     LikedTracksSync::Unchanged => {
-                        tracing::debug!("Liked tracks unchanged (revision {:?})", revision);
+                        tracing::debug!(revision = ?revision, "liked_tracks_unchanged");
                         return;
                     }
                     LikedTracksSync::Changed {
@@ -869,21 +948,34 @@ impl AudioSystem {
                 };
 
                 let mut db = db_arc.lock().await;
-                let _ = db.save_liked_tracks(&ids).await;
-                let _ = db.save_setting("liked_tracks_revision", &new_revision).await;
+                // The revision must only advance when the liked save landed,
+                // or the next revision-gated sync would skip the missing ids.
+                match db.save_liked_tracks(&ids).await {
+                    Ok(()) => {
+                        if let Err(e) = db
+                            .save_setting("liked_tracks_revision", &new_revision)
+                            .await
+                        {
+                            tracing::error!(error = ?e, "persist_liked_tracks_revision_failed");
+                        }
+                    }
+                    Err(e) => {
+                        tracing::error!(error = ?e, "persist_liked_tracks_failed");
+                    }
+                }
                 drop(db);
 
                 signals.library_changed.send_replace(());
 
                 tracing::info!(
-                    "Synced {} liked track IDs (revision {:?} -> {})",
                     count,
-                    revision,
-                    new_revision
+                    old_revision = ?revision,
+                    new_revision = ?new_revision,
+                    "liked_tracks_synced_collection"
                 );
             }
             Err(e) => {
-                tracing::warn!("Liked collection sync failed: {:?}", e);
+                tracing::warn!(error = ?e, "liked_collection_sync_failed");
                 // Legacy fallback (servers without collection/sync): full pull.
                 // No revision comes back, so the next sync retries the gated path.
                 match api.fetch_liked_ids().await {
@@ -895,13 +987,15 @@ impl AudioSystem {
                         }
                         let liked_ids = state.read().await.liked.ordered_snapshot().0;
                         let mut db = db_arc.lock().await;
-                        let _ = db.save_liked_tracks(&liked_ids).await;
+                        if let Err(e) = db.save_liked_tracks(&liked_ids).await {
+                            tracing::error!(error = ?e, "persist_liked_tracks_failed");
+                        }
                         drop(db);
                         signals.library_changed.send_replace(());
-                        tracing::info!("Synced {} liked track IDs (fallback full pull)", count);
+                        tracing::info!(count, "liked_tracks_synced_full_pull");
                     }
                     Err(e) => {
-                        tracing::warn!("Liked fallback pull failed, keeping cache: {:?}", e);
+                        tracing::warn!(error = ?e, "liked_fallback_pull_failed");
                     }
                 }
             }

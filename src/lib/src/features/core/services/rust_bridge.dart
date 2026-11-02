@@ -4,6 +4,7 @@ import 'package:yayma/src/app/init.dart' as app_init;
 import 'package:yayma/src/app/session.dart';
 import 'package:yayma/src/features/core/providers/notification_provider.dart';
 import 'package:yayma/src/features/core/services/app_error.dart';
+import 'package:yayma/src/features/core/services/app_logger.dart';
 import 'package:yayma/src/rust/app/context.dart';
 
 /// Executes a Rust action safely, catches errors and shows a notification.
@@ -42,6 +43,9 @@ Future<T?> runRustFetch<T>(
 }
 
 void _handleRustError(Object e, AppContext ctx, bool notifyErrors) {
+  // Every Rust failure lands in the file log, even when it is not surfaced
+  // to the user.
+  appLog(AppLogLevel.error, 'rust action failed: $e');
   if (isSessionExpired(e)) {
     // A request that started before the last login/logout must not tear down
     // the session that replaced it.

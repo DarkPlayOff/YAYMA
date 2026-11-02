@@ -58,13 +58,13 @@ pub async fn get_disliked_tracks(ctx: &AppContext) -> Vec<SimpleTrackDto> {
                 .set_disliked_ids(ids.clone());
             let mut db = ctx.core.db.lock().await;
             if let Err(e) = db.save_setting(DISLIKED_TRACKS_KEY, &ids).await {
-                tracing::warn!("Failed to persist disliked tracks: {:?}", e);
+                tracing::warn!(error = ?e, "persist_disliked_tracks_failed");
             }
             drop(db);
             ids
         }
         Err(e) => {
-            tracing::warn!("Failed to fetch disliked tracks: {:?}", e);
+            tracing::warn!(error = ?e, "fetch_disliked_tracks_failed");
             // Offline: the persisted list keeps the dislike order; the
             // in-memory set has none to offer.
             let persisted: Option<Vec<String>> = {
@@ -116,11 +116,11 @@ pub async fn toggle_like(ctx: &AppContext, track_id: String) -> bool {
         let mut db = ctx.core.db.lock().await;
         if is_liked {
             if let Err(e) = db.remove_liked_track(&base_id).await {
-                tracing::error!("Failed to remove liked track from DB: {:?}", e);
+                tracing::error!(track_id = %base_id, error = ?e, "remove_liked_track_db_failed");
             }
         } else {
             if let Err(e) = db.add_liked_track(&base_id).await {
-                tracing::error!("Failed to add liked track to DB: {:?}", e);
+                tracing::error!(track_id = %base_id, error = ?e, "add_liked_track_db_failed");
             }
         }
     }
@@ -158,7 +158,7 @@ pub async fn toggle_like(ctx: &AppContext, track_id: String) -> bool {
             true
         }
         Err(e) => {
-            tracing::warn!("toggle_like API failed, rolling back: {:?}", e);
+            tracing::warn!(track_id = %track_id, error = ?e, "toggle_like_api_failed");
             // Don't overwrite a newer user action: roll back only if the
             // current status still equals the optimistic value.
             let should_rollback = {
@@ -176,10 +176,18 @@ pub async fn toggle_like(ctx: &AppContext, track_id: String) -> bool {
                     if is_liked {
                         // We optimistically removed -> restore
                         if let Err(e) = db.add_liked_track(&base_id).await {
-                            tracing::warn!("toggle_like rollback DB add failed: {:?}", e);
+                            tracing::warn!(
+                                track_id = %base_id,
+                                error = ?e,
+                                "toggle_like_rollback_db_add_failed"
+                            );
                         }
                     } else if let Err(e) = db.remove_liked_track(&base_id).await {
-                        tracing::warn!("toggle_like rollback DB remove failed: {:?}", e);
+                        tracing::warn!(
+                            track_id = %base_id,
+                            error = ?e,
+                            "toggle_like_rollback_db_remove_failed"
+                        );
                     }
                 }
                 signals.library_changed.send_replace(());
@@ -234,7 +242,7 @@ pub async fn toggle_dislike(ctx: &AppContext, track_id: String) {
                 let _ = audio_tx.send(msg).await;
             }
             Err(e) => {
-                tracing::warn!("toggle_dislike API failed, rolling back: {:?}", e);
+                tracing::warn!(track_id = %track_id, error = ?e, "toggle_dislike_api_failed");
                 let should_rollback = {
                     let s = state.read().await;
                     s.liked.is_disliked(&track_id) == !is_disliked
@@ -271,7 +279,7 @@ pub async fn upload_user_track(
     let upload_url = match api.fetch_ugc_upload_info(kind, file_name).await {
         Ok(url) => url,
         Err(e) => {
-            tracing::error!("Failed to get upload info: {:?}", e);
+            tracing::error!(kind = kind, error = ?e, "fetch_upload_info_failed");
             return false;
         }
     };
@@ -280,7 +288,7 @@ pub async fn upload_user_track(
     let track_id = match api.upload_ugc_track(&upload_url, &file_path).await {
         Ok(id) => id,
         Err(e) => {
-            tracing::error!("Failed to upload track: {:?}", e);
+            tracing::error!(error = ?e, "upload_ugc_track_failed");
             return false;
         }
     };
@@ -316,7 +324,7 @@ pub async fn get_playlists(ctx: &AppContext) -> Vec<SimplePlaylistDto> {
             .map(SimplePlaylistDto::from_yandex)
             .collect(),
         Err(e) => {
-            tracing::error!("Failed to fetch playlists: {:?}", e);
+            tracing::error!(error = ?e, "fetch_playlists_failed");
             vec![]
         }
     }
@@ -337,7 +345,7 @@ pub async fn get_playlists_containing_track(
     {
         Ok(containing) => Some(containing),
         Err(e) => {
-            tracing::error!("Failed to check track playlists: {:?}", e);
+            tracing::error!(track_id = %track_id, error = ?e, "fetch_playlists_containing_track_failed");
             None
         }
     }
@@ -350,7 +358,7 @@ pub async fn get_liked_albums(ctx: &AppContext) -> Vec<SimpleAlbumDto> {
             .map(SimpleAlbumDto::from_yandex)
             .collect(),
         Err(e) => {
-            tracing::error!("Failed to fetch liked albums: {:?}", e);
+            tracing::error!(error = ?e, "fetch_liked_albums_failed");
             vec![]
         }
     }
@@ -363,7 +371,7 @@ pub async fn get_liked_artists(ctx: &AppContext) -> Vec<SimpleArtistDto> {
             .map(SimpleArtistDto::from_yandex)
             .collect(),
         Err(e) => {
-            tracing::error!("Failed to fetch liked artists: {:?}", e);
+            tracing::error!(error = ?e, "fetch_liked_artists_failed");
             vec![]
         }
     }
@@ -415,7 +423,7 @@ pub async fn add_liked_artist(ctx: &AppContext, artist_id: String) -> bool {
     let id = artist_id.clone();
     tokio::spawn(async move {
         if let Err(e) = api.add_like_artist(id.clone()).await {
-            tracing::warn!("add_liked_artist API failed, rolling back: {:?}", e);
+            tracing::warn!(artist_id = %id, error = ?e, "add_liked_artist_api_failed");
             if state.read().await.liked.is_artist_liked(&id) {
                 state.write().await.liked.set_artist_like_status(&id, false);
                 signals.library_changed.send_replace(());
@@ -441,7 +449,7 @@ pub async fn remove_liked_artist(ctx: &AppContext, artist_id: String) -> bool {
     let id = artist_id.clone();
     tokio::spawn(async move {
         if let Err(e) = api.remove_like_artist(id.clone()).await {
-            tracing::warn!("remove_liked_artist API failed, rolling back: {:?}", e);
+            tracing::warn!(artist_id = %id, error = ?e, "remove_liked_artist_api_failed");
             if !state.read().await.liked.is_artist_liked(&id) {
                 state.write().await.liked.set_artist_like_status(&id, true);
                 signals.library_changed.send_replace(());
@@ -467,7 +475,7 @@ pub async fn add_disliked_artist(ctx: &AppContext, artist_id: String) -> bool {
     let id = artist_id.clone();
     tokio::spawn(async move {
         if let Err(e) = api.add_dislike_artist(id.clone()).await {
-            tracing::warn!("add_disliked_artist API failed, rolling back: {:?}", e);
+            tracing::warn!(artist_id = %id, error = ?e, "add_disliked_artist_api_failed");
             if state.read().await.liked.is_artist_disliked(&id) {
                 state
                     .write()
@@ -497,9 +505,13 @@ pub async fn remove_disliked_artist(ctx: &AppContext, artist_id: String) -> bool
     let id = artist_id.clone();
     tokio::spawn(async move {
         if let Err(e) = api.remove_dislike_artist(id.clone()).await {
-            tracing::warn!("remove_disliked_artist API failed, rolling back: {:?}", e);
+            tracing::warn!(artist_id = %id, error = ?e, "remove_disliked_artist_api_failed");
             if !state.read().await.liked.is_artist_disliked(&id) {
-                state.write().await.liked.set_artist_dislike_status(&id, true);
+                state
+                    .write()
+                    .await
+                    .liked
+                    .set_artist_dislike_status(&id, true);
                 signals.library_changed.send_replace(());
                 signals.changed.send_replace(());
             }
@@ -522,7 +534,12 @@ pub async fn add_liked_playlist(ctx: &AppContext, owner_uid: u64, kind: u32) -> 
     let signals = ctx.audio.signals.clone();
     tokio::spawn(async move {
         if let Err(e) = api.add_like_playlist(owner_uid, kind).await {
-            tracing::warn!("add_liked_playlist API failed, rolling back: {:?}", e);
+            tracing::warn!(
+                owner_uid = owner_uid,
+                kind = kind,
+                error = ?e,
+                "add_liked_playlist_api_failed"
+            );
             if state.read().await.liked.is_playlist_liked(owner_uid, kind) {
                 state
                     .write()
@@ -551,7 +568,12 @@ pub async fn remove_liked_playlist(ctx: &AppContext, owner_uid: u64, kind: u32) 
     let signals = ctx.audio.signals.clone();
     tokio::spawn(async move {
         if let Err(e) = api.remove_like_playlist(owner_uid, kind).await {
-            tracing::warn!("remove_liked_playlist API failed, rolling back: {:?}", e);
+            tracing::warn!(
+                owner_uid = owner_uid,
+                kind = kind,
+                error = ?e,
+                "remove_liked_playlist_api_failed"
+            );
             if !state.read().await.liked.is_playlist_liked(owner_uid, kind) {
                 state
                     .write()
@@ -640,7 +662,7 @@ pub async fn rename_playlist(ctx: &AppContext, kind: u32, new_title: String) -> 
     // on fetch failure fall through to the rename request rather than lie.
     match ctx.core.api.fetch_playlist_bare(kind).await {
         Ok(pl) if pl.title == title => return true,
-        Err(e) => tracing::debug!("rename_playlist prefetch failed, proceeding: {:?}", e),
+        Err(e) => tracing::debug!(kind = %kind, error = ?e, "rename_playlist_prefetch_failed"),
         _ => {}
     }
     let ok = ctx.core.api.rename_playlist(kind, title).await.is_ok();
@@ -751,7 +773,11 @@ async fn fetch_and_save_missing_metadata(
         for t in tracks {
             let metadata_to_save = yandex_track_to_metadata(t);
             if let Err(e) = db.upsert_track_metadata(metadata_to_save.clone()).await {
-                tracing::error!("Failed to upsert track metadata in DB: {:?}", e);
+                tracing::error!(
+                    track_id = %metadata_to_save.id,
+                    error = ?e,
+                    "upsert_track_metadata_failed"
+                );
             }
             metadata_map.insert(metadata_to_save.id.clone(), metadata_to_save);
         }
@@ -813,14 +839,7 @@ pub(crate) async fn build_track_dtos(
 
     // 1. Fetch available metadata from DB
     let mut metadata_map = foldhash::HashMap::new();
-    if let Ok(metadata) = ctx
-        .core
-        .db
-        .lock()
-        .await
-        .get_track_metadata(&base_ids)
-        .await
-    {
+    if let Ok(metadata) = ctx.core.db.lock().await.get_track_metadata(&base_ids).await {
         for m in metadata {
             metadata_map.insert(m.id.clone(), m);
         }
@@ -869,8 +888,9 @@ pub(crate) async fn build_track_dtos_from_server_tracks(
         let mut db = ctx.core.db.lock().await;
         for t in tracks {
             let m = yandex_track_to_metadata(t);
+            let track_id = m.id.clone();
             if let Err(e) = db.upsert_track_metadata(m).await {
-                tracing::error!("Failed to upsert track metadata in DB: {:?}", e);
+                tracing::error!(track_id = %track_id, error = ?e, "upsert_track_metadata_failed");
             }
         }
     }
@@ -901,7 +921,7 @@ pub(crate) async fn resolve_favorite_playlist_kind(ctx: &AppContext) -> Option<(
                 .map(|p| (p.uid as i64, p.kind))
         }
         Err(e) => {
-            tracing::error!("Failed to fetch playlists for favorite resolve: {:?}", e);
+            tracing::error!(error = ?e, "resolve_favorite_playlist_kind_failed");
             None
         }
     }
@@ -958,8 +978,7 @@ pub async fn liked_tracks_stream(
     }
 
     loop {
-        let (liked_ids, disliked_ids_set) =
-            ctx.audio.state.read().await.liked.ordered_snapshot();
+        let (liked_ids, disliked_ids_set) = ctx.audio.state.read().await.liked.ordered_snapshot();
 
         // If the previous sequence had ids but sent zero DTOs (metadata was
         // missing from DB/network at the time), don't skip: a later

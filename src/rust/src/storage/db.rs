@@ -137,7 +137,7 @@ impl AppDatabase {
                 {
                     return Ok(Some((tok.to_string(), uid)));
                 }
-                tracing::warn!("Unrecognized auth_token format, dropping");
+                tracing::warn!("unrecognized_auth_token_format_dropped");
                 Ok(None)
             }
         }
@@ -263,11 +263,10 @@ impl AppDatabase {
                     .execute("DELETE FROM cache_metadata WHERE url = ?1", params![url])
                 {
                     Ok(1..) => paths.push(path),
-                    Ok(0) => tracing::warn!(
-                        "prune_cache: row already gone for {}, keeping file list consistent",
-                        url
-                    ),
-                    Err(e) => tracing::warn!("prune_cache: failed to delete {}: {}", url, e),
+                    Ok(0) => tracing::warn!(url = %url, "prune_cache_row_already_gone"),
+                    Err(e) => {
+                        tracing::warn!(url = %url, error = %e, "prune_cache_delete_failed")
+                    }
                 }
             }
             Ok(paths)
@@ -488,7 +487,7 @@ impl AppDatabase {
         match serde_json::to_string(value) {
             Ok(val) => self.save_app_setting(key, &val).await,
             Err(e) => {
-                tracing::error!("Failed to serialize setting '{}': {}", key, e);
+                tracing::error!(key = %key, error = %e, "serialize_setting_failed");
                 Ok(())
             }
         }
@@ -503,7 +502,7 @@ impl AppDatabase {
             Some(v) => match serde_json::from_str(&v) {
                 Ok(parsed) => Ok(Some(parsed)),
                 Err(e) => {
-                    tracing::warn!("Failed to parse setting '{}': {}", key, e);
+                    tracing::warn!(key = %key, error = %e, "parse_setting_failed");
                     Ok(None)
                 }
             },

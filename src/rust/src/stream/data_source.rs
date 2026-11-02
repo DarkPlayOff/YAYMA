@@ -243,7 +243,7 @@ impl StreamingDataSource {
                             let _ = ctx.tx_res.send(());
                         }
                         Ok(Err(err)) => {
-                            tracing::error!("Stream fetch failed: {:?}", err);
+                            tracing::error!(error = ?err, "stream_fetch_failed");
                             {
                                 let mut buf = ctx.buffer.lock();
                                 buf.clear_pending();
@@ -365,9 +365,7 @@ impl StreamingDataSource {
                     // Fail fast on client errors (e.g. 403 expired URL, 404):
                     // retrying other mirrors won't help and only adds latency.
                     // 408/429 are retryable.
-                    if status.is_client_error()
-                        && status.as_u16() != 408
-                        && status.as_u16() != 429
+                    if status.is_client_error() && status.as_u16() != 408 && status.as_u16() != 429
                     {
                         return Err(Box::from(format!(
                             "stream url rejected (status {})",
@@ -394,9 +392,7 @@ impl StreamingDataSource {
                                     match tokio::time::timeout(RANGE_TIMEOUT, resp.bytes()).await {
                                         Ok(Ok(bytes)) => {
                                             if bytes.is_empty() {
-                                                last_error = Some(
-                                                    "empty stream range body".into(),
-                                                );
+                                                last_error = Some("empty stream range body".into());
                                             } else {
                                                 return Ok(bytes);
                                             }

@@ -444,7 +444,11 @@ mod tests {
         // attack = release = 1.0: current equals |input| every sample.
         let mean = tracker.process_block(&[0.0, 1.0]);
         assert!((mean - 0.5).abs() < 1e-6);
-        assert_eq!(tracker.amplitude(), 1.0, "amplitude() must see last current");
+        assert_eq!(
+            tracker.amplitude(),
+            1.0,
+            "amplitude() must see last current"
+        );
     }
 
     #[test]

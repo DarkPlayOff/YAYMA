@@ -91,7 +91,7 @@ impl DiscordManager {
                             };
 
                             if let Err(e) = update_presence(c, data) {
-                                tracing::error!("Discord RPC error: {:?}", e);
+                                tracing::error!(error = ?e, "discord_rpc_error");
                                 let _ = c.close();
                                 client = None;
                             }

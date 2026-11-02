@@ -38,21 +38,30 @@ pub async fn initialize_app(
     initialize_services(api).await
 }
 
-/// Initialize base infrastructure (logging, panic hook, DB)
-/// Called once at FRB startup
+/// Initialize base infrastructure (panic hook, DB, logging)
+/// Called once at FRB startup (with `None`) and again from Dart right after,
+/// with the real data dir. The log file lives in the data dir, so logging
+/// starts only on that second call; before it, the panic hook is the only
+/// reporter.
 pub fn initialize_infrastructure(base_path: Option<String>) {
-    if let Some(path) = base_path {
+    if let Some(path) = &base_path {
         let p = PathBuf::from(path);
         std::fs::create_dir_all(&p).ok();
         DATA_DIR.set(p).ok();
     }
 
-    static ONCE: std::sync::Once = std::sync::Once::new();
-    ONCE.call_once(|| {
+    static INIT_ONCE: std::sync::Once = std::sync::Once::new();
+    INIT_ONCE.call_once(|| {
         flutter_rust_bridge::setup_default_user_utils();
         crate::util::hook::set_panic_hook();
-        let _ = crate::util::log::initialize_logging();
     });
+
+    static LOG_ONCE: std::sync::Once = std::sync::Once::new();
+    if base_path.is_some() {
+        LOG_ONCE.call_once(|| {
+            let _ = crate::util::log::initialize_logging();
+        });
+    }
 }
 
 async fn initialize_services(

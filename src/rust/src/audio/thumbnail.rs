@@ -4,9 +4,9 @@ use std::sync::atomic::{AtomicIsize, AtomicU64, Ordering};
 use std::sync::{Arc, LazyLock, OnceLock};
 use windows::{
     Win32::Foundation::*, Win32::Graphics::Dwm::*, Win32::Graphics::Gdi::*,
-    Win32::Graphics::Imaging::*, Win32::System::Com::*, Win32::System::Threading::GetCurrentProcessId,
-    Win32::UI::Shell::SetWindowSubclass, Win32::UI::Shell::*, Win32::UI::WindowsAndMessaging::*,
-    core::*,
+    Win32::Graphics::Imaging::*, Win32::System::Com::*,
+    Win32::System::Threading::GetCurrentProcessId, Win32::UI::Shell::SetWindowSubclass,
+    Win32::UI::Shell::*, Win32::UI::WindowsAndMessaging::*, core::*,
 };
 
 const SUBCLASS_ID: usize = 1337;
@@ -104,11 +104,9 @@ impl ThumbnailManager {
         }
 
         let hwnd = self.hwnd_ptr;
-        prerender_sender().send(PrerenderJob {
-            hash,
-            bytes,
-            hwnd,
-        }).ok();
+        prerender_sender()
+            .send(PrerenderJob { hash, bytes, hwnd })
+            .ok();
     }
 }
 
@@ -174,10 +172,7 @@ fn prerender_loop(rx: std::sync::mpsc::Receiver<PrerenderJob>) {
 /// Replace (or add) the cached bitmap for `(tw, th)`, deleting the evicted
 /// HBITMAP. Caller holds `READY_BITMAPS`.
 fn replace_ready_bitmap(ready: &mut Vec<CachedBitmap>, tw: u32, th: u32, h: HBITMAP) {
-    if let Some(pos) = ready
-        .iter()
-        .position(|c| c.width == tw && c.height == th)
-    {
+    if let Some(pos) = ready.iter().position(|c| c.width == tw && c.height == th) {
         let old = ready.remove(pos);
         unsafe {
             let _ = DeleteObject(HBITMAP(old.hbitmap_ptr as *mut _).into());

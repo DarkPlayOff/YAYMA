@@ -35,6 +35,10 @@ pub struct AudioSignals {
     pub is_shuffled: Signal<bool>,
     pub current_wave_seeds: Signal<Vec<String>>,
     pub amplitude: Signal<f32>,
+    /// Crossfade length in milliseconds (0 = strict gapless without overlap).
+    /// Written by the settings API (and the startup loader), read by the
+    /// controller's monitor trigger and the crossfade path.
+    pub crossfade_ms: Signal<u32>,
     pub codec: Signal<Option<String>>,
     pub discord_rpc: Signal<bool>,
     pub selected_device: Signal<Option<String>>,
@@ -52,6 +56,10 @@ pub struct AudioSignals {
     pub progress_changed: watch::Sender<u32>,
     pub progress_rx: watch::Receiver<u32>,
 }
+
+/// Overlap window used when the crossfade toggle is on and a track has no
+/// server fade region of its own. Not user-configurable.
+pub const USER_CROSSFADE_MS: u32 = 6_000;
 
 impl AudioSignals {
     pub fn new() -> Self {
@@ -81,6 +89,7 @@ impl AudioSignals {
             is_shuffled: Signal::new(false),
             current_wave_seeds: Signal::new(Vec::new()),
             amplitude: Signal::new(0.0),
+            crossfade_ms: Signal::new(0),
             codec: Signal::new(None),
             discord_rpc: Signal::new(false),
             selected_device: Signal::new(None),

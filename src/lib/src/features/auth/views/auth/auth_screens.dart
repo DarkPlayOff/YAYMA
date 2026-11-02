@@ -13,6 +13,7 @@ import 'package:yayma/src/app/init.dart';
 import 'package:yayma/src/app/session.dart';
 import 'package:yayma/src/features/core/providers/navigation_provider.dart';
 import 'package:yayma/src/features/core/services/app_error.dart';
+import 'package:yayma/src/features/core/services/app_logger.dart';
 import 'package:yayma/src/features/core/views/layout.dart';
 import 'package:yayma/src/features/core/views/widgets/smooth_scroll.dart';
 import 'package:yayma/src/features/settings/services/update_service.dart';
@@ -144,7 +145,10 @@ class _LoginScreenState extends State<LoginScreen> {
     var token = val.trim();
     try {
       token = Uri.decodeFull(token);
-    } on Object catch (_) {}
+    } on Object catch (e) {
+      // Not fatal — the raw token often still works — but worth logging.
+      appLog(AppLogLevel.warn, 'token URI decode failed: $e');
+    }
 
     token = token.replaceAll(RegExp(r'[\u200B-\u200D\uFEFF\u00A0]'), '');
     token = token.replaceAll(RegExp(r'[^\x21-\x7E]'), '');

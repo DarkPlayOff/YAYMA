@@ -283,7 +283,7 @@ async fn download_track_to_destination(
         let _ = tokio::fs::remove_file(&temp_path).await;
 
         if let Err(e) = extraction_result {
-            tracing::error!("Failed to extract native FLAC: {}", e);
+            tracing::error!(track_id = %track_id, error = %e, "extract_native_flac_failed");
             tokio::fs::write(&dest_path, &bytes).await?;
         }
     } else {

@@ -45,12 +45,7 @@ pub async fn build_local_liked_context(
         return None;
     }
 
-    let metadata = db
-        .lock()
-        .await
-        .get_track_metadata(&liked_ids)
-        .await
-        .ok()?;
+    let metadata = db.lock().await.get_track_metadata(&liked_ids).await.ok()?;
     let mut metadata_map: foldhash::HashMap<String, crate::storage::db::TrackMetadata> = {
         use foldhash::HashMapExt;
         foldhash::HashMap::new()
@@ -79,24 +74,18 @@ async fn fetch_remote_for_source(
     tid: &str,
 ) -> std::result::Result<(PlaybackContext, Vector<Track>, usize), String> {
     match source {
-        SingleTrackSource::AlbumTrack { album_id } => {
-            yandex
-                .fetch_album_context(*album_id, Some(tid.to_string()))
-                .await
-                .map_err(|e| format!("Failed to load album: {e}"))
-        }
-        SingleTrackSource::PlaylistTrack { kind } => {
-            yandex
-                .fetch_playlist_context(*kind, Some(tid.to_string()))
-                .await
-                .map_err(|e| format!("Failed to load playlist track: {e}"))
-        }
-        SingleTrackSource::Liked => {
-            yandex
-                .fetch_liked_context(Some(tid.to_string()))
-                .await
-                .map_err(|e| format!("Failed to load liked track: {e}"))
-        }
+        SingleTrackSource::AlbumTrack { album_id } => yandex
+            .fetch_album_context(*album_id, Some(tid.to_string()))
+            .await
+            .map_err(|e| format!("Failed to load album: {e}")),
+        SingleTrackSource::PlaylistTrack { kind } => yandex
+            .fetch_playlist_context(*kind, Some(tid.to_string()))
+            .await
+            .map_err(|e| format!("Failed to load playlist track: {e}")),
+        SingleTrackSource::Liked => yandex
+            .fetch_liked_context(Some(tid.to_string()))
+            .await
+            .map_err(|e| format!("Failed to load liked track: {e}")),
     }
 }
 
@@ -139,9 +128,6 @@ pub async fn resolve_single_track_offline_or_remote(
     }
     let result = fetch_remote_for_source(&yandex, &source, &tid).await;
     let _ = tx
-        .send(AudioMessage::ContextFetched {
-            generation,
-            result,
-        })
+        .send(AudioMessage::ContextFetched { generation, result })
         .await;
 }

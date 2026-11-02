@@ -83,6 +83,7 @@ pub async fn get_initial_settings() -> InitialSettingsDto {
             .unwrap_or(0.50)
             .clamp(0.25, 0.50),
         blur_effects_enabled: parse_setting(&settings, "blur_effects_enabled").unwrap_or(true),
+        crossfade_enabled: parse_setting::<bool>(&settings, "crossfade_enabled").unwrap_or(true),
     }
 }
 
@@ -94,7 +95,7 @@ pub async fn set_discord_rpc_enabled(ctx: &AppContext, enabled: bool) {
     ctx.audio.signals.discord_rpc.set(enabled);
     let mut db = ctx.core.db.lock().await;
     if let Err(e) = db.save_setting("discord_rpc", &enabled).await {
-        tracing::error!("Failed to save discord_rpc setting: {:?}", e);
+        tracing::error!(key = "discord_rpc", error = ?e, "save_setting_failed");
     }
 }
 
@@ -109,7 +110,7 @@ pub async fn is_custom_titlebar_enabled(ctx: &AppContext) -> bool {
 pub async fn set_custom_titlebar_enabled(ctx: &AppContext, enabled: bool) {
     let mut db = ctx.core.db.lock().await;
     if let Err(e) = db.save_setting("custom_titlebar", &enabled).await {
-        tracing::error!("Failed to save custom_titlebar setting: {:?}", e);
+        tracing::error!(key = "custom_titlebar", error = ?e, "save_setting_failed");
     }
 }
 
@@ -124,7 +125,7 @@ pub async fn is_auto_hide_navbar_enabled(ctx: &AppContext) -> bool {
 pub async fn set_auto_hide_navbar_enabled(ctx: &AppContext, enabled: bool) {
     let mut db = ctx.core.db.lock().await;
     if let Err(e) = db.save_setting("auto_hide_navbar", &enabled).await {
-        tracing::error!("Failed to save auto_hide_navbar setting: {:?}", e);
+        tracing::error!(key = "auto_hide_navbar", error = ?e, "save_setting_failed");
     }
 }
 
@@ -139,7 +140,7 @@ pub async fn is_close_to_tray_enabled(ctx: &AppContext) -> bool {
 pub async fn set_close_to_tray_enabled(ctx: &AppContext, enabled: bool) {
     let mut db = ctx.core.db.lock().await;
     if let Err(e) = db.save_setting("close_to_tray", &enabled).await {
-        tracing::error!("Failed to save close_to_tray setting: {:?}", e);
+        tracing::error!(key = "close_to_tray", error = ?e, "save_setting_failed");
     }
 }
 
@@ -216,7 +217,7 @@ pub async fn is_update_check_enabled(ctx: &AppContext) -> bool {
 pub async fn set_update_check_enabled(ctx: &AppContext, enabled: bool) {
     let mut db = ctx.core.db.lock().await;
     if let Err(e) = db.save_setting("update_check", &enabled).await {
-        tracing::error!("Failed to save update_check setting: {:?}", e);
+        tracing::error!(key = "update_check", error = ?e, "save_setting_failed");
     }
 }
 
@@ -252,4 +253,33 @@ pub async fn set_blur_effects_enabled(ctx: &AppContext, enabled: bool) {
         .await
         .save_setting("blur_effects_enabled", &enabled)
         .await;
+}
+
+/// Enables or disables crossfade (on = fixed-length overlap, off = strict
+/// gapless). Applied immediately through the audio signals the controller's
+/// monitor reads; persisted for the next launch.
+pub async fn set_crossfade(ctx: &AppContext, enabled: bool) {
+    let ms = if enabled {
+        crate::audio::signals::USER_CROSSFADE_MS
+    } else {
+        0
+    };
+    ctx.audio.signals.crossfade_ms.set(ms);
+    let mut db = ctx.core.db.lock().await;
+    if let Err(e) = db.save_setting("crossfade_enabled", &enabled).await {
+        tracing::error!(key = "crossfade_enabled", error = ?e, "save_setting_failed");
+    }
+}
+
+/// Forwards a Dart-side log message into the Rust tracing pipeline, so UI
+/// errors land in the same rotated file log. Levels: 0=debug, 1=info,
+/// 2=warn, 3=error; unknown levels fall back to info.
+pub async fn log_from_dart(level: u8, message: String) {
+    match level {
+        0 => tracing::debug!(source = "dart", "{message}"),
+        1 => tracing::info!(source = "dart", "{message}"),
+        2 => tracing::warn!(source = "dart", "{message}"),
+        3 => tracing::error!(source = "dart", "{message}"),
+        _ => tracing::info!(source = "dart", "{message}"),
+    }
 }

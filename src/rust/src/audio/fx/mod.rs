@@ -218,12 +218,7 @@ mod tests {
         let mut fx = FxSource::new(VecSource::new(vec![1.0; 600]));
         let params = Arc::new(param::EffectParams::new(&[]));
         params.set_enabled(true);
-        fx.add_effect(
-            "gain",
-            "Gain",
-            Box::new(GainEffect { gain: 0.5 }),
-            params,
-        );
+        fx.add_effect("gain", "Gain", Box::new(GainEffect { gain: 0.5 }), params);
 
         let drained: Vec<f32> = std::iter::from_fn(|| fx.next()).collect();
         assert_eq!(drained.len(), 600);

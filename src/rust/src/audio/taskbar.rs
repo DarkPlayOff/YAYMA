@@ -9,14 +9,16 @@ use windows::{
     Win32::Foundation::{HMODULE, HWND, LPARAM, WPARAM},
     Win32::System::Com::{CLSCTX_INPROC_SERVER, CoCreateInstance},
     Win32::System::LibraryLoader::GetModuleFileNameW,
-    Win32::UI::Controls::{HIMAGELIST, ILC_COLOR32, ILC_MASK, ImageList_Create, ImageList_ReplaceIcon},
+    Win32::UI::Controls::{
+        HIMAGELIST, ILC_COLOR32, ILC_MASK, ImageList_Create, ImageList_ReplaceIcon,
+    },
     Win32::UI::Shell::{
-        ITaskbarList3, THB_BITMAP, THB_FLAGS, THB_TOOLTIP, THBF_ENABLED, THBF_HIDDEN,
-        THUMBBUTTON, THUMBBUTTONFLAGS, THUMBBUTTONMASK, TaskbarList,
+        ITaskbarList3, THB_BITMAP, THB_FLAGS, THB_TOOLTIP, THBF_ENABLED, THBF_HIDDEN, THUMBBUTTON,
+        THUMBBUTTONFLAGS, THUMBBUTTONMASK, TaskbarList,
     },
     Win32::UI::WindowsAndMessaging::{
-        HICON, IMAGE_ICON, LR_LOADFROMFILE, LR_LOADTRANSPARENT, LoadImageW, SM_CXSMICON,
-        SM_CYSMICON, WM_COMMAND, GetSystemMetrics, IsWindowVisible, PostMessageW,
+        GetSystemMetrics, HICON, IMAGE_ICON, IsWindowVisible, LR_LOADFROMFILE, LR_LOADTRANSPARENT,
+        LoadImageW, PostMessageW, SM_CXSMICON, SM_CYSMICON, WM_COMMAND,
     },
     core::{HSTRING, PCWSTR},
 };
@@ -198,7 +200,12 @@ async fn send_update(ctx: &AppContext) {
         },
         ButtonSpec {
             icon: icon(if disliked { "disliked" } else { "dislike" }),
-            tooltip: if disliked { "Убрать дизлайк" } else { "Дизлайк" }.into(),
+            tooltip: if disliked {
+                "Убрать дизлайк"
+            } else {
+                "Дизлайк"
+            }
+            .into(),
         },
         ButtonSpec {
             icon: icon("skip_previous"),
@@ -206,7 +213,12 @@ async fn send_update(ctx: &AppContext) {
         },
         ButtonSpec {
             icon: icon(if is_playing { "pause" } else { "play" }),
-            tooltip: if is_playing { "Пауза" } else { "Играть" }.into(),
+            tooltip: if is_playing {
+                "Пауза"
+            } else {
+                "Играть"
+            }
+            .into(),
         },
         ButtonSpec {
             icon: icon("skip_next"),
@@ -214,7 +226,12 @@ async fn send_update(ctx: &AppContext) {
         },
         ButtonSpec {
             icon: icon(if liked { "liked" } else { "like" }),
-            tooltip: if liked { "Убрать лайк" } else { "Лайк" }.into(),
+            tooltip: if liked {
+                "Убрать лайк"
+            } else {
+                "Лайк"
+            }
+            .into(),
         },
         ButtonSpec {
             icon: icon(match repeat_mode {

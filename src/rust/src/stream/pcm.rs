@@ -573,7 +573,10 @@ mod tests {
     fn next_and_read_chunk_share_cursor() {
         let mut rig = make_rig();
         rig.sample_tx
-            .send(SampleMessage::Samples((0..10).map(|i| i as f32).collect(), 0))
+            .send(SampleMessage::Samples(
+                (0..10).map(|i| i as f32).collect(),
+                0,
+            ))
             .unwrap();
 
         assert_eq!(rig.source.next(), Some(0.0));

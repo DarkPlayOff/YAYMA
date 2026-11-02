@@ -155,6 +155,14 @@ impl StreamManager {
         self.prewarm_cache.lock().has_ready(track_id)
     }
 
+    /// Adopts an already-built prewarm session without ever building a new
+    /// one — the gapless preheat path must never block the audio actor on a
+    /// cold network session. Returns `None` when the session is still being
+    /// built (the preheat trigger retries on its next tick).
+    pub fn adopt_prewarmed(&self, track_id: &str) -> Option<PreparedStream> {
+        self.prewarm_cache.lock().remove(track_id)
+    }
+
     pub async fn is_track_offline(&self, track_id: &str) -> bool {
         self.track_cache.get_track_file(track_id).await.is_some()
     }
@@ -302,6 +310,8 @@ mod tests {
         cache.start("track-7").expect("first attempt starts");
         cache.invalidate("track-7");
         assert!(!cache.has_ready("track-7"));
-        cache.start("track-7").expect("attempt restarts after invalidate");
+        cache
+            .start("track-7")
+            .expect("attempt restarts after invalidate");
     }
 }
