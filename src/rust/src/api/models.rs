@@ -275,6 +275,17 @@ pub enum RepeatModeDto {
     Single,
 }
 
+/// Active playback context projection. `kind` is one of
+/// "playlist"|"album"|"artist"|"track"|"wave"|"standalone"; `title` is only
+/// set when the context carried one at load time.
+#[flutter_rust_bridge::frb(unignore)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct PlaybackContextDto {
+    pub kind: String,
+    pub id: Option<String>,
+    pub title: Option<String>,
+}
+
 #[flutter_rust_bridge::frb(unignore)]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct PlaybackState {
@@ -292,6 +303,7 @@ pub struct PlaybackState {
     pub current_track: Option<SimpleTrackDto>,
     pub current_wave_seeds: Vec<String>,
     pub codec: Option<String>,
+    pub playback_context: Option<PlaybackContextDto>,
 }
 
 #[flutter_rust_bridge::frb(unignore)]

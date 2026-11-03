@@ -3,7 +3,7 @@ use yandex_music::model::track::Track;
 
 /// Cap on retained playback history. Unbounded growth + a full-vector clone
 /// into the signal on every track advance leaks memory over long sessions.
-/// 100 comfortably covers wave-seed needs (last 20 played).
+/// 100 matches the rotor `queue` dedup window (last 100 played tracks).
 const MAX_HISTORY_ENTRIES: usize = 100;
 
 #[derive(Clone)]

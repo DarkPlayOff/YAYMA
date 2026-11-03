@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -15,6 +16,7 @@ import 'package:yayma/src/features/core/views/widgets/quality_selector.dart';
 import 'package:yayma/src/features/core/views/widgets/responsive.dart';
 import 'package:yayma/src/features/core/views/widgets/track_elements.dart';
 import 'package:yayma/src/features/playback/providers/playback_provider.dart';
+import 'package:yayma/src/features/playback/views/queue_panel.dart';
 import 'package:yayma/src/rust/api/models.dart';
 
 class PlayerBar extends StatelessWidget {
@@ -279,6 +281,8 @@ class _PlayerControls extends StatelessWidget {
         final repeatMode = repeatModeSignal();
         final showBuffering = showBufferingIndicatorSignal.value;
         final onSurfaceVariant = Theme.of(context).colorScheme.onSurfaceVariant;
+        // The rotor session owns the wave queue: shuffle/repeat are disabled.
+        final isWaveActive = isWaveActiveSignal();
 
         var repeatIcon = Icons.repeat;
         if (repeatMode == RepeatModeDto.single) {
@@ -310,9 +314,15 @@ class _PlayerControls extends StatelessWidget {
                         icon: Icon(
                           Icons.shuffle,
                           size: 20,
-                          color: isShuffled ? accentColor : onSurfaceVariant,
+                          color: isWaveActive
+                              ? onSurfaceVariant.withValues(alpha: 0.38)
+                              : isShuffled
+                              ? accentColor
+                              : onSurfaceVariant,
                         ),
-                        onPressed: PlaybackController.toggleShuffle,
+                        onPressed: isWaveActive
+                            ? null
+                            : PlaybackController.toggleShuffle,
                       ),
                       IconButton(
                         icon: Icon(
@@ -384,13 +394,24 @@ class _PlayerControls extends StatelessWidget {
                         icon: Icon(
                           repeatIcon,
                           size: 20,
-                          color: repeatMode != RepeatModeDto.none
+                          color: isWaveActive
+                              ? onSurfaceVariant.withValues(alpha: 0.38)
+                              : repeatMode != RepeatModeDto.none
                               ? accentColor
                               : onSurfaceVariant,
                         ),
-                        onPressed: PlaybackController.toggleRepeat,
+                        onPressed: isWaveActive
+                            ? null
+                            : PlaybackController.toggleRepeat,
                       ),
-                      CommonQualitySelector(accentColor: accentColor),
+                      IconButton(
+                        icon: Icon(
+                          Icons.queue_music_rounded,
+                          size: 20,
+                          color: onSurfaceVariant,
+                        ),
+                        onPressed: () => unawaited(showQueuePanel(context)),
+                      ),
                     ],
                   ),
                 ),
@@ -428,8 +449,10 @@ class _VolumeAndQuality extends StatelessWidget {
             Icon(Icons.volume_up_rounded, size: 18, color: onSurfaceVariant),
             CommonVolumeSlider(width: volumeWidth, activeColor: accentColor),
             const SizedBox(width: 8),
-            const AudioDeviceButton(),
           ],
+          // Sound settings (quality + output device) in the corner, where
+          // the standalone device button used to sit.
+          CommonQualitySelector(accentColor: accentColor),
         ],
       ),
     );

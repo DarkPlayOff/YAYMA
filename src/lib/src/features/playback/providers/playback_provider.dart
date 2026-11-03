@@ -10,6 +10,7 @@ import 'package:yayma/src/app/session.dart';
 import 'package:yayma/src/features/core/providers/notification_provider.dart';
 import 'package:yayma/src/features/core/providers/visual_effects_provider.dart';
 import 'package:yayma/src/features/core/services/app_error.dart';
+import 'package:yayma/src/features/core/services/app_logger.dart';
 import 'package:yayma/src/features/core/services/debouncer.dart';
 import 'package:yayma/src/features/core/services/rust_bridge.dart';
 import 'package:yayma/src/features/core/theme/app_theme.dart';
@@ -243,6 +244,12 @@ final FlutterComputed<String?> currentTrackIdSignal = computed(
   options: const ComputedOptions(name: 'currentTrackIdSignal'),
 );
 
+// Signal for the current track only
+final FlutterComputed<SimpleTrackDto?> currentTrackSignal = computed(
+  () => playerStateSignal.value?.currentTrack,
+  options: const ComputedOptions(name: 'currentTrackSignal'),
+);
+
 // Signal for volume only
 final FlutterComputed<int> playerVolumeSignal = computed(
   () => playerStateSignal.value?.volume ?? 100,
@@ -317,6 +324,13 @@ final FlutterComputed<bool> isDislikedSignal = computed(
 final FlutterComputed<List<String>> currentWaveSeedsSignal = computed(
   () => playerStateSignal.value?.currentWaveSeeds ?? [],
   options: const ComputedOptions(name: 'currentWaveSeedsSignal'),
+);
+
+/// True while the queue is owned by the rotor session ("Моя волна"):
+/// shuffle/repeat are disabled there, desktop-client parity.
+final FlutterComputed<bool> isWaveActiveSignal = computed(
+  () => currentWaveSeedsSignal().isNotEmpty,
+  options: const ComputedOptions(name: 'isWaveActiveSignal'),
 );
 
 // Track metadata (static data only)
@@ -399,6 +413,19 @@ final FlutterComputed<int> queueCountSignal = computed(
   options: const ComputedOptions(name: 'queueCountSignal'),
 );
 
+// Queue position only: the queue panel subscribes to this instead of the
+// whole playback state, so volume/pause ticks do not rebuild the O(n) list.
+final FlutterComputed<int> queueIndexSignal = computed(
+  () => playerStateSignal.value?.queueIndex ?? 0,
+  options: const ComputedOptions(name: 'queueIndexSignal'),
+);
+
+// Playback source context only (for the "Сейчас играет из …" header line).
+final FlutterComputed<PlaybackContextDto?> playbackContextSignal = computed(
+  () => playerStateSignal.value?.playbackContext,
+  options: const ComputedOptions(name: 'playbackContextSignal'),
+);
+
 // Queue identity only: bumped by Rust whenever the queue is replaced or
 // reordered. Count alone misses a replacement with the same queue length.
 final FlutterComputed<int> queueRevisionSignal = computed(
@@ -406,35 +433,106 @@ final FlutterComputed<int> queueRevisionSignal = computed(
   options: const ComputedOptions(name: 'queueRevisionSignal'),
 );
 
-// Signal for queue tracks
+/// Narrow neighbourhood of the playhead for the cover-swipe previews:
+/// [queueIndex-1 .. queueIndex+1], clamped at the queue ends. Fetching the
+/// whole queue here would copy thousands of DTOs over the bridge on every
+/// queue mutation just to show two neighbouring covers.
 final FutureSignal<List<SimpleTrackDto>> queueTracksSignal = computedAsync(
   () async {
     final ctx = appContextSignal();
     final queueCount = queueCountSignal();
-    if (ctx == null || queueCount == 0) return const [];
-
+    final index = queueIndexSignal();
     // Refetch when the queue itself changes, including a same-length swap
     // (album A → album B) and a shuffle that reorders the same tracks.
     final _ = queueRevisionSignal();
+    if (ctx == null || queueCount == 0) return const [];
 
-    return await rust.getQueue(ctx: ctx);
+    final base = (index - 1).clamp(0, queueCount - 1);
+    return await rust.queueWindow(ctx: ctx, offset: base, len: 3);
   },
   options: const AsyncSignalOptions(name: 'queueTracksSignal'),
 );
 
+// First and last queue entries, for the repeat-all wrap previews: the ±1
+// window cannot reach across the queue ends. One DTO per revision each.
+final FutureSignal<SimpleTrackDto?> queueFirstTrackSignal = computedAsync(
+  () async {
+    final ctx = appContextSignal();
+    final queueCount = queueCountSignal();
+    final _ = queueRevisionSignal();
+    if (ctx == null || queueCount == 0) return null;
+    final head = await rust.queueWindow(ctx: ctx, offset: 0, len: 1);
+    return head.isEmpty ? null : head.first;
+  },
+  options: const AsyncSignalOptions(name: 'queueFirstTrackSignal'),
+);
+
+final FutureSignal<SimpleTrackDto?> queueLastTrackSignal = computedAsync(
+  () async {
+    final ctx = appContextSignal();
+    final queueCount = queueCountSignal();
+    final _ = queueRevisionSignal();
+    if (ctx == null || queueCount == 0) return null;
+    final tail = await rust.queueWindow(ctx: ctx, offset: queueCount - 1, len: 1);
+    return tail.isEmpty ? null : tail.first;
+  },
+  options: const AsyncSignalOptions(name: 'queueLastTrackSignal'),
+);
+
+/// How many upcoming tracks the queue panel fetches and shows at most, like
+/// the desktop client caps its queue view. The rest is summarised in a
+/// footer line.
+const int queueWindowLength = 200;
+
+/// Upcoming queue window for the panel: the [queueWindowLength] tracks after
+/// the current one, so large queues are not copied whole on every change.
+/// Refetched on queue revisions and on queue position moves (the window
+/// follows the playhead).
+final FutureSignal<List<SimpleTrackDto>> queueWindowSignal = computedAsync(
+  () async {
+    final ctx = appContextSignal();
+    final count = queueCountSignal();
+    final start = queueIndexSignal() + 1;
+    // Refetch on queue mutations, same as queueTracksSignal.
+    final _ = queueRevisionSignal();
+    if (ctx == null || start >= count) return const [];
+
+    return await rust.queueWindow(
+      ctx: ctx,
+      offset: start,
+      len: queueWindowLength,
+    );
+  },
+  options: const AsyncSignalOptions(name: 'queueWindowSignal'),
+);
+
+/// Playhead neighbourhood for preview consumers ([queueTracksSignal]). A
+/// failed refetch must not masquerade as an empty queue, so failures land in
+/// the log; consumers degrade the same way as for an empty queue (no
+/// neighbour previews).
+List<SimpleTrackDto> queueSnapshot() {
+  final state = queueTracksSignal();
+  if (state.hasError && !state.hasValue) {
+    appLog(AppLogLevel.error, 'queue refetch failed: ${state.error}');
+  }
+  return state.value ?? const [];
+}
+
 // Signal for previous track in queue
 final FlutterComputed<SimpleTrackDto?> previousTrackSignal = computed(() {
   final state = playerStateSignal.value;
-  final queue = queueTracksSignal().value ?? const [];
+  final queue = queueSnapshot();
   if (state == null || queue.isEmpty) return null;
 
-  final index = state.queueIndex;
-  final repeatMode = state.repeatMode;
-
-  if (index > 0 && index < queue.length) {
-    return queue[index - 1];
-  } else if (index == 0 && repeatMode == RepeatModeDto.all) {
-    return queue.last;
+  // The window starts one track before the playhead (clamped at 0).
+  final base = (state.queueIndex - 1).clamp(0, state.queueCount - 1);
+  final relative = state.queueIndex - base;
+  if (relative > 0 && relative - 1 < queue.length) {
+    return queue[relative - 1];
+  }
+  // Repeat-all wraps around the start; the window cannot see the tail.
+  if (state.repeatMode == RepeatModeDto.all && state.queueIndex == 0) {
+    return queueLastTrackSignal().value;
   }
   return null;
 }, options: const ComputedOptions(name: 'previousTrackSignal'));
@@ -442,21 +540,24 @@ final FlutterComputed<SimpleTrackDto?> previousTrackSignal = computed(() {
 // Signal for next track in queue
 final FlutterComputed<SimpleTrackDto?> nextTrackSignal = computed(() {
   final state = playerStateSignal.value;
-  final queue = queueTracksSignal().value ?? const [];
+  final queue = queueSnapshot();
   if (state == null || queue.isEmpty) return null;
 
-  final index = state.queueIndex;
-  final repeatMode = state.repeatMode;
+  final base = (state.queueIndex - 1).clamp(0, state.queueCount - 1);
+  final relative = state.queueIndex - base;
 
   // Repeat-one replays this track, so the "next" preview is the current one.
-  if (repeatMode == RepeatModeDto.single && index < queue.length) {
-    return queue[index];
+  if (state.repeatMode == RepeatModeDto.single && relative < queue.length) {
+    return queue[relative];
   }
 
-  if (index + 1 < queue.length) {
-    return queue[index + 1];
-  } else if (index + 1 == queue.length && repeatMode == RepeatModeDto.all) {
-    return queue.first;
+  if (relative + 1 < queue.length) {
+    return queue[relative + 1];
+  }
+  // Repeat-all wraps around the end.
+  if (state.repeatMode == RepeatModeDto.all &&
+      state.queueIndex == state.queueCount - 1) {
+    return queueFirstTrackSignal().value;
   }
   return null;
 }, options: const ComputedOptions(name: 'nextTrackSignal'));
@@ -583,8 +684,6 @@ class PlaybackController {
       );
   static Future<void> playPlaylist(String uid, int kind) =>
       runRustAction((ctx) => rust.playPlaylist(ctx: ctx, uid: uid, kind: kind));
-  static Future<void> playAlbum(int albumId) =>
-      runRustAction((ctx) => rust.playAlbum(ctx: ctx, albumId: albumId));
   static Future<void> togglePlay() {
     // Decide from what the button shows, not from Rust's momentary flag: while
     // a track is being swapped Rust reports isPlaying=false, so a plain toggle
@@ -614,15 +713,62 @@ class PlaybackController {
   /// the current track once it has been playing for a while.
   static Future<void> previousTrack() =>
       runRustAction((ctx) => rust.playPreviousTrack(ctx: ctx));
+
+  /// Jumps straight to the queue track at absolute [index]. No optimistic
+  /// updates: Rust emits PlaybackStateChanged, which refreshes
+  /// [playerStateSignal] and (via the queueRevision bump) [queueTracksSignal].
+  static Future<void> jumpToQueueIndex(int index) =>
+      runRustAction((ctx) => rust.queueJumpTo(ctx: ctx, index: index));
+
+  /// Removes the queue track at absolute [index]. The queue list refetches
+  /// itself through the queueRevision bump in the emitted state.
+  static Future<void> removeFromQueueAt(int index) =>
+      runRustAction((ctx) => rust.queueRemoveAt(ctx: ctx, index: index));
+
+  /// Moves the queue track from absolute index [from] to [to]. [to] is the
+  /// final position of the item in the list after the removal, matching the
+  /// `onReorderItem` semantics used by the queue panel.
+  static Future<void> reorderQueue(int from, int to) =>
+      runRustAction((ctx) => rust.queueReorder(ctx: ctx, from: from, to: to));
+
+  /// Puts [trackId] right after the currently playing track. Returns whether
+  /// the call succeeded, so callers can show their own success feedback.
+  static Future<bool> playTrackNextInQueue(String trackId) =>
+      runRustAction((ctx) => rust.queueAddNext(ctx: ctx, trackId: trackId));
+
+  /// Appends [trackId] to the end of the playback queue. Returns whether the
+  /// call succeeded, so callers can show their own success feedback.
+  static Future<bool> addTrackToQueue(String trackId) =>
+      runRustAction((ctx) => rust.queueAddLast(ctx: ctx, trackId: trackId));
+
+  /// Drops every upcoming track; the current one keeps playing. The queue
+  /// list refetches itself through the queueRevision bump in the emitted
+  /// state.
+  static Future<bool> clearQueue() =>
+      runRustAction((ctx) => rust.queueClear(ctx: ctx));
+
   static Future<void> toggleShuffle() =>
       runRustAction((ctx) => rust.toggleShuffle(ctx: ctx));
   static Future<void> toggleRepeat() =>
       runRustAction((ctx) => rust.toggleRepeatMode(ctx: ctx));
+
+  /// Sets the repeat mode to an exact value instead of cycling it. Used where
+  /// the target mode is known precisely, e.g. the Android media notification
+  /// (AudioServiceRepeatMode has none/all/one and no toggle semantics).
+  static Future<void> setRepeatMode(RepeatModeDto mode) =>
+      runRustAction((ctx) => rust.setRepeatMode(ctx: ctx, mode: mode));
+
+  /// Enables or disables shuffle directly instead of toggling, mirroring
+  /// [setRepeatMode] for the Android media notification.
+  static Future<void> setShuffle({required bool enabled}) =>
+      runRustAction((ctx) => rust.setShuffle(ctx: ctx, enabled: enabled));
   static Future<void> stop() => runRustAction((ctx) => rust.stop(ctx: ctx));
   static Future<bool> toggleLike({required String trackId}) async {
     // Optimistic list update (instant); the Rust stream reconciles after.
-    // Unlike works by id; insertion needs the DTO: current queue first,
-    // then the liked cache (re-like).
+    // Unlike works by id; insertion needs the DTO: the playhead neighbourhood
+    // first, then the liked cache (re-like). A fresh like of a track outside
+    // that neighbourhood skips the optimistic insert — the confirmed update
+    // still lands via the liked-tracks stream.
     final baseId = baseTrackId(trackId);
     SimpleTrackDto? dto;
     for (final t in queueTracksSignal.value.value ?? const <SimpleTrackDto>[]) {

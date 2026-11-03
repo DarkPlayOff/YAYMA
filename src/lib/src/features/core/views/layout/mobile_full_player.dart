@@ -21,6 +21,7 @@ import 'package:yayma/src/features/core/views/widgets/rust_cached_image.dart';
 import 'package:yayma/src/features/core/views/widgets/track_context_actions.dart';
 import 'package:yayma/src/features/core/views/widgets/track_elements.dart';
 import 'package:yayma/src/features/playback/providers/playback_provider.dart';
+import 'package:yayma/src/features/playback/views/queue_panel.dart';
 import 'package:yayma/src/features/playback/views/wave_view.dart';
 import 'package:yayma/src/rust/api/models.dart';
 
@@ -194,7 +195,7 @@ class _MobileFullPlayerState extends State<MobileFullPlayer>
       animation: _coverSwipe,
       initialTrack: initialState?.currentTrack,
       initialIndex: initialState?.queueIndex,
-      queue: () => queueTracksSignal().value ?? const [],
+      queue: queueSnapshot,
       travel: () => _swipeTravel(context),
       canAnimate: () => !_closing && _controller.value >= 0.95,
       isMounted: () => mounted,
@@ -1700,6 +1701,8 @@ class _FullPlayerActions extends StatelessWidget {
         final isShuffled = isShuffledSignal();
         final repeatMode = repeatModeSignal();
         final onSurfaceVariant = Theme.of(context).colorScheme.onSurfaceVariant;
+        // The rotor session owns the wave queue: shuffle/repeat are disabled.
+        final isWaveActive = isWaveActiveSignal();
 
         var repeatIcon = Icons.repeat_rounded;
         if (repeatMode == RepeatModeDto.single) {
@@ -1713,20 +1716,31 @@ class _FullPlayerActions extends StatelessWidget {
               iconSize: 24,
               icon: Icon(
                 Icons.shuffle_rounded,
-                color: isShuffled ? accent : onSurfaceVariant,
+                color: isWaveActive
+                    ? onSurfaceVariant.withValues(alpha: 0.38)
+                    : isShuffled
+                    ? accent
+                    : onSurfaceVariant,
               ),
-              onPressed: PlaybackController.toggleShuffle,
+              onPressed: isWaveActive ? null : PlaybackController.toggleShuffle,
             ),
             _FullPlayerWaveButton(accent: accent),
             IconButton(
               iconSize: 24,
+              icon: Icon(Icons.queue_music_rounded, color: onSurfaceVariant),
+              onPressed: () => unawaited(showQueuePanel(context)),
+            ),
+            IconButton(
+              iconSize: 24,
               icon: Icon(
                 repeatIcon,
-                color: repeatMode != RepeatModeDto.none
+                color: isWaveActive
+                    ? onSurfaceVariant.withValues(alpha: 0.38)
+                    : repeatMode != RepeatModeDto.none
                     ? accent
                     : onSurfaceVariant,
               ),
-              onPressed: PlaybackController.toggleRepeat,
+              onPressed: isWaveActive ? null : PlaybackController.toggleRepeat,
             ),
           ],
         );

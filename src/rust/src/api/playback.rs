@@ -25,6 +25,7 @@ pub(crate) fn get_playback_state_internal<S: std::hash::BuildHasher>(
         queue_revision: signals.queue_revision.get(),
         current_wave_seeds: signals.current_wave_seeds.get(),
         codec: signals.codec.get(),
+        playback_context: signals.playback_context.get(),
         current_track: current_track
             .map(|t| SimpleTrackDto::from_yandex(&t, liked_ids, disliked_ids)),
     }
@@ -95,6 +96,76 @@ pub async fn set_transient_volume_gain(ctx: &AppContext, gain: u8) {
         .await;
 }
 
+/// Inserts the track right after the current one ("play next").
+/// No-ops when the track cannot be fetched.
+pub async fn queue_add_next(ctx: &AppContext, track_id: String) {
+    if let Ok(tracks) = ctx.core.api.fetch_tracks(vec![track_id]).await
+        && let Some(track) = tracks.into_iter().next()
+    {
+        let _ = ctx.audio.tx.send(AudioMessage::PlayTrackNext(track)).await;
+    }
+}
+
+/// Appends the track to the end of the queue ("add to queue").
+/// In a wave context the insertion lands right after the visible window,
+/// ahead of the rotor tail. No-ops when the track cannot be fetched.
+pub async fn queue_add_last(ctx: &AppContext, track_id: String) {
+    if let Ok(tracks) = ctx.core.api.fetch_tracks(vec![track_id]).await
+        && let Some(track) = tracks.into_iter().next()
+    {
+        let _ = ctx.audio.tx.send(AudioMessage::QueueTrack(track)).await;
+    }
+}
+
+/// Removes the queue entry at `index`. Out-of-range indices are ignored.
+pub async fn queue_remove_at(ctx: &AppContext, index: u32) {
+    let _ = ctx
+        .audio
+        .tx
+        .send(AudioMessage::RemoveFromQueue(index as usize))
+        .await;
+}
+
+/// Empties the queue without stopping the current playback.
+pub async fn queue_clear(ctx: &AppContext) {
+    let _ = ctx.audio.tx.send(AudioMessage::ClearQueue).await;
+}
+
+/// Moves the queue entry at `from` to `to`, keeping the current track
+/// playing when it is the one being moved.
+pub async fn queue_reorder(ctx: &AppContext, from: u32, to: u32) {
+    let _ = ctx
+        .audio
+        .tx
+        .send(AudioMessage::ReorderQueue(from as usize, to as usize))
+        .await;
+}
+
+/// Jumps to the queue entry at `index` and starts playing it, without
+/// resetting the playback context.
+pub async fn queue_jump_to(ctx: &AppContext, index: u32) {
+    let _ = ctx
+        .audio
+        .tx
+        .send(AudioMessage::PlayQueueIndex(index as usize))
+        .await;
+}
+
+/// Sets the repeat mode directly (none / all / single) and persists it.
+pub async fn set_repeat_mode(ctx: &AppContext, mode: RepeatModeDto) {
+    let mode = match mode {
+        RepeatModeDto::None => crate::audio::enums::RepeatMode::None,
+        RepeatModeDto::All => crate::audio::enums::RepeatMode::All,
+        RepeatModeDto::Single => crate::audio::enums::RepeatMode::Single,
+    };
+    let _ = ctx.audio.tx.send(AudioMessage::SetRepeatMode(mode)).await;
+}
+
+/// Enables or disables shuffle and persists the choice.
+pub async fn set_shuffle(ctx: &AppContext, enabled: bool) {
+    let _ = ctx.audio.tx.send(AudioMessage::SetShuffle(enabled)).await;
+}
+
 pub async fn toggle_shuffle(ctx: &AppContext) {
     let _ = ctx.audio.tx.send(AudioMessage::ToggleShuffle).await;
 }
@@ -111,6 +182,21 @@ pub async fn get_queue(ctx: &AppContext) -> Vec<SimpleTrackDto> {
     let (liked_ids, disliked_ids) = ctx.audio.state.read().await.liked.snapshot();
     ctx.audio.signals.queue.with(|q| {
         q.iter()
+            .map(|t| SimpleTrackDto::from_yandex(t, &liked_ids, &disliked_ids))
+            .collect()
+    })
+}
+
+/// Returns up to `len` queue entries starting at the absolute position
+/// `offset`, so large queues do not have to be copied whole. Out-of-range
+/// parts are silently clamped.
+pub async fn queue_window(ctx: &AppContext, offset: u32, len: u32) -> Vec<SimpleTrackDto> {
+    let (liked_ids, disliked_ids) = ctx.audio.state.read().await.liked.snapshot();
+    ctx.audio.signals.queue.with(|q| {
+        let start = (offset as usize).min(q.len());
+        q.iter()
+            .skip(start)
+            .take(len as usize)
             .map(|t| SimpleTrackDto::from_yandex(t, &liked_ids, &disliked_ids))
             .collect()
     })

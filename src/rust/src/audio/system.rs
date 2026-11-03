@@ -72,6 +72,16 @@ pub type EffectHandles =
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 const PREVIOUS_TRACK_RESTART_THRESHOLD: Duration = Duration::from_secs(5);
 
+/// Stored form of the persisted repeat mode.
+fn repeat_mode_key(mode: crate::audio::enums::RepeatMode) -> String {
+    match mode {
+        crate::audio::enums::RepeatMode::None => "none",
+        crate::audio::enums::RepeatMode::All => "all",
+        crate::audio::enums::RepeatMode::Single => "single",
+    }
+    .to_string()
+}
+
 pub struct AudioSystem {
     controller: AudioController,
     queue: QueueManager,
@@ -265,7 +275,26 @@ impl AudioSystem {
                 tokio::select! {
                     msg = rx.recv() => {
                         let Some(msg) = msg else { break };
-                        system_loop.process_message(msg).await;
+                        if matches!(msg, AudioMessage::Next) {
+                            // Skip-burst debounce: collapse already-queued
+                            // Next presses into a single advance without
+                            // waiting. A non-Next message drained first is
+                            // processed right after.
+                            let mut pending_other = None;
+                            while let Ok(extra) = rx.try_recv() {
+                                if matches!(extra, AudioMessage::Next) {
+                                    continue;
+                                }
+                                pending_other = Some(extra);
+                                break;
+                            }
+                            system_loop.process_message(msg).await;
+                            if let Some(other) = pending_other {
+                                system_loop.process_message(other).await;
+                            }
+                        } else {
+                            system_loop.process_message(msg).await;
+                        }
                     }
                     _ = fetch_notified.as_mut() => {
                         fetch_notified = Box::pin(fetch_finished.notified());
@@ -383,6 +412,87 @@ impl AudioSystem {
         index: usize,
     ) {
         self.load_context_inner(None, ctx, tracks, index).await;
+    }
+
+    /// Desktop getPlayContextRequestKey parity: clicking a track that belongs
+    /// to the context already playing must not rebuild the queue — it jumps
+    /// to that position instead, preserving shuffle, wave state and queue
+    /// edits. Returns false when the context differs (or the track is not in
+    /// the queue) so the caller falls back to the rebuild.
+    async fn try_jump_within_context(
+        &mut self,
+        source: &system_loading::SingleTrackSource,
+        tid: &str,
+    ) -> bool {
+        let ctx = self.queue.playback_context();
+        let matched = match (&ctx, source) {
+            (
+                crate::audio::queue::PlaybackContext::Album(album),
+                system_loading::SingleTrackSource::AlbumTrack { album_id },
+            ) => album.id == Some(*album_id),
+            (
+                crate::audio::queue::PlaybackContext::Playlist(playlist),
+                system_loading::SingleTrackSource::PlaylistTrack { kind },
+            ) => playlist.kind == *kind,
+            // Liked tracks play through the private playlist kind 3.
+            (
+                crate::audio::queue::PlaybackContext::Playlist(playlist),
+                system_loading::SingleTrackSource::Liked,
+            ) => playlist.kind == 3,
+            _ => false,
+        };
+        if !matched {
+            return false;
+        }
+        let position = self
+            .signals
+            .queue
+            .with(|q| q.iter().position(|t| t.id == tid));
+        match position {
+            Some(index) => {
+                self.play_queue_index(index).await;
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// Queue-position jump (user tap on a queue row or an idempotent
+    /// context re-click): starts the target track through the same
+    /// preheat-or-play path the unified advance uses.
+    async fn play_queue_index(&mut self, index: usize) {
+        let Some(track) = self.queue.jump_to(index) else {
+            return;
+        };
+        self.report_track_end(EndReason::Skip);
+        if self.queue.in_wave() {
+            self.send_wave_track_started(&track);
+        }
+        if self.controller.can_activate_preheat(&track.id) {
+            self.controller.activate_preheat(track.clone());
+        } else {
+            self.controller
+                .play_track(track.clone(), false, Duration::ZERO, false)
+                .await;
+        }
+        self.report_track_start(&track, Duration::ZERO, false);
+    }
+
+    /// Fire-and-forget settings write; the actor never waits on the DB.
+    fn persist_setting<T: serde::Serialize + Clone + Send + Sync + 'static>(
+        &self,
+        key: &str,
+        value: &T,
+    ) {
+        let db = self.db.clone();
+        let key = key.to_string();
+        let value = value.clone();
+        tokio::spawn(async move {
+            let mut db = db.lock().await;
+            if let Err(e) = db.save_setting(&key, &value).await {
+                tracing::error!(error = ?e, key = %key, "persist_setting_failed");
+            }
+        });
     }
 
     async fn load_fetched_context(
@@ -610,8 +720,35 @@ impl AudioSystem {
             AudioMessage::PlayTrackNext(track) => self.queue.play_next(track),
             AudioMessage::RemoveFromQueue(idx) => self.queue.remove_track(idx),
             AudioMessage::ClearQueue => self.queue.clear(),
-            AudioMessage::ToggleShuffle => self.queue.toggle_shuffle(),
-            AudioMessage::ToggleRepeatMode => self.queue.toggle_repeat_mode(),
+            AudioMessage::ReorderQueue(from, to) => self.queue.reorder(from, to),
+            AudioMessage::PlayQueueIndex(index) => self.play_queue_index(index).await,
+            // The wave queue is owned by the rotor session: shuffle/repeat
+            // would desync it from the server-side track stream, so both are
+            // disabled in a wave context (desktop-client parity).
+            AudioMessage::SetRepeatMode(mode) => {
+                if !self.queue.in_wave() {
+                    self.queue.set_repeat_mode(mode);
+                    self.persist_setting("repeat_mode", &repeat_mode_key(mode));
+                }
+            }
+            AudioMessage::SetShuffle(enabled) => {
+                if !self.queue.in_wave() {
+                    self.queue.set_shuffle(enabled);
+                    self.persist_setting("shuffle_enabled", &enabled);
+                }
+            }
+            AudioMessage::ToggleShuffle => {
+                if !self.queue.in_wave() {
+                    let enabled = self.queue.toggle_shuffle();
+                    self.persist_setting("shuffle_enabled", &enabled);
+                }
+            }
+            AudioMessage::ToggleRepeatMode => {
+                if !self.queue.in_wave() {
+                    let mode = self.queue.toggle_repeat_mode();
+                    self.persist_setting("repeat_mode", &repeat_mode_key(mode));
+                }
+            }
 
             AudioMessage::PlayPlaylist(kind) => {
                 let generation = self.begin_context_change();
@@ -634,18 +771,42 @@ impl AudioSystem {
                 });
             }
             AudioMessage::PlayAlbumTrack(aid, tid) => {
+                if self
+                    .try_jump_within_context(
+                        &system_loading::SingleTrackSource::AlbumTrack { album_id: aid },
+                        &tid,
+                    )
+                    .await
+                {
+                    return;
+                }
                 self.spawn_single_track_with_offline(
                     system_loading::SingleTrackSource::AlbumTrack { album_id: aid },
                     tid,
                 );
             }
             AudioMessage::PlayPlaylistTrack(kind, tid) => {
+                if self
+                    .try_jump_within_context(
+                        &system_loading::SingleTrackSource::PlaylistTrack { kind },
+                        &tid,
+                    )
+                    .await
+                {
+                    return;
+                }
                 self.spawn_single_track_with_offline(
                     system_loading::SingleTrackSource::PlaylistTrack { kind },
                     tid,
                 );
             }
             AudioMessage::PlayLikedTrack(tid) => {
+                if self
+                    .try_jump_within_context(&system_loading::SingleTrackSource::Liked, &tid)
+                    .await
+                {
+                    return;
+                }
                 self.spawn_single_track_with_offline(system_loading::SingleTrackSource::Liked, tid);
             }
             AudioMessage::StartWave(seeds) => {

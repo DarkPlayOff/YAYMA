@@ -90,6 +90,58 @@ impl ShuffleState {
             self.index_map.remove(at);
         }
     }
+
+    /// Keeps the original-queue mapping valid across a position swap inside
+    /// the shuffled order: the entry at `from` moves to `to`.
+    pub fn record_reorder(&mut self, from: usize, to: usize) {
+        if !self.is_active || from == to || from >= self.index_map.len() {
+            return;
+        }
+        let entry = self.index_map.remove(from);
+        if to <= self.index_map.len() {
+            self.index_map.insert(to, entry);
+        } else {
+            self.index_map.push(entry);
+        }
+    }
+
+    /// Re-rolls the shuffled order anchored on the track currently at
+    /// `anchor`: the anchor becomes position 0 and the rest is reshuffled.
+    /// The original-queue mapping is rebuilt so `disable` keeps working.
+    pub fn reroll_anchored(
+        &mut self,
+        shuffled_queue: Vector<Track>,
+        anchor: usize,
+    ) -> (Vector<Track>, usize) {
+        debug_assert!(self.is_active, "reroll called while not shuffled");
+
+        let mut tracks: Vec<Track> = shuffled_queue.into_iter().collect();
+        if tracks.is_empty() {
+            return (Vector::new(), 0);
+        }
+        let anchor = anchor.min(tracks.len() - 1);
+        let current = tracks.remove(anchor);
+        let mut map = std::mem::take(&mut self.index_map);
+        let current_entry = if anchor < map.len() {
+            map.remove(anchor)
+        } else {
+            None
+        };
+
+        let mut rest: Vec<(Track, Option<usize>)> = tracks.into_iter().zip(map).collect();
+        rest.shuffle(&mut rng());
+
+        let mut new_tracks = Vec::with_capacity(rest.len() + 1);
+        let mut new_map = Vec::with_capacity(rest.len() + 1);
+        new_tracks.push(current);
+        new_map.push(current_entry);
+        for (t, m) in rest {
+            new_tracks.push(t);
+            new_map.push(m);
+        }
+        self.index_map = new_map;
+        (Vector::from(new_tracks), 0)
+    }
 }
 
 #[cfg(test)]

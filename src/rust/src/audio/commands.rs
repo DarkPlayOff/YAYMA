@@ -1,3 +1,4 @@
+use crate::audio::enums::RepeatMode;
 use crate::audio::queue::PlaybackContext;
 use im::Vector;
 use std::time::Duration;
@@ -39,6 +40,14 @@ pub enum AudioMessage {
     PlayTrackNext(Track),
     RemoveFromQueue(usize),
     ClearQueue,
+    /// Moves the queue entry at `from` to `to`, keeping the current track
+    /// playing when it is the one being moved.
+    ReorderQueue(usize, usize),
+    /// Jumps to the queue entry at `index` and plays it; under shuffle the
+    /// order is re-rolled anchored on the target track.
+    PlayQueueIndex(usize),
+    SetRepeatMode(RepeatMode),
+    SetShuffle(bool),
     ToggleShuffle,
     ToggleRepeatMode,
 

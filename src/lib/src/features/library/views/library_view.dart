@@ -368,16 +368,15 @@ class _LikedTracksTabState extends State<_LikedTracksTab> {
           ),
           actions: [
             AppDialog.cancelButton(context),
-            M3EElevatedButton(
-              decoration: M3EButtonDecoration.styleFrom(
-                backgroundColor: cs.error,
-                foregroundColor: cs.onError,
-              ),
+            M3ETextButton(
               onPressed: () {
                 Navigator.pop(context);
                 unawaited(_deleteAllLikedTracks(tracks));
               },
-              child: const Text('Удалить'),
+              child: Text(
+                'Удалить',
+                style: TextStyle(color: cs.error, fontWeight: FontWeight.w700),
+              ),
             ),
           ],
         );

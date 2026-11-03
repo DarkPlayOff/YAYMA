@@ -418,9 +418,12 @@ impl AudioController {
         if self.preheat.lock().is_some() {
             return;
         }
-        // Repeat-single replays the current track; peek_gapless_next already
-        // filters it, this guards a policy change racing the message queue.
-        if self.signals.current_track_id.get().as_deref() == Some(next.id.as_str()) {
+        // Under repeat-single the preheat parks a replay of the current track
+        // itself; in every other mode a peeked successor equal to the current
+        // track is a stale request racing a skip and must be ignored.
+        let repeat_single = self.signals.repeat_mode.get() == crate::audio::enums::RepeatMode::Single;
+        if !repeat_single && self.signals.current_track_id.get().as_deref() == Some(next.id.as_str())
+        {
             return;
         }
         let Some(prepared) = self.stream_manager.adopt_prewarmed(&next.id) else {

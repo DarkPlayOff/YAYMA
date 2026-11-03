@@ -7,7 +7,6 @@ import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/features/core/services/app_error.dart';
 import 'package:yayma/src/features/core/theme/app_theme.dart';
 import 'package:yayma/src/features/core/theme/app_tokens.dart';
-import 'package:yayma/src/features/core/views/widgets/app_context_menu.dart';
 import 'package:yayma/src/features/core/views/widgets/app_cover.dart';
 import 'package:yayma/src/features/core/views/widgets/responsive.dart';
 import 'package:yayma/src/features/core/views/widgets/smooth_scroll.dart';
@@ -53,7 +52,9 @@ String formatCount(int value) {
   return buffer.toString();
 }
 
-String _plural(int n, String one, String few, String many) {
+/// Russian plural form for [n]: one / few (2-4) / many, with the 11-14
+/// exception handled.
+String plural(int n, String one, String few, String many) {
   final mod100 = n % 100;
   if (mod100 >= 11 && mod100 <= 14) return many;
   switch (n % 10) {
@@ -71,7 +72,7 @@ String _plural(int n, String one, String few, String many) {
 /// "1 234 567 monthly listeners", or null when there is no data.
 String? formatMonthlyListeners(int? value) {
   if (value == null) return null;
-  return '${formatCount(value)} ${_plural(value, 'слушатель', 'слушателя', 'слушателей')} за месяц';
+  return '${formatCount(value)} ${plural(value, 'слушатель', 'слушателя', 'слушателей')} за месяц';
 }
 
 /// Compact subtitle for artist cards: monthly listeners, falling back to likes.
@@ -79,7 +80,7 @@ String? formatArtistCardSubtitle({int? monthlyListeners, int? likesCount}) {
   final monthly = formatMonthlyListeners(monthlyListeners);
   if (monthly != null) return monthly;
   if (likesCount != null) {
-    return '${formatCount(likesCount)} ${_plural(likesCount, 'слушатель', 'слушателя', 'слушателей')}';
+    return '${formatCount(likesCount)} ${plural(likesCount, 'слушатель', 'слушателя', 'слушателей')}';
   }
   return null;
 }
@@ -371,85 +372,6 @@ class _CommonVolumeSliderState extends State<CommonVolumeSlider> {
             onChangeEnd: (_) {
               setState(() => _dragVolume = null);
             },
-          ),
-        );
-      },
-    );
-  }
-}
-
-class AudioDeviceButton extends StatefulWidget {
-  final double iconSize;
-  const AudioDeviceButton({super.key, this.iconSize = 18});
-
-  @override
-  State<AudioDeviceButton> createState() => _AudioDeviceButtonState();
-}
-
-class _AudioDeviceButtonState extends State<AudioDeviceButton> {
-  bool _devicesLoaded = false;
-
-  @override
-  void initState() {
-    super.initState();
-    unawaited(_loadDevices());
-  }
-
-  Future<void> _loadDevices() async {
-    await refreshAudioDevices();
-    if (mounted) {
-      setState(() => _devicesLoaded = true);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return SignalBuilder(
-      builder: (context) {
-        final devices = audioDevicesSignal.value;
-        final selectedDevice = selectedAudioDeviceSignal.value;
-        // No accent subscription while the hosting tab is hidden.
-        final accentColor = visibleSignal<Color>(context, accentColorSignal);
-
-        final items = [
-          AppContextMenuItem<String>(
-            value: '',
-            label: 'По умолчанию',
-            icon: Icons.computer_rounded,
-            isSelected: selectedDevice == null,
-            color: selectedDevice == null ? accentColor : null,
-          ),
-          ...devices.map(
-            (device) => AppContextMenuItem<String>(
-              value: device,
-              label: device,
-              icon: Icons.speaker_rounded,
-              isSelected: device == selectedDevice,
-              color: device == selectedDevice ? accentColor : null,
-            ),
-          ),
-        ];
-
-        return AppContextMenu<String>(
-          onOpen: () {
-            if (!_devicesLoaded) {
-              unawaited(_loadDevices());
-            }
-          },
-          onSelected: (value) {
-            unawaited(setAudioDevice(value));
-          },
-          items: items,
-          child: IconButton(
-            icon: Icon(
-              Icons.speaker_group_rounded,
-              size: widget.iconSize,
-              color: selectedDevice != null
-                  ? accentColor
-                  : Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-            tooltip: selectedDevice ?? 'Устройство вывода',
-            onPressed: null, // AppContextMenu handles clicks
           ),
         );
       },

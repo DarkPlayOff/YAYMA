@@ -43,6 +43,21 @@ pub async fn load_persisted_settings(ctx: &AppContext) {
         ctx.core.api.set_quality(quality);
     }
 
+    // Repeat/shuffle ride the normal messages so signal updates, persistence
+    // and (for shuffle) the queue re-roll all go through one code path.
+    if let Some(mode) = parse_setting::<String>(&settings, "repeat_mode") {
+        let mode = match mode.as_str() {
+            "all" => crate::audio::enums::RepeatMode::All,
+            "single" => crate::audio::enums::RepeatMode::Single,
+            _ => crate::audio::enums::RepeatMode::None,
+        };
+        let _ = ctx.audio.tx.send(AudioMessage::SetRepeatMode(mode)).await;
+    }
+
+    if let Some(enabled) = parse_setting::<bool>(&settings, "shuffle_enabled") {
+        let _ = ctx.audio.tx.send(AudioMessage::SetShuffle(enabled)).await;
+    }
+
     if let Some(rpc_enabled) = parse_setting::<bool>(&settings, "discord_rpc") {
         ctx.audio.signals.discord_rpc.set(rpc_enabled);
     }

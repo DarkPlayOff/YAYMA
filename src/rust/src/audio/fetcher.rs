@@ -488,6 +488,10 @@ pub struct WaveExtensionHandles {
     pub wave_session: Arc<Mutex<Option<Session>>>,
     pub wave_batch_ids: Arc<Mutex<HashMap<String, String>>>,
     pub playback_context: Arc<Mutex<crate::audio::queue::PlaybackContext>>,
+    /// Mirror of the context projection for the bridge (kept in sync with
+    /// `playback_context` here because this task replaces it off-actor).
+    pub playback_context_dto:
+        Signal<Option<crate::api::models::PlaybackContextDto>>,
     pub generation: u64,
     pub generation_ref: Arc<std::sync::atomic::AtomicU64>,
 }
@@ -525,7 +529,10 @@ impl WaveExtensionHandles {
             &session.batch_id,
             additional.iter().map(|track| track.id.clone()),
         );
-        *self.playback_context.lock() = crate::audio::queue::PlaybackContext::Wave(session);
+        *self.playback_context.lock() = crate::audio::queue::PlaybackContext::Wave(session.clone());
+        self.playback_context_dto.set(Some(
+            crate::audio::queue::PlaybackContext::Wave(session).to_dto(),
+        ));
 
         let visible: Vector<Track> = additional
             .iter()

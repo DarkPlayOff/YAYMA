@@ -314,6 +314,23 @@ class _TrackMenu extends StatelessWidget {
           onClose: onClose,
           onSelected: onSelected,
           items: [
+            // Queue actions sit at the top, matching the desktop client. They
+            // only make sense when there is a queue to insert into.
+            if (visibleSignal(
+              context,
+              playerStateSignal,
+            )?.currentTrack != null) ...[
+              const AppContextMenuItem(
+                value: 'play_next',
+                label: 'Играть следующим',
+                icon: Icons.queue_rounded,
+              ),
+              const AppContextMenuItem(
+                value: 'add_last',
+                label: 'Добавить в конец очереди',
+                icon: Icons.playlist_add_rounded,
+              ),
+            ],
             AppContextMenuItem(
               label: 'Добавить в плейлист',
               icon: Icons.playlist_add_rounded,

@@ -153,6 +153,21 @@ class TrackContextActions {
         ];
       },
       actions: [
+        // Queue actions sit at the top, right after the primary quick-action
+        // row — matching the desktop client. They only make sense when
+        // something is already playing, i.e. there is a queue to insert into.
+        if (playerStateSignal.value?.currentTrack != null) ...[
+          const TrackSheetAction(
+            value: 'play_next',
+            label: 'Играть следующим',
+            icon: Icons.queue_rounded,
+          ),
+          const TrackSheetAction(
+            value: 'add_last',
+            label: 'Добавить в конец очереди',
+            icon: Icons.playlist_add_rounded,
+          ),
+        ],
         TrackSheetAction(
           value: 'dislike',
           label: initialDisliked ? 'Убрать дизлайк' : 'Не нравится',
@@ -213,6 +228,13 @@ class TrackContextActions {
     }
 
     switch (value) {
+      // Queue additions are silent by design: the list itself is the
+      // feedback (the track appears in the queue panel), and a toast would
+      // also fire on no-op fetches where nothing was actually added.
+      case 'play_next':
+        await PlaybackController.playTrackNextInQueue(trackId);
+      case 'add_last':
+        await PlaybackController.addTrackToQueue(trackId);
       case 'like':
         await PlaybackController.toggleLike(trackId: trackId);
       case 'dislike':

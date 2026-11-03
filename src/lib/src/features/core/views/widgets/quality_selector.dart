@@ -74,6 +74,32 @@ class CommonQualitySelector extends SignalWidget {
             isSelected: quality == AudioQuality.high,
             color: quality == AudioQuality.high ? accentColor : null,
           ),
+          AppContextMenuItem(
+            label: 'Устройство вывода',
+            icon: Icons.speaker_group_rounded,
+            subItems: () {
+              final devices = audioDevicesSignal.value;
+              final selectedDevice = selectedAudioDeviceSignal.value;
+              return <AppContextMenuItem<dynamic>>[
+                AppContextMenuItem<dynamic>(
+                  value: const _DeviceChoice(''),
+                  label: 'По умолчанию',
+                  icon: Icons.computer_rounded,
+                  isSelected: selectedDevice == null,
+                  color: selectedDevice == null ? accentColor : null,
+                ),
+                ...devices.map(
+                  (device) => AppContextMenuItem<dynamic>(
+                    value: _DeviceChoice(device),
+                    label: device,
+                    icon: Icons.speaker_rounded,
+                    isSelected: device == selectedDevice,
+                    color: device == selectedDevice ? accentColor : null,
+                  ),
+                ),
+              ];
+            },
+          ),
           const AppContextMenuItem(
             value: 'eq',
             label: 'Настройки звука',
@@ -82,6 +108,8 @@ class CommonQualitySelector extends SignalWidget {
         ]);
 
         return AppContextMenu<dynamic>(
+          // Device list changes with plug/unplug — refresh on every open.
+          onOpen: () => unawaited(refreshAudioDevices()),
           hoverColor: Theme.of(
             context,
           ).colorScheme.onSurfaceVariant.withValues(alpha: 0.1),
@@ -91,6 +119,8 @@ class CommonQualitySelector extends SignalWidget {
           onSelected: (val) {
             if (val is AudioQuality) {
               unawaited(PlaybackController.setQuality(val));
+            } else if (val is _DeviceChoice) {
+              unawaited(setAudioDevice(val.name));
             } else if (val == 'eq') {
               unawaited(refreshEqualizer());
               unawaited(refreshAudioEffects());
@@ -126,6 +156,13 @@ class CommonQualitySelector extends SignalWidget {
       },
     );
   }
+}
+
+/// Output device choice inside the quality menu; wrapped so arbitrary
+/// device names can never collide with the other menu values.
+class _DeviceChoice {
+  const _DeviceChoice(this.name);
+  final String name;
 }
 
 class _QualityIcon extends StatelessWidget {

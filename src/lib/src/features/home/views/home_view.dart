@@ -11,6 +11,7 @@ import 'package:yayma/src/features/core/views/widgets/responsive.dart';
 import 'package:yayma/src/features/core/views/widgets/tab_visibility.dart';
 import 'package:yayma/src/features/core/views/widgets/track_elements.dart';
 import 'package:yayma/src/features/playback/providers/playback_provider.dart';
+import 'package:yayma/src/features/playback/views/queue_panel.dart';
 import 'package:yayma/src/rust/api/models.dart';
 
 class HomeView extends StatelessWidget {
@@ -349,6 +350,8 @@ class _HomeMainControls extends StatelessWidget {
       accentColor,
       onSurfaceVariant,
     );
+    // The rotor session owns the wave queue: shuffle/repeat are disabled.
+    final isWaveActive = visibleSignal(context, isWaveActiveSignal);
 
     return Column(
       children: [
@@ -425,18 +428,39 @@ class _HomeMainControls extends StatelessWidget {
                   icon: Icon(
                     Icons.shuffle,
                     size: 24,
-                    color: isShuffled ? accentColor : onSurfaceVariant,
+                    color: isWaveActive
+                        ? onSurfaceVariant.withValues(alpha: 0.38)
+                        : isShuffled
+                        ? accentColor
+                        : onSurfaceVariant,
                   ),
-                  onPressed: () =>
-                      unawaited(PlaybackController.toggleShuffle()),
+                  onPressed: isWaveActive
+                      ? null
+                      : () => unawaited(PlaybackController.toggleShuffle()),
                 ),
               ],
             ),
             Row(
               children: [
                 IconButton(
-                  icon: Icon(repeatIcon, size: 24, color: repeatColor),
-                  onPressed: () => unawaited(PlaybackController.toggleRepeat()),
+                  icon: Icon(
+                    repeatIcon,
+                    size: 24,
+                    color: isWaveActive
+                        ? onSurfaceVariant.withValues(alpha: 0.38)
+                        : repeatColor,
+                  ),
+                  onPressed: isWaveActive
+                      ? null
+                      : () => unawaited(PlaybackController.toggleRepeat()),
+                ),
+                IconButton(
+                  icon: Icon(
+                    Icons.queue_music_rounded,
+                    size: 24,
+                    color: onSurfaceVariant,
+                  ),
+                  onPressed: () => unawaited(showQueuePanel(context)),
                 ),
                 const SizedBox(
                   width: 48,
@@ -467,6 +491,8 @@ class _HomeMainControls extends StatelessWidget {
       accentColor,
       onSurfaceVariant,
     );
+    // The rotor session owns the wave queue: shuffle/repeat are disabled.
+    final isWaveActive = visibleSignal(context, isWaveActiveSignal);
 
     return Column(
       children: [
@@ -486,9 +512,15 @@ class _HomeMainControls extends StatelessWidget {
               icon: Icon(
                 Icons.shuffle,
                 size: small ? 20 : 24,
-                color: isShuffled ? accentColor : onSurfaceVariant,
+                color: isWaveActive
+                    ? onSurfaceVariant.withValues(alpha: 0.38)
+                    : isShuffled
+                    ? accentColor
+                    : onSurfaceVariant,
               ),
-              onPressed: () => unawaited(PlaybackController.toggleShuffle()),
+              onPressed: isWaveActive
+                  ? null
+                  : () => unawaited(PlaybackController.toggleShuffle()),
             ),
             SizedBox(width: small ? 8 : 12),
             IconButton(
@@ -544,11 +576,26 @@ class _HomeMainControls extends StatelessWidget {
             ),
             SizedBox(width: small ? 8 : 12),
             IconButton(
-              icon: Icon(repeatIcon, size: small ? 20 : 24, color: repeatColor),
-              onPressed: () => unawaited(PlaybackController.toggleRepeat()),
+              icon: Icon(
+                repeatIcon,
+                size: small ? 20 : 24,
+                color: isWaveActive
+                    ? onSurfaceVariant.withValues(alpha: 0.38)
+                    : repeatColor,
+              ),
+              onPressed: isWaveActive
+                  ? null
+                  : () => unawaited(PlaybackController.toggleRepeat()),
             ),
             SizedBox(width: small ? 8 : 12),
-            CommonQualitySelector(iconSize: small ? 20 : 24),
+            IconButton(
+              icon: Icon(
+                Icons.queue_music_rounded,
+                size: small ? 20 : 24,
+                color: onSurfaceVariant,
+              ),
+              onPressed: () => unawaited(showQueuePanel(context)),
+            ),
           ],
         ),
         SizedBox(height: small ? 20 : 32),
@@ -564,7 +611,8 @@ class _HomeMainControls extends StatelessWidget {
             const SizedBox(width: 12),
             Icon(Icons.volume_up, color: onSurfaceVariant, size: 18),
             const SizedBox(width: 8),
-            const AudioDeviceButton(),
+            // Sound settings (quality + output device) before the volume.
+            const CommonQualitySelector(),
           ],
         ),
       ],

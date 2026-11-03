@@ -14,6 +14,7 @@ import 'package:yayma/src/app/session.dart';
 import 'package:yayma/src/features/core/providers/navigation_provider.dart';
 import 'package:yayma/src/features/core/services/app_error.dart';
 import 'package:yayma/src/features/core/services/app_logger.dart';
+import 'package:yayma/src/features/core/services/rust_bridge.dart';
 import 'package:yayma/src/features/core/views/layout.dart';
 import 'package:yayma/src/features/core/views/widgets/smooth_scroll.dart';
 import 'package:yayma/src/features/settings/services/update_service.dart';
@@ -47,15 +48,25 @@ class _RootScreenState extends State<RootScreen> {
                     unawaited(() async {
                       final ctx = appContextSignal.value;
                       if (ctx == null) return;
-                      final state = await rust.restoreSavedState(ctx: ctx);
-                      if (state != null) {
-                        await rust.restoreAndPlay(
+                      final state = await runRustFetch(
+                        (ctx) => rust.restoreSavedState(ctx: ctx),
+                        notifyErrors: false,
+                      );
+                      // A logout/login during the fetch must not restore
+                      // playback into the session that replaced this one.
+                      if (state == null ||
+                          !identical(appContextSignal.value, ctx)) {
+                        return;
+                      }
+                      await runRustFetch(
+                        (ctx) => rust.restoreAndPlay(
                           ctx: ctx,
                           trackId: state.trackId,
                           positionMs: state.positionMs,
                           isPlaying: false,
-                        );
-                      }
+                        ),
+                        notifyErrors: false,
+                      );
 
                       // Auto check for updates on launch if enabled
                       unawaited(() async {

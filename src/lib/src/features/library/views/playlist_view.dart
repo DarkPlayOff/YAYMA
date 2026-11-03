@@ -603,7 +603,7 @@ class _PlaylistContentState extends State<_PlaylistContent> {
           ),
           actions: [
             AppDialog.cancelButton(context),
-            M3EElevatedButton(
+            M3ETextButton(
               onPressed: () async {
                 await deletePlaylistAction(playlist.kind);
                 if (context.mounted) {
@@ -611,10 +611,10 @@ class _PlaylistContentState extends State<_PlaylistContent> {
                   setSection(AppSection.liked);
                 }
               },
-              decoration: M3EButtonDecoration.styleFrom(
-                backgroundColor: cs.error,
+              child: Text(
+                'Удалить',
+                style: TextStyle(color: cs.error, fontWeight: FontWeight.w700),
               ),
-              child: const Text('Удалить'),
             ),
           ],
         );

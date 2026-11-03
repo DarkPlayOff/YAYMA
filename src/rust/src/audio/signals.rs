@@ -34,6 +34,9 @@ pub struct AudioSignals {
     pub repeat_mode: Signal<RepeatMode>,
     pub is_shuffled: Signal<bool>,
     pub current_wave_seeds: Signal<Vec<String>>,
+    /// Projection of the active playback context, kept in sync with
+    /// QueueManager's playback_context (and the wave extension path).
+    pub playback_context: Signal<Option<crate::api::models::PlaybackContextDto>>,
     pub amplitude: Signal<f32>,
     /// Crossfade length in milliseconds (0 = strict gapless without overlap).
     /// Written by the settings API (and the startup loader), read by the
@@ -88,6 +91,7 @@ impl AudioSignals {
             repeat_mode: Signal::new(RepeatMode::None),
             is_shuffled: Signal::new(false),
             current_wave_seeds: Signal::new(Vec::new()),
+            playback_context: Signal::new(None),
             amplitude: Signal::new(0.0),
             crossfade_ms: Signal::new(0),
             codec: Signal::new(None),
