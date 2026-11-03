@@ -52,6 +52,7 @@ class AppInit {
         vibeRenderScaleSignal.value = settings.vibeRenderScale;
         blurEffectsEnabledSignal.value = settings.blurEffectsEnabled;
         crossfadeEnabledSignal.value = settings.crossfadeEnabled;
+        aiContentReductionSignal.value = settings.aiContentReduction;
       } on Object catch (e) {
         // Defaults are fine, but the failure should be visible in the log.
         appLog(AppLogLevel.warn, 'initial settings load failed: $e');
@@ -103,12 +104,29 @@ class AppInit {
 
       // Fetch network-dependent data in the background
       unawaited(_loadAccountInfo(context, epoch));
+      unawaited(_syncAiContentReduction(context, epoch));
       unawaited(initLibrary());
 
       authSignal.value = const AsyncData(true);
     } on Object catch (e, st) {
       if (epoch != _authEpoch) return;
       authSignal.value = AsyncError(e, st);
+    }
+  }
+
+  /// "Меньше ИИ" lives in the account settings, so another client may have
+  /// changed it since the last launch.
+  static Future<void> _syncAiContentReduction(
+    AppContext context,
+    int epoch,
+  ) async {
+    try {
+      final enabled = await simple.syncAiContentReduction(ctx: context);
+      if (epoch != _authEpoch) return;
+      aiContentReductionSignal.value = enabled;
+    } on Object catch (e) {
+      if (epoch != _authEpoch) return;
+      appLog(AppLogLevel.warn, 'ai content reduction sync failed: $e');
     }
   }
 
@@ -135,6 +153,7 @@ class AppInit {
       if (epoch != _authEpoch) return;
 
       unawaited(_loadAccountInfo(context, epoch));
+      unawaited(_syncAiContentReduction(context, epoch));
       unawaited(initLibrary());
 
       authSignal.value = const AsyncData(true);

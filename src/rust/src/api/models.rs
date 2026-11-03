@@ -48,6 +48,8 @@ pub struct InitialSettingsDto {
     pub blur_effects_enabled: bool,
     /// Crossfade toggle: on = fixed-length overlap, off = strict gapless.
     pub crossfade_enabled: bool,
+    /// "Меньше ИИ": fewer AI-generated tracks in the recommendations.
+    pub ai_content_reduction: bool,
 }
 
 impl Default for InitialSettingsDto {
@@ -60,6 +62,7 @@ impl Default for InitialSettingsDto {
             vibe_render_scale: 0.50,
             blur_effects_enabled: true,
             crossfade_enabled: true,
+            ai_content_reduction: false,
         }
     }
 }

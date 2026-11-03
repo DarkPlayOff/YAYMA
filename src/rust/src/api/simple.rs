@@ -84,6 +84,8 @@ pub async fn get_initial_settings() -> InitialSettingsDto {
             .clamp(0.25, 0.50),
         blur_effects_enabled: parse_setting(&settings, "blur_effects_enabled").unwrap_or(true),
         crossfade_enabled: parse_setting::<bool>(&settings, "crossfade_enabled").unwrap_or(true),
+        ai_content_reduction: parse_setting::<bool>(&settings, "ai_content_reduction")
+            .unwrap_or(false),
     }
 }
 
@@ -269,6 +271,48 @@ pub async fn set_crossfade(ctx: &AppContext, enabled: bool) {
     if let Err(e) = db.save_setting("crossfade_enabled", &enabled).await {
         tracing::error!(key = "crossfade_enabled", error = ?e, "save_setting_failed");
     }
+}
+
+/// Enables or disables "Меньше ИИ" (fewer AI-generated tracks in the
+/// recommendations): mirrors the value to the account, applies it to the next
+/// rotor session, and persists it for the next launch.
+pub async fn set_ai_content_reduction(ctx: &AppContext, enabled: bool) {
+    ctx.core.api.set_ai_reduction(enabled);
+    if let Err(e) = ctx.core.api.set_ai_reduction_remote(enabled).await {
+        tracing::warn!(error = ?e, "ai_reduction_sync_failed");
+    }
+    let mut db = ctx.core.db.lock().await;
+    if let Err(e) = db.save_setting("ai_content_reduction", &enabled).await {
+        tracing::error!(key = "ai_content_reduction", error = ?e, "save_setting_failed");
+    }
+}
+
+/// Pulls "Меньше ИИ" from the account so a change made in an official client
+/// shows up here too. Falls back to the cached value when offline.
+pub async fn sync_ai_content_reduction(ctx: &AppContext) -> bool {
+    let cached = {
+        let mut db = ctx.core.db.lock().await;
+        db.load_setting("ai_content_reduction")
+            .await
+            .ok()
+            .flatten()
+            .unwrap_or(false)
+    };
+    let enabled = match ctx.core.api.get_ai_reduction_remote().await {
+        Ok(enabled) => enabled,
+        Err(e) => {
+            tracing::warn!(error = ?e, "ai_reduction_fetch_failed");
+            return cached;
+        }
+    };
+    ctx.core.api.set_ai_reduction(enabled);
+    if enabled != cached {
+        let mut db = ctx.core.db.lock().await;
+        if let Err(e) = db.save_setting("ai_content_reduction", &enabled).await {
+            tracing::error!(key = "ai_content_reduction", error = ?e, "save_setting_failed");
+        }
+    }
+    enabled
 }
 
 /// Forwards a Dart-side log message into the Rust tracing pipeline, so UI

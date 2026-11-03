@@ -42,6 +42,9 @@ final FlutterSignal<AudioQuality> audioQualitySignal = signal<AudioQuality>(
 /// the audio engine reads the same value through its own signals.
 final FlutterSignal<bool> crossfadeEnabledSignal = signal(true);
 
+/// "Меньше ИИ": ask Yandex for fewer AI-generated tracks in recommendations.
+final FlutterSignal<bool> aiContentReductionSignal = signal(false);
+
 StreamSubscription<rust.AppEvent>? _eventSub;
 
 /// Deduplicates concurrent [initPlayback] calls (login + auto-login racing).

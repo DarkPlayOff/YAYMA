@@ -4,6 +4,7 @@ use chrono::{SecondsFormat, Utc};
 use parking_lot::RwLock;
 use serde_json;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use tokio::time::sleep;
 
@@ -33,10 +34,7 @@ use yandex_music::{
             remove_liked_playlist::RemoveLikedPlaylistOptions,
             rename_playlist::RenamePlaylistOptions,
         },
-        rotor::{
-            create_session::CreateSessionOptions, get_session_tracks::GetSessionTracksOptions,
-            send_station_feedback::SendStationFeedbackOptions,
-        },
+        rotor::send_station_feedback::SendStationFeedbackOptions,
         search::get_search::SearchOptions,
         track::{
             add_disliked_tracks::AddDislikedTracksOptions, add_liked_tracks::AddLikedTracksOptions,
@@ -172,6 +170,14 @@ fn track_entry_id(entry: &serde_json::Value) -> Option<String> {
     }
 }
 
+/// "Меньше ИИ" from an `account/settings` body. A missing field is an error,
+/// not `false`: treating it as off would silently drop the setting.
+fn parse_ai_reduction(body: &serde_json::Value) -> Result<bool> {
+    body["result"]["aiContentReductionEnabled"]
+        .as_bool()
+        .ok_or_else(|| "account settings has no aiContentReductionEnabled".into())
+}
+
 /// Kinds of the playlists in a `/playlists?richTracks=false` response that
 /// contain [track_id]. Entries without a track list are skipped, not guessed.
 fn containing_kinds(body: &serde_json::Value, track_id: &str) -> Vec<u32> {
@@ -202,6 +208,10 @@ pub struct ApiService {
     pub http_client: reqwest::Client,
     user_id: u64,
     pub quality: RwLock<AudioQuality>,
+    /// "Меньше ИИ": ask the rotor for fewer AI-generated tracks. The official
+    /// clients express this as the `X-Yandex-Music-AI-Content-Rate` header on
+    /// session requests, not as a body field.
+    ai_reduction: AtomicBool,
 }
 
 #[derive(Debug)]
@@ -299,7 +309,34 @@ impl ApiService {
             http_client,
             user_id,
             quality,
+            ai_reduction: AtomicBool::new(false),
         })
+    }
+
+    /// Enables/disables "Меньше ИИ" for subsequently created rotor sessions.
+    pub fn set_ai_reduction(&self, enabled: bool) {
+        self.ai_reduction.store(enabled, Ordering::Relaxed);
+    }
+
+    /// Mirrors the "Меньше ИИ" preference to the account, like the official
+    /// clients do, so other clients see the same value. The rotor header below
+    /// is what actually changes the recommendations.
+    pub async fn set_ai_reduction_remote(&self, enabled: bool) -> Result<()> {
+        let url = format!(
+            "{}account/settings?aiContentReductionEnabled={enabled}",
+            yandex_music::API_PATH
+        );
+        send_with_retry(|| self.http_client.post(&url).json(&serde_json::json!({}))).await?;
+        Ok(())
+    }
+
+    /// Reads "Меньше ИИ" from the account settings, where the official
+    /// clients keep it.
+    pub async fn get_ai_reduction_remote(&self) -> Result<bool> {
+        let url = format!("{}account/settings", yandex_music::API_PATH);
+        let response = send_with_retry(|| self.http_client.get(&url)).await?;
+        let body: serde_json::Value = response.json().await?;
+        parse_ai_reduction(&body)
     }
 
     pub fn current_user_id(&self) -> u64 {
@@ -747,11 +784,17 @@ impl ApiService {
     }
 
     pub async fn create_session(&self, seeds: Vec<String>) -> Result<Session> {
-        let opts = CreateSessionOptions::new(seeds)
-            .include_tracks_in_response(true)
-            .include_wave_model(true)
-            .interactive(true);
-        Ok(self.client.create_session(opts).await?)
+        self.rotor_request(
+            "rotor/session/new",
+            serde_json::json!({
+                "seeds": seeds,
+                "queue": [],
+                "includeTracksInResponse": true,
+                "includeWaveModel": true,
+                "interactive": true,
+            }),
+        )
+        .await
     }
 
     pub async fn get_session_tracks(
@@ -760,8 +803,38 @@ impl ApiService {
         queue: Vec<String>,
         feedbacks: Vec<StationFeedback>,
     ) -> Result<Session> {
-        let opts = GetSessionTracksOptions::new(session_id, queue).feedbacks(feedbacks);
-        Ok(self.client.get_session_tracks(opts).await?)
+        self.rotor_request(
+            &format!("rotor/session/{session_id}/tracks"),
+            serde_json::json!({ "queue": queue, "feedbacks": feedbacks }),
+        )
+        .await
+    }
+
+    /// Rotor session calls go through `http_client` directly (not the crate)
+    /// because "Меньше ИИ" rides as a request header the crate's session
+    /// options can't set. The header is absent in "standard" mode, exactly
+    /// like the official client.
+    async fn rotor_request(&self, path: &str, body: serde_json::Value) -> Result<Session> {
+        let reduced = self.ai_reduction.load(Ordering::Relaxed);
+        let url = format!("{}{path}", yandex_music::API_PATH);
+        let response = send_with_retry(|| {
+            let request = self.http_client.post(&url).json(&body);
+            if reduced {
+                request.header("X-Yandex-Music-AI-Content-Rate", "reduced")
+            } else {
+                request
+            }
+        })
+        .await?;
+        let body: serde_json::Value = response.json().await?;
+        if let Some(error) = body.get("error") {
+            return Err(format!("rotor error: {error}").into());
+        }
+        Ok(serde_json::from_value(
+            body.get("result")
+                .cloned()
+                .ok_or("rotor response has no result")?,
+        )?)
     }
 
     pub async fn send_rotor_feedback(
@@ -1143,6 +1216,19 @@ mod tests {
         assert_eq!(containing_kinds(&body, "42"), [1000, 1001]);
         assert!(containing_kinds(&json!({"result": []}), "42").is_empty());
         assert!(containing_kinds(&json!({"error": "unauthorized"}), "42").is_empty());
+    }
+
+    #[test]
+    fn ai_reduction_reads_the_account_flag_and_rejects_a_missing_one() {
+        let body = json!({"result": {"uid": 1, "aiContentReductionEnabled": true}});
+        assert!(parse_ai_reduction(&body).unwrap());
+
+        let body = json!({"result": {"uid": 1, "aiContentReductionEnabled": false}});
+        assert!(!parse_ai_reduction(&body).unwrap());
+
+        // Old accounts may lack the field; that must be an error, not "off".
+        assert!(parse_ai_reduction(&json!({"result": {"uid": 1}})).is_err());
+        assert!(parse_ai_reduction(&json!({"error": "unauthorized"})).is_err());
     }
 
     #[test]

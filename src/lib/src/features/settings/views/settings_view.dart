@@ -371,6 +371,21 @@ class _SettingsViewState extends State<SettingsView> {
           );
         },
       ),
+      SignalBuilder(
+        builder: (context) {
+          final enabled = aiContentReductionSignal.value;
+          return _SettingItem(
+            title: 'Меньше ИИ',
+            subtitle: 'Меньше сгенерированных ИИ треков в рекомендациях',
+            icon: Icons.auto_awesome_rounded,
+            onTap: () => unawaited(_saveAiContentReduction(!enabled)),
+            trailing: Switch(
+              value: enabled,
+              onChanged: (value) => unawaited(_saveAiContentReduction(value)),
+            ),
+          );
+        },
+      ),
     ];
   }
 
@@ -378,6 +393,13 @@ class _SettingsViewState extends State<SettingsView> {
     crossfadeEnabledSignal.value = enabled;
     await runRustAction(
       (ctx) => simple.setCrossfade(ctx: ctx, enabled: enabled),
+    );
+  }
+
+  Future<void> _saveAiContentReduction(bool enabled) async {
+    aiContentReductionSignal.value = enabled;
+    await runRustAction(
+      (ctx) => simple.setAiContentReduction(ctx: ctx, enabled: enabled),
     );
   }
 

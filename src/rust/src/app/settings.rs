@@ -59,6 +59,9 @@ pub async fn load_persisted_settings(ctx: &AppContext) {
         0
     });
 
+    let ai_reduction = parse_setting::<bool>(&settings, "ai_content_reduction").unwrap_or(false);
+    ctx.core.api.set_ai_reduction(ai_reduction);
+
     if let Some(device) = parse_setting::<String>(&settings, "audio_device")
         && !device.is_empty()
     {
