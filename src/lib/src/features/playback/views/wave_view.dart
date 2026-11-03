@@ -235,7 +235,9 @@ class WaveSettingsPanel extends StatelessWidget {
         SignalBuilder(
           builder: (context) {
             final catsFuture = waveStationsSignal.value;
-            var label = seed;
+            var label = seed.startsWith('playlist:')
+                ? 'Волна по плейлисту'
+                : seed;
 
             if (seed.startsWith('track:')) {
               // Display hint is everything after the second ':'.

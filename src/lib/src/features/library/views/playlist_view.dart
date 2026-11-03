@@ -20,6 +20,7 @@ import 'package:yayma/src/features/core/views/widgets/track_context_sheet.dart';
 import 'package:yayma/src/features/core/views/widgets/track_tile.dart';
 import 'package:yayma/src/features/library/providers/library_provider.dart';
 import 'package:yayma/src/features/playback/providers/playback_provider.dart';
+import 'package:yayma/src/features/playback/providers/wave_provider.dart';
 import 'package:yayma/src/rust/api/content.dart' as rust;
 import 'package:yayma/src/rust/api/models.dart';
 
@@ -206,6 +207,10 @@ class _PlaylistContentState extends State<_PlaylistContent> {
 
   Future<void> _handlePlaylistAction(String value) async {
     switch (value) {
+      case 'wave':
+        await WaveController.playStation(
+          'playlist:${widget.playlist.uid}:${widget.playlist.kind}',
+        );
       case 'rename':
         await _showRenameDialog(context, widget.playlist);
       case 'visibility':
@@ -225,6 +230,11 @@ class _PlaylistContentState extends State<_PlaylistContent> {
       context,
       title: 'Плейлист',
       actionsBuilder: () => [
+        const TrackSheetAction(
+          value: 'wave',
+          label: 'Моя волна по плейлисту',
+          icon: Icons.waves_rounded,
+        ),
         const TrackSheetAction(
           value: 'rename',
           label: 'Переименовать',
@@ -320,6 +330,11 @@ class _PlaylistContentState extends State<_PlaylistContent> {
             : AppContextMenu<String>(
                 onSelected: (value) => unawaited(_handlePlaylistAction(value)),
                 items: [
+                  const AppContextMenuItem(
+                    value: 'wave',
+                    label: 'Моя волна по плейлисту',
+                    icon: Icons.waves_rounded,
+                  ),
                   const AppContextMenuItem(
                     value: 'rename',
                     label: 'Переименовать',

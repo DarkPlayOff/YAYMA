@@ -1186,6 +1186,19 @@ mod tests {
     }
 
     #[test]
+    fn wave_seeds_keep_the_parts_the_rotor_needs() {
+        // `track:<id>:<title>` carries a display title that the rotor rejects.
+        assert_eq!(clean_wave_seed("track:123:Some Title"), "track:123");
+        // Everything else is passed as-is, including the playlist seed that
+        // names both the owner and the kind.
+        assert_eq!(
+            clean_wave_seed("playlist:1022032131:42"),
+            "playlist:1022032131:42"
+        );
+        assert_eq!(clean_wave_seed("user:onyourwave"), "user:onyourwave");
+    }
+
+    #[test]
     fn wave_window_refill_tops_up_visible_ahead_and_requests_more() {
         // Enough buffered: fill the window, no fetch needed.
         assert_eq!(fetch_policy::wave_window_refill(1, 5), (2, false));
