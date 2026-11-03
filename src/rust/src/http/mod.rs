@@ -1,6 +1,6 @@
 use crate::api::models::AudioQuality;
 use crate::util::track::CleanId;
-use chrono::Utc;
+use chrono::{SecondsFormat, Utc};
 use parking_lot::RwLock;
 use serde_json;
 use std::sync::Arc;
@@ -11,9 +11,7 @@ type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>
 
 use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue};
 use yandex_music::{
-    DEFAULT_CLIENT_ID,
-    YandexMusicClient,
-    // ... (rest of imports remains similar, but I need to provide full block)
+    DEFAULT_CLIENT_ID, YandexMusicClient,
     api::{
         album::{
             add_liked_album::AddLikedAlbumOptions, get_album::GetAlbumOptions,
@@ -77,6 +75,9 @@ use yandex_music::{
 // the watchdog would kick in, giving a real `Event::Error` instead of an unexplained pause.
 const FILE_INFO_REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
 const MAX_REQUEST_ATTEMPTS: usize = 3;
+/// `POST /plays` identity: the desktop app's unversioned client id, unlike the
+/// versioned one used for every other request.
+const PLAYS_CLIENT_ID: &str = "YandexMusicDesktopApp";
 
 fn retryable_status(status: reqwest::StatusCode) -> bool {
     matches!(status.as_u16(), 408 | 429 | 500..=504)
@@ -789,6 +790,35 @@ impl ApiService {
         let opts = SendStationFeedbackOptions::new(station_id, feedback);
         self.client.send_station_feedback(&opts).await?;
 
+        Ok(())
+    }
+
+    /// `POST /plays` — the reports behind the server-side playback history.
+    /// Field set and identity mirror the desktop client (`changeReason` +
+    /// `pause` carry the event kind, `clientNow` is ISO-8601).
+    ///
+    /// Endpoint quirks: no `x-yandex-music-device` header (it makes the server
+    /// answer 400), and the unversioned [`PLAYS_CLIENT_ID`] rather than the
+    /// versioned id used elsewhere. Whether a report is stored depends on the
+    /// payload — see [`crate::audio::plays::PlayContext`].
+    pub async fn send_plays(&self, plays: Vec<serde_json::Value>) -> Result<()> {
+        let client_now = Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
+        let response = send_with_retry(|| {
+            self.http_client
+                .post("https://api.music.yandex.ru/plays")
+                .query(&[("clientNow", client_now.as_str())])
+                .header("X-Yandex-Music-Client", PLAYS_CLIENT_ID)
+                .json(&serde_json::json!({ "plays": plays }))
+        })
+        .await?;
+        // A 200 with an error envelope is the silent "not recorded" case; log it.
+        let body = response.text().await.unwrap_or_default();
+        if !body.contains("\"result\":\"ok\"") {
+            tracing::warn!(
+                body = &body[..body.len().min(300)],
+                "plays_response_unexpected"
+            );
+        }
         Ok(())
     }
 

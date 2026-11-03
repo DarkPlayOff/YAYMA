@@ -10,6 +10,7 @@ pub mod history;
 pub mod liked;
 pub mod monitor;
 pub mod playback;
+pub mod plays;
 pub mod prefetcher;
 pub mod progress;
 pub mod queue;

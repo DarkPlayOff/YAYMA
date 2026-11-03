@@ -306,6 +306,11 @@ impl QueueManager {
         self.fetch.wave_session_clone()
     }
 
+    /// Clone of the active playback context for `/plays` attribution.
+    pub fn playback_context(&self) -> PlaybackContext {
+        self.playback_context.lock().clone()
+    }
+
     pub fn in_wave(&self) -> bool {
         matches!(*self.playback_context.lock(), PlaybackContext::Wave(_))
     }
