@@ -56,7 +56,7 @@ pub async fn login_with_token(token: String) -> Result<AppContext, AppError> {
         .await
         .map_err(|e| AppError::ApiError(e.to_string()))?;
 
-    tracing::info!(user_id = user_id, "user_login");
+    tracing::info!("user_login");
 
     initialize_app(api)
         .await
@@ -70,7 +70,7 @@ pub async fn try_auto_login() -> Option<AppContext> {
     if let Ok(api) = ApiService::new(token.clone(), Some(user_id)).await
         && let Ok(ctx) = initialize_app(api).await
     {
-        tracing::info!(user_id = user_id, "user_login");
+        tracing::info!("user_login");
         return Some(ctx);
     }
 

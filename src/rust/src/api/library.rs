@@ -278,8 +278,10 @@ pub async fn upload_user_track(
     // 1. Get upload info (target URL)
     let upload_url = match api.fetch_ugc_upload_info(kind, file_name).await {
         Ok(url) => url,
-        Err(e) => {
-            tracing::error!(kind = kind, error = ?e, "fetch_upload_info_failed");
+        Err(_) => {
+            // reqwest embeds the request URL in the error text, and this URL
+            // carries the account uid — keep it out of the log.
+            tracing::error!(kind = kind, "fetch_upload_info_failed");
             return false;
         }
     };
