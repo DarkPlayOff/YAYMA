@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 
 enum AppSection {
@@ -109,6 +109,10 @@ void navigateTo(AppSection section, [String? id]) {
   final currentStack =
       rootStacksSignal.value[activeRoot] ?? [NavState(activeRoot)];
   if (currentStack.last == newState) return;
+
+  // The search field keeps focus under the pushed screen; drop it so the
+  // keyboard closes and does not come back when the screen is popped.
+  FocusManager.instance.primaryFocus?.unfocus();
 
   final newStacks = Map<AppSection, List<NavState>>.from(
     rootStacksSignal.value,
