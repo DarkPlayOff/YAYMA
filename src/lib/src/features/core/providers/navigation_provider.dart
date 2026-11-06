@@ -6,6 +6,7 @@ import 'package:signals_flutter/signals_flutter.dart';
 enum AppSection {
   home,
   search,
+  history,
   liked,
   playlists,
   album,
@@ -40,6 +41,7 @@ class NavState {
 final List<AppSection> rootSections = [
   if (!Platform.isAndroid) AppSection.home,
   AppSection.search,
+  AppSection.history,
   AppSection.liked,
   AppSection.playlists,
   AppSection.account,
