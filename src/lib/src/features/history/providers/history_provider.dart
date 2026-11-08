@@ -1,17 +1,54 @@
 import 'package:signals_flutter/signals_flutter.dart';
-import 'package:yayma/src/app/session.dart';
-import 'package:yayma/src/features/playback/providers/playback_provider.dart';
+import 'package:yayma/src/features/core/services/rust_bridge.dart';
 import 'package:yayma/src/rust/api/models.dart';
 import 'package:yayma/src/rust/api/playback.dart';
 
-/// Listening history. Re-fetched on every track change, so a track that just
-/// started shows up at the top without a manual refresh.
-final FutureSignal<List<SimpleTrackDto>> historyTracksSignal =
-    futureSignal<List<SimpleTrackDto>>(() async {
-      currentTrackIdSignal.value;
+/// Page size for the history list, matching the liked-tracks batching.
+const int historyPageSize = 50;
 
-      final ctx = appContextSignal.value;
-      if (ctx == null) return const [];
+/// Listening history as recorded by the server (the `/plays` reports), so it
+/// covers plays from every device. Loaded 50 entries at a time; the endpoint
+/// has no paging, so each page re-reads its id window and fetches only its own
+/// track models.
+final FlutterSignal<List<SimpleTrackDto>> historyTracksSignal =
+    signal<List<SimpleTrackDto>>([]);
+final FlutterSignal<bool> isHistoryLoadingSignal = signal<bool>(false);
+final FlutterSignal<bool> historyHasMoreSignal = signal<bool>(true);
 
-      return await getHistory(ctx: ctx);
-    });
+/// Reloads the history from the first page.
+Future<void> refreshHistory() async {
+  if (isHistoryLoadingSignal.value) return;
+  historyTracksSignal.value = const [];
+  historyHasMoreSignal.value = true;
+  await _loadHistoryPage();
+}
+
+/// Appends the next page; no-op while a page is in flight or at the end.
+Future<void> loadMoreHistory() async {
+  if (isHistoryLoadingSignal.value || !historyHasMoreSignal.value) return;
+  await _loadHistoryPage();
+}
+
+Future<void> _loadHistoryPage() async {
+  isHistoryLoadingSignal.value = true;
+  try {
+    final offset = historyTracksSignal.value.length;
+    final page = await runRustFetch(
+      (ctx) => getHistory(
+        ctx: ctx,
+        offset: BigInt.from(offset),
+        limit: BigInt.from(historyPageSize),
+      ),
+    );
+    if (page == null) {
+      // Stop paging on failure instead of retrying on every scroll tick;
+      // pull-to-refresh starts over.
+      historyHasMoreSignal.value = false;
+      return;
+    }
+    historyTracksSignal.value = [...historyTracksSignal.value, ...page];
+    if (page.length < historyPageSize) historyHasMoreSignal.value = false;
+  } finally {
+    isHistoryLoadingSignal.value = false;
+  }
+}

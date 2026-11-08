@@ -17,6 +17,8 @@ import 'package:yayma/src/features/core/views/widgets/responsive.dart';
 import 'package:yayma/src/features/core/views/widgets/smooth_scroll.dart';
 import 'package:yayma/src/features/core/views/widgets/tab_visibility.dart';
 import 'package:yayma/src/features/core/views/widgets/track_tile.dart';
+import 'package:yayma/src/features/history/providers/history_provider.dart';
+import 'package:yayma/src/features/history/views/history_view.dart';
 import 'package:yayma/src/features/library/providers/library_provider.dart';
 import 'package:yayma/src/features/playback/providers/playback_provider.dart';
 import 'package:yayma/src/rust/api/models.dart';
@@ -62,6 +64,8 @@ class _LibraryViewState extends State<LibraryView>
           await refreshLikedArtists();
         case 4:
           await refreshDislikedTracks();
+        case 5:
+          await refreshHistory();
       }
     } finally {
       _refreshBusy = false;
@@ -75,7 +79,7 @@ class _LibraryViewState extends State<LibraryView>
     final initialIndex = currentSection == AppSection.playlists ? 1 : 0;
     _root = currentRootSignal.value;
     _tabController = TabController(
-      length: 5,
+      length: 6,
       vsync: this,
       initialIndex: initialIndex,
     );
@@ -244,6 +248,7 @@ class _LibraryViewState extends State<LibraryView>
             Tab(text: 'Любимые альбомы'),
             Tab(text: 'Любимые исполнители'),
             Tab(text: 'Не нравится'),
+            Tab(text: 'История'),
           ],
         ),
         Expanded(
@@ -255,6 +260,7 @@ class _LibraryViewState extends State<LibraryView>
               const _LikedAlbumsTab(),
               const _LikedArtistsTab(),
               const _DislikedTracksTab(),
+              const HistoryView(),
             ],
           ),
         ),

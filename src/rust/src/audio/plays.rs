@@ -156,14 +156,7 @@ fn default_sink(api: Arc<ApiService>) -> PlaySink {
                 report["totalPlayedSeconds"].as_f64().unwrap_or(0.0),
             );
             match api.send_plays(vec![report]).await {
-                Ok(()) => tracing::debug!(
-                    track_id = summary.0,
-                    context = summary.1,
-                    from = summary.2,
-                    change_reason = summary.3,
-                    total_played_seconds = summary.4,
-                    "play_report_sent"
-                ),
+                Ok(()) => {}
                 Err(e) => tracing::warn!(
                     track_id = summary.0,
                     context = summary.1,

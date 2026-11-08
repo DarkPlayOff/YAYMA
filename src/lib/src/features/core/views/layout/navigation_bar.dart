@@ -168,12 +168,6 @@ class _FloatingNavBarState extends State<FloatingNavBar>
             isNarrow: isNarrow,
           ),
           _NavIcon(
-            icon: Icons.history_rounded,
-            isSelected: currentSection == AppSection.history,
-            onTap: () => setSection(AppSection.history),
-            isNarrow: isNarrow,
-          ),
-          _NavIcon(
             icon: Icons.library_music_rounded,
             isSelected:
                 currentSection == AppSection.liked ||

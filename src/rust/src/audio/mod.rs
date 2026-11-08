@@ -6,7 +6,6 @@ pub mod discord;
 pub mod enums;
 pub mod fetcher;
 pub mod fx;
-pub mod history;
 pub mod liked;
 pub mod monitor;
 pub mod playback;

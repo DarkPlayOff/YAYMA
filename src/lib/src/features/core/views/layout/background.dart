@@ -105,7 +105,9 @@ class _BlurredCoverBackgroundState extends State<BlurredCoverBackground> {
                     child: CustomPaint(painter: _BlurredCoverPainter(entry)),
                   )
                 : Container(
-                    key: const ValueKey('loading'),
+                    // Per-cover key: a shared 'loading' key collides with the
+                    // previous placeholder still fading out after a fast skip.
+                    key: ValueKey('loading:$coverUrl'),
                     color: Colors.black,
                   ),
           );

@@ -15,7 +15,6 @@ import 'package:yayma/src/features/core/views/layout/navigation_bar.dart';
 import 'package:yayma/src/features/core/views/layout/player_bar.dart';
 import 'package:yayma/src/features/core/views/widgets/responsive.dart';
 import 'package:yayma/src/features/core/views/widgets/tab_visibility.dart';
-import 'package:yayma/src/features/history/views/history_view.dart';
 import 'package:yayma/src/features/home/views/home_view.dart';
 import 'package:yayma/src/features/library/views/library_view.dart';
 import 'package:yayma/src/features/library/views/playlist_view.dart';
@@ -454,8 +453,6 @@ class _WindowContent extends StatelessWidget {
         return const HomeView();
       case AppSection.search:
         return const SearchView();
-      case AppSection.history:
-        return const HistoryView();
       case AppSection.liked:
       case AppSection.playlists:
         return const LibraryView();

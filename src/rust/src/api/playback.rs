@@ -202,13 +202,21 @@ pub async fn queue_window(ctx: &AppContext, offset: u32, len: u32) -> Vec<Simple
     })
 }
 
-pub async fn get_history(ctx: &AppContext) -> Vec<SimpleTrackDto> {
+/// A page of the server-side history shown on the "История" tab. The endpoint
+/// returns its whole window at once, so paging happens on our side: the view
+/// asks for 50 at a time while scrolling.
+pub async fn get_history(ctx: &AppContext, offset: usize, limit: usize) -> Vec<SimpleTrackDto> {
     let (liked_ids, disliked_ids) = ctx.audio.state.read().await.liked.snapshot();
-    ctx.audio.signals.history.with(|h| {
-        h.iter()
+    match ctx.core.api.fetch_music_history(offset, limit).await {
+        Ok(tracks) => tracks
+            .iter()
             .map(|t| SimpleTrackDto::from_yandex(t, &liked_ids, &disliked_ids))
-            .collect()
-    })
+            .collect(),
+        Err(e) => {
+            tracing::error!(error = ?e, "fetch_history_failed");
+            Vec::new()
+        }
+    }
 }
 
 pub async fn play_track(ctx: &AppContext, track_id: String) {

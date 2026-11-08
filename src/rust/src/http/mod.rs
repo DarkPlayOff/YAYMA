@@ -11,6 +11,7 @@ use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue};
 use yandex_music::{DEFAULT_CLIENT_ID, YandexMusicClient, model::rotor::session::Session};
 
 mod auth;
+mod history;
 mod library;
 mod likes;
 mod playlists;

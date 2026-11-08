@@ -21,7 +21,6 @@ use crate::audio::fetcher::{
     FetchState, WAVE_VISIBLE_TRACKS, WaveExtensionHandles, WaveTrackEvent, WaveTrackOutcome,
     is_usable_wave_session,
 };
-use crate::audio::history::HistoryState;
 use crate::audio::prefetcher::UrlPrefetcher;
 use crate::audio::shuffle::ShuffleState;
 
@@ -65,26 +64,14 @@ mod wave_feedback {
 /// methods below; only branch conditions and window math live here so
 /// they are testable without signals/streaming state.
 mod fetch_policy {
-    use super::HistoryState;
     use super::Track;
     use super::Vector;
     use super::WAVE_VISIBLE_TRACKS;
     use super::WaveTrackEvent;
-    use super::as_wave_seed;
 
     /// The rotor `queue` dedup parameter carries up to the last 100 played
     /// vibe tracks ("trackId:albumId"), matching the desktop client.
     pub(super) const MAX_HISTORY_SEEDS: usize = 100;
-
-    pub(super) fn history_seeds(history: &HistoryState) -> Vec<String> {
-        let len = history.entries.len();
-        history
-            .entries
-            .iter()
-            .skip(len.saturating_sub(MAX_HISTORY_SEEDS))
-            .map(as_wave_seed)
-            .collect()
-    }
 
     pub(super) fn playlist_needs_topup(
         is_wave: bool,
@@ -220,7 +207,7 @@ struct QueueSignals {
 
 impl QueueSignals {
     fn new(inner: AudioSignals) -> Self {
-        inner.set_queue(Vector::new(), Vector::new(), 0);
+        inner.set_queue(Vector::new(), 0);
         inner.set_repeat_mode(RepeatMode::None);
         inner.set_shuffled(false);
         Self { inner }
@@ -246,13 +233,6 @@ impl QueueSignals {
         let len = queue.len();
         self.inner.queue.set(queue);
         self.inner.queue_length.set(len);
-    }
-
-    fn set_history(&self, history: Vector<Track>) {
-        // Delegate to the inner notifying setters: a raw `.set()` would not
-        // wake the bridge worker, and the UI would only see the change when
-        // some other event (e.g. a track change) happened to notify.
-        self.inner.set_history(history);
     }
 
     fn set_index(&self, index: usize) {
@@ -313,8 +293,6 @@ pub struct QueueManager {
 
     shuffle: ShuffleState,
 
-    history: HistoryState,
-
     fetch: FetchState,
 
     wave_buffer: VecDeque<Track>,
@@ -345,7 +323,6 @@ impl QueueManager {
             signals: QueueSignals::new(signals),
             playback_context: Arc::new(Mutex::new(PlaybackContext::Standalone)),
             shuffle: ShuffleState::inactive(),
-            history: HistoryState::empty(),
             fetch: FetchState::new(),
             wave_buffer: VecDeque::new(),
             wave_fetch_times: foldhash::HashMap::default(),
@@ -393,12 +370,10 @@ impl QueueManager {
         let keep_shuffled =
             self.signals.is_shuffled() && !matches!(context, PlaybackContext::Wave(_));
         self.shuffle.reset();
-        self.history.reset();
         self.wave_buffer.clear();
         self.wave_fetch_times.clear();
         self.wave_feedbacks.clear();
         self.wave_feedback_sent = false;
-        self.signals.set_history(Vector::new());
         self.signals.set_shuffled(keep_shuffled);
 
         if start_index >= tracks.len() {
@@ -502,8 +477,7 @@ impl QueueManager {
 
         let start = self.signals.index();
         let track = self.signals.queue().get(start).cloned();
-        if let Some(t) = &track {
-            self.commit_track_to_history(t.clone());
+        if track.is_some() {
             self.update_prefetch_interest();
         }
         track
@@ -758,7 +732,6 @@ impl QueueManager {
         self.signals.set_index(index);
         self.wave_feedback_sent = false;
         let track = self.signals.queue().get(index).cloned()?;
-        self.commit_track_to_history(track.clone());
 
         if self.in_wave() {
             self.prune_expired_wave_tracks();
@@ -912,14 +885,12 @@ impl QueueManager {
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         self.signals.set_queue(Vector::new());
         self.signals.set_index(0);
-        self.signals.set_history(Vector::new());
         // Repeat/shuffle are player-level settings: they survive clearing and
         // re-apply to whatever plays next (clear() also runs on Stop).
         self.signals.set_wave_seeds(Vec::new());
         self.signals.inner.set_stream_info(None);
 
         self.shuffle.reset();
-        self.history.reset();
         self.wave_buffer.clear();
         self.wave_fetch_times.clear();
         self.wave_feedbacks.clear();
@@ -1004,11 +975,19 @@ impl QueueManager {
     }
 
     /// `queue` for the next `/tracks` page mirrors the original client: the
-    /// played history (oldest → newest, capped) — NOT the upcoming queue or
+    /// played tracks (oldest → newest, capped) — NOT the upcoming queue or
     /// the prefetch buffer. Sending future tracks as `queue` confuses the
     /// recommender and contributes to wave resets.
     fn build_wave_history_seeds(&self) -> Vec<String> {
-        fetch_policy::history_seeds(&self.history)
+        let queue = self.signals.queue();
+        let played = self.signals.index() + 1;
+        let start = played.saturating_sub(fetch_policy::MAX_HISTORY_SEEDS);
+        queue
+            .iter()
+            .take(played)
+            .skip(start)
+            .map(as_wave_seed)
+            .collect()
     }
 
     /// Prepend failed page feedbacks so they are retried with the next page.
@@ -1095,19 +1074,21 @@ impl QueueManager {
 
     /// Queue navigation housekeeping: unplayed rotor tracks older than
     /// `WAVE_TRACK_TTL` leave the visible tail and the buffer. Played tracks
-    /// (history) and the current track are never dropped.
+    /// (the prefix up to the current one) and the current track are never
+    /// dropped.
     fn prune_expired_wave_tracks(&mut self) {
         if !self.in_wave() || self.wave_fetch_times.is_empty() {
             return;
         }
         let now = std::time::Instant::now();
-        let played: std::collections::HashSet<&str> =
-            self.history.entries.iter().map(|t| t.id.as_str()).collect();
-        let current_id = self
-            .signals
-            .queue()
-            .get(self.signals.index())
-            .map(|t| t.id.clone());
+        let current_index = self.signals.index();
+        let mut queue = self.signals.queue();
+        let played: std::collections::HashSet<&str> = queue
+            .iter()
+            .take(current_index + 1)
+            .map(|t| t.id.as_str())
+            .collect();
+        let current_id = queue.get(current_index).map(|t| t.id.clone());
         let expired_ids: std::collections::HashSet<String> = self
             .wave_fetch_times
             .iter()
@@ -1122,8 +1103,6 @@ impl QueueManager {
             return;
         }
 
-        let current_index = self.signals.index();
-        let mut queue = self.signals.queue();
         let mut removed = false;
         for i in (current_index + 1..queue.len()).rev() {
             if expired_ids.contains(&queue[i].id) {
@@ -1207,11 +1186,6 @@ impl QueueManager {
             .collect();
 
         self.url_prefetcher.update(needed, current_id);
-    }
-
-    fn commit_track_to_history(&mut self, track: Track) {
-        self.history.push(track);
-        self.signals.set_history(self.history.as_vector());
     }
 
     pub fn set_repeat_mode(&mut self, mode: RepeatMode) {
@@ -1595,10 +1569,9 @@ mod tests {
 
     #[tokio::test]
     async fn wave_history_seeds_are_played_in_order() {
-        let mut q = manager().await;
-        for i in 0..5 {
-            q.history.push(test_track(&format!("t{i}")));
-        }
+        let q = manager().await;
+        q.signals.set_queue(standalone(5));
+        q.signals.set_index(4);
         // Playback order (oldest -> newest), no future/buffered tracks.
         let seeds = q.build_wave_history_seeds();
         assert_eq!(seeds, vec!["t0", "t1", "t2", "t3", "t4"]);
@@ -1606,10 +1579,9 @@ mod tests {
 
     #[tokio::test]
     async fn wave_history_seeds_cap_at_100_newest() {
-        let mut q = manager().await;
-        for i in 0..105 {
-            q.history.push(test_track(&format!("t{i}")));
-        }
+        let q = manager().await;
+        q.signals.set_queue(standalone(105));
+        q.signals.set_index(104);
         let seeds = q.build_wave_history_seeds();
         assert_eq!(seeds.len(), 100);
         assert_eq!(seeds[0], "t5");

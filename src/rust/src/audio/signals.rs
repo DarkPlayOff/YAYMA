@@ -25,7 +25,6 @@ pub struct AudioSignals {
     pub volume: Signal<u8>,
     pub is_muted: Signal<bool>,
     pub queue: Signal<Vector<Track>>,
-    pub history: Signal<Vector<Track>>,
     pub queue_index: Signal<usize>,
     pub queue_length: Signal<usize>,
     /// Bumped on every queue replacement/reorder so the UI can tell two
@@ -83,7 +82,6 @@ impl AudioSignals {
             volume: Signal::new(100),
             is_muted: Signal::new(false),
             queue: Signal::new(Vector::new()),
-            history: Signal::new(Vector::new()),
             queue_index: Signal::new(0),
             queue_length: Signal::new(0),
             queue_revision: Signal::new(0),
@@ -156,9 +154,8 @@ impl AudioSignals {
         self.buffered_ratio.set(ratio.clamp(0.0, 1.0));
     }
 
-    pub fn set_queue(&self, queue: Vector<Track>, history: Vector<Track>, index: usize) {
+    pub fn set_queue(&self, queue: Vector<Track>, index: usize) {
         self.queue.set(queue.clone());
-        self.history.set(history);
         self.queue_index.set(index);
         self.queue_length.set(queue.len());
         self.queue_revision
@@ -179,11 +176,6 @@ impl AudioSignals {
 
     pub fn set_shuffled(&self, shuffled: bool) {
         self.is_shuffled.set(shuffled);
-        self.changed.send_replace(());
-    }
-
-    pub fn set_history(&self, history: Vector<Track>) {
-        self.history.set(history);
         self.changed.send_replace(());
     }
 
@@ -218,11 +210,11 @@ mod tests {
         let signals = AudioSignals::new();
         assert_eq!(signals.queue_revision.get(), 0);
 
-        signals.set_queue(Vector::new(), Vector::new(), 0);
+        signals.set_queue(Vector::new(), 0);
         assert_eq!(signals.queue_revision.get(), 1);
 
         // A same-length replacement must still be observable.
-        signals.set_queue(Vector::new(), Vector::new(), 0);
+        signals.set_queue(Vector::new(), 0);
         assert_eq!(signals.queue_revision.get(), 2);
     }
 }
