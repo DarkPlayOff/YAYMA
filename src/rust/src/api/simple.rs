@@ -233,6 +233,8 @@ pub async fn set_vibe_animation_enabled(ctx: &AppContext, enabled: bool) {
     // Read by the bridge worker: when the shader is disabled, VibeTick
     // computation is skipped entirely rather than just dropped on the Dart side.
     ctx.audio.signals.vibe_enabled.set(enabled);
+    // The monitor only feeds the shader, so its band split can idle too.
+    ctx.audio.signals.monitor.set_enabled(enabled);
     let _ = ctx
         .core
         .db

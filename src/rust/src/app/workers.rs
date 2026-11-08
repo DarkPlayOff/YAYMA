@@ -82,10 +82,11 @@ pub fn spawn_bridge_worker(ctx: AppContext, mut shutdown_rx: watch::Receiver<boo
                     }));
                 }
                 _ = vibe_interval.tick() => {
-                    // Shader is disabled — skip tick computation entirely
+                    // Shader is disabled or the window cannot show it (minimized /
+                    // hidden to tray) — skip tick computation entirely
                     // (VibeEngine::tick + event dispatch), instead of merely
                     // dropping it on the Dart side.
-                    if !audio_signals.vibe_enabled.get() {
+                    if !audio_signals.vibe_enabled.get() || vibe_window_hidden() {
                         continue;
                     }
                     let is_playing = audio_signals.is_playing.get();
@@ -119,6 +120,37 @@ pub fn spawn_bridge_worker(ctx: AppContext, mut shutdown_rx: watch::Receiver<boo
             }
         }
     });
+}
+
+/// True while the app window is minimized or hidden (close-to-tray), where the
+/// vibe shader cannot be seen and its 30 Hz tick is wasted work.
+#[cfg(target_os = "windows")]
+fn vibe_window_hidden() -> bool {
+    use std::sync::OnceLock;
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::UI::WindowsAndMessaging::{IsIconic, IsWindowVisible};
+
+    static HWND_RAW: OnceLock<isize> = OnceLock::new();
+    // Enumerating windows is too heavy for 30 Hz; resolve the handle once.
+    // Retry until found in case the first ticks land before window creation.
+    let raw = match HWND_RAW.get() {
+        Some(&raw) => raw,
+        None => {
+            let Some(hwnd) = crate::audio::thumbnail::get_flutter_hwnd() else {
+                return false;
+            };
+            let raw = hwnd.0 as isize;
+            let _ = HWND_RAW.set(raw);
+            raw
+        }
+    };
+    let hwnd = HWND(raw as *mut _);
+    unsafe { IsIconic(hwnd).as_bool() || !IsWindowVisible(hwnd).as_bool() }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn vibe_window_hidden() -> bool {
+    false
 }
 
 pub fn spawn_settings_worker(ctx: AppContext, mut shutdown_rx: watch::Receiver<bool>) {

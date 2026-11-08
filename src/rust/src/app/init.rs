@@ -111,7 +111,13 @@ async fn initialize_services(
     );
 
     load_persisted_settings(&context).await;
-    context.audio.signals.monitor.set_enabled(true);
+    // The monitor feeds only the vibe shader: keep it off while the shader is
+    // disabled instead of running the band split for every audio block.
+    context
+        .audio
+        .signals
+        .monitor
+        .set_enabled(context.audio.signals.vibe_enabled.get());
 
     workers::spawn_sync_worker(context.clone(), shutdown_rx.clone());
     workers::spawn_bridge_worker(context.clone(), shutdown_rx.clone());

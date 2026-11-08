@@ -88,114 +88,7 @@ impl BandFilters {
     }
 }
 
-#[derive(Clone, Copy)]
-struct EnvelopeState {
-    current: f32,
-    peak: f32,
-    samples_since_peak: usize,
-}
-
-impl EnvelopeState {
-    const IDLE: Self = Self {
-        current: 0.0,
-        peak: 0.0,
-        samples_since_peak: 0,
-    };
-}
-
-#[flutter_rust_bridge::frb(ignore)]
-pub struct AmplitudeTracker {
-    /// Per-sample envelope state. Only the audio thread mutates it, inside
-    /// `process_block` (locked once per block, never per sample); the mutex
-    /// exists solely so `reset()` from other threads stays race-free.
-    state: Mutex<EnvelopeState>,
-    /// Last smoothed value, published once per block for lock-free readers.
-    published: AtomicU32,
-    attack: f32,
-    release: f32,
-    peak_hold_samples: usize,
-}
-
-impl AmplitudeTracker {
-    pub fn new(attack: f32, release: f32, peak_hold_ms: u32, sample_rate: u32) -> Self {
-        let peak_hold_samples = (peak_hold_ms as f32 * sample_rate as f32 / 1000.0) as usize;
-        Self {
-            state: Mutex::new(EnvelopeState::IDLE),
-            published: AtomicU32::new(0),
-            attack: attack.clamp(0.0, 1.0),
-            release: release.clamp(0.0, 1.0),
-            peak_hold_samples,
-        }
-    }
-
-    /// Smooth the envelope over one block of samples; returns the block mean
-    /// of the smoothed value. Audio thread only.
-    #[inline]
-    pub fn process_block(&self, samples: &[f32]) -> f32 {
-        if samples.is_empty() {
-            return self.amplitude();
-        }
-        let mut st = self.state.lock();
-        let mut sum = 0.0f32;
-        for &sample in samples {
-            let abs_sample = sample.abs();
-            let coef = if abs_sample > st.current {
-                self.attack
-            } else {
-                self.release
-            };
-            st.current += (abs_sample - st.current) * coef;
-            if abs_sample > st.peak {
-                st.peak = abs_sample;
-                st.samples_since_peak = 0;
-            } else {
-                st.samples_since_peak += 1;
-            }
-            sum += st.current;
-        }
-        // Decay the held peak once per audio block (not per sample: a
-        // per-sample `* 0.995` at 48kHz collapses to zero in milliseconds
-        // and flickers).
-        if st.samples_since_peak >= self.peak_hold_samples {
-            st.peak *= 0.995;
-        }
-        let last_current = st.current;
-        let mean = sum / samples.len() as f32;
-        drop(st);
-        self.published
-            .store(last_current.to_bits(), Ordering::Relaxed);
-        mean
-    }
-
-    #[inline]
-    pub fn amplitude(&self) -> f32 {
-        f32::from_bits(self.published.load(Ordering::Relaxed))
-    }
-    pub fn reset(&self) {
-        *self.state.lock() = EnvelopeState::IDLE;
-        self.published.store(0, Ordering::Relaxed);
-    }
-}
-
-impl Default for AmplitudeTracker {
-    fn default() -> Self {
-        Self::new(0.3, 0.05, 500, 44100)
-    }
-}
-impl Clone for AmplitudeTracker {
-    fn clone(&self) -> Self {
-        Self {
-            state: Mutex::new(*self.state.lock()),
-            published: AtomicU32::new(self.published.load(Ordering::Relaxed)),
-            attack: self.attack,
-            release: self.release,
-            peak_hold_samples: self.peak_hold_samples,
-        }
-    }
-}
-
 struct MonitorInternal {
-    combined_amplitude: AtomicU32,
     bass_amp: AtomicU32,
     mid_amp: AtomicU32,
     high_amp: AtomicU32,
@@ -207,8 +100,6 @@ struct MonitorInternal {
 
 #[flutter_rust_bridge::frb(ignore)]
 pub struct Monitor {
-    pub amplitude_left: AmplitudeTracker,
-    pub amplitude_right: AmplitudeTracker,
     pub vibe: Arc<tokio::sync::Mutex<crate::audio::vibe::VibeEngine>>,
     playing: Signal<bool>,
     internal: Arc<MonitorInternal>,
@@ -217,7 +108,6 @@ pub struct Monitor {
 impl Monitor {
     pub fn new(_notify_samples: usize) -> Self {
         let internal = Arc::new(MonitorInternal {
-            combined_amplitude: AtomicU32::new(0),
             bass_amp: AtomicU32::new(0),
             mid_amp: AtomicU32::new(0),
             high_amp: AtomicU32::new(0),
@@ -229,8 +119,6 @@ impl Monitor {
         // Preallocate band scratch outside the realtime thread.
         internal.bands.lock().ensure_capacity(MAX_MONITOR_BLOCK);
         Self {
-            amplitude_left: AmplitudeTracker::default(),
-            amplitude_right: AmplitudeTracker::default(),
             vibe: Arc::new(tokio::sync::Mutex::new(
                 crate::audio::vibe::VibeEngine::new(),
             )),
@@ -262,11 +150,6 @@ impl Monitor {
             return;
         }
 
-        let avg_left = self.amplitude_left.process_block(&left[..len]);
-        let avg_right = self.amplitude_right.process_block(&right[..len]);
-        self.internal
-            .combined_amplitude
-            .store(((avg_left + avg_right) * 0.5).to_bits(), Ordering::Relaxed);
         self.internal
             .position
             .fetch_add(len as u64, Ordering::Relaxed);
@@ -341,12 +224,16 @@ impl Monitor {
     }
 
     #[inline]
-    pub fn combined_amplitude(&self) -> f32 {
-        f32::from_bits(self.internal.combined_amplitude.load(Ordering::Relaxed))
-    }
-    #[inline]
     pub fn set_enabled(&self, v: bool) {
         self.internal.enabled.store(v, Ordering::Relaxed);
+        if !v {
+            // Don't leave stale loudness behind: the max-hold peaks only decay
+            // while process_block runs, so a shader re-enabled after a long
+            // pause would otherwise flash the last remembered energy.
+            self.internal.bass_amp.store(0, Ordering::Relaxed);
+            self.internal.mid_amp.store(0, Ordering::Relaxed);
+            self.internal.high_amp.store(0, Ordering::Relaxed);
+        }
     }
     #[inline]
     pub fn set_focused(&self, v: bool) {
@@ -367,9 +254,6 @@ impl Monitor {
     }
     pub fn reset_position(&self) {
         self.internal.position.store(0, Ordering::Relaxed);
-        self.amplitude_left.reset();
-        self.amplitude_right.reset();
-        self.internal.combined_amplitude.store(0, Ordering::Relaxed);
     }
 }
 
@@ -381,8 +265,6 @@ impl Default for Monitor {
 impl Clone for Monitor {
     fn clone(&self) -> Self {
         Self {
-            amplitude_left: self.amplitude_left.clone(),
-            amplitude_right: self.amplitude_right.clone(),
             vibe: self.vibe.clone(),
             playing: self.playing.clone(),
             internal: self.internal.clone(),
@@ -407,60 +289,11 @@ mod tests {
     }
 
     #[test]
-    fn peak_decay_happens_per_block_not_per_sample() {
-        // attack 1.0 (current follows input exactly), zero peak hold:
-        // the block-end decay applies once per process_block call.
-        let tracker = AmplitudeTracker::new(1.0, 0.0, 0, 44100);
-        let mean = tracker.process_block(&[1.0]);
-        assert_eq!(mean, 1.0);
-        assert_eq!(tracker.amplitude(), 1.0);
-        // 100 silent samples inside ONE block: exactly one decay, the peak
-        // must survive (per-sample decay would have collapsed it).
-        tracker.process_block(&[0.0; 100]);
-        let peak = tracker.state.lock().peak;
-        assert!(
-            peak > 0.9,
-            "peak must survive 100 silent samples in one block, got {peak}"
-        );
-        // release = 0.0 means the envelope itself never falls; only the peak decays.
-        assert_eq!(tracker.amplitude(), 1.0);
-        // Repeated blocks decay cumulatively: the peak block, the 100-sample
-        // block and the 100 single-sample blocks each applied exactly one
-        // 0.995 factor — 102 decays in total.
-        for _ in 0..100 {
-            tracker.process_block(&[0.0]);
-        }
-        let peak = tracker.state.lock().peak;
-        let expected = 0.995f32.powi(102);
-        assert!(
-            (peak - expected).abs() < 1e-4,
-            "peak must decay per block, got {peak}, expected ~{expected}"
-        );
-    }
-
-    #[test]
-    fn process_block_publishes_block_mean_and_last_current() {
-        let tracker = AmplitudeTracker::new(1.0, 1.0, 1000, 44100);
-        // attack = release = 1.0: current equals |input| every sample.
-        let mean = tracker.process_block(&[0.0, 1.0]);
-        assert!((mean - 0.5).abs() < 1e-6);
-        assert_eq!(
-            tracker.amplitude(),
-            1.0,
-            "amplitude() must see last current"
-        );
-    }
-
-    #[test]
-    fn reset_clears_envelope_and_publication() {
-        let tracker = AmplitudeTracker::new(1.0, 1.0, 1000, 44100);
-        tracker.process_block(&[0.7]);
-        assert!(tracker.amplitude() > 0.0);
-        tracker.reset();
-        assert_eq!(tracker.amplitude(), 0.0);
-        let st = tracker.state.lock();
-        assert_eq!(st.current, 0.0);
-        assert_eq!(st.peak, 0.0);
-        assert_eq!(st.samples_since_peak, 0);
+    fn disabled_monitor_skips_band_analysis() {
+        let monitor = Monitor::new(1024);
+        monitor.set_enabled(false);
+        let block = vec![0.5f32; 256];
+        monitor.process_block(&block, &block);
+        assert_eq!(monitor.vibe_bands(), [0.0, 0.0, 0.0]);
     }
 }

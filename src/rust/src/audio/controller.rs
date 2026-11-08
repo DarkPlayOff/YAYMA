@@ -302,13 +302,10 @@ impl AudioController {
                         progress_clock.set_current_position(pos);
                         let buffered = progress_clock.get_buffered_ratio() as f32;
                         signals.update_buffered_ratio(buffered);
-
-                        let amp = signals.monitor.combined_amplitude();
-                        signals.amplitude.set(amp);
                     } else {
                         // Keep position fresh while unfocused: Prev threshold
-                        // and reload use position_ms, only heavy UI updates
-                        // (amplitude/buffered) stay gated.
+                        // and reload use position_ms, only the buffering ratio
+                        // (and other heavy UI updates) stay gated.
                         let pos = engine.pos();
                         signals.update_progress(pos.as_millis() as u64, signals.duration_ms.get());
                         progress_clock.set_current_position(pos);
