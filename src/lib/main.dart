@@ -20,6 +20,10 @@ import 'package:yayma/src/features/playback/providers/playback_provider.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Covers are cached on disk and decoded at display size, so a smaller cap
+  // only costs a re-decode; the 100 MiB default is most of the app's RAM use.
+  PaintingBinding.instance.imageCache.maximumSizeBytes = 64 << 20;
+
   // Without these an exception during init or in a detached future only
   // reaches the console, leaving the user on a spinner with no explanation.
   FlutterError.onError = (details) {
