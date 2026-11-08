@@ -377,43 +377,56 @@ impl AppDatabase {
         Ok(())
     }
 
-    pub async fn upsert_track_metadata(&mut self, metadata: TrackMetadata) -> DbResult<()> {
-        let tx = self.conn.transaction()?;
-        tx.execute(
-            "INSERT INTO track_metadata (track_id, title, version, album, album_id, cover_url, duration_ms)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
-             ON CONFLICT(track_id) DO UPDATE SET
-             title = excluded.title,
-             version = excluded.version,
-             album = excluded.album,
-             album_id = excluded.album_id,
-             cover_url = excluded.cover_url,
-             duration_ms = excluded.duration_ms",
-            params![
-                metadata.id,
-                metadata.title,
-                metadata.version,
-                metadata.album,
-                metadata.album_id,
-                metadata.cover_url,
-                metadata.duration_ms as i64
-            ],
-        )?;
-        tx.execute(
-            "DELETE FROM track_metadata_artists WHERE track_id = ?1",
-            params![metadata.id],
-        )?;
-        {
-            let mut stmt = tx.prepare(
-                "INSERT INTO track_metadata_artists (track_id, artist_id, name, position)
-                 VALUES (?1, ?2, ?3, ?4)",
-            )?;
-            for (i, artist) in metadata.artists.into_iter().enumerate() {
-                stmt.execute(params![metadata.id, artist.id, artist.name, i as i64])?;
-            }
+    /// Inserts or updates many tracks in one transaction.
+    ///
+    /// Seeded from playlist syncs, where the per-track version paid a
+    /// transaction, three statement preparations and a `clone()` per track.
+    /// All-or-nothing: on failure the previous rows stay and the next sync
+    /// retries. These rows cache server data, so a lost batch costs nothing.
+    pub async fn upsert_track_metadata(&mut self, items: &[TrackMetadata]) -> DbResult<()> {
+        if items.is_empty() {
+            return Ok(());
         }
-        tx.commit()?;
-        Ok(())
+        // Bulk write: keep off the async executor.
+        tokio::task::block_in_place(|| {
+            let tx = self.conn.transaction()?;
+            {
+                let mut upsert = tx.prepare(
+                    "INSERT INTO track_metadata (track_id, title, version, album, album_id, cover_url, duration_ms)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+                     ON CONFLICT(track_id) DO UPDATE SET
+                     title = excluded.title,
+                     version = excluded.version,
+                     album = excluded.album,
+                     album_id = excluded.album_id,
+                     cover_url = excluded.cover_url,
+                     duration_ms = excluded.duration_ms",
+                )?;
+                let mut clear_artists =
+                    tx.prepare("DELETE FROM track_metadata_artists WHERE track_id = ?1")?;
+                let mut insert_artist = tx.prepare(
+                    "INSERT INTO track_metadata_artists (track_id, artist_id, name, position)
+                     VALUES (?1, ?2, ?3, ?4)",
+                )?;
+                for m in items {
+                    upsert.execute(params![
+                        m.id,
+                        m.title,
+                        m.version,
+                        m.album,
+                        m.album_id,
+                        m.cover_url,
+                        m.duration_ms as i64
+                    ])?;
+                    clear_artists.execute(params![m.id])?;
+                    for (i, artist) in m.artists.iter().enumerate() {
+                        insert_artist.execute(params![m.id, artist.id, artist.name, i as i64])?;
+                    }
+                }
+            }
+            tx.commit()?;
+            Ok(())
+        })
     }
 
     pub async fn get_track_metadata(
@@ -571,5 +584,78 @@ impl AppDatabase {
                 |r| r.get(0),
             )
             .optional()?)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn track(id: &str, artists: &[(&str, &str)]) -> TrackMetadata {
+        TrackMetadata {
+            id: id.to_string(),
+            title: format!("title {id}"),
+            version: None,
+            artists: artists
+                .iter()
+                .map(|(artist_id, name)| TrackArtistDto {
+                    id: artist_id.to_string(),
+                    name: name.to_string(),
+                })
+                .collect(),
+            album: None,
+            album_id: None,
+            cover_url: None,
+            duration_ms: 1000,
+        }
+    }
+
+    // `block_in_place` panics on the current-thread runtime.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn batch_upsert_replaces_artists_and_keeps_their_order() {
+        let dir = std::env::temp_dir().join(format!(
+            "yayma-db-test-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("clock after unix epoch")
+                .as_nanos()
+        ));
+        let mut db = AppDatabase::init(Some(dir.clone())).await.expect("init db");
+
+        db.upsert_track_metadata(&[
+            track("a", &[("1", "First"), ("2", "Second")]),
+            track("b", &[("3", "Solo")]),
+        ])
+        .await
+        .expect("first batch");
+
+        // Re-upserting a track must replace its artists, not append to them.
+        db.upsert_track_metadata(&[track("a", &[("4", "Replacement")])])
+            .await
+            .expect("second batch");
+
+        let rows = db
+            .get_track_metadata(&["a".to_string(), "b".to_string()])
+            .await
+            .expect("read back");
+
+        let ids: Vec<&str> = rows.iter().map(|r| r.id.as_str()).collect();
+        assert_eq!(ids, ["a", "b"], "requested order is preserved");
+        assert_eq!(rows[0].artists.len(), 1);
+        assert_eq!(rows[0].artists[0].name, "Replacement");
+        assert_eq!(rows[1].artists[0].name, "Solo");
+
+        db.upsert_track_metadata(&[track("a", &[("1", "One"), ("2", "Two")])])
+            .await
+            .expect("third batch");
+        let rows = db
+            .get_track_metadata(&["a".to_string()])
+            .await
+            .expect("read back");
+        let names: Vec<&str> = rows[0].artists.iter().map(|a| a.name.as_str()).collect();
+        assert_eq!(names, ["One", "Two"], "artist position follows the input");
+
+        drop(db);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

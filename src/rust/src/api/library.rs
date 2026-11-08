@@ -770,19 +770,26 @@ async fn fetch_and_save_missing_metadata(
         .collect()
         .await;
 
-    let mut db = ctx.core.db.lock().await;
-    for tracks in fetched {
-        for t in tracks {
-            let metadata_to_save = yandex_track_to_metadata(t);
-            if let Err(e) = db.upsert_track_metadata(metadata_to_save.clone()).await {
-                tracing::error!(
-                    track_id = %metadata_to_save.id,
-                    error = ?e,
-                    "upsert_track_metadata_failed"
-                );
-            }
-            metadata_map.insert(metadata_to_save.id.clone(), metadata_to_save);
+    // One transaction and one lock hold for the whole batch: a cold library
+    // can miss thousands of rows here.
+    let metadata: Vec<crate::storage::db::TrackMetadata> = fetched
+        .into_iter()
+        .flatten()
+        .map(yandex_track_to_metadata)
+        .collect();
+    if !metadata.is_empty() {
+        let mut db = ctx.core.db.lock().await;
+        if let Err(e) = db.upsert_track_metadata(&metadata).await {
+            tracing::error!(
+                tracks = metadata.len(),
+                error = ?e,
+                "upsert_track_metadata_failed"
+            );
         }
+    }
+    for m in metadata {
+        let id = m.id.clone();
+        metadata_map.insert(id, m);
     }
 }
 
@@ -886,14 +893,16 @@ pub(crate) async fn build_track_dtos_from_server_tracks(
         return Vec::new();
     }
     let ids: Vec<String> = tracks.iter().map(|t| t.id.clone()).collect();
-    {
+    let metadata: Vec<crate::storage::db::TrackMetadata> =
+        tracks.into_iter().map(yandex_track_to_metadata).collect();
+    if !metadata.is_empty() {
         let mut db = ctx.core.db.lock().await;
-        for t in tracks {
-            let m = yandex_track_to_metadata(t);
-            let track_id = m.id.clone();
-            if let Err(e) = db.upsert_track_metadata(m).await {
-                tracing::error!(track_id = %track_id, error = ?e, "upsert_track_metadata_failed");
-            }
+        if let Err(e) = db.upsert_track_metadata(&metadata).await {
+            tracing::error!(
+                tracks = metadata.len(),
+                error = ?e,
+                "upsert_track_metadata_failed"
+            );
         }
     }
     build_track_dtos(ctx, ids).await
