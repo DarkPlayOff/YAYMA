@@ -73,6 +73,12 @@ pub enum FetchError {
     PendingIdsNotEmpty,
 }
 
+// Big variants travel one at a time across a channel and are consumed
+// immediately, so boxing them would only add an allocation.
+#[expect(
+    clippy::large_enum_variant,
+    reason = "results cross a channel one at a time; boxing adds per-request allocation"
+)]
 pub enum FetchTaskResult {
     Playlist {
         ids: Vec<String>,
@@ -490,8 +496,7 @@ pub struct WaveExtensionHandles {
     pub playback_context: Arc<Mutex<crate::audio::queue::PlaybackContext>>,
     /// Mirror of the context projection for the bridge (kept in sync with
     /// `playback_context` here because this task replaces it off-actor).
-    pub playback_context_dto:
-        Signal<Option<crate::api::models::PlaybackContextDto>>,
+    pub playback_context_dto: Signal<Option<crate::api::models::PlaybackContextDto>>,
     pub generation: u64,
     pub generation_ref: Arc<std::sync::atomic::AtomicU64>,
 }

@@ -105,12 +105,20 @@ pub struct StreamManager {
 
 impl StreamManager {
     pub fn new(api: Arc<ApiService>, url_cache: UrlCache, track_cache: Arc<TrackCache>) -> Self {
-        let http_client = crate::util::tls::builder()
+        let http_client = match crate::util::tls::builder()
             .pool_max_idle_per_host(4)
             .pool_idle_timeout(std::time::Duration::from_secs(60))
             .timeout(std::time::Duration::from_secs(10))
             .build()
-            .unwrap_or_else(|_| reqwest::Client::new());
+        {
+            Ok(client) => client,
+            Err(e) => {
+                // The custom builder carries the platform verifier; falling back
+                // silently would surface later as unexplainable TLS failures.
+                tracing::error!(error = %e, "http_client_build_failed_using_default");
+                reqwest::Client::new()
+            }
+        };
 
         Self {
             api,
@@ -251,12 +259,12 @@ impl StreamManager {
         )
         .await
         .map_err(|e| {
-            let msg = e.to_string();
-            // Expired/rejected stream URL: drop it so the next attempt refetches.
-            if msg.contains("403") || msg.contains("rejected") {
+            // Only a server-side rejection means the cached URL is dead;
+            // a transport failure must keep it for the next attempt.
+            if matches!(e, stream::StreamSourceError::Rejected(_)) {
                 url_cache.remove(&track_id);
             }
-            Box::<dyn std::error::Error + Send + Sync>::from(msg)
+            Box::<dyn std::error::Error + Send + Sync>::from(e)
         })?;
         let codec_clone = codec.clone();
 

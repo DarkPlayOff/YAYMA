@@ -27,7 +27,7 @@ async fn resolve_like_entity_id(ctx: &AppContext, track_id: &str) -> String {
         .db
         .lock()
         .await
-        .get_track_metadata(&[base_id.clone()])
+        .get_track_metadata(std::slice::from_ref(&base_id))
         .await
         .ok()
         .and_then(|mut v| v.pop())

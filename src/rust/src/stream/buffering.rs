@@ -2,7 +2,7 @@ use parking_lot::Mutex;
 use std::sync::Arc;
 
 /// Publishes a stream's buffering state to the UI.
-pub type BufferingReport = Box<dyn Fn(bool) + Send + Sync>;
+pub type BufferingReport = Arc<dyn Fn(bool) + Send + Sync>;
 
 /// Routes a stream's buffering state to the UI, but only for the session that is
 /// actually being played.
@@ -33,8 +33,52 @@ impl BufferingGate {
     }
 
     pub fn set(&self, buffering: bool) {
-        if let Some(report) = self.report.lock().as_ref() {
+        // Clone the handle and drop the lock before calling out: the report
+        // touches signals and wakes tasks, which must never run under our lock.
+        let report = self.report.lock().clone();
+        if let Some(report) = report {
             report(buffering);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use parking_lot::Mutex;
+
+    #[test]
+    fn set_before_arm_is_a_no_op() {
+        let gate = BufferingGate::new();
+        gate.set(true);
+        gate.set(false);
+    }
+
+    #[test]
+    fn armed_gate_forwards_every_change() {
+        let gate = BufferingGate::new();
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let sink = seen.clone();
+        gate.arm(Arc::new(move |b| sink.lock().push(b)));
+
+        gate.set(true);
+        gate.set(false);
+
+        assert_eq!(*seen.lock(), vec![true, false]);
+    }
+
+    #[test]
+    fn report_may_call_back_into_the_gate() {
+        // Regression: the report used to run while the gate's mutex was held,
+        // so any handler that touched the gate again deadlocked.
+        let gate = BufferingGate::new();
+        let inner = gate.clone();
+        gate.arm(Arc::new(move |b| {
+            if b {
+                inner.set(false);
+            }
+        }));
+
+        gate.set(true);
     }
 }

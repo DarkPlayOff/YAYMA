@@ -43,6 +43,12 @@ pub struct AppContext {
 }
 
 impl AppContext {
+    // The fields are dependency handles, not collaborating data: grouping them
+    // into a struct would only move the same nine values one call deeper.
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "constructor lists the dependencies the context owns; used once at startup"
+    )]
     pub fn new(
         audio_tx: mpsc::Sender<AudioMessage>,
         api: Arc<ApiService>,

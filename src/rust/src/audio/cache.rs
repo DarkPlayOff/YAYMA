@@ -39,14 +39,13 @@ impl UrlCache {
         // Sweep expired entries + cap size so a long session doesn't grow
         // one entry per played track forever.
         cache.retain(|_, e| e.fetched_at.elapsed() < STRM_URL_TTL);
-        if cache.len() > 200 {
-            if let Some(oldest) = cache
+        if cache.len() > 200
+            && let Some(oldest) = cache
                 .iter()
                 .min_by_key(|(_, e)| e.fetched_at)
                 .map(|(k, _)| k.clone())
-            {
-                cache.remove(&oldest);
-            }
+        {
+            cache.remove(&oldest);
         }
         cache.insert(
             track_id,

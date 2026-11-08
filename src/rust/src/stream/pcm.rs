@@ -54,8 +54,8 @@ pub struct BufferedStreamingSource {
     sample_pos: usize,
     pending_generation: u64,
     generation: Arc<AtomicU64>,
-    sample_rate: u32,
-    channels: u16,
+    sample_rate: NonZero<u32>,
+    channels: NonZero<u16>,
     total_duration: Option<Duration>,
     finished_generation: Option<u64>,
     controller: StreamController,
@@ -158,8 +158,8 @@ impl BufferedStreamingSource {
         rx: CbReceiver<SampleMessage>,
         recycle_tx: CbSender<Vec<f32>>,
         generation: Arc<AtomicU64>,
-        sample_rate: u32,
-        channels: u16,
+        sample_rate: NonZero<u32>,
+        channels: NonZero<u16>,
         total_duration: Option<Duration>,
         controller: StreamController,
     ) -> Self {
@@ -218,11 +218,11 @@ impl Source for BufferedStreamingSource {
     }
 
     fn channels(&self) -> NonZero<u16> {
-        NonZero::new(self.channels).unwrap()
+        self.channels
     }
 
     fn sample_rate(&self) -> NonZero<u32> {
-        NonZero::new(self.sample_rate).unwrap()
+        self.sample_rate
     }
 
     fn total_duration(&self) -> Option<Duration> {
@@ -230,6 +230,10 @@ impl Source for BufferedStreamingSource {
     }
 
     fn try_seek(&mut self, pos: Duration) -> std::result::Result<(), rodio::source::SeekError> {
+        // shortcut: the seek is acknowledged optimistically. The decoder's
+        // coarse seek runs on its own thread and may fail (only a warning is
+        // logged), while the UI already shows `pos`; reporting it back would
+        // need a seek-result channel from the decode loop.
         self.recycle_current();
         self.sample_pos = 0;
         self.finished_generation = None;
@@ -297,8 +301,8 @@ pub fn create_streaming_session<R: std::io::Read + std::io::Seek + Send + Sync +
         sample_rx,
         recycle_tx,
         generation,
-        sample_rate.get(),
-        channels.get(),
+        sample_rate,
+        channels,
         total_duration,
         controller.clone(),
     );
@@ -310,8 +314,49 @@ pub fn create_streaming_session<R: std::io::Read + std::io::Seek + Send + Sync +
     })
 }
 
+/// Decoder-side state of a stream: the decoder itself plus the buffers moving
+/// between the decode thread and the audio thread.
+struct DecodeState<R: std::io::Read + std::io::Seek> {
+    decoder: Decoder<R>,
+    progress: Arc<TrackProgress>,
+    progress_generation: u64,
+    active_generation: u64,
+    chunk: Vec<f32>,
+    pending_chunk: Option<Vec<f32>>,
+}
+
+impl<R: std::io::Read + std::io::Seek> DecodeState<R> {
+    /// Applies one seek command: repositions the decoder, recycles the data of
+    /// the generation being abandoned and adopts the seeker's generation, so
+    /// samples decoded before the seek are dropped downstream.
+    fn apply_seek(&mut self, position: Duration, generation: u64) {
+        if let Err(e) = self.decoder.try_seek(position) {
+            tracing::warn!(error = %e, "decoder coarse seek failed");
+        }
+        if self.progress_generation == self.progress.get_generation() {
+            self.progress.set_current_position(position);
+        }
+        self.active_generation = generation;
+        if let Some(mut reused) = self.pending_chunk.take() {
+            reused.clear();
+            self.chunk = reused;
+        }
+    }
+}
+
+/// Reuses a buffer the audio thread handed back, or allocates one.
+fn take_buffer(recycle_rx: &CbReceiver<Vec<f32>>) -> Vec<f32> {
+    match recycle_rx.try_recv() {
+        Ok(mut v) => {
+            v.clear();
+            v
+        }
+        Err(_) => Vec::with_capacity(PCM_CHUNK_SAMPLES),
+    }
+}
+
 fn run_decode_loop<R: std::io::Read + std::io::Seek + Send + Sync + 'static>(
-    mut decoder: Decoder<R>,
+    decoder: Decoder<R>,
     sample_tx: CbSender<SampleMessage>,
     cmd_rx: CbReceiver<DecoderCommand>,
     recycle_rx: CbReceiver<Vec<f32>>,
@@ -319,65 +364,42 @@ fn run_decode_loop<R: std::io::Read + std::io::Seek + Send + Sync + 'static>(
     progress: Arc<TrackProgress>,
     progress_generation: u64,
 ) {
-    let mut active_generation = generation.load(Ordering::Acquire);
-
-    let get_buffer = || match recycle_rx.try_recv() {
-        Ok(mut v) => {
-            v.clear();
-            v
-        }
-        Err(_) => Vec::with_capacity(PCM_CHUNK_SAMPLES),
+    let active_generation = generation.load(Ordering::Acquire);
+    let mut state = DecodeState {
+        decoder,
+        progress,
+        progress_generation,
+        active_generation,
+        chunk: take_buffer(&recycle_rx),
+        pending_chunk: None,
     };
 
-    let mut chunk = get_buffer();
-    let mut pending_chunk: Option<Vec<f32>> = None;
-
     loop {
+        // Drain pending commands before any decoding work, so a seek or stop
+        // that landed while the sender was blocked is applied first.
         loop {
             match cmd_rx.try_recv() {
                 Ok(DecoderCommand::Seek {
                     position,
-                    generation: new_gen,
-                }) => {
-                    if let Err(e) = decoder.try_seek(position) {
-                        tracing::warn!(error = %e, "decoder coarse seek failed");
-                    }
-                    if progress_generation == progress.get_generation() {
-                        progress.set_current_position(position);
-                    }
-                    active_generation = new_gen;
-                    if let Some(mut pc) = pending_chunk.take() {
-                        pc.clear();
-                        chunk = pc;
-                    }
-                }
+                    generation,
+                }) => state.apply_seek(position, generation),
                 Ok(DecoderCommand::Stop) => return,
                 Err(crossbeam_channel::TryRecvError::Empty) => break,
                 Err(crossbeam_channel::TryRecvError::Disconnected) => return,
             }
         }
 
-        if let Some(chunk_to_send) = pending_chunk.take() {
+        if let Some(chunk_to_send) = state.pending_chunk.take() {
             select! {
-                send(sample_tx, SampleMessage::Samples(chunk_to_send, active_generation)) -> res => {
+                send(sample_tx, SampleMessage::Samples(chunk_to_send, state.active_generation)) -> res => {
                     if res.is_err() {
                         return;
                     }
                 }
                 recv(cmd_rx) -> msg => {
                     match msg {
-                        Ok(DecoderCommand::Seek { position, generation: new_gen }) => {
-                            if let Err(e) = decoder.try_seek(position) {
-                                tracing::warn!(error = %e, "decoder coarse seek failed");
-                            }
-                            if progress_generation == progress.get_generation() {
-                                progress.set_current_position(position);
-                            }
-                            active_generation = new_gen;
-                            if let Some(mut pc) = pending_chunk.take() {
-                                pc.clear();
-                                chunk = pc;
-                            }
+                        Ok(DecoderCommand::Seek { position, generation }) => {
+                            state.apply_seek(position, generation);
                             continue;
                         }
                         Ok(DecoderCommand::Stop) => return,
@@ -387,17 +409,17 @@ fn run_decode_loop<R: std::io::Read + std::io::Seek + Send + Sync + 'static>(
             }
         }
 
-        chunk.clear();
+        state.chunk.clear();
         for _ in 0..PCM_CHUNK_SAMPLES {
-            match decoder.next() {
-                Some(sample) => chunk.push(sample),
+            match state.decoder.next() {
+                Some(sample) => state.chunk.push(sample),
                 None => break,
             }
         }
 
-        if chunk.is_empty() {
+        if state.chunk.is_empty() {
             if sample_tx
-                .send(SampleMessage::Finished(active_generation))
+                .send(SampleMessage::Finished(state.active_generation))
                 .is_err()
             {
                 return;
@@ -407,33 +429,23 @@ fn run_decode_loop<R: std::io::Read + std::io::Seek + Send + Sync + 'static>(
             match cmd_rx.recv() {
                 Ok(DecoderCommand::Seek {
                     position,
-                    generation: new_gen,
+                    generation,
                 }) => {
-                    if let Err(e) = decoder.try_seek(position) {
-                        tracing::warn!(error = %e, "decoder coarse seek failed");
-                    }
-                    if progress_generation == progress.get_generation() {
-                        progress.set_current_position(position);
-                    }
-                    active_generation = new_gen;
-                    if let Some(mut pc) = pending_chunk.take() {
-                        pc.clear();
-                        chunk = pc;
-                    }
+                    state.apply_seek(position, generation);
                     continue;
                 }
                 Ok(DecoderCommand::Stop) | Err(_) => return,
             }
         }
 
-        let new_chunk = get_buffer();
-        let send_chunk = std::mem::replace(&mut chunk, new_chunk);
+        let new_chunk = take_buffer(&recycle_rx);
+        let send_chunk = std::mem::replace(&mut state.chunk, new_chunk);
 
-        match sample_tx.try_send(SampleMessage::Samples(send_chunk, active_generation)) {
+        match sample_tx.try_send(SampleMessage::Samples(send_chunk, state.active_generation)) {
             Ok(()) => {}
             Err(crossbeam_channel::TrySendError::Full(msg)) => {
                 if let SampleMessage::Samples(chunk_data, _) = msg {
-                    pending_chunk = Some(chunk_data);
+                    state.pending_chunk = Some(chunk_data);
                 }
             }
             Err(crossbeam_channel::TrySendError::Disconnected(_)) => {
@@ -472,8 +484,8 @@ mod tests {
             sample_rx,
             recycle_tx,
             generation.clone(),
-            44100,
-            2,
+            NonZero::new(44100).unwrap(),
+            NonZero::new(2).unwrap(),
             None,
             controller.clone(),
         );

@@ -207,10 +207,10 @@ pub async fn init(ctx: AppContext, mut shutdown_rx: tokio::sync::watch::Receiver
 
     tokio::spawn(async move {
         let _ = shutdown_rx.changed().await;
-        if *shutdown_rx.borrow() {
-            if let Some(tx) = MANAGER_TX.get() {
-                let _ = tx.send(ManagerCmd::Shutdown);
-            }
+        if *shutdown_rx.borrow()
+            && let Some(tx) = MANAGER_TX.get()
+        {
+            let _ = tx.send(ManagerCmd::Shutdown);
         }
     });
 }

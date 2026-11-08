@@ -13,7 +13,6 @@ use crate::{
 #[cfg(not(any(target_os = "android")))]
 use crate::audio::{discord::DiscordManager, smtc::SmtcManager};
 
-use parking_lot::RwLock as PRwLock;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
@@ -127,7 +126,6 @@ impl AudioSystem {
 
         let signals = AudioSignals::new();
         let track_progress_inner = Arc::new(TrackProgress::default());
-        let track_progress = Arc::new(PRwLock::new(track_progress_inner.clone()));
 
         let controller = AudioController::new(
             engine,
@@ -135,7 +133,7 @@ impl AudioSystem {
             tx.clone(),
             error_sink.clone(),
             signals.clone(),
-            track_progress.clone(),
+            track_progress_inner.clone(),
         );
 
         let queue = QueueManager::new(
@@ -907,13 +905,7 @@ impl AudioSystem {
                     tracing::info!(device = ?device_name, "audio_device_changed");
                 }
                 // Don't hold the actor on a DB write; persist in background.
-                let db = self.db.clone();
-                tokio::spawn(async move {
-                    let mut db = db.lock().await;
-                    if let Err(e) = db.save_setting("audio_device", &device_name).await {
-                        tracing::error!(error = ?e, "persist_audio_device_failed");
-                    }
-                });
+                self.persist_setting("audio_device", &device_name);
                 self.recreate_stream().await;
             }
             AudioMessage::RecreateStream => {

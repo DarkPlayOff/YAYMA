@@ -113,10 +113,10 @@ impl EffectChain {
 
         if ch == 1 {
             // Mono: run effects on duplicated mono so monitor/fade/FX keep working.
-            for i in 0..frames {
-                let m = buffer[i];
-                self.left[i] = m;
-                self.right[i] = m;
+            let (left, right) = (&mut self.left[..frames], &mut self.right[..frames]);
+            for ((m, l), r) in buffer[..frames].iter().zip(left).zip(right) {
+                *l = *m;
+                *r = *m;
             }
 
             for slot in &mut self.slots {
@@ -126,8 +126,12 @@ impl EffectChain {
                 }
             }
 
-            for i in 0..frames {
-                buffer[i] = 0.5 * (self.left[i] + self.right[i]);
+            for ((m, l), r) in buffer[..frames]
+                .iter_mut()
+                .zip(&self.left[..frames])
+                .zip(&self.right[..frames])
+            {
+                *m = 0.5 * (l + r);
             }
             return;
         }

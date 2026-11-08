@@ -291,10 +291,11 @@ fn wave_seed_category(seed: &str) -> &str {
 /// - otherwise drop the default seed plus every seed of the same category,
 ///   then add `seed`;
 /// - if nothing is left, fall back to the default seed.
+///
 /// Afterwards a wave is (re)started with the resulting seeds.
 pub async fn toggle_wave_station(ctx: &AppContext, seed: String) {
     let mut seeds = ctx.audio.signals.current_wave_seeds.get();
-    if seeds.iter().any(|s| *s == seed) {
+    if seeds.contains(&seed) {
         seeds.retain(|s| *s != seed);
     } else {
         let prefix = format!("{}:", wave_seed_category(&seed));

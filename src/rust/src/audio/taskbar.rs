@@ -352,27 +352,27 @@ fn apply_buttons(hwnd: HWND, buttons: Vec<ButtonSpec>, tooltip: String) {
             dwFlags: THUMBBUTTONFLAGS(0),
         });
 
-        for i in 0..BUTTON_COUNT {
+        for (i, button) in thumb_buttons.iter_mut().enumerate() {
             let id = FIRST_BUTTON_ID + i as u32;
-            if let Some(spec) = buttons.get(i) {
-                thumb_buttons[i] = THUMBBUTTON {
+            *button = if let Some(spec) = buttons.get(i) {
+                THUMBBUTTON {
                     dwMask: THUMBBUTTONMASK(THB_BITMAP.0 | THB_TOOLTIP.0 | THB_FLAGS.0),
                     iId: id,
                     iBitmap: i as u32,
                     hIcon: HICON::default(),
                     szTip: utf16(spec.tooltip.as_str()),
                     dwFlags: THBF_ENABLED,
-                };
+                }
             } else {
-                thumb_buttons[i] = THUMBBUTTON {
+                THUMBBUTTON {
                     dwMask: THUMBBUTTONMASK(THB_FLAGS.0),
                     iId: id,
                     iBitmap: 0,
                     hIcon: HICON::default(),
                     szTip: [0; 260],
                     dwFlags: THBF_HIDDEN,
-                };
-            }
+                }
+            };
         }
 
         let result = if state.buttons_added {
@@ -490,7 +490,7 @@ mod cover {
         let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
         for b in s.as_bytes() {
             hash ^= *b as u64;
-            hash = hash.wrapping_mul(0x1_0000_0001_b3);
+            hash = hash.wrapping_mul(0x0100_0000_01b3);
         }
         hash
     }

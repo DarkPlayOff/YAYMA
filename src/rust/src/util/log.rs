@@ -245,8 +245,8 @@ mod tests {
         let mut out = Vec::new();
         {
             let mut writer = SizeCappedWriter::new(&mut out);
-            writer.write(b"line one\n").unwrap();
-            writer.write(b"line two\n").unwrap();
+            writer.write_all(b"line one\n").unwrap();
+            writer.write_all(b"line two\n").unwrap();
         }
         assert_eq!(out, b"line one\nline two\n");
     }

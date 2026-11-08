@@ -476,7 +476,7 @@ fn cover_hash(bytes: &[u8]) -> u64 {
     let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
     for &b in bytes {
         hash ^= b as u64;
-        hash = hash.wrapping_mul(0x1_0000_0001_b3);
+        hash = hash.wrapping_mul(0x0100_0000_01b3);
     }
     hash
 }

@@ -1,27 +1,21 @@
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 /// Per-track playback counters, all atomics: sharing one instance across
-/// threads needs no replacement, mutation suffices.
+/// threads needs no replacement, mutation suffices. Callers hold it as
+/// `Arc<TrackProgress>`, so the counters stay plain fields.
 #[derive(Default, Debug)]
 pub struct TrackProgress {
-    current_position_millis: Arc<AtomicU64>,
-    total_duration_millis: Arc<AtomicU64>,
-    total_bytes: Arc<AtomicU64>,
-    buffered_bytes: Arc<AtomicU64>,
-    generation: Arc<AtomicU64>,
+    current_position_millis: AtomicU64,
+    total_duration_millis: AtomicU64,
+    total_bytes: AtomicU64,
+    buffered_bytes: AtomicU64,
+    generation: AtomicU64,
 }
 
 impl TrackProgress {
     pub fn new() -> Self {
-        Self {
-            current_position_millis: Arc::new(AtomicU64::new(0)),
-            total_duration_millis: Arc::new(AtomicU64::new(0)),
-            total_bytes: Arc::new(AtomicU64::new(0)),
-            buffered_bytes: Arc::new(AtomicU64::new(0)),
-            generation: Arc::new(AtomicU64::new(0)),
-        }
+        Self::default()
     }
 
     pub fn set_current_position(&self, position: Duration) {

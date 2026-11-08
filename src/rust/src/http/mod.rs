@@ -92,17 +92,16 @@ fn retryable_status(status: reqwest::StatusCode) -> bool {
 fn is_precondition_failed(err: &(dyn std::error::Error + Send + Sync + 'static)) -> bool {
     let mut cur: Option<&(dyn std::error::Error + 'static)> = Some(err);
     while let Some(e) = cur {
-        if let Some(client_err) = e.downcast_ref::<yandex_music::error::ClientError>() {
-            if let yandex_music::error::ClientError::RequestError { error } = client_err {
-                if error.status().is_some_and(|s| s.as_u16() == 412) {
-                    return true;
-                }
-            }
+        if let Some(client_err) = e.downcast_ref::<yandex_music::error::ClientError>()
+            && let yandex_music::error::ClientError::RequestError { error } = client_err
+            && error.status().is_some_and(|s| s.as_u16() == 412)
+        {
+            return true;
         }
-        if let Some(req_err) = e.downcast_ref::<reqwest::Error>() {
-            if req_err.status().is_some_and(|s| s.as_u16() == 412) {
-                return true;
-            }
+        if let Some(req_err) = e.downcast_ref::<reqwest::Error>()
+            && req_err.status().is_some_and(|s| s.as_u16() == 412)
+        {
+            return true;
         }
         let msg = e.to_string();
         if msg.contains("status code: 412") || msg.contains("412 Precondition") {

@@ -37,6 +37,8 @@ impl<T: Send + Sync + 'static> Signal<T> {
         self.0.store(Arc::new(value));
     }
 
+    /// Read-modify-write, not an atomic increment: two concurrent writers can
+    /// lose one update. Use a dedicated atomic or a lock for racing writers.
     pub fn update(&self, f: impl FnOnce(&mut T))
     where
         T: Clone,

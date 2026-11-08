@@ -7,6 +7,12 @@ use crate::frb_generated::StreamSink;
 use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
+// `PlaybackState` is large, but events are sent one at a time through a channel
+// and consumed immediately; boxing would add an allocation per progress tick.
+#[expect(
+    clippy::large_enum_variant,
+    reason = "events cross a channel one at a time; boxing adds per-event allocation"
+)]
 pub enum AppEvent {
     PlaybackStateChanged(PlaybackState),
     PlaybackProgress(PlaybackProgressDto),

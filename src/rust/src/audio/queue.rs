@@ -161,17 +161,11 @@ impl PlaybackContext {
     /// when the context carried one at load time.
     pub fn to_dto(&self) -> crate::api::models::PlaybackContextDto {
         let (kind, id, title) = match self {
-            PlaybackContext::Playlist(p) => (
-                "playlist",
-                Some(p.kind.to_string()),
-                Some(p.title.clone()),
-            ),
+            PlaybackContext::Playlist(p) => {
+                ("playlist", Some(p.kind.to_string()), Some(p.title.clone()))
+            }
             PlaybackContext::Artist(a) => ("artist", a.id.clone(), a.name.clone()),
-            PlaybackContext::Album(a) => (
-                "album",
-                a.id.map(|i| i.to_string()),
-                a.title.clone(),
-            ),
+            PlaybackContext::Album(a) => ("album", a.id.map(|i| i.to_string()), a.title.clone()),
             PlaybackContext::Track(t) => ("track", Some(t.id.clone()), t.title.clone()),
             PlaybackContext::Wave(s) => (
                 "wave",
@@ -278,9 +272,7 @@ impl QueueSignals {
     }
 
     fn set_playback_context(&self, context: &PlaybackContext) {
-        self.inner
-            .playback_context
-            .set(Some(context.to_dto()));
+        self.inner.playback_context.set(Some(context.to_dto()));
     }
 
     /// Bumps the queue revision and wakes the bridge worker so queue edits
@@ -473,7 +465,7 @@ impl QueueManager {
 
                     self.signals.set_queue(visible);
                     self.signals
-                        .set_index(start_index.min(visible_count.saturating_sub(1).max(0)));
+                        .set_index(start_index.min(visible_count.saturating_sub(1)));
                     for t in hidden {
                         self.wave_buffer.push_back(t);
                     }
@@ -702,17 +694,18 @@ impl QueueManager {
         {
             self.recreate_wave_session().await;
         }
-        if self.in_wave() && !self.wave_feedback_sent {
-            if let Some(track) = self.signals.queue().get(self.signals.index()).cloned() {
-                self.wave_feedbacks.push(wave_feedback::build_event(
-                    &track,
-                    WaveTrackOutcome::Skipped,
-                    self.fetch.wave_batch_for(&track.id),
-                    self.track_progress.current_position(),
-                    None,
-                ));
-                self.wave_feedback_sent = true;
-            }
+        if self.in_wave()
+            && !self.wave_feedback_sent
+            && let Some(track) = self.signals.queue().get(self.signals.index()).cloned()
+        {
+            self.wave_feedbacks.push(wave_feedback::build_event(
+                &track,
+                WaveTrackOutcome::Skipped,
+                self.fetch.wave_batch_for(&track.id),
+                self.track_progress.current_position(),
+                None,
+            ));
+            self.wave_feedback_sent = true;
         }
 
         let current = self.signals.index();
@@ -932,7 +925,8 @@ impl QueueManager {
         self.wave_feedbacks.clear();
         self.wave_feedback_sent = false;
         *self.playback_context.lock() = PlaybackContext::Standalone;
-        self.signals.set_playback_context(&PlaybackContext::Standalone);
+        self.signals
+            .set_playback_context(&PlaybackContext::Standalone);
 
         self.update_prefetch_interest();
     }
@@ -1107,13 +1101,13 @@ impl QueueManager {
             return;
         }
         let now = std::time::Instant::now();
-        let played: std::collections::HashSet<&str> = self
-            .history
-            .entries
-            .iter()
-            .map(|t| t.id.as_str())
-            .collect();
-        let current_id = self.signals.queue().get(self.signals.index()).map(|t| t.id.clone());
+        let played: std::collections::HashSet<&str> =
+            self.history.entries.iter().map(|t| t.id.as_str()).collect();
+        let current_id = self
+            .signals
+            .queue()
+            .get(self.signals.index())
+            .map(|t| t.id.clone());
         let expired_ids: std::collections::HashSet<String> = self
             .wave_fetch_times
             .iter()
@@ -1143,8 +1137,7 @@ impl QueueManager {
             self.signals.bump_revision();
         }
         let buffer_len = self.wave_buffer.len();
-        self.wave_buffer
-            .retain(|t| !expired_ids.contains(&t.id));
+        self.wave_buffer.retain(|t| !expired_ids.contains(&t.id));
         if removed || self.wave_buffer.len() != buffer_len {
             self.update_prefetch_interest();
         }
@@ -1432,7 +1425,11 @@ mod tests {
         // Move "t0" to the end: [t1 t2 t3 t4 t0], cursor stays on t2 (index 1).
         q.reorder(0, 4);
         assert_eq!(
-            q.signals.queue().iter().map(|t| t.id.clone()).collect::<Vec<_>>(),
+            q.signals
+                .queue()
+                .iter()
+                .map(|t| t.id.clone())
+                .collect::<Vec<_>>(),
             vec!["t1", "t2", "t3", "t4", "t0"]
         );
         assert_eq!(q.signals.index(), 1);
@@ -1451,14 +1448,12 @@ mod tests {
         q.toggle_shuffle();
         assert_eq!(q.signals.index(), 0);
         let current_before = q.signals.queue()[0].id.clone();
-        let shuffled_before: Vec<String> =
-            q.signals.queue().iter().map(|t| t.id.clone()).collect();
+        let shuffled_before: Vec<String> = q.signals.queue().iter().map(|t| t.id.clone()).collect();
 
         // Reorder within the shuffled order and move the entry back.
         q.reorder(1, 3);
         q.reorder(3, 1);
-        let after_roundtrip: Vec<String> =
-            q.signals.queue().iter().map(|t| t.id.clone()).collect();
+        let after_roundtrip: Vec<String> = q.signals.queue().iter().map(|t| t.id.clone()).collect();
 
         // Undoing the reorder restores the exact shuffled order.
         assert_eq!(after_roundtrip, shuffled_before);
@@ -1469,7 +1464,11 @@ mod tests {
         // Disable restores the original order and maps the cursor back.
         q.toggle_shuffle();
         assert_eq!(
-            q.signals.queue().iter().map(|t| t.id.clone()).collect::<Vec<_>>(),
+            q.signals
+                .queue()
+                .iter()
+                .map(|t| t.id.clone())
+                .collect::<Vec<_>>(),
             vec!["t0", "t1", "t2", "t3", "t4"]
         );
         assert_eq!(q.signals.queue()[q.signals.index()].id, current_before);
@@ -1553,7 +1552,10 @@ mod tests {
         assert_eq!(ids, vec!["t0", "t1", "t2", "t3", "pinned"]);
         // The rotor tail stays in the buffer behind the pinned track.
         assert_eq!(
-            q.wave_buffer.iter().map(|t| t.id.clone()).collect::<Vec<_>>(),
+            q.wave_buffer
+                .iter()
+                .map(|t| t.id.clone())
+                .collect::<Vec<_>>(),
             vec!["t4", "t5", "t6"]
         );
 

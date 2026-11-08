@@ -86,8 +86,6 @@ pub struct AudioController {
     stream_manager: Arc<StreamManager>,
     tx: tokio::sync::mpsc::Sender<AudioMessage>,
     error_sink: Arc<dyn Fn(String) + Send + Sync>,
-    // Compat handle, always points at `progress_clock`, never swapped.
-    pub track_progress: Arc<RwLock<Arc<TrackProgress>>>,
     // Stable PositionClock: the same instance QueueManager holds; never replaced.
     progress_clock: Arc<TrackProgress>,
     // Current stream-written per-track progress, mirrored into the clock.
@@ -134,7 +132,6 @@ impl Clone for AudioController {
             stream_manager: self.stream_manager.clone(),
             tx: self.tx.clone(),
             error_sink: self.error_sink.clone(),
-            track_progress: self.track_progress.clone(),
             progress_clock: self.progress_clock.clone(),
             progress_source: self.progress_source.clone(),
             current_playback_task: self.current_playback_task.clone(),
@@ -171,17 +168,14 @@ impl AudioController {
         tx: tokio::sync::mpsc::Sender<AudioMessage>,
         error_sink: Arc<dyn Fn(String) + Send + Sync>,
         signals: AudioSignals,
-        track_progress: Arc<RwLock<Arc<TrackProgress>>>,
+        progress_clock: Arc<TrackProgress>,
     ) -> Self {
         let effect_handles = crate::audio::fx::init::create_templates();
-        // Same instance QueueManager holds (built in AudioSystem::spawn).
-        let progress_clock = track_progress.read().clone();
         let controller = Self {
             engine: Arc::new(engine),
             stream_manager,
             tx,
             error_sink,
-            track_progress,
             progress_clock,
             progress_source: Arc::new(parking_lot::Mutex::new(None)),
             current_playback_task: Arc::new(Mutex::new(None)),
@@ -421,8 +415,10 @@ impl AudioController {
         // Under repeat-single the preheat parks a replay of the current track
         // itself; in every other mode a peeked successor equal to the current
         // track is a stale request racing a skip and must be ignored.
-        let repeat_single = self.signals.repeat_mode.get() == crate::audio::enums::RepeatMode::Single;
-        if !repeat_single && self.signals.current_track_id.get().as_deref() == Some(next.id.as_str())
+        let repeat_single =
+            self.signals.repeat_mode.get() == crate::audio::enums::RepeatMode::Single;
+        if !repeat_single
+            && self.signals.current_track_id.get().as_deref() == Some(next.id.as_str())
         {
             return;
         }
@@ -548,7 +544,7 @@ impl AudioController {
             let signals = self.signals.clone();
             let generation = self.playback_generation.clone();
             let my_generation = self.playback_generation.load(Ordering::SeqCst);
-            buffering.arm(Box::new(move |is_buffering| {
+            buffering.arm(std::sync::Arc::new(move |is_buffering| {
                 if generation.load(Ordering::SeqCst) == my_generation {
                     signals.set_buffering(is_buffering);
                 }
@@ -870,7 +866,7 @@ impl AudioController {
                     {
                         let signals = signals.clone();
                         let generation = generation.clone();
-                        buffering.arm(Box::new(move |is_buffering| {
+                        buffering.arm(std::sync::Arc::new(move |is_buffering| {
                             // The data source of a superseded session can outlive it by a
                             // moment; its stalls must not leak onto the track that replaced it.
                             if generation.load(Ordering::SeqCst) == my_generation {
@@ -1000,7 +996,7 @@ impl AudioController {
 
     pub fn set_volume(&self, volume: f32) {
         let vol_u8 = (volume * 100.0).round().clamp(0.0, 100.0) as u8;
-        self.signals.set_volume(vol_u8.min(100), false);
+        self.signals.set_volume(vol_u8, false);
         self.apply_volume();
     }
 

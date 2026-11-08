@@ -707,7 +707,7 @@ impl From<Box<dyn std::error::Error + Send + Sync>> for AppError {
         // Same host rule as above, for errors that still carry their request.
         let auth_401 = err
             .downcast_ref::<reqwest::Error>()
-            .map_or(true, |e| is_auth_host(e.url()));
+            .is_none_or(|e| is_auth_host(e.url()));
         if (s.contains("401") || s.contains("unauthorized")) && auth_401 {
             AppError::Unauthorized
         } else if s.contains("404") || s.contains("not found") {
