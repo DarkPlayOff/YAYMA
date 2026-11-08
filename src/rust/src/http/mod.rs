@@ -76,9 +76,44 @@ const MAX_REQUEST_ATTEMPTS: usize = 3;
 /// `POST /plays` identity: the desktop app's unversioned client id, unlike the
 /// versioned one used for every other request.
 const PLAYS_CLIENT_ID: &str = "YandexMusicDesktopApp";
+/// Legacy API host. `yandex_music::API_PATH` points at the `.net` host, but
+/// these endpoints only exist on `.ru`.
+const API_RU: &str = "https://api.music.yandex.ru";
+const API_NET: &str = "https://api.music.yandex.net";
 
 fn retryable_status(status: reqwest::StatusCode) -> bool {
     matches!(status.as_u16(), 408 | 429 | 500..=504)
+}
+
+/// Transient failures only. Repeating a 404, a rejected request or a JSON
+/// parse error just adds backoff to a path that is already waiting for audio.
+fn retryable_client_error(error: &yandex_music::error::ClientError) -> bool {
+    match error {
+        // No status means the request never got an answer (DNS, TLS, timeout).
+        yandex_music::error::ClientError::RequestError { error } => {
+            error.status().is_none_or(retryable_status)
+        }
+        _ => false,
+    }
+}
+
+/// Runs one crate call with the shared bounded backoff.
+async fn retry_client_call<T, Fut>(mut call: impl FnMut() -> Fut) -> Result<T>
+where
+    Fut: std::future::Future<Output = std::result::Result<T, yandex_music::error::ClientError>>,
+{
+    let mut last = None;
+    for attempt in 0..MAX_REQUEST_ATTEMPTS {
+        match call().await {
+            Ok(value) => return Ok(value),
+            Err(error) if retryable_client_error(&error) => last = Some(error),
+            Err(error) => return Err(error.into()),
+        }
+        if attempt + 1 < MAX_REQUEST_ATTEMPTS {
+            sleep(Duration::from_millis(200 * (1 << attempt))).await;
+        }
+    }
+    Err(last.expect("attempts are non-empty").into())
 }
 
 /// True if the error chain carries HTTP 412 Precondition Failed.
@@ -161,9 +196,7 @@ impl SessionExt for Session {
 fn track_entry_id(entry: &serde_json::Value) -> Option<String> {
     let id = entry.get("id").unwrap_or(entry);
     match id {
-        serde_json::Value::Number(n) => {
-            Some(n.as_u64().map_or_else(|| n.to_string(), |v| v.to_string()))
-        }
+        serde_json::Value::Number(n) => Some(n.to_string()),
         serde_json::Value::String(s) => Some(s.clone()),
         _ => None,
     }
@@ -258,7 +291,7 @@ impl ApiService {
         );
 
         let http_client = crate::util::tls::builder()
-            .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 YandexMusic/5.110.1")
+            .user_agent(crate::util::tls::USER_AGENT)
             .default_headers(headers.clone())
             .brotli(true)
             // Keep playlist/context requests from blocking playback indefinitely.
@@ -344,7 +377,7 @@ impl ApiService {
 
     pub async fn fetch_ugc_upload_info(&self, kind: u32, name: &str) -> Result<String> {
         let url = format!(
-            "https://api.music.yandex.ru/loader/upload-url?uid={0}&playlist-id={0}:{1}&path={2}",
+            "{API_RU}/loader/upload-url?uid={0}&playlist-id={0}:{1}&path={2}",
             self.user_id,
             kind,
             urlencoding::encode(name)
@@ -417,10 +450,7 @@ impl ApiService {
     }
 
     pub async fn fetch_liked_albums(&self) -> Result<Vec<Album>> {
-        let url = format!(
-            "https://api.music.yandex.ru/users/{}/likes/albums?rich=true",
-            self.user_id
-        );
+        let url = format!("{API_RU}/users/{}/likes/albums?rich=true", self.user_id);
         let body: serde_json::Value = send_with_retry(|| self.http_client.get(&url))
             .await?
             .json()
@@ -430,7 +460,7 @@ impl ApiService {
 
     pub async fn fetch_liked_artists(&self) -> Result<Vec<Artist>> {
         let url = format!(
-            "https://api.music.yandex.ru/users/{}/likes/artists?with-timestamps=false",
+            "{API_RU}/users/{}/likes/artists?with-timestamps=false",
             self.user_id
         );
         let body: serde_json::Value = send_with_retry(|| self.http_client.get(&url))
@@ -448,21 +478,40 @@ impl ApiService {
         plural_key: &str,
         singular_key: &str,
     ) -> Vec<T> {
-        if let Some(items) = Self::liked_items(body, plural_key) {
-            items
-                .iter()
-                .filter_map(|item| {
-                    let value = if item.get(singular_key).is_some() {
-                        &item[singular_key]
-                    } else {
-                        item
-                    };
-                    serde_json::from_value::<T>(value.clone()).ok()
-                })
-                .collect()
-        } else {
-            vec![]
+        let Some(items) = Self::liked_items(body, plural_key) else {
+            return vec![];
+        };
+        let mut skipped = 0usize;
+        let mut first_error = None;
+        let items = items
+            .iter()
+            .filter_map(|item| {
+                let value = if item.get(singular_key).is_some() {
+                    &item[singular_key]
+                } else {
+                    item
+                };
+                match serde_json::from_value::<T>(value.clone()) {
+                    Ok(parsed) => Some(parsed),
+                    Err(e) => {
+                        // Silent drops made a server-side shape change look
+                        // like "the user has fewer albums".
+                        skipped += 1;
+                        first_error.get_or_insert_with(|| e.to_string());
+                        None
+                    }
+                }
+            })
+            .collect();
+        if skipped > 0 {
+            tracing::warn!(
+                key = plural_key,
+                skipped,
+                error = first_error.as_deref().unwrap_or("-"),
+                "liked_entries_skipped"
+            );
         }
+        items
     }
 
     fn liked_items<'a>(
@@ -530,7 +579,7 @@ impl ApiService {
             .collect::<Vec<_>>()
             .join(",");
         let url = format!(
-            "https://api.music.yandex.ru/users/{}/playlists?kinds={}&withTracks=true&richTracks=false",
+            "{API_RU}/users/{}/playlists?kinds={}&withTracks=true&richTracks=false",
             self.user_id, kinds_param
         );
         // Raw JSON on purpose: the crate's untagged `PlaylistTracks` fails the
@@ -566,19 +615,7 @@ impl ApiService {
         quality: Quality,
     ) -> Result<Vec<TrackFileInfo>> {
         let opts = GetFileInfoBatchOptions::new(track_ids).quality(quality);
-        let mut last_error = None;
-        for attempt in 0..MAX_REQUEST_ATTEMPTS {
-            match self.file_info_client.get_file_info_batch(&opts).await {
-                Ok(value) => return Ok(value),
-                Err(error) => {
-                    last_error = Some(error);
-                    if attempt + 1 < MAX_REQUEST_ATTEMPTS {
-                        sleep(Duration::from_millis(200 * (1 << attempt))).await;
-                    }
-                }
-            }
-        }
-        Err(last_error.expect("file info attempts are non-empty").into())
+        retry_client_call(|| self.file_info_client.get_file_info_batch(&opts)).await
     }
 
     fn map_quality(quality: AudioQuality) -> Quality {
@@ -604,53 +641,13 @@ impl ApiService {
             opts = opts.codecs([codec]);
         }
 
-        let mut last_error = None;
-        let mut info = None;
-        for attempt in 0..MAX_REQUEST_ATTEMPTS {
-            match self.file_info_client.get_file_info(&opts).await {
-                Ok(value) => {
-                    info = Some(value);
-                    break;
-                }
-                Err(error) => {
-                    last_error = Some(error);
-                    if attempt + 1 < MAX_REQUEST_ATTEMPTS {
-                        sleep(Duration::from_millis(200 * (1 << attempt))).await;
-                    }
-                }
-            }
-        }
-        let info = info.ok_or_else(|| {
-            last_error
-                .expect("file info attempts are non-empty")
-                .to_string()
-        })?;
+        let info = retry_client_call(|| self.file_info_client.get_file_info(&opts)).await?;
         Ok((info.url, info.codec))
     }
 
     pub async fn fetch_track_stream_info(&self, track_id: String) -> Result<TrackStreamInfo> {
         let opts = GetFileInfoOptions::new(track_id).quality(Self::map_quality(self.get_quality()));
-        let mut last_error = None;
-        let mut info = None;
-        for attempt in 0..MAX_REQUEST_ATTEMPTS {
-            match self.file_info_client.get_file_info(&opts).await {
-                Ok(value) => {
-                    info = Some(value);
-                    break;
-                }
-                Err(error) => {
-                    last_error = Some(error);
-                    if attempt + 1 < MAX_REQUEST_ATTEMPTS {
-                        sleep(Duration::from_millis(200 * (1 << attempt))).await;
-                    }
-                }
-            }
-        }
-        let info = info.ok_or_else(|| {
-            last_error
-                .expect("stream info attempts are non-empty")
-                .to_string()
-        })?;
+        let info = retry_client_call(|| self.file_info_client.get_file_info(&opts)).await?;
         let mirror_urls = info
             .urls
             .iter()
@@ -877,7 +874,7 @@ impl ApiService {
         let client_now = Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
         let response = send_with_retry(|| {
             self.http_client
-                .post("https://api.music.yandex.ru/plays")
+                .post(format!("{API_RU}/plays"))
                 .query(&[("clientNow", client_now.as_str())])
                 .header("X-Yandex-Music-Client", PLAYS_CLIENT_ID)
                 .json(&serde_json::json!({ "plays": plays }))
@@ -885,11 +882,14 @@ impl ApiService {
         .await?;
         // A 200 with an error envelope is the silent "not recorded" case; log it.
         let body = response.text().await.unwrap_or_default();
-        if !body.contains("\"result\":\"ok\"") {
-            tracing::warn!(
-                body = &body[..body.len().min(300)],
-                "plays_response_unexpected"
-            );
+        let result_is_ok = serde_json::from_str::<serde_json::Value>(&body)
+            .ok()
+            .is_some_and(|value| value["result"] == "ok");
+        if !result_is_ok {
+            // Char-safe: a byte slice at 300 panics inside a multi-byte
+            // character, and these bodies carry Russian error text.
+            let preview: String = body.chars().take(300).collect();
+            tracing::warn!(body = preview, "plays_response_unexpected");
         }
         Ok(())
     }
@@ -981,19 +981,35 @@ impl ApiService {
         };
 
         // NOTE: yandex-music 0.7.0 DiffOp supports only Insert/Delete (no atomic
-        // move/reorder op), so a move stays a delete+insert pair. Each step goes
-        // through with_revision_retry (one refetch + one retry max per step);
-        // the second step fetches a fresh revision after the first completes.
+        // move/reorder op), so a move stays a delete+insert pair. If the insert
+        // fails, put the track back where it was: losing it from the playlist is
+        // not recoverable from the UI, while an extra restore at worst leaves a
+        // duplicate. Inserting a copy first instead would assume the server
+        // accepts duplicate entries, which is not something we control.
         let diff_delete = Diff::new(
             DiffOp::delete(from_index, from_index + 1),
             vec![track.clone()],
         );
-        let diff_insert = Diff::new(DiffOp::insert(to_index), vec![track]);
+        let diff_insert = Diff::new(DiffOp::insert(to_index), vec![track.clone()]);
 
         self.modify_playlist_with_revision_retry(kind, diff_delete)
             .await?;
-        self.modify_playlist_with_revision_retry(kind, diff_insert)
-            .await?;
+        if let Err(e) = self
+            .modify_playlist_with_revision_retry(kind, diff_insert)
+            .await
+        {
+            let restore = Diff::new(DiffOp::insert(from_index), vec![track]);
+            if let Err(restore_error) = self
+                .modify_playlist_with_revision_retry(kind, restore)
+                .await
+            {
+                tracing::error!(
+                    error = %restore_error,
+                    "playlist_move_restore_failed"
+                );
+            }
+            return Err(e);
+        }
 
         Ok(())
     }
@@ -1086,7 +1102,7 @@ impl ApiService {
         if let Ok(resp) = self
             .client
             .inner
-            .get("https://api.music.yandex.net/account/about")
+            .get(format!("{API_NET}/account/about"))
             .send()
             .await
             && let Ok(json) = resp.json::<serde_json::Value>().await
@@ -1148,7 +1164,7 @@ impl ApiService {
         let response: serde_json::Value = send_with_retry(|| {
             self.client
                 .inner
-                .post("https://api.music.yandex.net/collection/sync")
+                .post(format!("{API_NET}/collection/sync"))
                 .json(&body)
         })
         .await?

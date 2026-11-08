@@ -11,6 +11,10 @@ type DbResult<T> = Result<T, AppError>;
 /// Default TTL for cached images: 7 days in seconds
 pub(crate) const DEFAULT_CACHE_TTL_SECS: i64 = 7 * 24 * 60 * 60;
 
+/// Synchronous SQLite on an async runtime. Every method takes `&mut self`, so
+/// callers already serialize on one `tokio::sync::Mutex`. Full-table scans and
+/// bulk transactions are wrapped in `block_in_place` so they do not hold a
+/// worker thread hostage; single-row statements are short enough to run inline.
 pub struct AppDatabase {
     conn: Connection,
 }
@@ -65,13 +69,31 @@ const CREATE_TRACK_ARTISTS: &str = "CREATE TABLE IF NOT EXISTS track_metadata_ar
     FOREIGN KEY (track_id) REFERENCES track_metadata(track_id) ON DELETE CASCADE
 )";
 
+/// Indexes the queries above actually use: `prune_cache` orders by
+/// `last_access_at`, `prune_expired` filters on `expires_at`.
 const CREATE_INDEXES: &[&str] = &[
     "CREATE INDEX IF NOT EXISTS idx_cache_last_access ON cache_metadata(last_access_at)",
     "CREATE INDEX IF NOT EXISTS idx_cache_expires_at ON cache_metadata(expires_at)",
-    "CREATE INDEX IF NOT EXISTS idx_track_artists_id ON track_metadata_artists(track_id)",
-    "CREATE INDEX IF NOT EXISTS idx_track_artists_name ON track_metadata_artists(name)",
-    "CREATE INDEX IF NOT EXISTS idx_metadata_search_title ON track_metadata(title)",
 ];
+
+/// Indexes from earlier schema versions that no query can use, dropped so
+/// existing databases stop paying for them on every write:
+/// - `idx_track_artists_id` is the prefix of the `(track_id, position)`
+///   primary key;
+/// - nothing filters on artist name or title in SQL (both searches run in
+///   memory over a snapshot).
+const DROP_INDEXES: &[&str] = &[
+    "DROP INDEX IF EXISTS idx_track_artists_id",
+    "DROP INDEX IF EXISTS idx_track_artists_name",
+    "DROP INDEX IF EXISTS idx_metadata_search_title",
+];
+
+/// A cached HTTP response. `expired` means the TTL ran out and the file must
+/// be re-fetched.
+pub struct CachedFile {
+    pub path: String,
+    pub expired: bool,
+}
 
 impl AppDatabase {
     pub async fn init(base_path: Option<PathBuf>) -> DbResult<Self> {
@@ -109,6 +131,9 @@ impl AppDatabase {
                 conn.execute(m, [])?;
             }
             for idx in CREATE_INDEXES {
+                conn.execute(idx, [])?;
+            }
+            for idx in DROP_INDEXES {
                 conn.execute(idx, [])?;
             }
 
@@ -178,31 +203,28 @@ impl AppDatabase {
         Ok(())
     }
 
-    pub async fn get_cache_metadata(
-        &mut self,
-        url: &str,
-    ) -> DbResult<Option<(String, Option<String>, bool)>> {
-        let row: Option<(String, Option<String>, i64)> = self
+    pub async fn get_cache_metadata(&mut self, url: &str) -> DbResult<Option<CachedFile>> {
+        let row: Option<(String, i64)> = self
             .conn
             .query_row(
-                "SELECT file_path, etag, expires_at FROM cache_metadata WHERE url = ?1",
+                "SELECT file_path, expires_at FROM cache_metadata WHERE url = ?1",
                 params![url],
-                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+                |r| Ok((r.get(0)?, r.get(1)?)),
             )
             .optional()?;
         match row {
             None => Ok(None),
-            Some((path, etag, expires_at)) => {
+            Some((path, expires_at)) => {
                 let now = chrono::Utc::now().timestamp();
-                let is_expired = now >= expires_at;
-                if !is_expired {
+                let expired = now >= expires_at;
+                if !expired {
                     let new_expires = now + DEFAULT_CACHE_TTL_SECS;
                     let _ = self.conn.execute(
                         "UPDATE cache_metadata SET last_access_at = ?1, expires_at = ?2 WHERE url = ?3",
                         params![now, new_expires, url],
                     );
                 }
-                Ok(Some((path, etag, is_expired)))
+                Ok(Some(CachedFile { path, expired }))
             }
         }
     }
@@ -312,25 +334,31 @@ impl AppDatabase {
     }
 
     pub async fn save_liked_tracks(&mut self, track_ids: &[String]) -> DbResult<()> {
-        let tx = self.conn.transaction()?;
-        tx.execute("DELETE FROM liked_tracks", [])?;
-        {
-            let mut stmt =
-                tx.prepare("INSERT OR IGNORE INTO liked_tracks (track_id) VALUES (?1)")?;
-            for id in track_ids {
-                stmt.execute(params![id])?;
+        // Bulk delete + N inserts: long enough to keep off the async executor.
+        tokio::task::block_in_place(|| {
+            let tx = self.conn.transaction()?;
+            tx.execute("DELETE FROM liked_tracks", [])?;
+            {
+                let mut stmt =
+                    tx.prepare("INSERT OR IGNORE INTO liked_tracks (track_id) VALUES (?1)")?;
+                for id in track_ids {
+                    stmt.execute(params![id])?;
+                }
             }
-        }
-        tx.commit()?;
-        Ok(())
+            tx.commit()?;
+            Ok(())
+        })
     }
 
     pub async fn load_liked_tracks(&mut self) -> DbResult<Vec<String>> {
-        let mut stmt = self.conn.prepare("SELECT track_id FROM liked_tracks")?;
-        let ids: Vec<String> = stmt
-            .query_map([], |row| row.get::<_, String>(0))?
-            .collect::<rusqlite::Result<_>>()?;
-        Ok(ids)
+        // Full-table scan: same reason as the bulk write above.
+        tokio::task::block_in_place(|| {
+            let mut stmt = self.conn.prepare("SELECT track_id FROM liked_tracks")?;
+            let ids: Vec<String> = stmt
+                .query_map([], |row| row.get::<_, String>(0))?
+                .collect::<rusqlite::Result<_>>()?;
+            Ok(ids)
+        })
     }
 
     pub async fn add_liked_track(&mut self, track_id: &str) -> DbResult<()> {
@@ -484,13 +512,13 @@ impl AppDatabase {
         key: &str,
         value: &T,
     ) -> DbResult<()> {
-        match serde_json::to_string(value) {
-            Ok(val) => self.save_app_setting(key, &val).await,
-            Err(e) => {
-                tracing::error!(key = %key, error = %e, "serialize_setting_failed");
-                Ok(())
-            }
-        }
+        // A failed serialization means the setting was NOT saved; reporting
+        // success would silently revert it on the next launch.
+        let val = serde_json::to_string(value).map_err(|e| {
+            tracing::error!(key = %key, error = %e, "serialize_setting_failed");
+            AppError::DbError(format!("serialize setting {key}: {e}"))
+        })?;
+        self.save_app_setting(key, &val).await
     }
 
     pub async fn load_setting<T: serde::de::DeserializeOwned>(

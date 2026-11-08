@@ -172,7 +172,7 @@ impl StreamManager {
     }
 
     pub async fn is_track_offline(&self, track_id: &str) -> bool {
-        self.track_cache.get_track_file(track_id).await.is_some()
+        self.track_cache.get_track_file(track_id).is_some()
     }
 
     pub async fn create_stream_session(&self, track: &Track) -> Result<PreparedStream> {
@@ -188,7 +188,7 @@ impl StreamManager {
         let progress_clone = progress.clone();
 
         // 1. Check if track is fully downloaded in offline cache
-        if let Some((path, codec)) = self.track_cache.get_track_file(&track.id).await {
+        if let Some((path, codec)) = self.track_cache.get_track_file(&track.id) {
             let codec_clone = codec.clone();
 
             // Blocking FS stays off the async executor.

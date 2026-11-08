@@ -27,6 +27,10 @@ use yandex_music::{DEFAULT_CLIENT_ID, YandexMusicClient};
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
+/// User agent for clients that talk to Yandex hosts (API, CDN, cover art).
+/// One constant so the advertised app version cannot drift between clients.
+pub const USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 YandexMusic/5.110.1";
+
 const RUSSIAN_TRUSTED_ROOT_CA: &[u8] =
     include_bytes!("../../../assets/certs/russian-trusted-root-ca.pem");
 /// Mozilla bundle for the Android fallback below (PEM, 118 roots, fetched
