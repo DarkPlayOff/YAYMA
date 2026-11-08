@@ -43,37 +43,18 @@ pub struct AppContext {
 }
 
 impl AppContext {
-    // The fields are dependency handles, not collaborating data: grouping them
-    // into a struct would only move the same nine values one call deeper.
-    #[expect(
-        clippy::too_many_arguments,
-        reason = "constructor lists the dependencies the context owns; used once at startup"
-    )]
+    /// Takes the dependency groups by name: nine positional handles made the
+    /// call site unreadable, and the groups are the same ones the context
+    /// stores, so nothing is reshaped here.
     pub fn new(
-        audio_tx: mpsc::Sender<AudioMessage>,
-        api: Arc<ApiService>,
-        db: Arc<Mutex<AppDatabase>>,
-        http_cache: Arc<HttpCache>,
-        track_cache: Arc<TrackCache>,
-        signals: AudioSignals,
-        state: Arc<RwLock<SystemState>>,
-        effect_handles: Arc<StdRwLock<HashMap<String, EffectHandle>>>,
+        audio: AppAudioContext,
+        core: AppCoreContext,
         event_sink: Arc<OnceCell<StreamSink<AppEvent>>>,
     ) -> (Self, watch::Receiver<bool>) {
         let (shutdown_tx, shutdown_rx) = watch::channel(false);
         let inner = Arc::new(AppContextInner {
-            audio: AppAudioContext {
-                tx: audio_tx,
-                signals,
-                state,
-                effect_handles,
-            },
-            core: AppCoreContext {
-                api,
-                db,
-                http_cache,
-                track_cache,
-            },
+            audio,
+            core,
             system: AppSystemContext {
                 event_sink,
                 shutdown_tx,

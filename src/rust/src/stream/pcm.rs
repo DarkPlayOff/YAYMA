@@ -459,7 +459,101 @@ fn run_decode_loop<R: std::io::Read + std::io::Seek + Send + Sync + 'static>(
 mod tests {
     use super::*;
     use crate::audio::fx::BlockSource;
+    use std::io::Cursor;
     use std::sync::Arc;
+
+    /// Mono 16-bit WAV: silence for the first `step_seconds`, then a constant
+    /// half-scale tone. A decoder position is then visible in the samples.
+    fn wav_with_step(step_seconds: u32, total_seconds: u32) -> Vec<u8> {
+        const SAMPLE_RATE: u32 = 44100;
+        let total = SAMPLE_RATE * total_seconds;
+        let step = SAMPLE_RATE * step_seconds;
+
+        let mut data = Vec::with_capacity(total as usize * 2);
+        for i in 0..total {
+            let value: i16 = if i < step { 0 } else { 16384 };
+            data.extend_from_slice(&value.to_le_bytes());
+        }
+
+        let mut wav = Vec::with_capacity(44 + data.len());
+        wav.extend_from_slice(b"RIFF");
+        wav.extend_from_slice(&(36 + data.len() as u32).to_le_bytes());
+        wav.extend_from_slice(b"WAVEfmt ");
+        wav.extend_from_slice(&16u32.to_le_bytes());
+        wav.extend_from_slice(&1u16.to_le_bytes()); // PCM
+        wav.extend_from_slice(&1u16.to_le_bytes()); // mono
+        wav.extend_from_slice(&SAMPLE_RATE.to_le_bytes());
+        wav.extend_from_slice(&(SAMPLE_RATE * 2).to_le_bytes()); // byte rate
+        wav.extend_from_slice(&2u16.to_le_bytes()); // block align
+        wav.extend_from_slice(&16u16.to_le_bytes()); // bits per sample
+        wav.extend_from_slice(b"data");
+        wav.extend_from_slice(&(data.len() as u32).to_le_bytes());
+        wav.extend_from_slice(&data);
+        wav
+    }
+
+    fn decode_state(
+        pending: Option<Vec<f32>>,
+    ) -> (DecodeState<Cursor<Vec<u8>>>, Arc<TrackProgress>) {
+        let decoder = Decoder::new(Cursor::new(wav_with_step(1, 2))).expect("decode in-memory wav");
+        let progress = Arc::new(TrackProgress::default());
+        let state = DecodeState {
+            decoder,
+            progress: progress.clone(),
+            progress_generation: 0,
+            active_generation: 0,
+            chunk: Vec::new(),
+            pending_chunk: pending,
+        };
+        (state, progress)
+    }
+
+    #[test]
+    fn apply_seek_repositions_the_decoder() {
+        let (mut state, _progress) = decode_state(None);
+        assert!(
+            state.decoder.next().expect("first sample") < 0.01,
+            "the fixture starts with silence"
+        );
+
+        state.apply_seek(Duration::from_millis(1500), 7);
+
+        let sample = state.decoder.next().expect("sample after seek");
+        assert!(
+            (sample - 0.5).abs() < 0.05,
+            "seek must land past the 1s step, got {sample}"
+        );
+    }
+
+    #[test]
+    fn apply_seek_adopts_generation_and_recycles_the_pending_chunk() {
+        let (mut state, _progress) = decode_state(Some(vec![9.0; 4]));
+
+        state.apply_seek(Duration::from_secs(1), 7);
+
+        assert_eq!(state.active_generation, 7);
+        assert!(state.pending_chunk.is_none());
+        assert!(state.chunk.is_empty(), "recycled buffer is cleared");
+        assert!(
+            state.chunk.capacity() >= 4,
+            "pending buffer is reused, not dropped"
+        );
+    }
+
+    #[test]
+    fn apply_seek_updates_progress_only_for_its_own_session() {
+        let (mut state, progress) = decode_state(None);
+
+        state.apply_seek(Duration::from_millis(1500), 1);
+        assert_eq!(progress.current_position(), Duration::from_millis(1500));
+
+        // The clock now belongs to a newer session; a stale decoder must not
+        // write its position into it.
+        progress.reset();
+        progress.set_current_position(Duration::from_millis(200));
+        state.apply_seek(Duration::from_millis(100), 2);
+        assert_eq!(progress.current_position(), Duration::from_millis(200));
+    }
 
     /// A BufferedStreamingSource wired to test channels — no decoder needed.
     struct TestRig {

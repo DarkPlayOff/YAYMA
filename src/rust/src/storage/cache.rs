@@ -13,6 +13,27 @@ use tokio::fs;
 use tokio::sync::Mutex;
 use tokio::sync::broadcast;
 
+/// How long a follower waits for the download it joined, and how long the
+/// downloader itself may run. The follower's budget is longer on purpose: it
+/// also has to cover the downloader's own timeout.
+const DOWNLOAD_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
+const DOWNLOAD_WAIT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(90);
+
+/// Waits for the in-flight download of a URL.
+///
+/// Three failures can happen at once here — the downloader timed out, the
+/// broadcast channel died, or the payload says the download failed — so each
+/// `?` turns one layer into a flat error instead of nesting matches.
+async fn await_download(
+    rx: &mut broadcast::Receiver<Result<PathBuf, String>>,
+) -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
+    let received = tokio::time::timeout(DOWNLOAD_WAIT_TIMEOUT, rx.recv())
+        .await
+        .map_err(|_| "timed out waiting for the http cache download")?;
+    let outcome = received.map_err(|e| format!("http cache download channel closed: {e}"))?;
+    outcome.map_err(Into::into)
+}
+
 /// Streams the body into `path`, returning the bytes actually written.
 ///
 /// The byte count is what landed on disk, not `Content-Length` (which counts
@@ -153,15 +174,14 @@ impl HttpCache {
             // We are the downloader. The guard removes the map entry on every
             // exit path, including cancellation of this future.
             let guard = DownloadGuard(url.to_string());
-            let result = tokio::time::timeout(
-                std::time::Duration::from_secs(60),
-                self.perform_download(url),
-            )
-            .await
-            .map_err(|_| {
-                Box::<dyn std::error::Error + Send + Sync>::from("http cache download timed out")
-            })
-            .and_then(|r| r);
+            let result = tokio::time::timeout(DOWNLOAD_TIMEOUT, self.perform_download(url))
+                .await
+                .map_err(|_| {
+                    Box::<dyn std::error::Error + Send + Sync>::from(
+                        "http cache download timed out",
+                    )
+                })
+                .and_then(|r| r);
 
             // Remove before send: a waiter subscribing between send and remove
             // would wait on an already-fired broadcast channel forever.
@@ -177,15 +197,7 @@ impl HttpCache {
 
             result
         } else {
-            // Wait for the existing download, but not forever: a downloader
-            // that died without broadcasting would otherwise hang this caller
-            // until the app restarts.
-            match tokio::time::timeout(std::time::Duration::from_secs(90), rx.recv()).await {
-                Ok(Ok(Ok(path))) => Ok(path),
-                Ok(Ok(Err(e))) => Err(e.into()),
-                Ok(Err(e)) => Err(e.into()),
-                Err(_) => Err("timed out waiting for the http cache download".into()),
-            }
+            await_download(&mut rx).await
         }
     }
 

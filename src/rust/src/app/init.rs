@@ -1,5 +1,5 @@
 use crate::app::AUDIO_READY;
-use crate::app::context::AppContext;
+use crate::app::context::{AppAudioContext, AppContext, AppCoreContext};
 use crate::app::settings::load_persisted_settings;
 use crate::app::workers;
 use crate::audio::system::AudioSystem;
@@ -95,14 +95,18 @@ async fn initialize_services(
     .await?;
 
     let (context, shutdown_rx) = AppContext::new(
-        audio_tx,
-        api_arc.clone(),
-        db_arc,
-        http_cache,
-        track_cache,
-        signals.clone(),
-        state,
-        effect_handles.clone(),
+        AppAudioContext {
+            tx: audio_tx,
+            signals,
+            state,
+            effect_handles,
+        },
+        AppCoreContext {
+            api: api_arc.clone(),
+            db: db_arc,
+            http_cache,
+            track_cache,
+        },
         event_sink,
     );
 
