@@ -3,9 +3,9 @@ import 'dart:async';
 import 'package:material_ui/material_ui.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/features/core/providers/navigation_provider.dart';
+import 'package:yayma/src/features/core/views/layout/player_lyrics.dart';
 import 'package:yayma/src/features/core/views/widgets/common_ui.dart';
 import 'package:yayma/src/features/core/views/widgets/home_cover_widget.dart';
-import 'package:yayma/src/features/core/views/widgets/lyrics_view.dart';
 import 'package:yayma/src/features/core/views/widgets/quality_selector.dart';
 import 'package:yayma/src/features/core/views/widgets/responsive.dart';
 import 'package:yayma/src/features/core/views/widgets/tab_visibility.dart';
@@ -149,27 +149,37 @@ class HomeView extends StatelessWidget {
         ),
         child: Stack(
           children: [
-            Positioned.fill(
-              child: SignalBuilder(
-                builder: (context) {
-                  final trackId = visibleSignal(
-                    context,
-                    trackMetadataSignal,
-                  ).id;
-                  if (trackId == null) {
-                    return Center(
-                      child: Text(
-                        'Выберите трек',
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+            if (showLyrics)
+              Positioned.fill(
+                child: SignalBuilder(
+                  builder: (context) {
+                    final trackId = visibleSignal(
+                      context,
+                      trackMetadataSignal,
+                    ).id;
+                    if (trackId == null) {
+                      return Center(
+                        child: Text(
+                          'Выберите трек',
+                          style: TextStyle(
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurfaceVariant,
+                          ),
                         ),
-                      ),
+                      );
+                    }
+                    return PlayerLyrics(
+                      key: ValueKey(trackId),
+                      trackId: trackId,
+                      accent: visibleSignal<Color>(context, accentColorSignal),
+                      // The desktop pane is full width: keep lines centered
+                      // like the touch screen's lyrics.
+                      textAlign: TextAlign.center,
                     );
-                  }
-                  return LyricsWidget(trackId: trackId, visible: showLyrics);
-                },
+                  },
+                ),
               ),
-            ),
           ],
         ),
       ),

@@ -24,7 +24,15 @@ class PlayerLyrics extends StatefulWidget {
   final String trackId;
   final Color? accent;
 
-  const PlayerLyrics({required this.trackId, this.accent, super.key});
+  /// Touch screens read the lyrics left-aligned; the desktop pane centers them.
+  final TextAlign textAlign;
+
+  const PlayerLyrics({
+    required this.trackId,
+    this.accent,
+    this.textAlign = TextAlign.left,
+    super.key,
+  });
 
   @override
   State<PlayerLyrics> createState() => _PlayerLyricsState();
@@ -45,6 +53,11 @@ class _PlayerLyricsState extends State<PlayerLyrics>
 
   bool _follow = true;
   EffectCleanup? _cleanup;
+  EffectCleanup? _dimCleanup;
+
+  /// Programmatic scrolls add no entry here, so the scrollbar can stay hidden
+  /// while the lyrics follow the song.
+  int _autoScrolls = 0;
 
   /// Item count of the last reported lyrics, used to estimate a scroll offset.
   int _itemCount = 0;
@@ -116,6 +129,20 @@ class _PlayerLyricsState extends State<PlayerLyrics>
         _bringIntoView(index);
       }
     });
+    // Loading or empty lyrics leave nothing to read over a darkened backdrop,
+    // so the dim is held off until there is text to show.
+    _dimCleanup = effect(() {
+      final lyrics = lyricsSignal(widget.trackId).value;
+      _suppressDim(lyrics.isLoading || (lyrics.value?.items.isEmpty ?? false));
+    });
+  }
+
+  /// This widget mounts and unmounts inside a build, so writing the dim signal
+  /// there would mark the dim overlay dirty mid-build. Defer one frame.
+  void _suppressDim(bool suppress) {
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => lyricsSuppressDimSignal.value = suppress,
+    );
   }
 
   /// Lyrics with the closing pause appended: the track length lives in the
@@ -171,9 +198,11 @@ class _PlayerLyricsState extends State<PlayerLyrics>
           ? 0.0
           : position.maxScrollExtent * index / _itemCount;
       if (!retry || (target - position.pixels).abs() < 1) return;
+      _autoScrolls++;
       _scroll.jumpTo(
         target.clamp(position.minScrollExtent, position.maxScrollExtent),
       );
+      _autoScrolls--;
       WidgetsBinding.instance.addPostFrameCallback(
         (_) => _bringIntoViewNow(index, cascade: false, retry: false),
       );
@@ -186,16 +215,23 @@ class _PlayerLyricsState extends State<PlayerLyrics>
         .clamp(position.minScrollExtent, position.maxScrollExtent);
     final delta = position.pixels - target;
     if (cascade && delta.abs() > 1) setState(() => _scrollDelta = delta);
-    _scroll.animateTo(
-      target,
-      duration: _scrollDuration,
-      curve: Curves.fastOutSlowIn,
+    _autoScrolls++;
+    unawaited(
+      _scroll
+          .animateTo(
+            target,
+            duration: _scrollDuration,
+            curve: Curves.fastOutSlowIn,
+          )
+          .whenComplete(() => _autoScrolls--),
     );
   }
 
   @override
   void dispose() {
     _cleanup?.call();
+    _dimCleanup?.call();
+    _suppressDim(false);
     _ticker.dispose();
     _clock.dispose();
     _cascade.dispose();
@@ -255,53 +291,70 @@ class _PlayerLyricsState extends State<PlayerLyrics>
                   ).createShader(rect),
                   blendMode: BlendMode.dstIn,
                   child: RepaintBoundary(
-                    child: NotificationListener<UserScrollNotification>(
-                      onNotification: _handleUserScroll,
-                      child: ListView.builder(
+                    child: ScrollConfiguration(
+                      // The platform scrollbar also appears on programmatic
+                      // scrolls; ours only reacts to the user's own.
+                      behavior: ScrollConfiguration.of(
+                        context,
+                      ).copyWith(scrollbars: false),
+                      child: Scrollbar(
                         controller: _scroll,
-                        physics: const BouncingScrollPhysics(),
-                        padding: EdgeInsets.symmetric(
-                          vertical: MediaQuery.sizeOf(context).height * 0.1,
-                        ),
-                        itemCount: items.length,
-                        itemBuilder: (context, index) {
-                          _keys.putIfAbsent(index, GlobalKey.new);
-                          final item = items[index];
-                          return _CascadeRow(
-                            animation: _cascade,
-                            scrollDelta: _scrollDelta,
-                            distance:
-                                (_activeIndex < 0 ? 0 : index - _activeIndex)
-                                    .abs(),
-                            child: Padding(
-                              key: _keys[index],
-                              padding: const EdgeInsets.symmetric(vertical: 8),
-                              child: item is LyricLine
-                                  ? _LineRow(
-                                      line: item,
-                                      active: index == _activeIndex,
-                                      // Only the sung line and the one about to
-                                      // be sung still move; further rows would
-                                      // re-layout per frame for nothing.
-                                      animated:
-                                          _activeIndex >= 0 &&
-                                          index >= _activeIndex &&
-                                          index <= _activeIndex + 1,
-                                      alpha: _lineAlpha(index),
-                                      accent: accent,
-                                      clock: _clock,
-                                      onTap: () => _jumpToLine(item),
-                                    )
-                                  : _GapIndicator(
-                                      timer: item as LyricTimer,
-                                      active: index == _currentIndex,
-                                      accent: accent,
-                                      clock: _clock,
-                                      onTap: () => _jumpToLine(item),
-                                    ),
+                        notificationPredicate: (_) => _autoScrolls == 0,
+                        child: NotificationListener<UserScrollNotification>(
+                          onNotification: _handleUserScroll,
+                          child: ListView.builder(
+                            controller: _scroll,
+                            physics: const BouncingScrollPhysics(),
+                            padding: EdgeInsets.symmetric(
+                              vertical: MediaQuery.sizeOf(context).height * 0.1,
                             ),
-                          );
-                        },
+                            itemCount: items.length,
+                            itemBuilder: (context, index) {
+                              _keys.putIfAbsent(index, GlobalKey.new);
+                              final item = items[index];
+                              return _CascadeRow(
+                                animation: _cascade,
+                                scrollDelta: _scrollDelta,
+                                distance:
+                                    (_activeIndex < 0
+                                            ? 0
+                                            : index - _activeIndex)
+                                        .abs(),
+                                child: Padding(
+                                  key: _keys[index],
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 8,
+                                  ),
+                                  child: item is LyricLine
+                                      ? _LineRow(
+                                          line: item,
+                                          textAlign: widget.textAlign,
+                                          active: index == _activeIndex,
+                                          // Only the sung line and the one about
+                                          // to be sung still move; further rows
+                                          // would re-layout per frame for
+                                          // nothing.
+                                          animated:
+                                              _activeIndex >= 0 &&
+                                              index >= _activeIndex &&
+                                              index <= _activeIndex + 1,
+                                          alpha: _lineAlpha(index),
+                                          accent: accent,
+                                          clock: _clock,
+                                          onTap: () => _jumpToLine(item),
+                                        )
+                                      : _GapIndicator(
+                                          timer: item as LyricTimer,
+                                          active: index == _currentIndex,
+                                          accent: accent,
+                                          clock: _clock,
+                                          onTap: () => _jumpToLine(item),
+                                        ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
                       ),
                     ),
                   ),
@@ -369,6 +422,7 @@ class _CascadeRow extends StatelessWidget {
 
 class _LineRow extends StatelessWidget {
   final LyricLine line;
+  final TextAlign textAlign;
   final bool active;
   final bool animated;
   final double alpha;
@@ -378,6 +432,7 @@ class _LineRow extends StatelessWidget {
 
   const _LineRow({
     required this.line,
+    required this.textAlign,
     required this.active,
     required this.animated,
     required this.alpha,
@@ -413,9 +468,19 @@ class _LineRow extends StatelessWidget {
           builder: (context, faded, _) {
             final color = accent.withValues(alpha: faded);
             if (words.isEmpty) {
-              return Text(line.text, style: TextStyle(color: color));
+              return Text(
+                line.text,
+                textAlign: textAlign,
+                style: TextStyle(color: color),
+              );
             }
-            if (!animated) return _LineWords(words: words, color: color);
+            if (!animated) {
+              return _LineWords(
+                words: words,
+                color: color,
+                textAlign: textAlign,
+              );
+            }
             return ValueListenableBuilder<double>(
               valueListenable: clock,
               builder: (context, ms, _) {
@@ -423,6 +488,7 @@ class _LineRow extends StatelessWidget {
                 return _LineWords(
                   words: words,
                   color: color,
+                  textAlign: textAlign,
                   springs: springs,
                   nowMs: active ? ms : null,
                   unsung: accent.withValues(alpha: faded * 0.45),
@@ -462,6 +528,7 @@ List<LyricWord> synthLyricWords(LyricLine line) {
 class _LineWords extends StatelessWidget {
   final List<LyricWord> words;
   final Color color;
+  final TextAlign textAlign;
   final List<_WordSpring>? springs;
 
   /// When set, each word fills on its own timing: a line wrapping into three
@@ -472,6 +539,7 @@ class _LineWords extends StatelessWidget {
   const _LineWords({
     required this.words,
     required this.color,
+    required this.textAlign,
     this.springs,
     this.nowMs,
     this.unsung,
@@ -483,6 +551,11 @@ class _LineWords extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Wrap(
+      alignment: switch (textAlign) {
+        TextAlign.center => WrapAlignment.center,
+        TextAlign.right || TextAlign.end => WrapAlignment.end,
+        _ => WrapAlignment.start,
+      },
       children: [
         for (var i = 0; i < words.length; i++)
           Padding(
