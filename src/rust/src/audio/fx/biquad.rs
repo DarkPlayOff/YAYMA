@@ -155,6 +155,21 @@ impl StereoBiquad {
         };
     }
 
+    /// Magnitude response of the coefficients from the last `update`, in dB.
+    pub fn magnitude_db(&self, freq: f32, sample_rate: f32) -> f32 {
+        let w = 2.0 * PI * freq / sample_rate;
+        let (s1, c1) = w.sin_cos();
+        let (s2, c2) = (2.0 * w).sin_cos();
+        let Coeffs { b0, b1, b2, a1, a2 } = self.c;
+        let num_re = b0 + b1 * c1 + b2 * c2;
+        let num_im = -(b1 * s1 + b2 * s2);
+        let den_re = 1.0 + a1 * c1 + a2 * c2;
+        let den_im = -(a1 * s1 + a2 * s2);
+        let mag2 =
+            (num_re * num_re + num_im * num_im) / (den_re * den_re + den_im * den_im).max(1e-20);
+        10.0 * mag2.max(1e-20).log10()
+    }
+
     #[inline(always)]
     pub fn process_block(&mut self, left: &mut [f32], right: &mut [f32]) {
         let Coeffs { b0, b1, b2, a1, a2 } = self.c;
