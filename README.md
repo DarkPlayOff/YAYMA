@@ -23,13 +23,13 @@
 ## Возможности
 
 - **Приватность**: никакой аналитики и слежки со стороны клиента
-- **Тексты песен**: несколько источников (LrcLib, BetterLyrics, YouLyPlus), включая пословную синхронизацию
+- **Тексты песен**: несколько источников (LrcLib, LrcMux, BetterLyrics), включая пословную синхронизацию
 - **Интеграция с системой**: управление из панели задач Windows, Discord Rich Presence, глобальные горячие клавиши
 
 ## Благодарности ❤️
 
 - [Vyfor](https://github.com/vyfor) — за исходный TUI-клиент [YaMusic](https://github.com/yamusic/yamusic) и библиотеку [yandex-music-rs](https://github.com/vyfor/yandex-music-rs) для работы с API Яндекса
-- [LrcLib](https://lrclib.net), [BetterLyrics](https://github.com/better-lyrics/better-lyrics), [YouLyPlus](https://github.com/ibratabian17/YouLyPlus) — за базы текстов песен
+- [LrcLib](https://lrclib.net), [LrcMux](https://lrcmux.dev), [BetterLyrics](https://github.com/better-lyrics/better-lyrics) — за базы текстов песен
 - [Metrolist](https://github.com/MetrolistGroup/Metrolist) — за референс полноэкранного режима текстов
 
 ## Лицензия

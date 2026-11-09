@@ -17,15 +17,11 @@ struct Track {
 }
 
 async fn search(
-    query: Option<&str>,
     track_name: Option<&str>,
     artist_name: Option<&str>,
     album_name: Option<&str>,
 ) -> Vec<Track> {
     let mut req = CLIENT.get("https://lrclib.net/api/search");
-    if let Some(q) = query {
-        req = req.query(&[("q", q)]);
-    }
     if let Some(t) = track_name {
         req = req.query(&[("track_name", t)]);
     }
@@ -58,28 +54,27 @@ async fn query_lyrics(artist: &str, title: &str, album: Option<&str>) -> Vec<Tra
     let cleaned_title = clean_title(title);
     let cleaned_artist = clean_artist(artist);
     let has_lyrics = |t: &Track| t.synced_lyrics.is_some() || t.plain_lyrics.is_some();
-    let combined = format!("{cleaned_artist} {cleaned_title}");
     let trimmed_title = title.trim();
     let trimmed_artist = artist.trim();
 
-    // Progressively looser fallbacks, tried in priority order until one yields lyrics.
+    // Progressively looser fallbacks, tried in priority order until one yields
+    // lyrics. Free-text `q=` attempts used to be part of this chain; they never
+    // matched anything the field-based ones missed, and lrclib's `q=` endpoint
+    // regularly hangs until the client timeout on common titles.
     let mut attempts = vec![
         (
-            None,
             Some(cleaned_title.as_str()),
             Some(cleaned_artist.as_str()),
             album,
         ),
-        (None, Some(cleaned_title.as_str()), None, None),
-        (Some(combined.as_str()), None, None, None),
-        (Some(cleaned_title.as_str()), None, None, None),
+        (Some(cleaned_title.as_str()), None, None),
     ];
     if cleaned_title != trimmed_title {
-        attempts.push((None, Some(trimmed_title), Some(trimmed_artist), None));
+        attempts.push((Some(trimmed_title), Some(trimmed_artist), None));
     }
 
-    for (query, track_name, artist_name, album_name) in attempts {
-        let mut results = search(query, track_name, artist_name, album_name).await;
+    for (track_name, artist_name, album_name) in attempts {
+        let mut results = search(track_name, artist_name, album_name).await;
         results.retain(has_lyrics);
         if !results.is_empty() {
             return results;

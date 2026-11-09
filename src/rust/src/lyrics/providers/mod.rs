@@ -1,6 +1,6 @@
 pub mod betterlyrics;
 pub mod lrclib;
-pub mod youlyplus;
+pub mod lrcmux;
 
 use regex::Regex;
 use std::sync::LazyLock;
@@ -182,5 +182,59 @@ mod tests {
     #[test]
     fn string_similarity_unrelated_strings_is_low() {
         assert!(string_similarity("Completely Different", "Nothing Alike") < 0.5);
+    }
+}
+
+/// Hits the real APIs. Ignored by default: CI has no network.
+/// `cargo test --lib -- --ignored providers_live --nocapture`
+#[cfg(test)]
+mod live {
+    use super::*;
+
+    /// Two back-to-back requests per provider: after the first one the
+    /// connection was kept alive and the second hung until the timeout.
+    async fn fetch_twice(name: &str) -> Vec<String> {
+        let mut texts = Vec::new();
+        for _ in 0..2 {
+            let lines = match name {
+                "lrclib" => {
+                    lrclib::get_lyrics("Never Gonna Give You Up", "Rick Astley", 213, None).await
+                }
+                "betterlyrics" => {
+                    betterlyrics::get_lyrics("Never Gonna Give You Up", "Rick Astley", 213, None)
+                        .await
+                }
+                "lrcmux" => {
+                    lrcmux::get_lyrics("Never Gonna Give You Up", "Rick Astley", 213, None).await
+                }
+                _ => unreachable!(),
+            }
+            .unwrap_or_else(|| panic!("{name} returned no lyrics"));
+            texts.push(lines[0].text.clone());
+        }
+        texts
+    }
+
+    #[test]
+    #[ignore]
+    fn providers_live() {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        rt.block_on(async {
+            for name in ["lrclib", "betterlyrics", "lrcmux"] {
+                let texts = fetch_twice(name).await;
+                println!("{name}: {texts:?}");
+                assert_eq!(texts[0], texts[1], "{name} changed between requests");
+            }
+
+            // Unknown track: None, not a panic or a bogus match.
+            assert!(
+                lrcmux::get_lyrics("Zzqq Nope", "Nobody", 200, None)
+                    .await
+                    .is_none()
+            );
+        });
     }
 }

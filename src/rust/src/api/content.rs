@@ -774,7 +774,6 @@ async fn build_query(ctx: &AppContext, track_id: &str) -> Option<LyricsQuery> {
         .next()?;
 
     Some(LyricsQuery {
-        id: track_id.to_string(),
         title: track.title.clone().unwrap_or_default(),
         artist: track
             .artists
@@ -788,12 +787,12 @@ async fn build_query(ctx: &AppContext, track_id: &str) -> Option<LyricsQuery> {
 }
 
 /// Fetches lyrics for a track: races the word-sync-capable providers first
-/// (currently LrcLib, BetterLyrics and YouLyPlus — first one to actually
-/// return word timing wins, no waiting on the others). If none of them has
-/// word sync, tries Yandex directly as the guaranteed primary source; only
-/// if Yandex also has nothing does it fall back to whichever line-sync
-/// response arrived first from that same trio. Providers the user disabled
-/// in settings are skipped entirely.
+/// (currently BetterLyrics, LrcMux and LrcLib — first one to
+/// actually return word timing wins, no waiting on the others). If none of
+/// them has word sync, tries Yandex directly as the guaranteed primary
+/// source; only if Yandex also has nothing does it fall back to whichever
+/// line-sync response arrived first from that same group. Providers the user
+/// disabled in settings are skipped entirely.
 pub async fn get_lyrics(ctx: &AppContext, track_id: String) -> Option<LyricsResultDto> {
     let query = build_query(ctx, &track_id).await;
     let enabled = resolve_enabled(ctx).await;

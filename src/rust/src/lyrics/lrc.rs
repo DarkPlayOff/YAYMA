@@ -1,7 +1,7 @@
 //! Parser for standard and Enhanced (word-tagged) LRC text, as returned
 //! as-is by Yandex Music and LrcLib. Neither source emits the app's own
 //! `{agent}`/`{bg}` line tags or `<word:start:end|...>` sidecar format
-//! (those only ever came from this app's own TTML/YouLyPlus conversion,
+//! (those only ever came from this app's own TTML conversion,
 //! which now builds `ParsedLine`s directly instead of round-tripping
 //! through text), so this parser only needs to handle the two forms real
 //! LRC files actually use.

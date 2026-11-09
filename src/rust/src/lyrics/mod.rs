@@ -53,10 +53,17 @@ pub fn to_lines_dto(mut lines: Vec<ParsedLine>) -> Vec<LyricsLineDto> {
 /// keeps one connection pool instead of one per source. A browser-like
 /// User-Agent is required — some providers (e.g. lrclib.net) sit behind a
 /// WAF that 403s reqwest's default UA string.
+///
+/// Connection reuse is disabled: every one of these APIs sits behind
+/// Cloudflare, and a request sent over a kept-alive connection hangs until
+/// the timeout (both h2 and h1.1), so a second track's lyrics would never
+/// load. A fresh TLS handshake costs a few hundred ms, which the race across
+/// providers hides anyway.
 pub static CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
     reqwest::Client::builder()
         .connect_timeout(Duration::from_secs(5))
         .timeout(Duration::from_secs(8))
+        .pool_max_idle_per_host(0)
         .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
         .build()
         .unwrap_or_default()
@@ -66,7 +73,6 @@ pub static CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
 /// that can't look tracks up by Yandex track id.
 #[derive(Debug, Clone)]
 pub struct LyricsQuery {
-    pub id: String,
     pub title: String,
     pub artist: String,
     /// Duration in whole seconds, or -1 if unknown.
@@ -78,8 +84,8 @@ pub struct LyricsQuery {
 pub enum ProviderId {
     Yandex,
     LrcLib,
+    LrcMux,
     BetterLyrics,
-    YouLyPlus,
 }
 
 impl ProviderId {
@@ -88,7 +94,7 @@ impl ProviderId {
     /// setting — the order itself isn't user-editable.
     pub const ALL: [ProviderId; 4] = [
         ProviderId::BetterLyrics,
-        ProviderId::YouLyPlus,
+        ProviderId::LrcMux,
         ProviderId::Yandex,
         ProviderId::LrcLib,
     ];
@@ -97,8 +103,8 @@ impl ProviderId {
         match self {
             ProviderId::Yandex => "yandex",
             ProviderId::LrcLib => "lrclib",
+            ProviderId::LrcMux => "lrcmux",
             ProviderId::BetterLyrics => "betterlyrics",
-            ProviderId::YouLyPlus => "youlyplus",
         }
     }
 
@@ -106,8 +112,8 @@ impl ProviderId {
         match self {
             ProviderId::Yandex => "Яндекс Музыка",
             ProviderId::LrcLib => "LrcLib",
+            ProviderId::LrcMux => "LrcMux",
             ProviderId::BetterLyrics => "BetterLyrics",
-            ProviderId::YouLyPlus => "YouLyPlus",
         }
     }
 
@@ -122,7 +128,7 @@ impl ProviderId {
     pub fn supports_word_sync(&self) -> bool {
         matches!(
             self,
-            ProviderId::BetterLyrics | ProviderId::YouLyPlus | ProviderId::LrcLib
+            ProviderId::BetterLyrics | ProviderId::LrcMux | ProviderId::LrcLib
         )
     }
 }
@@ -139,19 +145,12 @@ pub async fn fetch_from_provider(
         ProviderId::LrcLib => {
             providers::lrclib::get_lyrics(&query.title, &query.artist, query.duration, album).await
         }
+        ProviderId::LrcMux => {
+            providers::lrcmux::get_lyrics(&query.title, &query.artist, query.duration, album).await
+        }
         ProviderId::BetterLyrics => {
             providers::betterlyrics::get_lyrics(&query.title, &query.artist, query.duration, album)
                 .await
-        }
-        ProviderId::YouLyPlus => {
-            providers::youlyplus::get_lyrics(
-                &query.title,
-                &query.artist,
-                query.duration,
-                album,
-                Some(&query.id),
-            )
-            .await
         }
     }
 }
