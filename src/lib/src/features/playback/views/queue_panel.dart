@@ -39,8 +39,9 @@ Future<void> showQueuePanel(BuildContext context) {
   );
 }
 
-/// Playback queue: the current track on top, then everything that plays after
-/// it, with tap-to-jump, per-row remove and drag&drop reorder.
+/// Playback queue as one flat list in play order: already-played tracks, the
+/// current one (highlighted and scrolled into view on open), then everything
+/// that plays next, with tap-to-jump, per-row remove and drag&drop reorder.
 class QueuePanel extends StatefulWidget {
   /// Sheet mode: the panel is embedded into a [DraggableScrollableSheet] and
   /// its scroll view must be driven by the sheet-provided controller.
@@ -73,6 +74,11 @@ class _QueuePanelState extends State<QueuePanel> {
   int? _overrideRevision;
   int? _overrideWindowStart;
 
+  /// The current-track row, scrolled into view once when the panel opens so
+  /// the playing track is what the user sees first.
+  final GlobalKey _currentRowKey = GlobalKey();
+  bool _scrolledToCurrent = false;
+
   ScrollController get _scrollController =>
       widget.scrollController ??
       (_ownScrollController ??= SmoothScrollController(debugLabel: 'queue'));
@@ -103,6 +109,16 @@ class _QueuePanelState extends State<QueuePanel> {
         final queueIndex = queueIndexSignal();
         final queueCount = queueCountSignal();
         final upcomingCount = queueCount - queueIndex - 1;
+        // Already-played rows carry their absolute start index; the count is
+        // clamped to the playhead so a stale window (kept while a move
+        // refetches) never duplicates the current/upcoming rows.
+        final playedWindow = queuePlayedWindowSignal().value;
+        final playedTracks = playedWindow?.tracks ?? const <SimpleTrackDto>[];
+        final playedStart = playedWindow?.start ?? 0;
+        final playedCount = (queueIndex - playedStart).clamp(
+          0,
+          playedTracks.length,
+        );
         // Local-first reorder: while an override is active the panel shows
         // the order the user dropped into place; the refetch triggered by the
         // revision bump confirms it right after, and the override is dropped
@@ -138,6 +154,8 @@ class _QueuePanelState extends State<QueuePanel> {
           seenIds[track.id] = n + 1;
         }
 
+        // One flat queue list in play order — played tracks, the current one,
+        // then upcoming — scrolled to the current row on open.
         final content = CustomScrollView(
           controller: _scrollController,
           slivers: [
@@ -148,27 +166,32 @@ class _QueuePanelState extends State<QueuePanel> {
                   child: _buildHeader(context, canClear: upcomingCount > 0),
                 ),
               ),
-            if (currentTrack != null)
+            if (playedCount > 0)
               SliverPadding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                sliver: SliverToBoxAdapter(
-                  child: _QueueTrackRow(
-                    track: currentTrack,
-                    isCurrent: true,
-                    isPlaying: isPlaying,
+                padding: const EdgeInsets.only(top: 12),
+                sliver: SliverList.builder(
+                  itemCount: playedCount,
+                  itemBuilder: (context, index) => _QueueTrackRow(
+                    track: playedTracks[index],
+                    absoluteIndex: playedStart + index,
+                    isPlayed: true,
                   ),
                 ),
               ),
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(24, 20, 24, 8),
-              sliver: SliverToBoxAdapter(
-                child: _SectionTitle(
-                  upcomingCount <= 0
-                      ? 'Далее в очереди'
-                      : 'Далее в очереди · $upcomingCount',
+            if (currentTrack != null)
+              SliverPadding(
+                padding: const EdgeInsets.only(top: 12),
+                sliver: SliverToBoxAdapter(
+                  child: KeyedSubtree(
+                    key: _currentRowKey,
+                    child: _QueueTrackRow(
+                      track: currentTrack,
+                      isCurrent: true,
+                      isPlaying: isPlaying,
+                    ),
+                  ),
                 ),
               ),
-            ),
             if (queueState.hasError && !queueState.hasValue)
               SliverToBoxAdapter(child: _ErrorRow(error: queueState.error!))
             else if (!queueState.hasValue && queueState.isLoading)
@@ -183,7 +206,7 @@ class _QueuePanelState extends State<QueuePanel> {
             else if (upcomingCount <= 0)
               SliverToBoxAdapter(
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 4, 24, 0),
+                  padding: const EdgeInsets.fromLTRB(16, 16, 24, 0),
                   child: Text(
                     'Это последний трек в очереди',
                     style: TextStyle(
@@ -195,12 +218,11 @@ class _QueuePanelState extends State<QueuePanel> {
               )
             else ...[
               SliverPadding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
+                padding: const EdgeInsets.only(top: 4),
                 sliver: SliverReorderableList(
                   itemCount: tracks.length,
-                  // Drag starts from the explicit handle in the row (same
-                  // approach as the playlist editor); a whole-row long-press
-                  // drag would fight with the row's tap-to-jump.
+                  // Reorder without a handle: long-press the row on touch,
+                  // drag by the cover on desktop (see _QueueTrackRow).
                   onReorderItem: (oldIndex, newIndex) {
                     // onReorderItem already shifts newIndex down for items
                     // moved downward; the window list starts right after the
@@ -248,14 +270,14 @@ class _QueuePanelState extends State<QueuePanel> {
                     final track = tracks[index];
                     final absoluteIndex = queueIndex + 1 + index;
                     return KeyedSubtree(
-                      key: ValueKey(
-                        'queue_${track.id}#${ordinals[index]}',
-                      ),
-                      child: _QueueTrackRow(
-                        listIndex: index,
-                        position: absoluteIndex + 1,
-                        track: track,
-                        absoluteIndex: absoluteIndex,
+                      key: ValueKey('queue_${track.id}#${ordinals[index]}'),
+                      child: ReorderableDelayedDragStartListener(
+                        index: index,
+                        child: _QueueTrackRow(
+                          track: track,
+                          absoluteIndex: absoluteIndex,
+                          dragIndex: index,
+                        ),
                       ),
                     );
                   },
@@ -264,7 +286,7 @@ class _QueuePanelState extends State<QueuePanel> {
               if (upcomingCount > tracks.length)
                 SliverToBoxAdapter(
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 4, 24, 0),
+                    padding: const EdgeInsets.fromLTRB(16, 4, 24, 0),
                     child: Text(
                       'Ещё ${plural(upcomingCount - tracks.length, 'трек', 'трека', 'треков')} '
                       'в очереди',
@@ -283,6 +305,25 @@ class _QueuePanelState extends State<QueuePanel> {
             ),
           ],
         );
+
+        // Wait for the played window too: it sits above the current row, so
+        // centering before it lands would leave the list far above the track.
+        if (!_scrolledToCurrent &&
+            currentTrack != null &&
+            playedWindow != null) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted || _scrolledToCurrent) return;
+            _scrolledToCurrent = true;
+            final rowContext = _currentRowKey.currentContext;
+            if (rowContext == null) return;
+            Scrollable.ensureVisible(
+              rowContext,
+              alignment: 0.4,
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeOut,
+            );
+          });
+        }
 
         if (widget.bottomSheet) {
           return Material(color: Colors.transparent, child: content);
@@ -411,19 +452,14 @@ String? describePlaybackContext(PlaybackContextDto? context) {
       : 'Сейчас играет из $source · $title';
 }
 
-/// One queue row. The currently playing track uses the same card as the
-/// upcoming ones, only highlighted: the position number becomes a live
-/// indicator, the title takes the accent colour, and the remove/drag/tap
-/// actions are dropped.
+/// True on touch-first platforms, where long-press is the natural reorder
+/// gesture; desktop drags by the cover instead.
+final bool _isTouchPlatform = Platform.isAndroid || Platform.isIOS;
+
+/// One queue row. Full-width card: cover, title/artists, duration. The current
+/// track is highlighted and shows a live indicator instead of the duration;
+/// it has no remove button. Tapping a row jumps to it.
 class _QueueTrackRow extends StatelessWidget {
-  /// Visible offset inside the reorderable list, for the drag handle. Null
-  /// for the current track: it is not part of the reorderable list.
-  final int? listIndex;
-
-  /// 1-based queue position. Null for the current track: a live indicator is
-  /// shown instead of the number.
-  final int? position;
-
   final SimpleTrackDto track;
 
   /// Jump target; null for the current track (it is already playing).
@@ -432,61 +468,46 @@ class _QueueTrackRow extends StatelessWidget {
   final bool isCurrent;
   final bool isPlaying;
 
+  /// Already played: dimmed, tapping replays it.
+  final bool isPlayed;
+
+  /// Offset inside the reorderable list; set for upcoming rows only. On
+  /// desktop the cover doubles as the drag handle (long-press drag is not
+  /// discoverable with a mouse).
+  final int? dragIndex;
+
   const _QueueTrackRow({
     required this.track,
-    this.listIndex,
-    this.position,
     this.absoluteIndex,
     this.isCurrent = false,
     this.isPlaying = false,
+    this.isPlayed = false,
+    this.dragIndex,
   });
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
 
+    Widget cover = AppCover(
+      coverUrl: track.coverUrl,
+      size: 52,
+      radius: AppRadius.sm,
+      // A 52px row lands on the coarse 80px preset at 1x; floor at 2x.
+      minPixelRatio: 2,
+    );
+    final dragIndex = this.dragIndex;
+    if (dragIndex != null && !_isTouchPlatform) {
+      cover = MouseRegion(
+        cursor: SystemMouseCursors.grab,
+        child: ReorderableDragStartListener(index: dragIndex, child: cover),
+      );
+    }
+
     final row = Row(
       children: [
-        if (isCurrent)
-          Container(
-            width: 32,
-            height: 40,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: cs.primary.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(AppRadius.xs),
-            ),
-            child: TrackPlayingIndicator(
-              isPlaying: isPlaying,
-              height: 14,
-              color: cs.primary,
-            ),
-          )
-        else
-          ReorderableDragStartListener(
-            index: listIndex!,
-            child: Container(
-              width: 32,
-              height: 40,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: cs.onSurface.withValues(alpha: 0.04),
-                borderRadius: BorderRadius.circular(AppRadius.xs),
-              ),
-              child: Text(
-                '$position',
-                style: TextStyle(
-                  color: cs.onSurfaceVariant,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  fontFeatures: const [FontFeature.tabularFigures()],
-                ),
-              ),
-            ),
-          ),
-        const SizedBox(width: 10),
-        AppCover(coverUrl: track.coverUrl, size: 40, radius: AppRadius.xs),
-        const SizedBox(width: 12),
+        cover,
+        const SizedBox(width: 14),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -496,10 +517,14 @@ class _QueueTrackRow extends StatelessWidget {
                   context,
                   title: track.title,
                   version: track.version,
-                  versionFontSize: 11,
+                  versionFontSize: 12,
                   style: TextStyle(
-                    color: isCurrent ? cs.primary : cs.onSurface,
-                    fontSize: 14,
+                    color: isCurrent
+                        ? cs.primary
+                        : isPlayed
+                        ? cs.onSurfaceVariant
+                        : cs.onSurface,
+                    fontSize: 15,
                     fontWeight: FontWeight.w600,
                     height: 1.15,
                   ),
@@ -507,10 +532,10 @@ class _QueueTrackRow extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
-              const SizedBox(height: 2),
+              const SizedBox(height: 3),
               ArtistNamesWidget(
                 artists: track.artists,
-                fontSize: 12,
+                fontSize: 13,
                 color: cs.onSurfaceVariant,
                 maxLines: 1,
               ),
@@ -518,66 +543,45 @@ class _QueueTrackRow extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 8),
-        Text(
-          formatDuration(track.durationMs),
-          style: TextStyle(
-            color: isCurrent ? cs.primary : cs.onSurfaceVariant,
-            fontSize: 12,
-            fontFeatures: const [FontFeature.tabularFigures()],
+        if (isCurrent)
+          TrackPlayingIndicator(isPlaying: isPlaying, color: cs.primary)
+        else ...[
+          Text(
+            formatDuration(track.durationMs),
+            style: TextStyle(
+              color: cs.onSurfaceVariant,
+              fontSize: 13,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
           ),
-        ),
-        if (!isCurrent)
           IconButton(
             icon: Icon(
               Icons.close_rounded,
               size: 18,
               color: cs.onSurfaceVariant,
             ),
-            onPressed: () => unawaited(
-              PlaybackController.removeFromQueueAt(absoluteIndex!),
-            ),
+            onPressed: () =>
+                unawaited(PlaybackController.removeFromQueueAt(absoluteIndex!)),
           ),
+        ],
       ],
     );
 
     if (isCurrent) {
       return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-        decoration: BoxDecoration(
-          color: cs.primary.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(AppRadius.sm),
-        ),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(color: cs.primary.withValues(alpha: 0.08)),
         child: row,
       );
     }
     return InkWell(
       onTap: absoluteIndex == null
           ? null
-          : () => unawaited(PlaybackController.jumpToQueueIndex(absoluteIndex!)),
-      borderRadius: BorderRadius.circular(AppRadius.sm),
+          : () =>
+                unawaited(PlaybackController.jumpToQueueIndex(absoluteIndex!)),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         child: row,
-      ),
-    );
-  }
-}
-
-class _SectionTitle extends StatelessWidget {
-  final String title;
-  const _SectionTitle(this.title);
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      title.toUpperCase(),
-      style: TextStyle(
-        color: Theme.of(
-          context,
-        ).colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
-        fontSize: 12,
-        fontWeight: FontWeight.w800,
-        letterSpacing: 1.2,
       ),
     );
   }

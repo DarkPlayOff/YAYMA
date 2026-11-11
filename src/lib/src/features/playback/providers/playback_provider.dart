@@ -473,7 +473,11 @@ final FutureSignal<SimpleTrackDto?> queueLastTrackSignal = computedAsync(
     final queueCount = queueCountSignal();
     final _ = queueRevisionSignal();
     if (ctx == null || queueCount == 0) return null;
-    final tail = await rust.queueWindow(ctx: ctx, offset: queueCount - 1, len: 1);
+    final tail = await rust.queueWindow(
+      ctx: ctx,
+      offset: queueCount - 1,
+      len: 1,
+    );
     return tail.isEmpty ? null : tail.first;
   },
   options: const AsyncSignalOptions(name: 'queueLastTrackSignal'),
@@ -505,6 +509,31 @@ final FutureSignal<List<SimpleTrackDto>> queueWindowSignal = computedAsync(
   },
   options: const AsyncSignalOptions(name: 'queueWindowSignal'),
 );
+
+/// How many already-played tracks the queue panel keeps visible.
+const int queuePlayedWindowLength = 50;
+
+/// Already-played queue window for the panel: up to
+/// [queuePlayedWindowLength] tracks right before the playhead. The absolute
+/// index of the first track travels with the list, so a stale value (kept
+/// while a move refetches) can still be placed correctly.
+final FutureSignal<({int start, List<SimpleTrackDto> tracks})>
+queuePlayedWindowSignal = computedAsync(() async {
+  final ctx = appContextSignal();
+  final index = queueIndexSignal();
+  // Refetch on queue mutations, same as queueWindowSignal.
+  final _ = queueRevisionSignal();
+  if (ctx == null || index == 0) {
+    return (start: 0, tracks: const <SimpleTrackDto>[]);
+  }
+  final start = index > queuePlayedWindowLength
+      ? index - queuePlayedWindowLength
+      : 0;
+  return (
+    start: start,
+    tracks: await rust.queueWindow(ctx: ctx, offset: start, len: index - start),
+  );
+}, options: const AsyncSignalOptions(name: 'queuePlayedWindowSignal'));
 
 /// Playhead neighbourhood for preview consumers ([queueTracksSignal]). A
 /// failed refetch must not masquerade as an empty queue, so failures land in

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:m3e_core/m3e_core.dart';
 import 'package:material_ui/material_ui.dart';
@@ -70,6 +71,12 @@ class AppCover extends StatelessWidget {
   final BoxFit fit;
   final IconData? placeholderIcon;
 
+  /// Lower bound for the device pixel ratio used to pick the source
+  /// resolution. Yandex cover presets are coarse on 1x displays (80px for a
+  /// 52px row), so a 2 floor pulls the 200px preset there while keeping the
+  /// decode size the same as before on HiDPI screens.
+  final double minPixelRatio;
+
   const AppCover({
     this.coverUrl,
     this.url,
@@ -87,13 +94,14 @@ class AppCover extends StatelessWidget {
     this.hoverScale = 1.05,
     this.fit = BoxFit.cover,
     this.placeholderIcon,
+    this.minPixelRatio = 1,
   });
 
   @override
   Widget build(BuildContext context) {
     final effectiveRadius = radius ?? borderRadius;
     final pixelRatio = MediaQuery.devicePixelRatioOf(context);
-    final targetPx = (size * pixelRatio).round();
+    final targetPx = (size * math.max(pixelRatio, minPixelRatio)).round();
     final placeholder = CoverPlaceholder(
       circle: circle,
       size: size,
