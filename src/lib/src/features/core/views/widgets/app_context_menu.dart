@@ -39,7 +39,7 @@ class AppContextMenuItem<T> {
   });
 }
 
-class AppContextMenu<T> extends StatelessWidget {
+class AppContextMenu<T> extends StatefulWidget {
   final List<AppContextMenuItem<T>> items;
   final void Function(T value) onSelected;
   final Widget child;
@@ -64,6 +64,115 @@ class AppContextMenu<T> extends StatelessWidget {
   });
 
   @override
+  State<AppContextMenu<T>> createState() => _AppContextMenuState<T>();
+}
+
+class _AppContextMenuState<T> extends State<AppContextMenu<T>> {
+  final GlobalKey _anchorKey = GlobalKey();
+  final MenuController _controller = MenuController();
+  OverlayEntry? _entry;
+  ScrollPosition? _scrollPosition;
+
+  @override
+  void dispose() {
+    _hideEntry();
+    super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(covariant AppContextMenu<T> oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Keep an open menu in sync with fresh items (playlists, devices, ...).
+    // The parent is mid-build here, so refresh after the frame.
+    final entry = _entry;
+    if (entry == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _entry != null) entry.markNeedsBuild();
+    });
+  }
+
+  void _toggleMenu() {
+    if (_controller.isOpen) {
+      _controller.close();
+    } else {
+      _showMenu();
+    }
+  }
+
+  /// The popup is hosted in the root overlay, not inside the trigger. A menu
+  /// opened in place focuses itself, and list wrappers such as M3E segmented
+  /// items rebuild their subtree on any focus inside them — that recreated the
+  /// row and killed the just-opened menu (it looked like the menu closed by
+  /// itself on the first try, then worked on the second).
+  void _showMenu() {
+    if (_entry != null) return;
+    final box = _anchorKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null) return;
+    final origin = box.localToGlobal(Offset(0, box.size.height));
+
+    _entry = OverlayEntry(
+      builder: (context) => Stack(
+        children: [
+          Positioned(
+            left: origin.dx,
+            top: origin.dy,
+            child: MenuAnchor(
+              controller: _controller,
+              style: _menuStyle(context),
+              onClose: () {
+                widget.onClose?.call();
+                _hideEntry();
+              },
+              menuChildren: widget.items.asMap().entries.map((entry) {
+                return _buildItem(context, entry.value, entry.key);
+              }).toList(),
+              builder: (context, controller, child) => const SizedBox.shrink(),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    Overlay.of(context, rootOverlay: true).insert(_entry!);
+    // The popup does not move with the list, so any scroll would leave it
+    // hanging over a different row — and the action would hit the old one.
+    _scrollPosition = Scrollable.maybeOf(context)?.position;
+    _scrollPosition?.addListener(_hideEntry);
+    widget.onOpen?.call();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _entry != null) _controller.open();
+    });
+  }
+
+  void _hideEntry() {
+    _scrollPosition?.removeListener(_hideEntry);
+    _scrollPosition = null;
+    _entry?.remove();
+    _entry = null;
+  }
+
+  MenuStyle _menuStyle(BuildContext context) {
+    return MenuStyle(
+      backgroundColor: WidgetStateProperty.all(
+        Theme.of(context).colorScheme.surfaceContainerHighest,
+      ),
+      surfaceTintColor: WidgetStateProperty.all(Colors.transparent),
+      padding: WidgetStateProperty.all(EdgeInsets.zero),
+      elevation: WidgetStateProperty.all(12),
+      shape: WidgetStateProperty.all(
+        RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.sm),
+          side: BorderSide(
+            color: Theme.of(
+              context,
+            ).colorScheme.onSurface.withValues(alpha: 0.1),
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
     // Android has no hover/flyout menus: the same actions open as a sheet.
     if (Platform.isAndroid) {
@@ -71,66 +180,36 @@ class AppContextMenu<T> extends StatelessWidget {
         color: Colors.transparent,
         child: InkWell(
           onTap: () async {
-            onOpen?.call();
+            widget.onOpen?.call();
             await showAppActionSheet<T>(
               context,
-              actions: items,
-              onSelected: onSelected,
+              actions: widget.items,
+              onSelected: widget.onSelected,
             );
-            onClose?.call();
+            widget.onClose?.call();
           },
-          hoverColor: hoverColor,
-          highlightColor: hoverColor,
-          borderRadius: borderRadius,
-          child: child,
+          hoverColor: widget.hoverColor,
+          highlightColor: widget.hoverColor,
+          borderRadius: widget.borderRadius,
+          child: widget.child,
         ),
       );
     }
 
-    return MenuAnchor(
-      onOpen: onOpen,
-      onClose: onClose,
-      style: MenuStyle(
-        backgroundColor: WidgetStateProperty.all(
-          Theme.of(context).colorScheme.surfaceContainerHighest,
-        ),
-        surfaceTintColor: WidgetStateProperty.all(Colors.transparent),
-        padding: WidgetStateProperty.all(EdgeInsets.zero),
-        elevation: WidgetStateProperty.all(12),
-        shape: WidgetStateProperty.all(
-          RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppRadius.sm),
-            side: BorderSide(
-              color: Theme.of(
-                context,
-              ).colorScheme.onSurface.withValues(alpha: 0.1),
-            ),
-          ),
+    return ExcludeFocus(
+      // Local Material: ink paints at the trigger itself instead of a Material
+      // buried under opaque backgrounds (e.g. the player backdrop).
+      child: Material(
+        key: _anchorKey,
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: _toggleMenu,
+          hoverColor: widget.hoverColor,
+          highlightColor: widget.hoverColor,
+          borderRadius: widget.borderRadius,
+          child: widget.child,
         ),
       ),
-      menuChildren: items.asMap().entries.map((entry) {
-        return _buildItem(context, entry.value, entry.key);
-      }).toList(),
-      builder: (context, controller, child) {
-        // Local Material: ink paints at the trigger itself instead of a
-        // Material buried under opaque backgrounds (e.g. the player backdrop).
-        return Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: () {
-              if (controller.isOpen) {
-                controller.close();
-              } else {
-                controller.open();
-              }
-            },
-            hoverColor: hoverColor,
-            highlightColor: hoverColor,
-            borderRadius: borderRadius,
-            child: this.child,
-          ),
-        );
-      },
     );
   }
 
@@ -223,7 +302,7 @@ class AppContextMenu<T> extends StatelessWidget {
     return MenuItemButton(
       onPressed: () {
         if (item.value != null) {
-          onSelected(item.value as T);
+          widget.onSelected(item.value as T);
         }
       },
       leadingIcon: leading,
