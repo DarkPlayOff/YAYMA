@@ -616,17 +616,18 @@ pub async fn remove_track_from_playlist(
     track_id: String,
     album_id: Option<String>,
 ) -> bool {
-    let ok = ctx
+    let result = ctx
         .core
         .api
-        .remove_track_from_playlist(kind, track_id, album_id.unwrap_or_default())
-        .await
-        .is_ok();
-    if ok {
-        ctx.audio.signals.library_changed.send_replace(());
-        ctx.audio.signals.changed.send_replace(());
+        .remove_track_from_playlist(kind, track_id.clone(), album_id.unwrap_or_default())
+        .await;
+    if let Err(e) = result {
+        tracing::error!(kind, track_id = %track_id, error = %e, "playlist_track_remove_failed");
+        return false;
     }
-    ok
+    ctx.audio.signals.library_changed.send_replace(());
+    ctx.audio.signals.changed.send_replace(());
+    true
 }
 
 pub async fn create_playlist(ctx: &AppContext, title: String, is_public: bool) -> bool {

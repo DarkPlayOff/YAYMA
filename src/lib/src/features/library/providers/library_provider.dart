@@ -620,6 +620,8 @@ Future<bool> removeTrackFromPlaylistAction(
     // Keep the cached checkmarks in sync with the removal.
     _updateTrackMembership(trackId, kind, present: false);
     await refreshPlaylists();
+  } else {
+    showAppError('Не удалось удалить трек из плейлиста');
   }
   return success;
 }
@@ -641,7 +643,11 @@ Future<bool> moveTrackInPlaylistAction(
       albumId: albumId ?? '',
     ),
   );
-  if (success) await refreshPlaylists();
+  if (success) {
+    await refreshPlaylists();
+  } else {
+    showAppError('Не удалось переместить трек в плейлисте');
+  }
   return success;
 }
 

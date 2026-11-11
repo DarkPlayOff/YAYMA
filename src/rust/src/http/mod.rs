@@ -67,37 +67,6 @@ where
     Err(last.expect("attempts are non-empty").into())
 }
 
-/// True if the error chain carries HTTP 412 Precondition Failed.
-///
-/// `yandex-music 0.7.0` surfaces a non-2xx from `change-relative` as
-/// `ClientError::YandexMusicError { message: "Request failed with status code: 412 ..." }`
-/// (see `client/request.rs::send_request`), and transport-level failures as
-/// `ClientError::RequestError { reqwest::Error }`. Our API surface boxes everything
-/// into `Box<dyn Error>`, so match structurally where possible and fall back to
-/// substring search on the whole cause chain.
-fn is_precondition_failed(err: &(dyn std::error::Error + Send + Sync + 'static)) -> bool {
-    let mut cur: Option<&(dyn std::error::Error + 'static)> = Some(err);
-    while let Some(e) = cur {
-        if let Some(client_err) = e.downcast_ref::<yandex_music::error::ClientError>()
-            && let yandex_music::error::ClientError::RequestError { error } = client_err
-            && error.status().is_some_and(|s| s.as_u16() == 412)
-        {
-            return true;
-        }
-        if let Some(req_err) = e.downcast_ref::<reqwest::Error>()
-            && req_err.status().is_some_and(|s| s.as_u16() == 412)
-        {
-            return true;
-        }
-        let msg = e.to_string();
-        if msg.contains("status code: 412") || msg.contains("412 Precondition") {
-            return true;
-        }
-        cur = e.source();
-    }
-    false
-}
-
 /// Execute a raw request with the same bounded retry policy as the desktop client.
 /// The reqwest client timeout provides cancellation of the in-flight operation.
 pub async fn send_with_retry<F>(mut make_request: F) -> Result<reqwest::Response>
