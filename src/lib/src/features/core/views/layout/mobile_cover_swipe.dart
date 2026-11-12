@@ -173,17 +173,25 @@ class CoverSwipeController {
     final previousId = _reportedId;
     final previousIndex = _reportedIndex;
     final state = playerStateSignal.value;
-    _reportedId = trackId;
-    _reportedIndex = state?.queueIndex;
 
     if (trackId == previousId) {
-      // Same track: late metadata can still refine the artwork on screen.
+      // Same track: late metadata can still refine the artwork on screen. The
+      // index is deliberately not updated here: the queue actor bumps it
+      // before playback publishes the new track, so the outgoing track is
+      // briefly reported on the next position. Taking that index as the new
+      // one would swallow the direction of the slide that follows.
+      // shortcut: a reorder that moves the current track (shuffle) leaves the
+      // stored index stale until the next track change; the queue list still
+      // resolves most of those. Upgrade if shuffle-then-skip slides backwards.
       if (trackId == _centreId && coverUrl != _centreUrl) {
         _centreUrl = coverUrl;
         onChanged();
       }
       return;
     }
+
+    _reportedId = trackId;
+    _reportedIndex = state?.queueIndex;
 
     final direction = _changeDirection(
       previousId,
@@ -208,8 +216,9 @@ class CoverSwipeController {
     // While a landed artwork is held, a report that is still behind it is the
     // same slow skip, not news: remember it and keep waiting instead of
     // dragging the cover backwards.
-    if (_settleWatchdog != null &&
-        _isBehind(trackId ?? '', _centreId, _heldDirection)) {
+    if (trackId != null &&
+        _settleWatchdog != null &&
+        _isBehind(trackId, _centreId, _heldDirection)) {
       _pending = null;
       return;
     }

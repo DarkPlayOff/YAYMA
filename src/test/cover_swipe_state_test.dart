@@ -27,11 +27,12 @@ List<SimpleTrackDto> _queue(List<String> ids) => ids.map(_track).toList();
 
 PlaybackState _state(
   List<String> ids,
-  String trackId, {
+  String? trackId, {
   bool isPlaying = true,
   RepeatModeDto repeat = RepeatModeDto.none,
+  int? atIndex,
 }) {
-  final index = ids.indexOf(trackId);
+  final index = atIndex ?? (trackId == null ? -1 : ids.indexOf(trackId));
   return PlaybackState(
     isPlaying: isPlaying,
     isBuffering: false,
@@ -42,7 +43,7 @@ PlaybackState _state(
     queueCount: ids.length,
     queueIndex: index < 0 ? 0 : index,
     queueRevision: 0,
-    currentTrack: _track(trackId),
+    currentTrack: trackId == null ? null : _track(trackId),
     currentWaveSeeds: const [],
   );
 }
@@ -624,6 +625,92 @@ void main() {
       expect(bench.swipe.direction, -1);
       await _expectRest(bench, 'b');
     });
+
+    testWidgets(
+      'an index bump reported before the track does not eat the slide',
+      (tester) async {
+        final bench = _Bench(tester);
+
+        // The queue actor bumps the index before playback publishes the new
+        // track, so one state still names the outgoing track.
+        playerStateSignal.value = _state(bench.ids, 'a', atIndex: 1);
+        bench.swipe.onTrackChange(trackId: 'a', coverUrl: 'a.jpg');
+        bench.play('b');
+
+        expect(bench.swipe.direction, 1);
+        expect(bench.swipe.incomingUrl, 'b.jpg');
+        await _expectRest(bench, 'b');
+      },
+    );
+
+    testWidgets('a stop clears the cover', (tester) async {
+      final bench = _Bench(tester);
+
+      playerStateSignal.value = _state(const [], null);
+      bench.swipe.onTrackChange();
+
+      expect(bench.swipe.holdUrl, isNull);
+    });
+
+    testWidgets(
+      'a repeat-all wrap keeps its direction through the index bump',
+      (tester) async {
+        const ids = ['a', 'b', 'c', 'd', 'e'];
+        // The app reads a ±1 window around the playhead, and it still shows the
+        // previous position while the queue signal refetches.
+        final window = [
+          for (final id in ['d', 'e']) _track(id),
+        ];
+        playerStateSignal.value = _state(
+          ids,
+          'e',
+          atIndex: 4,
+          repeat: RepeatModeDto.all,
+        );
+        final animation = AnimationController(
+          vsync: const TestVSync(),
+          duration: const Duration(milliseconds: 400),
+          lowerBound: double.negativeInfinity,
+          upperBound: double.infinity,
+          value: 0,
+        );
+        addTearDown(animation.dispose);
+        final swipe = CoverSwipeController(
+          animation: animation,
+          travel: () => _travel,
+          canAnimate: () => true,
+          isMounted: () => true,
+          onNext: () {},
+          onPrevious: () {},
+          onChanged: () {},
+          queue: () => window,
+          initialTrack: _track('e'),
+          initialIndex: 4,
+        );
+        addTearDown(swipe.dispose);
+
+        // The index has wrapped already, playback still names the last track.
+        playerStateSignal.value = _state(
+          ids,
+          'e',
+          atIndex: 0,
+          repeat: RepeatModeDto.all,
+        );
+        swipe.onTrackChange(trackId: 'e', coverUrl: 'e.jpg');
+        playerStateSignal.value = _state(
+          ids,
+          'a',
+          atIndex: 0,
+          repeat: RepeatModeDto.all,
+        );
+        swipe.onTrackChange(trackId: 'a', coverUrl: 'a.jpg');
+
+        expect(swipe.direction, 1);
+        expect(swipe.incomingUrl, 'a.jpg');
+        expect(swipe.canCommit, isTrue);
+        swipe.reset();
+      },
+    );
 
     testWidgets('a queue replaced in place still slides, by list position', (
       tester,

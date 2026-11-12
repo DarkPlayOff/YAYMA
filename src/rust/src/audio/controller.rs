@@ -746,7 +746,13 @@ impl AudioController {
         soft_reload: bool,
     ) {
         if !soft_reload {
-            self.stop().await;
+            // Tear down without publishing a stopped state, then publish the
+            // incoming track below in one step. `stop()` used to run here and
+            // briefly reported "no current track": consumers saw the switch as
+            // a stop (covers snapped instead of sliding, the notification
+            // flickered) depending on whether the bridge worker happened to
+            // read the signals in that window.
+            self.teardown_playback().await;
         } else {
             // Only stop current task and clear engine, without resetting UI signals.
             // No generation bump here: the single claim below invalidates the
@@ -769,9 +775,14 @@ impl AudioController {
             self.stream_error_retries.store(0, Ordering::SeqCst);
             self.reload_in_flight.store(0, Ordering::SeqCst);
             self.pause_requested.store(false, Ordering::SeqCst);
-            self.signals.is_stopped.set(false);
+            // Same switch state `stop()` used to publish, minus the empty
+            // current track: buffering shows, play is paused, progress restarts.
+            self.signals.set_playing(false);
             self.update_crossfade_out_window(&track);
             self.signals.set_current_track(Some(track.clone()));
+            self.signals
+                .update_progress(0, self.signals.duration_ms.get());
+            self.signals.update_buffered_ratio(0.0);
         }
 
         let engine = self.engine.clone();
@@ -934,7 +945,10 @@ impl AudioController {
         *task_guard = Some(task);
     }
 
-    pub(crate) async fn stop(&self) {
+    /// Tears the current playback down without publishing a "stopped" state.
+    /// The caller owns the signal writes that follow, so a track switch can
+    /// publish the incoming track directly instead of looking like a stop.
+    async fn teardown_playback(&self) {
         let mut task_guard = self.current_playback_task.lock().await;
         if let Some(task) = task_guard.take() {
             task.abort();
@@ -946,6 +960,10 @@ impl AudioController {
         self.engine.stop();
         self.progress_clock.reset();
         *self.progress_source.lock() = None;
+    }
+
+    pub(crate) async fn stop(&self) {
+        self.teardown_playback().await;
 
         self.signals.set_playing(false);
         self.signals.set_current_track(None);
