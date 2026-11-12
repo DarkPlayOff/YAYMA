@@ -120,72 +120,9 @@ class _LibraryViewState extends State<LibraryView>
   }
 
   void _showCreatePlaylistDialog(BuildContext context) {
-    final controller = TextEditingController();
-    var isPublic = false;
-
-    unawaited(
-      showDialog<void>(
-        context: context,
-        builder: (context) => StatefulBuilder(
-          builder: (context, setState) {
-            final cs = Theme.of(context).colorScheme;
-            return AppDialog(
-              title: 'Новый плейлист',
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    controller: controller,
-                    style: TextStyle(color: cs.onSurface),
-                    decoration: InputDecoration(
-                      hintText: 'Название',
-                      hintStyle: TextStyle(
-                        color: cs.onSurface.withValues(alpha: 0.24),
-                      ),
-                      filled: true,
-                      fillColor: cs.onSurface.withValues(alpha: 0.05),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(AppRadius.sm),
-                        borderSide: BorderSide.none,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  SwitchListTile(
-                    title: Text(
-                      'Публичный',
-                      style: TextStyle(color: cs.onSurfaceVariant),
-                    ),
-                    value: isPublic,
-                    onChanged: (val) => setState(() => isPublic = val),
-                  ),
-                ],
-              ),
-              actions: [
-                AppDialog.cancelButton(context),
-                M3EElevatedButton(
-                  onPressed: () async {
-                    if (controller.text.isNotEmpty) {
-                      final success = await createPlaylistAction(
-                        controller.text,
-                        isPublic: isPublic,
-                      );
-                      if (!context.mounted) return;
-                      Navigator.pop(context);
-                      if (!success) {
-                        showAppError('Ошибка при создании плейлиста');
-                      } else {
-                        showAppSuccess('Плейлист "${controller.text}" создан');
-                      }
-                    }
-                  },
-                  child: const Text('Создать'),
-                ),
-              ],
-            );
-          },
-        ),
-      ).whenComplete(controller.dispose),
+    showDialog<void>(
+      context: context,
+      builder: (context) => const _CreatePlaylistDialog(),
     );
   }
 
@@ -1182,6 +1119,82 @@ class _PlaylistCardState extends State<_PlaylistCard> {
           );
         },
       ),
+    );
+  }
+}
+
+/// Owns its [TextEditingController] so it dies with the dialog widget, not on
+/// pop: the exiting dialog still rebuilds (e.g. when the keyboard closes) and
+/// a disposed controller then throws "used after being disposed".
+class _CreatePlaylistDialog extends StatefulWidget {
+  const _CreatePlaylistDialog();
+
+  @override
+  State<_CreatePlaylistDialog> createState() => _CreatePlaylistDialogState();
+}
+
+class _CreatePlaylistDialogState extends State<_CreatePlaylistDialog> {
+  final TextEditingController _controller = TextEditingController();
+  bool _isPublic = false;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _create() async {
+    final title = _controller.text;
+    if (title.isEmpty) return;
+
+    final success = await createPlaylistAction(title, isPublic: _isPublic);
+    if (!mounted) return;
+    Navigator.pop(context);
+    if (!success) {
+      showAppError('Ошибка при создании плейлиста');
+    } else {
+      showAppSuccess('Плейлист "$title" создан');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
+    return AppDialog(
+      title: 'Новый плейлист',
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: _controller,
+            style: TextStyle(color: cs.onSurface),
+            decoration: InputDecoration(
+              hintText: 'Название',
+              hintStyle: TextStyle(color: cs.onSurface.withValues(alpha: 0.24)),
+              filled: true,
+              fillColor: cs.onSurface.withValues(alpha: 0.05),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(AppRadius.sm),
+                borderSide: BorderSide.none,
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          SwitchListTile(
+            title: Text(
+              'Публичный',
+              style: TextStyle(color: cs.onSurfaceVariant),
+            ),
+            value: _isPublic,
+            onChanged: (val) => setState(() => _isPublic = val),
+          ),
+        ],
+      ),
+      actions: [
+        AppDialog.cancelButton(context),
+        M3EElevatedButton(onPressed: _create, child: const Text('Создать')),
+      ],
     );
   }
 }

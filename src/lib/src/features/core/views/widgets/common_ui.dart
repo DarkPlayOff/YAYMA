@@ -1056,41 +1056,80 @@ Future<String?> showTextPromptDialog(
   String? initial,
   bool autofocus = false,
 }) {
-  final controller = TextEditingController(text: initial);
-  final cs = Theme.of(context).colorScheme;
-
   return showDialog<String>(
     context: context,
-    builder: (dialogContext) {
-      void close([String? value]) =>
-          Navigator.of(dialogContext).pop<String>(value);
+    builder: (dialogContext) => _TextPromptDialog(
+      title: title,
+      hint: hint,
+      confirmLabel: confirmLabel,
+      initial: initial,
+      autofocus: autofocus,
+    ),
+  ).then((value) => value?.trim());
+}
 
-      return AppDialog(
-        title: title,
-        content: TextField(
-          controller: controller,
-          autofocus: autofocus,
-          style: TextStyle(color: cs.onSurface),
-          decoration: InputDecoration(
-            hintText: hint,
-            hintStyle: TextStyle(color: cs.onSurface.withValues(alpha: 0.24)),
-            filled: true,
-            fillColor: cs.onSurface.withValues(alpha: 0.05),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(AppRadius.sm),
-              borderSide: BorderSide.none,
-            ),
+/// Owns its [TextEditingController] so it is disposed with the dialog widget.
+class _TextPromptDialog extends StatefulWidget {
+  final String title;
+  final String hint;
+  final String confirmLabel;
+  final String? initial;
+  final bool autofocus;
+
+  const _TextPromptDialog({
+    required this.title,
+    required this.hint,
+    required this.confirmLabel,
+    required this.initial,
+    required this.autofocus,
+  });
+
+  @override
+  State<_TextPromptDialog> createState() => _TextPromptDialogState();
+}
+
+class _TextPromptDialogState extends State<_TextPromptDialog> {
+  late final TextEditingController _controller = TextEditingController(
+    text: widget.initial,
+  );
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _close([String? value]) => Navigator.of(context).pop<String>(value);
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
+    return AppDialog(
+      title: widget.title,
+      content: TextField(
+        controller: _controller,
+        autofocus: widget.autofocus,
+        style: TextStyle(color: cs.onSurface),
+        decoration: InputDecoration(
+          hintText: widget.hint,
+          hintStyle: TextStyle(color: cs.onSurface.withValues(alpha: 0.24)),
+          filled: true,
+          fillColor: cs.onSurface.withValues(alpha: 0.05),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(AppRadius.sm),
+            borderSide: BorderSide.none,
           ),
-          onSubmitted: close,
         ),
-        actions: [
-          AppDialog.cancelButton(dialogContext),
-          M3EFilledButton(
-            onPressed: () => close(controller.text),
-            child: Text(confirmLabel),
-          ),
-        ],
-      );
-    },
-  ).then((value) => value?.trim()).whenComplete(controller.dispose);
+        onSubmitted: _close,
+      ),
+      actions: [
+        AppDialog.cancelButton(context),
+        M3EFilledButton(
+          onPressed: () => _close(_controller.text),
+          child: Text(widget.confirmLabel),
+        ),
+      ],
+    );
+  }
 }
