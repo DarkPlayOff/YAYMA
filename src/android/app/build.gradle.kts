@@ -1,19 +1,8 @@
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.jsonArray
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
+import org.gradle.api.file.RegularFileProperty
+import org.gradle.api.provider.ValueSource
+import org.gradle.api.provider.ValueSourceParameters
 import java.io.FileInputStream
 import java.util.Properties
-
-buildscript {
-    repositories {
-        mavenCentral()
-    }
-    dependencies {
-        classpath("org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0")
-    }
-}
 
 plugins {
     id("com.android.application")
@@ -82,34 +71,53 @@ kotlin {
 }
 
 dependencies {
-    implementation("rustls:rustls-platform-verifier:latest.release")
+    // The version comes from Cargo.lock via the resolution strategy below.
+    implementation("org.rustls:rustls-platform-verifier")
+}
+
+abstract class RustlsVersion : ValueSource<String, RustlsVersion.Params> {
+    interface Params : ValueSourceParameters {
+        val lockFile: RegularFileProperty
+    }
+
+    companion object {
+        const val CRATE_NAME = "rustls-platform-verifier-android"
+    }
+
+    override fun obtain(): String {
+        val version = parameters.lockFile.get().asFile.readLines().let { lines ->
+            val nameIdx = lines.indexOfFirst { it.trim() == "name = \"$CRATE_NAME\"" }
+            if (nameIdx < 0) {
+                null
+            } else {
+                lines.drop(nameIdx + 1)
+                    .firstOrNull { it.trimStart().startsWith("version = ") }
+                    ?.substringAfter('"', "")
+                    ?.substringBefore('"', "")
+                    ?.takeIf { it.isNotEmpty() }
+            }
+        }
+        return version ?: error("$CRATE_NAME not found in Cargo.lock")
+    }
+}
+
+val rustlsPlatformVerifierVersion = providers.of(RustlsVersion::class.java) {
+    parameters.lockFile.set(rootProject.layout.projectDirectory.file("../rust/Cargo.lock"))
+}
+
+configurations.configureEach {
+    resolutionStrategy.eachDependency {
+        if (requested.group == "org.rustls" && requested.name == "rustls-platform-verifier") {
+            useVersion(rustlsPlatformVerifierVersion.get())
+            because("native component version must match ${RustlsVersion.CRATE_NAME}")
+        }
+    }
 }
 
 repositories {
-    rustlsPlatformVerifier()
-}
-
-fun RepositoryHandler.rustlsPlatformVerifier(): MavenArtifactRepository {
-    @Suppress("UnstableApiUsage")
-    val manifestPath = let {
-        val dependencyJson = providers.exec {
-            workingDir = File(project.rootDir, "../rust")
-            commandLine("cargo", "metadata", "--format-version", "1", "--filter-platform", "aarch64-linux-android", "--manifest-path", "Cargo.toml")
-        }.standardOutput.asText
-
-        val path = Json.decodeFromString<JsonObject>(dependencyJson.get())
-            .getValue("packages")
-            .jsonArray
-            .first { element ->
-                element.jsonObject.getValue("name").jsonPrimitive.content == "rustls-platform-verifier-android"
-            }.jsonObject.getValue("manifest_path").jsonPrimitive.content
-
-        File(path)
-    }
-
-    return maven {
-        url = uri(File(manifestPath.parentFile, "maven").path)
-        metadataSources.artifact()
+    // rustls-platform-verifier 0.7 ships its Kotlin component here, not inside the crate.
+    maven {
+        url = uri("https://github.com/rustls/rustls-platform-verifier/raw/maven-archive/android-release-support/maven/")
     }
 }
 

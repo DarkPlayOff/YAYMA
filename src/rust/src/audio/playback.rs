@@ -246,15 +246,15 @@ impl PlaybackEngine {
         })?;
 
         let tx_clone = self.tx.clone();
-        let error_callback = move |err: rodio::cpal::StreamError| {
-            match err {
+        let error_callback = move |err: rodio::cpal::Error| {
+            match err.kind() {
                 // cpal already recovers an xrun internally (prepare/try_recover), so
                 // recreating the stream here would only drop audio — and on VMs where
                 // underruns are constant, turn every glitch into an endless recreate loop.
-                rodio::cpal::StreamError::BufferUnderrun => {
+                rodio::cpal::ErrorKind::Xrun => {
                     tracing::debug!("audio_stream_underrun");
                 }
-                err => {
+                _ => {
                     tracing::error!(error = ?err, "audio_stream_error");
                     let _ = tx_clone.try_send(crate::audio::commands::AudioMessage::RecreateStream);
                 }

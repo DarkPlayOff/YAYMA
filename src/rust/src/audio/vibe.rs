@@ -168,14 +168,14 @@ impl VibeEngine {
         if self.is_liking {
             if let Some(start) = self.like_start_time {
                 let elapsed = start.elapsed().as_millis() as f32;
-                for i in 0..3 {
+                for (i, react) in self.react.iter_mut().enumerate() {
                     let delay = match i {
                         0 => 0.0,
                         1 => 100.0,
                         _ => 150.0,
                     };
                     let t = elapsed - delay;
-                    self.react[i] = if t < 0.0 {
+                    *react = if t < 0.0 {
                         0.0
                     } else if t < 400.0 {
                         0.7 * (t / 400.0)

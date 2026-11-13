@@ -1,0 +1,27 @@
+name: Setup Rust
+description: Installs the Rust toolchain pinned in src/rust/rust-toolchain.toml
+
+inputs:
+  targets:
+    description: Comma-separated targets to install in addition to the toolchain file
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Read pinned version
+      id: pinned
+      shell: bash
+      run: |
+        version=$(sed -n 's/^[[:space:]]*channel[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' src/rust/rust-toolchain.toml | head -n1)
+        if [ -z "$version" ]; then
+          echo "::error::Could not resolve channel from src/rust/rust-toolchain.toml"
+          exit 1
+        fi
+        echo "version=$version" >> "$GITHUB_OUTPUT"
+
+    - uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: ${{ steps.pinned.outputs.version }}
+        targets: ${{ inputs.targets }}

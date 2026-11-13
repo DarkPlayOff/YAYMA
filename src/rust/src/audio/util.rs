@@ -147,7 +147,7 @@ pub fn construct_sink<F>(
     error_callback: F,
 ) -> Result<(MixerDeviceSink, Player), Box<dyn std::error::Error + Send + Sync>>
 where
-    F: FnMut(rodio::cpal::StreamError) + Send + Clone + 'static,
+    F: FnMut(rodio::cpal::Error) + Send + Clone + 'static,
 {
     let stream = DeviceSinkBuilder::default()
         .with_device(device)
