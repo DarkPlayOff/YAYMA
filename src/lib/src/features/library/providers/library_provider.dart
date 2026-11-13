@@ -146,7 +146,10 @@ Future<void> disposeLibrary() async {
   _librarySearchDebouncer.dispose();
   final sub = _likedSub;
   _likedSub = null;
-  await sub?.cancel();
+  // Never await: an FFI stream cancel may never complete, which used to stall
+  // logout before it could show the login screen. Late chunks are dropped by
+  // the `sub != _likedSub` guards.
+  unawaited(sub?.cancel());
   _resetLikedAccum();
   likedTracksSignal.value = [];
   playlistsSignal.value = [];

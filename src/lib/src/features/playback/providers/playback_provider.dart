@@ -78,8 +78,11 @@ Future<void> initPlayback() {
 Future<void> disposePlayback() async {
   _initPlaybackFuture = null;
   _progressTrackId = null;
-  await _eventSub?.cancel();
+  // Clear the handle first and don't await the cancel: an FFI stream cancel
+  // may never complete and must not stall logout before it reaches the UI.
+  final sub = _eventSub;
   _eventSub = null;
+  unawaited(sub?.cancel());
 
   _bufferingDelayDebouncer.dispose();
   _stablePlayingDebouncer.dispose();
@@ -117,8 +120,9 @@ Future<void> _initPlaybackUnsafe() async {
     unawaited(rust.setVibeAnimationEnabled(ctx: ctx, enabled: false));
   }
 
-  await _eventSub?.cancel();
+  final previousSub = _eventSub;
   _eventSub = null;
+  unawaited(previousSub?.cancel());
 
   // Initialize app event stream
   final subscription = rust.appEventStream(ctx: ctx).listen((event) {
@@ -189,8 +193,9 @@ Future<void> _initPlaybackUnsafe() async {
   // Installing effects and theme now would bind them to the dead context.
   if (!identical(appContextSignal.value, ctx)) {
     // Cancel only our own subscription: a new init may have replaced it
-    // while this one was awaiting.
-    await subscription.cancel();
+    // while this one was awaiting. Not awaited — an FFI cancel may never
+    // complete.
+    unawaited(subscription.cancel());
     if (identical(_eventSub, subscription)) _eventSub = null;
     return;
   }

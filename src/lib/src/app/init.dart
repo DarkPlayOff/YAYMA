@@ -165,12 +165,25 @@ class AppInit {
 
   static Future<void> logout() async {
     _authEpoch++;
-    await PlaybackController.stop();
-    await disposePlayback();
-    await disposeLibrary();
-    clearLyricsCache();
-    await disposeSearch();
-    await clearToken();
+
+    // Each step is independent and bounded: one failed or stuck cancel must not
+    // skip the rest (a skipped clearToken would auto-login the next launch) nor
+    // leave the UI in the account, which forced the user to press "log out"
+    // twice.
+    Future<void> step(Future<void> Function() action) async {
+      try {
+        await action().timeout(const Duration(seconds: 5));
+      } on Object catch (e) {
+        appLog(AppLogLevel.error, 'logout teardown failed: $e');
+      }
+    }
+
+    await step(PlaybackController.stop);
+    await step(disposePlayback);
+    await step(disposeLibrary);
+    await step(() async => clearLyricsCache());
+    await step(disposeSearch);
+    await step(clearToken);
     accountSignal.value = null;
     appContextSignal.value = null;
     // Drop the previous account's open album/playlist stack.
