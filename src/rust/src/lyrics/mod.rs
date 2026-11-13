@@ -1,5 +1,6 @@
 pub mod lrc;
 pub mod providers;
+pub mod timeline;
 pub mod ttml;
 
 use crate::api::models::{LyricsLineDto, LyricsWordDto};

@@ -98,11 +98,19 @@ class _Player {
     );
   }
 
-  /// [queueTracksSignal] is filled from Rust in the app; the test injects the
-  /// list it would return. Every state change makes the signal re-fetch, so it
-  /// has to be re-injected afterwards.
+  /// [queueNeighborhoodSignal] is filled from Rust in the app; the test
+  /// injects the window and the resolved neighbours it would return. Every
+  /// state change makes the signal re-fetch, so it has to be re-injected
+  /// afterwards.
   Future<void> publishQueue() async {
-    queueTracksSignal.setValue(_ids.map(_track).toList());
+    final index = _ids.indexOf(current);
+    queueNeighborhoodSignal.setValue(
+      QueueNeighborhoodDto(
+        tracks: _ids.map(_track).toList(),
+        previous: index > 0 ? _track(_ids[index - 1]) : null,
+        next: index + 1 < _ids.length ? _track(_ids[index + 1]) : null,
+      ),
+    );
     await tester.pump();
   }
 

@@ -5,7 +5,8 @@ use crate::api::models::{
 };
 use crate::app::AppContext;
 use crate::lyrics::{
-    LyricsQuery, ParsedLine, ProviderId, fetch_from_provider, has_word_sync, lrc, to_lines_dto,
+    LyricsQuery, ParsedLine, ProviderId, fetch_from_provider, has_word_sync, lrc, timeline,
+    to_lines_dto,
 };
 use crate::storage::cache::HttpCache;
 use crate::util::flac::extract_native_flac;
@@ -389,6 +390,19 @@ pub async fn delete_downloaded_track(ctx: &AppContext, track_id: String) -> Resu
         .await
         .map_err(|e| AppError::Unknown(e.to_string()))?;
     Ok(())
+}
+
+/// Deletes every given download in one call, ignoring per-track failures so a
+/// single bad file cannot stop the batch. Returns how many were actually
+/// deleted.
+pub async fn delete_downloaded_tracks(ctx: &AppContext, track_ids: Vec<String>) -> u32 {
+    let mut deleted = 0;
+    for track_id in track_ids {
+        if ctx.core.track_cache.delete_track(&track_id).await.is_ok() {
+            deleted += 1;
+        }
+    }
+    deleted
 }
 
 pub async fn get_downloaded_track_ids(ctx: &AppContext) -> Vec<String> {
@@ -795,6 +809,12 @@ async fn build_query(ctx: &AppContext, track_id: &str) -> Option<LyricsQuery> {
 /// disabled in settings are skipped entirely.
 pub async fn get_lyrics(ctx: &AppContext, track_id: String) -> Option<LyricsResultDto> {
     let query = build_query(ctx, &track_id).await;
+    // `duration` is whole seconds, -1 when the API did not report it.
+    let track_duration_ms = query
+        .as_ref()
+        .map(|q| q.duration)
+        .filter(|duration| *duration >= 0)
+        .map(|duration| i64::from(duration) * 1000);
     let enabled = resolve_enabled(ctx).await;
 
     let word_sync: Vec<ProviderId> = word_sync_batch()
@@ -804,23 +824,27 @@ pub async fn get_lyrics(ctx: &AppContext, track_id: String) -> Option<LyricsResu
 
     let batch_result = race_batch(ctx, &track_id, query.as_ref(), &word_sync).await;
     if let Some((provider, lines)) = batch_result.word_sync {
-        return Some(to_result(provider, lines));
+        return Some(to_result(provider, lines, track_duration_ms));
     }
 
     if let Some((provider, lines)) =
         fetch_provider_timed(ctx, ProviderId::Yandex, &track_id, query.as_ref()).await
     {
-        return Some(to_result(provider, lines));
+        return Some(to_result(provider, lines, track_duration_ms));
     }
 
     batch_result
         .first_any
-        .map(|(provider, lines)| to_result(provider, lines))
+        .map(|(provider, lines)| to_result(provider, lines, track_duration_ms))
 }
 
-fn to_result(provider: ProviderId, lines: Vec<ParsedLine>) -> LyricsResultDto {
+fn to_result(
+    provider: ProviderId,
+    lines: Vec<ParsedLine>,
+    track_duration_ms: Option<i64>,
+) -> LyricsResultDto {
     LyricsResultDto {
-        lines: to_lines_dto(lines),
+        timeline: timeline::build_timeline(to_lines_dto(lines), track_duration_ms),
         provider_name: provider.display_name().to_string(),
     }
 }

@@ -94,7 +94,7 @@ FutureSignal<LyricsResult> lyricsSignal(String trackId) {
     try {
       final result = await getLyrics(ctx: ctx, trackId: trackId);
       if (result == null) return LyricsResult([], '');
-      return LyricsResult(_toLyricItems(result.lines), result.providerName);
+      return LyricsResult(_toLyricItems(result.timeline), result.providerName);
     } on Object {
       _lyricsFailedAt[trackId] = DateTime.now();
       rethrow;
@@ -104,89 +104,29 @@ FutureSignal<LyricsResult> lyricsSignal(String trackId) {
   return created;
 }
 
-List<LyricItem> _toLyricItems(List<LyricsLineDto> lines) {
-  if (lines.isEmpty) return [];
-
-  final rawLines = lines
-      .map(
-        (line) => (
-          time: Duration(milliseconds: line.startMs),
-          text: line.text,
-          words: line.words.isEmpty
-              ? null
-              : line.words
-                    .map(
-                      (w) => LyricWord(
-                        text: w.text,
-                        start: Duration(milliseconds: w.startMs),
-                        end: Duration(milliseconds: w.endMs),
-                      ),
-                    )
-                    .toList(),
-        ),
-      )
-      .toList();
-
-  final result = <LyricItem>[];
-
-  if (rawLines.isNotEmpty && rawLines.first.time > const Duration(seconds: 5)) {
-    result.add(
-      LyricTimer(
-        const Duration(seconds: 1),
-        rawLines.first.time - const Duration(seconds: 2),
-      ),
+/// Maps Rust's ready-built timeline (timing rules live there) onto the UI's
+/// item classes. A `null` line is a pause.
+List<LyricItem> _toLyricItems(List<LyricItemDto> timeline) {
+  return timeline.map((item) {
+    final time = Duration(milliseconds: item.timeMs);
+    final duration = Duration(milliseconds: item.durationMs);
+    final line = item.line;
+    if (line == null) return LyricTimer(time, duration);
+    return LyricLine(
+      time,
+      line.text,
+      duration,
+      words: line.words.isEmpty
+          ? null
+          : line.words
+                .map(
+                  (w) => LyricWord(
+                    text: w.text,
+                    start: Duration(milliseconds: w.startMs),
+                    end: Duration(milliseconds: w.endMs),
+                  ),
+                )
+                .toList(),
     );
-  }
-
-  for (var i = 0; i < rawLines.length; i++) {
-    final current = rawLines[i];
-    final nextTime = (i + 1 < rawLines.length)
-        ? rawLines[i + 1].time
-        : current.time + const Duration(seconds: 10);
-
-    final duration = nextTime - current.time;
-
-    if (duration > const Duration(seconds: 5)) {
-      final words = current.words;
-      // Word timings can span most of a long gap: end the line when the last
-      // word is sung instead of stopping the karaoke cursor after 4 s.
-      final sung = (words != null && words.isNotEmpty)
-          ? words.last.end - current.time
-          : const Duration(seconds: 4);
-      final textDuration = sung < Duration.zero
-          ? Duration.zero
-          : (sung > duration ? duration : sung);
-      result.add(
-        LyricLine(current.time, current.text, textDuration, words: words),
-      );
-
-      final timerStart = current.time + textDuration;
-      final timerDuration =
-          duration - textDuration - const Duration(seconds: 1);
-
-      if (timerDuration > Duration.zero) {
-        result.add(LyricTimer(timerStart, timerDuration));
-      }
-    } else {
-      result.add(
-        LyricLine(current.time, current.text, duration, words: current.words),
-      );
-    }
-  }
-
-  return result;
-}
-
-/// Appends the closing pause: the gap between the last sung line and the end
-/// of the track, when it is longer than 5 s.
-List<LyricItem> withOutroTimer(List<LyricItem> items, Duration trackDuration) {
-  final last = items.isEmpty ? null : items.last;
-  if (last is! LyricLine) return items;
-  final words = last.words;
-  final lineEnd = (words != null && words.isNotEmpty)
-      ? words.last.end
-      : last.time + const Duration(seconds: 4);
-  final gap = trackDuration - lineEnd;
-  if (gap <= const Duration(seconds: 5)) return items;
-  return [...items, LyricTimer(lineEnd, gap)];
+  }).toList();
 }

@@ -1,7 +1,8 @@
-use crate::api::models::SimpleTrackDto;
 pub use crate::api::models::{PlaybackState, RepeatModeDto};
+use crate::api::models::{QueueNeighborhoodDto, SimpleTrackDto};
 use crate::app::AppContext;
 use crate::audio::commands::AudioMessage;
+use crate::audio::queue::preview_neighbor;
 
 pub(crate) fn get_playback_state_internal<S: std::hash::BuildHasher>(
     signals: &crate::audio::signals::AudioSignals,
@@ -199,6 +200,40 @@ pub async fn queue_window(ctx: &AppContext, offset: u32, len: u32) -> Vec<Simple
             .take(len as usize)
             .map(|t| SimpleTrackDto::from_yandex(t, &liked_ids, &disliked_ids))
             .collect()
+    })
+}
+
+/// Preview of the queue neighbourhood for the cover hints: the tracks around
+/// the playhead plus the previous/next tracks resolved with the same repeat
+/// policy as real playback, so the hints cannot drift from the queue.
+/// Nothing advances.
+pub async fn queue_neighborhood(ctx: &AppContext) -> QueueNeighborhoodDto {
+    let signals = &ctx.audio.signals;
+    let count = signals.queue_length.get();
+    let index = signals.queue_index.get();
+    let (liked_ids, disliked_ids) = ctx.audio.state.read().await.liked.snapshot();
+
+    signals.queue.with(|q| {
+        let tracks = if count == 0 {
+            Vec::new()
+        } else {
+            let base = index.saturating_sub(1);
+            q.iter()
+                .skip(base)
+                .take(3)
+                .map(|t| SimpleTrackDto::from_yandex(t, &liked_ids, &disliked_ids))
+                .collect()
+        };
+        let neighbor = |forward| {
+            preview_neighbor(count, index, signals.repeat_mode.get(), forward)
+                .and_then(|i| q.get(i))
+                .map(|t| SimpleTrackDto::from_yandex(t, &liked_ids, &disliked_ids))
+        };
+        QueueNeighborhoodDto {
+            tracks,
+            previous: neighbor(false),
+            next: neighbor(true),
+        }
     })
 }
 

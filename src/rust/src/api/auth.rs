@@ -1,12 +1,58 @@
 use crate::api::models::{AppError, SavedStateDto, UserAccountDto};
 use crate::app::{AppContext, initialize_app, initialize_infrastructure};
 use crate::auth::TokenProvider;
+use crate::auth::device;
 use crate::http::ApiService;
 use flutter_rust_bridge::frb;
+use serde::{Deserialize, Serialize};
 
 #[frb(init)]
 pub fn init_app() {
     initialize_infrastructure(None);
+}
+
+#[flutter_rust_bridge::frb(unignore)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct DeviceCodeDto {
+    pub user_code: String,
+    pub device_code: String,
+    pub verification_url: String,
+    pub interval: u32,
+}
+
+#[flutter_rust_bridge::frb(unignore)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct DeviceTokenDto {
+    pub access_token: Option<String>,
+    /// Provider rejection message; `None` while the user has not confirmed yet.
+    pub error: Option<String>,
+}
+
+pub async fn yandex_device_code() -> Result<DeviceCodeDto, AppError> {
+    let code = device::request_device_code().await?;
+    Ok(DeviceCodeDto {
+        user_code: code.user_code,
+        device_code: code.device_code,
+        verification_url: code.verification_url,
+        interval: code.interval,
+    })
+}
+
+pub async fn yandex_device_token(device_code: String) -> Result<DeviceTokenDto, AppError> {
+    match device::poll_token(&device_code).await? {
+        device::DeviceToken::Received(token) => Ok(DeviceTokenDto {
+            access_token: Some(token),
+            error: None,
+        }),
+        device::DeviceToken::Pending => Ok(DeviceTokenDto {
+            access_token: None,
+            error: None,
+        }),
+        device::DeviceToken::Rejected(error) => Ok(DeviceTokenDto {
+            access_token: None,
+            error: Some(error),
+        }),
+    }
 }
 
 pub async fn restore_saved_state(ctx: &AppContext) -> Option<SavedStateDto> {

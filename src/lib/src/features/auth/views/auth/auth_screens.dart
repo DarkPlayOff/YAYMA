@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/services.dart';
@@ -556,41 +555,24 @@ class _YandexDeviceLoginDialogState extends State<YandexDeviceLoginDialog> {
   }
 
   Future<void> _initDeviceFlow() async {
-    final client = HttpClient();
     try {
-      final request = await client.postUrl(
-        Uri.parse('https://oauth.yandex.ru/device/code'),
-      );
-      request.headers.set('content-type', 'application/x-www-form-urlencoded');
-      request.write('client_id=23cabbbdc6cd418abb4b39c32c41195d');
-      final response = await request.close();
-      final body = await response.transform(utf8.decoder).join();
+      final code = await rust.yandexDeviceCode();
 
       if (!mounted) return;
-      if (response.statusCode == 200) {
-        final data = jsonDecode(body) as Map<String, dynamic>;
-        setState(() {
-          _userCode = data['user_code'] as String?;
-          _deviceCode = data['device_code'] as String?;
-          _verificationUrl = data['verification_url'] as String?;
-          _interval = (data['interval'] as num?)?.toInt() ?? 5;
-          _isLoading = false;
-        });
-        _startPolling();
-      } else {
-        setState(() {
-          _error = 'Не удалось получить код устройства от Яндекс.';
-          _isLoading = false;
-        });
-      }
+      setState(() {
+        _userCode = code.userCode;
+        _deviceCode = code.deviceCode;
+        _verificationUrl = code.verificationUrl;
+        _interval = code.interval;
+        _isLoading = false;
+      });
+      _startPolling();
     } on Object catch (e) {
       if (!mounted) return;
       setState(() {
         _error = humanizeError(e);
         _isLoading = false;
       });
-    } finally {
-      client.close();
     }
   }
 
@@ -602,46 +584,24 @@ class _YandexDeviceLoginDialogState extends State<YandexDeviceLoginDialog> {
   }
 
   Future<void> _pollToken() async {
-    if (_isFinalized || _deviceCode == null) return;
+    final deviceCode = _deviceCode;
+    if (_isFinalized || deviceCode == null) return;
 
-    final client = HttpClient();
     try {
-      final request = await client.postUrl(
-        Uri.parse('https://oauth.yandex.ru/token'),
-      );
-      request.headers.set('content-type', 'application/x-www-form-urlencoded');
-      request.write(
-        'grant_type=device_code'
-        '&client_id=23cabbbdc6cd418abb4b39c32c41195d'
-        '&client_secret=53bc75238f0c4d08a118e51fe9203300'
-        '&code=$_deviceCode',
-      );
-      final response = await request.close();
-      final body = await response.transform(utf8.decoder).join();
-      final data = jsonDecode(body) as Map<String, dynamic>;
-
-      if (response.statusCode == 200) {
-        final token = data['access_token'] as String?;
-        if (token != null) {
-          _timer?.cancel();
-          await _handleFoundToken(token);
-        }
-      } else {
-        final error = data['error'] as String?;
-        if (error != 'authorization_pending') {
-          _timer?.cancel();
-          if (!mounted) return;
-          setState(() {
-            _error =
-                data['error_description'] as String? ??
-                'Ошибка авторизации ($error).';
-          });
-        }
+      final result = await rust.yandexDeviceToken(deviceCode: deviceCode);
+      final token = result.accessToken;
+      if (token != null) {
+        _timer?.cancel();
+        await _handleFoundToken(token);
+      } else if (result.error != null) {
+        _timer?.cancel();
+        if (!mounted) return;
+        setState(() {
+          _error = result.error;
+        });
       }
     } on Object catch (e) {
       debugPrint('Error polling token: $e');
-    } finally {
-      client.close();
     }
   }
 

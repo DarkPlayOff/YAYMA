@@ -1,6 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yayma/src/features/core/views/widgets/lyrics_pause_indicator.dart';
-import 'package:yayma/src/features/playback/providers/lyrics_provider.dart';
 
 void main() {
   const time = Duration(seconds: 10);
@@ -29,44 +28,5 @@ void main() {
     expect(pauseFade(const Duration(milliseconds: 2000)), 1);
     expect(pauseFade(const Duration(milliseconds: 500)), 0.5);
     expect(pauseFade(Duration.zero), 0);
-  });
-
-  group('withOutroTimer', () {
-    final line = LyricLine(
-      const Duration(seconds: 60),
-      'last line',
-      const Duration(seconds: 4),
-    );
-
-    test('short tail adds nothing', () {
-      expect(withOutroTimer([line], const Duration(seconds: 65)), [line]);
-    });
-
-    test('long tail counts down to the end of the track', () {
-      final items = withOutroTimer([line], const Duration(seconds: 80));
-
-      final timer = items.last as LyricTimer;
-      expect(timer.time, const Duration(seconds: 64));
-      expect(timer.duration, const Duration(seconds: 16));
-    });
-
-    test('word timings set where the line ends', () {
-      final sung = LyricLine(
-        const Duration(seconds: 60),
-        'last line',
-        const Duration(seconds: 4),
-        words: [
-          LyricWord(
-            text: 'last',
-            start: const Duration(seconds: 60),
-            end: const Duration(seconds: 62),
-          ),
-        ],
-      );
-
-      final items = withOutroTimer([sung], const Duration(seconds: 80));
-
-      expect((items.last as LyricTimer).time, const Duration(seconds: 62));
-    });
   });
 }

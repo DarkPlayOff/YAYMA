@@ -87,7 +87,7 @@ class _PlayerLyricsState extends State<PlayerLyrics>
     _cleanup = effect(() {
       final lyrics = lyricsSignal(widget.trackId).value;
       if (!lyrics.hasValue) return;
-      final items = _items(lyrics.value!.items);
+      final items = lyrics.value!.items;
       if (items.isEmpty) return;
       _itemCount = items.length;
 
@@ -143,14 +143,6 @@ class _PlayerLyricsState extends State<PlayerLyrics>
     WidgetsBinding.instance.addPostFrameCallback(
       (_) => lyricsSuppressDimSignal.value = suppress,
     );
-  }
-
-  /// Lyrics with the closing pause appended: the track length lives in the
-  /// player state and only applies to the track that is actually playing.
-  List<LyricItem> _items(List<LyricItem> items) {
-    final track = playerStateSignal.value?.currentTrack;
-    if (track == null || track.id != widget.trackId) return items;
-    return withOutroTimer(items, Duration(milliseconds: track.durationMs));
   }
 
   void _onTick(Duration elapsed) {
@@ -264,7 +256,7 @@ class _PlayerLyricsState extends State<PlayerLyrics>
         final lyrics = lyricsSignal(widget.trackId).value;
         return lyrics.map(
           data: (result) {
-            final items = _items(result.items);
+            final items = result.items;
             if (items.isEmpty) {
               return Center(
                 child: Text(

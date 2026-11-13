@@ -195,7 +195,7 @@ class _MobileFullPlayerState extends State<MobileFullPlayer>
       animation: _coverSwipe,
       initialTrack: initialState?.currentTrack,
       initialIndex: initialState?.queueIndex,
-      queue: queueSnapshot,
+      queue: () => queueTracksSignal.value,
       travel: () => _swipeTravel(context),
       canAnimate: () => !_closing && _controller.value >= 0.95,
       isMounted: () => mounted,

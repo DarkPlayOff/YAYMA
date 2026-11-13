@@ -205,6 +205,16 @@ pub struct SimpleTrackDto {
     pub is_disliked: bool,
 }
 
+/// Playhead neighbourhood: the tracks around the playhead plus the resolved
+/// previous/next previews under the real repeat policy.
+#[flutter_rust_bridge::frb(unignore)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct QueueNeighborhoodDto {
+    pub tracks: Vec<SimpleTrackDto>,
+    pub previous: Option<SimpleTrackDto>,
+    pub next: Option<SimpleTrackDto>,
+}
+
 #[flutter_rust_bridge::frb(ignore)]
 impl SimpleTrackDto {
     pub fn from_yandex<S: std::hash::BuildHasher>(
@@ -580,8 +590,19 @@ pub struct LyricsLineDto {
 
 #[flutter_rust_bridge::frb(unignore)]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct LyricItemDto {
+    /// Start of the item on the track timeline.
+    pub time_ms: i64,
+    /// How long the item stays current: the text of a line, or a pause.
+    pub duration_ms: i64,
+    /// `None` means a pause/timer between lines, not a lyric line.
+    pub line: Option<LyricsLineDto>,
+}
+
+#[flutter_rust_bridge::frb(unignore)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct LyricsResultDto {
-    pub lines: Vec<LyricsLineDto>,
+    pub timeline: Vec<LyricItemDto>,
     pub provider_name: String,
 }
 

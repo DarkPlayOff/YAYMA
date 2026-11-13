@@ -200,6 +200,30 @@ impl PlaybackPolicy {
     }
 }
 
+/// UI-only preview of the queue neighbour under the same policy as real
+/// playback, so the next/previous cover hints cannot drift from the queue.
+/// `forward` selects next (repeat-single replays the current track); previews
+/// never move the playhead.
+pub(crate) fn preview_neighbor(
+    queue_len: usize,
+    current: usize,
+    repeat: RepeatMode,
+    forward: bool,
+) -> Option<usize> {
+    if queue_len == 0 {
+        return None;
+    }
+    if forward {
+        if repeat == RepeatMode::Single {
+            return Some(current);
+        }
+        PlaybackPolicy::try_advance(current, queue_len)
+            .or_else(|| PlaybackPolicy::repeat_wrap_index(repeat, queue_len))
+    } else {
+        PlaybackPolicy::prev_index(current, queue_len, repeat)
+    }
+}
+
 #[derive(Clone)]
 struct QueueSignals {
     inner: AudioSignals,
@@ -1676,5 +1700,42 @@ mod tests {
             q.wave_batch_for_track(&test_track("t1")).as_deref(),
             Some("page-2")
         );
+    }
+
+    #[test]
+    fn preview_neighbor_is_none_for_an_empty_queue() {
+        for repeat in [RepeatMode::None, RepeatMode::All, RepeatMode::Single] {
+            assert_eq!(preview_neighbor(0, 0, repeat, true), None);
+            assert_eq!(preview_neighbor(0, 0, repeat, false), None);
+        }
+    }
+
+    #[test]
+    fn preview_neighbor_forward_matches_the_queue_policy() {
+        // Plain advance stops at the tail unless repeat-all wraps.
+        assert_eq!(preview_neighbor(3, 0, RepeatMode::None, true), Some(1));
+        assert_eq!(preview_neighbor(3, 2, RepeatMode::None, true), None);
+        assert_eq!(preview_neighbor(3, 2, RepeatMode::All, true), Some(0));
+        // Repeat-single replays the current track.
+        assert_eq!(preview_neighbor(3, 1, RepeatMode::Single, true), Some(1));
+    }
+
+    #[test]
+    fn preview_neighbor_backward_matches_the_queue_policy() {
+        assert_eq!(preview_neighbor(3, 2, RepeatMode::None, false), Some(1));
+        assert_eq!(preview_neighbor(3, 0, RepeatMode::None, false), None);
+        assert_eq!(preview_neighbor(3, 0, RepeatMode::All, false), Some(2));
+        // Repeat-single does not wrap backwards.
+        assert_eq!(preview_neighbor(3, 0, RepeatMode::Single, false), None);
+    }
+
+    #[test]
+    fn preview_neighbor_handles_a_single_track_queue() {
+        assert_eq!(preview_neighbor(1, 0, RepeatMode::None, true), None);
+        assert_eq!(preview_neighbor(1, 0, RepeatMode::All, true), Some(0));
+        assert_eq!(preview_neighbor(1, 0, RepeatMode::Single, true), Some(0));
+        assert_eq!(preview_neighbor(1, 0, RepeatMode::None, false), None);
+        assert_eq!(preview_neighbor(1, 0, RepeatMode::All, false), Some(0));
+        assert_eq!(preview_neighbor(1, 0, RepeatMode::Single, false), None);
     }
 }

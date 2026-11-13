@@ -10,7 +10,6 @@ import 'package:yayma/src/app/session.dart';
 import 'package:yayma/src/features/core/providers/notification_provider.dart';
 import 'package:yayma/src/features/core/providers/visual_effects_provider.dart';
 import 'package:yayma/src/features/core/services/app_error.dart';
-import 'package:yayma/src/features/core/services/app_logger.dart';
 import 'package:yayma/src/features/core/services/debouncer.dart';
 import 'package:yayma/src/features/core/services/rust_bridge.dart';
 import 'package:yayma/src/features/core/theme/app_theme.dart';
@@ -434,53 +433,32 @@ final FlutterComputed<int> queueRevisionSignal = computed(
 );
 
 /// Narrow neighbourhood of the playhead for the cover-swipe previews:
-/// [queueIndex-1 .. queueIndex+1], clamped at the queue ends. Fetching the
-/// whole queue here would copy thousands of DTOs over the bridge on every
-/// queue mutation just to show two neighbouring covers.
-final FutureSignal<List<SimpleTrackDto>> queueTracksSignal = computedAsync(
-  () async {
-    final ctx = appContextSignal();
-    final queueCount = queueCountSignal();
-    final index = queueIndexSignal();
-    // Refetch when the queue itself changes, including a same-length swap
-    // (album A → album B) and a shuffle that reorders the same tracks.
-    final _ = queueRevisionSignal();
-    if (ctx == null || queueCount == 0) return const [];
+/// [queueIndex-1 .. queueIndex+1], plus the previous/next tracks already
+/// resolved in Rust under the real repeat policy. One call covers both the
+/// window and the hints, so they refresh together and cannot drift.
+final FutureSignal<QueueNeighborhoodDto> queueNeighborhoodSignal =
+    computedAsync(
+      () async {
+        final ctx = appContextSignal();
+        final queueCount = queueCountSignal();
+        queueIndexSignal();
+        repeatModeSignal();
+        // Refetch when the queue itself changes, including a same-length swap
+        // (album A → album B) and a shuffle that reorders the same tracks.
+        final _ = queueRevisionSignal();
+        if (ctx == null || queueCount == 0) {
+          return const QueueNeighborhoodDto(tracks: []);
+        }
 
-    final base = (index - 1).clamp(0, queueCount - 1);
-    return await rust.queueWindow(ctx: ctx, offset: base, len: 3);
-  },
-  options: const AsyncSignalOptions(name: 'queueTracksSignal'),
-);
-
-// First and last queue entries, for the repeat-all wrap previews: the ±1
-// window cannot reach across the queue ends. One DTO per revision each.
-final FutureSignal<SimpleTrackDto?> queueFirstTrackSignal = computedAsync(
-  () async {
-    final ctx = appContextSignal();
-    final queueCount = queueCountSignal();
-    final _ = queueRevisionSignal();
-    if (ctx == null || queueCount == 0) return null;
-    final head = await rust.queueWindow(ctx: ctx, offset: 0, len: 1);
-    return head.isEmpty ? null : head.first;
-  },
-  options: const AsyncSignalOptions(name: 'queueFirstTrackSignal'),
-);
-
-final FutureSignal<SimpleTrackDto?> queueLastTrackSignal = computedAsync(
-  () async {
-    final ctx = appContextSignal();
-    final queueCount = queueCountSignal();
-    final _ = queueRevisionSignal();
-    if (ctx == null || queueCount == 0) return null;
-    final tail = await rust.queueWindow(
-      ctx: ctx,
-      offset: queueCount - 1,
-      len: 1,
+        return await rust.queueNeighborhood(ctx: ctx);
+      },
+      options: const AsyncSignalOptions(name: 'queueNeighborhoodSignal'),
     );
-    return tail.isEmpty ? null : tail.first;
-  },
-  options: const AsyncSignalOptions(name: 'queueLastTrackSignal'),
+
+/// Tracks around the playhead, for optimistic like inserts.
+final FlutterComputed<List<SimpleTrackDto>> queueTracksSignal = computed(
+  () => queueNeighborhoodSignal.value.value?.tracks ?? const [],
+  options: const ComputedOptions(name: 'queueTracksSignal'),
 );
 
 /// How many upcoming tracks the queue panel fetches and shows at most, like
@@ -535,61 +513,17 @@ queuePlayedWindowSignal = computedAsync(() async {
   );
 }, options: const AsyncSignalOptions(name: 'queuePlayedWindowSignal'));
 
-/// Playhead neighbourhood for preview consumers ([queueTracksSignal]). A
-/// failed refetch must not masquerade as an empty queue, so failures land in
-/// the log; consumers degrade the same way as for an empty queue (no
-/// neighbour previews).
-List<SimpleTrackDto> queueSnapshot() {
-  final state = queueTracksSignal();
-  if (state.hasError && !state.hasValue) {
-    appLog(AppLogLevel.error, 'queue refetch failed: ${state.error}');
-  }
-  return state.value ?? const [];
-}
-
 // Signal for previous track in queue
-final FlutterComputed<SimpleTrackDto?> previousTrackSignal = computed(() {
-  final state = playerStateSignal.value;
-  final queue = queueSnapshot();
-  if (state == null || queue.isEmpty) return null;
-
-  // The window starts one track before the playhead (clamped at 0).
-  final base = (state.queueIndex - 1).clamp(0, state.queueCount - 1);
-  final relative = state.queueIndex - base;
-  if (relative > 0 && relative - 1 < queue.length) {
-    return queue[relative - 1];
-  }
-  // Repeat-all wraps around the start; the window cannot see the tail.
-  if (state.repeatMode == RepeatModeDto.all && state.queueIndex == 0) {
-    return queueLastTrackSignal().value;
-  }
-  return null;
-}, options: const ComputedOptions(name: 'previousTrackSignal'));
+final FlutterComputed<SimpleTrackDto?> previousTrackSignal = computed(
+  () => queueNeighborhoodSignal().value?.previous,
+  options: const ComputedOptions(name: 'previousTrackSignal'),
+);
 
 // Signal for next track in queue
-final FlutterComputed<SimpleTrackDto?> nextTrackSignal = computed(() {
-  final state = playerStateSignal.value;
-  final queue = queueSnapshot();
-  if (state == null || queue.isEmpty) return null;
-
-  final base = (state.queueIndex - 1).clamp(0, state.queueCount - 1);
-  final relative = state.queueIndex - base;
-
-  // Repeat-one replays this track, so the "next" preview is the current one.
-  if (state.repeatMode == RepeatModeDto.single && relative < queue.length) {
-    return queue[relative];
-  }
-
-  if (relative + 1 < queue.length) {
-    return queue[relative + 1];
-  }
-  // Repeat-all wraps around the end.
-  if (state.repeatMode == RepeatModeDto.all &&
-      state.queueIndex == state.queueCount - 1) {
-    return queueFirstTrackSignal().value;
-  }
-  return null;
-}, options: const ComputedOptions(name: 'nextTrackSignal'));
+final FlutterComputed<SimpleTrackDto?> nextTrackSignal = computed(
+  () => queueNeighborhoodSignal().value?.next,
+  options: const ComputedOptions(name: 'nextTrackSignal'),
+);
 
 // Store color scheme, updated automatically when local cover URI changes
 final FlutterSignal<ColorScheme?> colorSchemeSignal = signal<ColorScheme?>(
@@ -745,7 +679,8 @@ class PlaybackController {
 
   /// Jumps straight to the queue track at absolute [index]. No optimistic
   /// updates: Rust emits PlaybackStateChanged, which refreshes
-  /// [playerStateSignal] and (via the queueRevision bump) [queueTracksSignal].
+  /// [playerStateSignal] and (via the queueRevision bump)
+  /// [queueNeighborhoodSignal].
   static Future<void> jumpToQueueIndex(int index) =>
       runRustAction((ctx) => rust.queueJumpTo(ctx: ctx, index: index));
 
@@ -800,7 +735,7 @@ class PlaybackController {
     // still lands via the liked-tracks stream.
     final baseId = baseTrackId(trackId);
     SimpleTrackDto? dto;
-    for (final t in queueTracksSignal.value.value ?? const <SimpleTrackDto>[]) {
+    for (final t in queueTracksSignal.value) {
       if (baseTrackId(t.id) == baseId) {
         dto = t;
         break;

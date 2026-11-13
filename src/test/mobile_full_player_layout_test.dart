@@ -33,7 +33,9 @@ Future<void> _mount(WidgetTester tester, Size size) async {
     currentTrack: _track,
     currentWaveSeeds: [],
   );
-  queueTracksSignal.setValue(const [_track]);
+  queueNeighborhoodSignal.setValue(
+    const QueueNeighborhoodDto(tracks: [_track]),
+  );
 
   await tester.pumpWidget(
     const MaterialApp(
