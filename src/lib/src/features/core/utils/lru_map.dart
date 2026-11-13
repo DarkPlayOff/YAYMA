@@ -56,7 +56,23 @@ final class LruMap<K, V> with MapMixin<K, V> {
   }
 
   @override
-  Iterable<K> get keys => _entries.keys;
+  Iterable<K> get keys => _entries.keys.toList();
+
+  // MapMixin reads through `[]`, which reorders the map and would mutate it
+  // while the returned iterable is walking `keys`. Snapshot instead: a read
+  // during iteration is legitimate and must not corrupt the walk.
+  @override
+  Iterable<V> get values => _entries.values.toList();
+
+  @override
+  Iterable<MapEntry<K, V>> get entries => _entries.entries.toList();
+
+  @override
+  void forEach(void Function(K key, V value) action) {
+    for (final entry in _entries.entries.toList()) {
+      action(entry.key, entry.value);
+    }
+  }
 
   @override
   void clear() {
