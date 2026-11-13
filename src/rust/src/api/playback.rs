@@ -27,7 +27,7 @@ pub(crate) fn get_playback_state_internal<S: std::hash::BuildHasher>(
         codec: signals.codec.get(),
         playback_context: signals.playback_context.get(),
         current_track: current_track
-            .map(|t| SimpleTrackDto::from_yandex(&t, liked_ids, disliked_ids)),
+            .map(|t| SimpleTrackDto::from_yandex_owned(t, liked_ids, disliked_ids)),
     }
 }
 
@@ -209,8 +209,8 @@ pub async fn get_history(ctx: &AppContext, offset: usize, limit: usize) -> Vec<S
     let (liked_ids, disliked_ids) = ctx.audio.state.read().await.liked.snapshot();
     match ctx.core.api.fetch_music_history(offset, limit).await {
         Ok(tracks) => tracks
-            .iter()
-            .map(|t| SimpleTrackDto::from_yandex(t, &liked_ids, &disliked_ids))
+            .into_iter()
+            .map(|t| SimpleTrackDto::from_yandex_owned(t, &liked_ids, &disliked_ids))
             .collect(),
         Err(e) => {
             tracing::error!(error = ?e, "fetch_history_failed");

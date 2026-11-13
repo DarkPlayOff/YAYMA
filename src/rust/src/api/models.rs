@@ -68,33 +68,47 @@ impl Default for InitialSettingsDto {
 }
 
 pub fn format_cover(uri: Option<String>, size: &str) -> Option<String> {
-    uri.map(|mut s| {
-        if let Some(pos) = s.find("%%") {
-            s.replace_range(pos..pos + 2, size);
-        }
-        if s.starts_with("//") {
-            s.insert_str(0, "https:");
-            s
-        } else if !s.starts_with("http") {
-            s.insert_str(0, "https://");
-            s
-        } else {
-            s
-        }
-    })
+    uri.as_deref().map(|s| format_cover_ref(s, size))
 }
 
-#[flutter_rust_bridge::frb(ignore)]
-pub(crate) fn get_any_cover(t: &Track) -> Option<String> {
+/// Same as [`format_cover`] for a borrowed source: callers that already hold a
+/// `&str` (the `Track` -> DTO path) skip the intermediate clone. Builds the
+/// result in one allocation instead of re-growing the source string twice.
+pub(crate) fn format_cover_ref(uri: &str, size: &str) -> String {
+    let prefix = if uri.starts_with("//") {
+        "https:"
+    } else if uri.starts_with("http") {
+        ""
+    } else {
+        "https://"
+    };
+    let mut out = String::with_capacity(prefix.len() + uri.len() + size.len());
+    out.push_str(prefix);
+    match uri.find("%%") {
+        Some(pos) => {
+            out.push_str(&uri[..pos]);
+            out.push_str(size);
+            out.push_str(&uri[pos + 2..]);
+        }
+        None => out.push_str(uri),
+    }
+    out
+}
+
+/// The cover a track would show at `size`, without cloning the source URI.
+pub(crate) fn cover_ref(t: &Track, size: &str) -> Option<String> {
+    any_cover(t).map(|u| format_cover_ref(u, size))
+}
+
+fn any_cover(t: &Track) -> Option<&str> {
     t.og_image
-        .as_ref()
-        .or(t.cover_uri.as_ref())
+        .as_deref()
+        .or(t.cover_uri.as_deref())
         .or_else(|| {
             t.albums
                 .first()
-                .and_then(|a| a.og_image.as_ref().or(a.cover_uri.as_ref()))
+                .and_then(|a| a.og_image.as_deref().or(a.cover_uri.as_deref()))
         })
-        .cloned()
 }
 
 /// `cover.uri` is empty for playlists using an auto-generated "mosaic" cover
@@ -106,6 +120,31 @@ fn get_playlist_cover(playlist: &mut Playlist) -> Option<String> {
         let og_image = std::mem::take(&mut playlist.og_image);
         (!og_image.is_empty()).then_some(og_image)
     })
+}
+
+#[cfg(test)]
+mod format_cover_tests {
+    use super::format_cover_ref;
+
+    #[test]
+    fn replaces_size_template_and_adds_scheme() {
+        assert_eq!(
+            format_cover_ref("//avatars.yandex.net/a/%%/x", "600x600"),
+            "https://avatars.yandex.net/a/600x600/x"
+        );
+        assert_eq!(
+            format_cover_ref("avatars.yandex.net/a/%%", "200x200"),
+            "https://avatars.yandex.net/a/200x200"
+        );
+        assert_eq!(
+            format_cover_ref("https://avatars.yandex.net/a/%%", "orig"),
+            "https://avatars.yandex.net/a/orig"
+        );
+        assert_eq!(
+            format_cover_ref("https://cdn/plain.jpg", "600x600"),
+            "https://cdn/plain.jpg"
+        );
+    }
 }
 
 #[flutter_rust_bridge::frb(unignore)]
@@ -139,6 +178,14 @@ impl TrackArtistDto {
         Self {
             id: a.id.as_ref().map(|id| id.to_string()).unwrap_or_default(),
             name: a.name.clone().unwrap_or_default(),
+        }
+    }
+
+    /// Owned counterpart for callers that already consumed the model.
+    pub fn from_yandex_owned(mut a: yandex_music::model::artist::Artist) -> Self {
+        Self {
+            id: a.id.take().unwrap_or_default(),
+            name: a.name.take().unwrap_or_default(),
         }
     }
 }
@@ -180,7 +227,7 @@ impl SimpleTrackDto {
             album: album_title,
             album_id,
             duration_ms: t.duration.map(|d| d.as_millis() as u32).unwrap_or(0),
-            cover_url: format_cover(get_any_cover(t), COVER_SIZE_MEDIUM),
+            cover_url: any_cover(t).map(|u| format_cover_ref(u, COVER_SIZE_MEDIUM)),
             is_liked: liked_ids.contains(track_id_base),
             is_disliked: disliked_ids.contains(track_id_base),
         }
@@ -193,7 +240,7 @@ impl SimpleTrackDto {
     ) -> Self {
         let is_liked = liked_ids.contains(t.id.to_base_id());
         let is_disliked = disliked_ids.contains(t.id.to_base_id());
-        let cover_url = format_cover(get_any_cover(&t), COVER_SIZE_MEDIUM);
+        let cover_url = any_cover(&t).map(|u| format_cover_ref(u, COVER_SIZE_MEDIUM));
         let (album_title, album_id) = t
             .albums
             .first_mut()
@@ -337,8 +384,8 @@ impl AlbumDetailsDto {
         let year = album.year.map(|y| y as i32);
         let artists = album
             .artists
-            .iter()
-            .map(TrackArtistDto::from_yandex)
+            .into_iter()
+            .map(TrackArtistDto::from_yandex_owned)
             .collect();
 
         let tracks = album
@@ -395,8 +442,8 @@ impl SimpleAlbumDto {
             title: album.title.take().unwrap_or_default(),
             artists: album
                 .artists
-                .iter()
-                .map(TrackArtistDto::from_yandex)
+                .into_iter()
+                .map(TrackArtistDto::from_yandex_owned)
                 .collect(),
             cover_url: format_cover(album.og_image.take(), "600x600"),
             year: album.year.map(|y| y as i32),
@@ -445,9 +492,7 @@ impl PlaylistDetailsDto {
         let cover_url = format_cover(get_playlist_cover(&mut playlist), "600x600");
         let title = std::mem::take(&mut playlist.title);
         let track_count = playlist.track_count;
-        let is_public = format!("{:?}", playlist.visibility)
-            .to_lowercase()
-            .contains("public");
+        let is_public = playlist.visibility.to_ascii_lowercase().contains("public");
 
         Self {
             kind: playlist.kind,
@@ -475,9 +520,7 @@ pub struct SimplePlaylistDto {
 #[flutter_rust_bridge::frb(ignore)]
 impl SimplePlaylistDto {
     pub fn from_yandex(mut playlist: Playlist) -> Self {
-        let is_public = format!("{:?}", playlist.visibility)
-            .to_lowercase()
-            .contains("public");
+        let is_public = playlist.visibility.to_ascii_lowercase().contains("public");
         Self {
             kind: playlist.kind,
             uid: playlist.uid as i64,

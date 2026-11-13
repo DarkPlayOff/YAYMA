@@ -1,6 +1,6 @@
 use crate::api::models::{
     COVER_SIZE_MEDIUM, PlaylistDetailsDto, SimpleAlbumDto, SimpleArtistDto, SimplePlaylistDto,
-    SimpleTrackDto, format_cover, get_any_cover,
+    SimpleTrackDto,
 };
 use crate::app::AppContext;
 use crate::frb_generated::StreamSink;
@@ -733,7 +733,7 @@ fn yandex_track_to_metadata(
         .first_mut()
         .and_then(|a| a.id.take())
         .map(|id| id.to_string());
-    let cover_url = format_cover(get_any_cover(&t), COVER_SIZE_MEDIUM);
+    let cover_url = crate::api::models::cover_ref(&t, COVER_SIZE_MEDIUM);
     let duration_ms = t.duration.map(|d| d.as_millis() as u64).unwrap_or(0);
 
     crate::storage::db::TrackMetadata {

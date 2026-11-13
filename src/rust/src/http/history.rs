@@ -30,15 +30,34 @@ impl ApiService {
         }
 
         let tracks = self.fetch_tracks(unique).await?;
-        let by_id: HashMap<String, Track> = tracks
-            .into_iter()
-            .map(|t| (t.id.to_base_id().to_string(), t))
-            .collect();
-        Ok(page
-            .iter()
-            .filter_map(|id| by_id.get(id.to_base_id()).cloned())
-            .collect())
+        Ok(restore_play_order(&page, tracks))
     }
+}
+
+/// Puts the fetched models back into first-play order. Tracks played once are
+/// moved out of the map; only repeats need a clone, and a track that was played
+/// more than once must stay in the result for every play.
+fn restore_play_order(page: &[String], tracks: Vec<Track>) -> Vec<Track> {
+    let mut by_id: HashMap<String, Track> = tracks
+        .into_iter()
+        .map(|t| (t.id.to_base_id().to_string(), t))
+        .collect();
+    let mut seen = HashSet::new();
+    let repeated: HashSet<&str> = page
+        .iter()
+        .map(|id| id.to_base_id())
+        .filter(|base| !seen.insert(*base))
+        .collect();
+    page.iter()
+        .filter_map(|id| {
+            let base = id.to_base_id();
+            if repeated.contains(base) {
+                by_id.get(base).cloned()
+            } else {
+                by_id.remove(base)
+            }
+        })
+        .collect()
 }
 
 /// Ids of the tracks to fetch: one per distinct base id, in first-play order.
@@ -150,6 +169,21 @@ mod tests {
             "3:30".to_string(),
         ];
         assert_eq!(unique_track_ids(&played), ["1:10", "2:20", "3:30"]);
+    }
+
+    #[test]
+    fn restore_play_order_keeps_repeats_and_skips_missing() {
+        let page = ["1:10".to_string(), "2:20".to_string(), "1:10".to_string()];
+        let tracks = vec![
+            crate::util::track::test_track("1"),
+            crate::util::track::test_track("2"),
+        ];
+        let restored = restore_play_order(&page, tracks);
+        let ids: Vec<_> = restored.iter().map(|t| t.id.as_str()).collect();
+        assert_eq!(ids, ["1", "2", "1"]);
+
+        let empty = restore_play_order(&["404".to_string()], Vec::new());
+        assert!(empty.is_empty());
     }
 
     #[test]

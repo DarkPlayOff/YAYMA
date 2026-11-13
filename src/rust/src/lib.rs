@@ -1,6 +1,3 @@
-#[global_allocator]
-static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
-
 pub mod api;
 pub use crate::api::simple::*;
 pub mod app;

@@ -76,7 +76,7 @@ pub async fn search(ctx: &AppContext, query: String) -> Option<SearchResultsDto>
 
     Some(SearchResultsDto {
         tracks: map_results!(results.tracks, |t| {
-            SimpleTrackDto::from_yandex(&t, &liked, &disliked)
+            SimpleTrackDto::from_yandex_owned(t, &liked, &disliked)
         }),
         albums: map_results!(results.albums, SimpleAlbumDto::from_yandex),
         artists: map_results!(results.artists, SimpleArtistDto::from_yandex),
@@ -171,7 +171,7 @@ async fn download_track_to_destination(
 
     // Downloaded files are kept forever, so embed the highest-quality cover
     // available rather than whatever fixed preset display DTOs use.
-    let orig_cover_url = format_cover(crate::api::models::get_any_cover(&track), "orig");
+    let orig_cover_url = crate::api::models::cover_ref(&track, "orig");
     let mut dto = SimpleTrackDto::from_yandex_owned(track, &liked, &disliked);
     dto.cover_url = orig_cover_url;
 
@@ -505,7 +505,7 @@ pub async fn get_artist_details(
 
     let mapped_tracks = tracks
         .into_iter()
-        .map(|t| SimpleTrackDto::from_yandex(&t, &liked, &disliked))
+        .map(|t| SimpleTrackDto::from_yandex_owned(t, &liked, &disliked))
         .collect();
 
     // Albums are only needed for the first page; subsequent pages just append tracks.
