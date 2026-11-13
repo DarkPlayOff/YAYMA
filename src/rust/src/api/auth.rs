@@ -17,7 +17,13 @@ pub struct DeviceCodeDto {
     pub user_code: String,
     pub device_code: String,
     pub verification_url: String,
+    /// Defaults to 5 s when the provider omits it.
+    #[serde(default = "default_interval")]
     pub interval: u32,
+}
+
+fn default_interval() -> u32 {
+    5
 }
 
 #[flutter_rust_bridge::frb(unignore)]
@@ -29,30 +35,11 @@ pub struct DeviceTokenDto {
 }
 
 pub async fn yandex_device_code() -> Result<DeviceCodeDto, AppError> {
-    let code = device::request_device_code().await?;
-    Ok(DeviceCodeDto {
-        user_code: code.user_code,
-        device_code: code.device_code,
-        verification_url: code.verification_url,
-        interval: code.interval,
-    })
+    device::request_device_code().await
 }
 
 pub async fn yandex_device_token(device_code: String) -> Result<DeviceTokenDto, AppError> {
-    match device::poll_token(&device_code).await? {
-        device::DeviceToken::Received(token) => Ok(DeviceTokenDto {
-            access_token: Some(token),
-            error: None,
-        }),
-        device::DeviceToken::Pending => Ok(DeviceTokenDto {
-            access_token: None,
-            error: None,
-        }),
-        device::DeviceToken::Rejected(error) => Ok(DeviceTokenDto {
-            access_token: None,
-            error: Some(error),
-        }),
-    }
+    device::poll_token(&device_code).await
 }
 
 pub async fn restore_saved_state(ctx: &AppContext) -> Option<SavedStateDto> {

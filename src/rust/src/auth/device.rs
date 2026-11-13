@@ -7,6 +7,7 @@ use std::time::Duration;
 
 use serde::Deserialize;
 
+use crate::api::auth::{DeviceCodeDto, DeviceTokenDto};
 use crate::api::models::AppError;
 
 const DEVICE_CODE_URL: &str = "https://oauth.yandex.ru/device/code";
@@ -14,30 +15,6 @@ const TOKEN_URL: &str = "https://oauth.yandex.ru/token";
 const CLIENT_ID: &str = "23cabbbdc6cd418abb4b39c32c41195d";
 const CLIENT_SECRET: &str = "53bc75238f0c4d08a118e51fe9203300";
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(15);
-
-/// Response of the device-code request. `interval` defaults to 5 s when the
-/// provider omits it, matching the previous Dart behaviour.
-#[derive(Debug, Deserialize)]
-pub struct DeviceCode {
-    pub user_code: String,
-    pub device_code: String,
-    pub verification_url: String,
-    #[serde(default = "default_interval")]
-    pub interval: u32,
-}
-
-fn default_interval() -> u32 {
-    5
-}
-
-/// Outcome of one token poll. `Pending` is normal while the user has not
-/// confirmed the code yet and must not be treated as an error.
-#[derive(Debug, PartialEq, Eq)]
-pub enum DeviceToken {
-    Received(String),
-    Pending,
-    Rejected(String),
-}
 
 #[derive(Deserialize)]
 struct TokenResponse {
@@ -53,7 +30,7 @@ fn client() -> Result<reqwest::Client, AppError> {
         .map_err(|e| AppError::Unknown(e.to_string()))
 }
 
-pub async fn request_device_code() -> Result<DeviceCode, AppError> {
+pub async fn request_device_code() -> Result<DeviceCodeDto, AppError> {
     let response = client()?
         .post(DEVICE_CODE_URL)
         .form(&[("client_id", CLIENT_ID)])
@@ -66,7 +43,7 @@ pub async fn request_device_code() -> Result<DeviceCode, AppError> {
     parse_device_code(status.is_success(), &body)
 }
 
-pub async fn poll_token(device_code: &str) -> Result<DeviceToken, AppError> {
+pub async fn poll_token(device_code: &str) -> Result<DeviceTokenDto, AppError> {
     let response = client()?
         .post(TOKEN_URL)
         .form(&[
@@ -84,27 +61,25 @@ pub async fn poll_token(device_code: &str) -> Result<DeviceToken, AppError> {
     parse_token(status.is_success(), &body)
 }
 
-fn parse_device_code(success: bool, body: &str) -> Result<DeviceCode, AppError> {
+fn parse_device_code(success: bool, body: &str) -> Result<DeviceCodeDto, AppError> {
     if !success {
         return Err(AppError::ApiError(format!("HTTP device code: {body}")));
     }
-    serde_json::from_str::<DeviceCode>(body)
+    serde_json::from_str::<DeviceCodeDto>(body)
         .map_err(|e| AppError::ApiError(format!("invalid device code response: {e}")))
 }
 
-fn parse_token(success: bool, body: &str) -> Result<DeviceToken, AppError> {
+fn parse_token(success: bool, body: &str) -> Result<DeviceTokenDto, AppError> {
     let response: TokenResponse = serde_json::from_str(body)
         .map_err(|e| AppError::ApiError(format!("invalid token response: {e}")))?;
 
-    if success {
-        return Ok(match response.access_token {
-            Some(token) => DeviceToken::Received(token),
-            None => DeviceToken::Pending,
+    // Pending is normal while the user has not confirmed the code yet: the
+    // token DTO reports it as "no token, no error".
+    if success || response.error.as_deref() == Some("authorization_pending") {
+        return Ok(DeviceTokenDto {
+            access_token: response.access_token,
+            error: None,
         });
-    }
-
-    if response.error.as_deref() == Some("authorization_pending") {
-        return Ok(DeviceToken::Pending);
     }
 
     let message = response
@@ -115,7 +90,10 @@ fn parse_token(success: bool, body: &str) -> Result<DeviceToken, AppError> {
                 .map(|error| format!("Ошибка авторизации ({error})."))
         })
         .unwrap_or_else(|| "Ошибка авторизации.".to_string());
-    Ok(DeviceToken::Rejected(message))
+    Ok(DeviceTokenDto {
+        access_token: None,
+        error: Some(message),
+    })
 }
 
 #[cfg(test)]
@@ -148,7 +126,10 @@ mod tests {
     fn token_received() {
         assert_eq!(
             parse_token(true, r#"{"access_token":"secret"}"#).unwrap(),
-            DeviceToken::Received("secret".to_string())
+            DeviceTokenDto {
+                access_token: Some("secret".to_string()),
+                error: None,
+            }
         );
     }
 
@@ -156,7 +137,10 @@ mod tests {
     fn token_pending() {
         assert_eq!(
             parse_token(false, r#"{"error":"authorization_pending"}"#).unwrap(),
-            DeviceToken::Pending
+            DeviceTokenDto {
+                access_token: None,
+                error: None,
+            }
         );
     }
 
@@ -168,7 +152,10 @@ mod tests {
                 r#"{"error":"invalid_grant","error_description":"Code expired"}"#,
             )
             .unwrap(),
-            DeviceToken::Rejected("Code expired".to_string())
+            DeviceTokenDto {
+                access_token: None,
+                error: Some("Code expired".to_string()),
+            }
         );
     }
 
@@ -176,7 +163,10 @@ mod tests {
     fn token_rejected_falls_back_to_error() {
         assert_eq!(
             parse_token(false, r#"{"error":"invalid_grant"}"#).unwrap(),
-            DeviceToken::Rejected("Ошибка авторизации (invalid_grant).".to_string())
+            DeviceTokenDto {
+                access_token: None,
+                error: Some("Ошибка авторизации (invalid_grant).".to_string()),
+            }
         );
     }
 }
