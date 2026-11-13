@@ -15,6 +15,7 @@ import 'package:yayma/src/features/core/providers/notification_provider.dart';
 import 'package:yayma/src/features/core/services/app_logger.dart';
 import 'package:yayma/src/features/core/services/global_hotkey_service.dart';
 import 'package:yayma/src/features/core/theme/app_theme.dart';
+import 'package:yayma/src/features/core/views/widgets/keyboard_focus.dart';
 import 'package:yayma/src/features/playback/providers/playback_provider.dart';
 
 Future<void> main() async {
@@ -138,7 +139,10 @@ class MyApp extends StatelessWidget {
           builder: (context, child) {
             return RepaintBoundary(
               child: GlobalNotificationListener(
-                child: child ?? const SizedBox.shrink(),
+                child: Actions(
+                  actions: unfocusOnTapOutside,
+                  child: child ?? const SizedBox.shrink(),
+                ),
               ),
             );
           },
