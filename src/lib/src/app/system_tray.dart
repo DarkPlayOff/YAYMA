@@ -19,10 +19,12 @@ import 'package:yayma/src/features/playback/providers/playback_provider.dart';
 /// Currently scoped to Windows, mirroring the other Win32-only integrations
 /// (taskbar thumbnail buttons). The shipped tray icon asset is a `.ico`, which
 /// only the Windows tray accepts.
-class SystemTrayManager with WindowListener {
+class SystemTrayManager {
   SystemTrayManager._();
 
   static final SystemTrayManager instance = SystemTrayManager._();
+
+  Window? get _window => WindowManager.instance.getCurrent();
 
   bool _initialized = false;
   bool _quitting = false;
@@ -90,8 +92,7 @@ class SystemTrayManager with WindowListener {
 
     // Only claim close-to-tray once the icon really exists; otherwise closing
     // the window would hide the app with no way to bring it back.
-    await windowManager.setPreventClose(true);
-    windowManager.addListener(this);
+    _window?.addListener(_onWindowEvent);
     _initialized = true;
   }
 
@@ -104,8 +105,8 @@ class SystemTrayManager with WindowListener {
   }
 
   Future<void> _showWindow() async {
-    await windowManager.show();
-    await windowManager.focus();
+    _window?.show();
+    _window?.focus();
   }
 
   /// Quits the app: saves the window placement, releases the hotkeys and tray,
@@ -116,26 +117,25 @@ class SystemTrayManager with WindowListener {
     _menuEffect = null;
     await WindowPlacement.saveNow();
     await GlobalHotkeyService.dispose();
-    // Allow the window to actually close now that the user asked to quit.
-    await windowManager.setPreventClose(false);
     // Removes the icon; the menu and its items are released with it.
     _trayIcon?.dispose();
     _trayIcon = null;
     _menu?.dispose();
     _menu = null;
     _pauseItem = null;
-    await windowManager.close();
+    _window?.close();
   }
 
-  // --- WindowListener -------------------------------------------------------
+  void _onWindowEvent(WindowEvent event) {
+    if (event is! WindowCloseRequestedEvent) return;
 
-  @override
-  void onWindowClose() {
-    if (_quitting) return;
+    if (_quitting) return; // The close that ends the process goes through.
 
+    // Hold the window open; either hide it to the tray or close it ourselves.
+    event.request.cancel();
     if (closeToTraySignal.value) {
       // Hide to tray rather than terminating the process.
-      unawaited(WindowPlacement.saveNow().then((_) => windowManager.hide()));
+      unawaited(WindowPlacement.saveNow().then((_) => _window?.hide()));
     } else {
       unawaited(quit());
     }

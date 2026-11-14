@@ -64,11 +64,10 @@ class WindowPlacement {
   /// Whether the saved position is actually visible on a connected display.
   static Future<bool> isPositionVisible(Rect bounds) async {
     try {
-      final displays = await screenRetriever.getAllDisplays();
-      for (final display in displays) {
-        final area = _visibleArea(display);
-        if (area == null) continue;
-        final intersection = area.intersect(bounds);
+      for (final display in DisplayManager.instance.getAll()) {
+        // The work area is the display minus panels and docks: the part of
+        // the screen a window can actually be seen in.
+        final intersection = display.workArea.toRect().intersect(bounds);
         if (intersection.width >= _minVisibleWidth &&
             intersection.height >= _minVisibleHeight) {
           return true;
@@ -94,16 +93,6 @@ class WindowPlacement {
 
   /// Persist the current geometry immediately (e.g. before hide/quit).
   static Future<void> saveNow() => _tracker.saveNow();
-
-  static Rect? _visibleArea(Display display) {
-    final position = display.visiblePosition;
-    final size = display.visibleSize ?? display.size;
-    if (position == null) {
-      // No origin reported: assume a single primary display at (0, 0).
-      return Rect.fromLTWH(0, 0, size.width, size.height);
-    }
-    return Rect.fromLTWH(position.dx, position.dy, size.width, size.height);
-  }
 
   static Future<Map<String, dynamic>?> _read() async {
     try {
@@ -179,23 +168,27 @@ class WindowPlacement {
   }
 }
 
-class _Tracker with WindowListener {
+class _Tracker {
   bool _attached = false;
   Timer? _debounce;
   Rect? _lastNormalBounds;
 
+  Window? get _window => WindowManager.instance.getCurrent();
+
   void attach() {
     if (_attached) return;
+    final window = _window;
+    if (window == null) return;
     _attached = true;
-    windowManager.addListener(this);
+    window.addListener(_onWindowEvent);
     // Capture the initial (restored or default) bounds as the normal state.
-    unawaited(_captureInitial());
+    unawaited(_captureInitial(window));
   }
 
-  Future<void> _captureInitial() async {
+  Future<void> _captureInitial(Window window) async {
     try {
-      if (!await windowManager.isMaximized()) {
-        _lastNormalBounds = await windowManager.getBounds();
+      if (!window.isMaximized) {
+        _lastNormalBounds = window.bounds.toRect();
       }
     } on Object {
       // Ignore; first move/resize will populate it.
@@ -213,16 +206,16 @@ class _Tracker with WindowListener {
     // Drop any pending debounced save: this is the save.
     _debounce?.cancel();
     _debounce = null;
+    final window = _window;
+    if (window == null) return;
     try {
-      if (await windowManager.isMinimized() ||
-          await windowManager.isFullScreen()) {
+      if (window.isMinimized || window.isFullScreen) {
         // Transient states must not overwrite the good geometry.
         return;
       }
-      final maximized = await windowManager.isMaximized();
-      if (maximized) {
-        // getBounds() while maximized returns the fullscreen rect, so keep
-        // the last normal bounds and only flip the maximized flag.
+      if (window.isMaximized) {
+        // bounds while maximized return the maximized rect, so keep the last
+        // normal bounds and only flip the maximized flag.
         final normal = _lastNormalBounds;
         if (normal != null) {
           await WindowPlacement.persistBounds(normal, maximized: true);
@@ -235,7 +228,7 @@ class _Tracker with WindowListener {
         }
         return;
       }
-      final bounds = await windowManager.getBounds();
+      final bounds = window.bounds.toRect();
       if (bounds.width < WindowPlacement.minimumSize.width ||
           bounds.height < WindowPlacement.minimumSize.height) {
         return;
@@ -247,18 +240,17 @@ class _Tracker with WindowListener {
     }
   }
 
-  @override
-  void onWindowMoved() => _scheduleSave();
-
-  @override
-  void onWindowResized() => _scheduleSave();
-
-  @override
-  void onWindowMaximize() => unawaited(saveNow());
-
-  @override
-  void onWindowUnmaximize() => unawaited(saveNow());
-
-  @override
-  void onWindowClose() => unawaited(saveNow());
+  void _onWindowEvent(WindowEvent event) {
+    switch (event) {
+      case WindowMovedEvent():
+      case WindowResizedEvent():
+        _scheduleSave();
+      case WindowMaximizedEvent():
+      case WindowRestoredEvent():
+      case WindowCloseRequestedEvent():
+        unawaited(saveNow());
+      default:
+        break;
+    }
+  }
 }

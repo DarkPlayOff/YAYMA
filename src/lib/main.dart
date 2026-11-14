@@ -63,55 +63,55 @@ Future<void> main() async {
     );
   }
   final appInitialization = AppInit.initialize();
-  final windowInitialization = isDesktop
-      ? windowManager.ensureInitialized()
-      : Future<void>.value();
 
   runApp(const MyApp());
 
-  await Future.wait([appInitialization, windowInitialization]);
+  await appInitialization;
 
-  Future<void>? windowReady;
+  var windowReady = false;
   if (isDesktop) {
-    final isCustom = customTitlebarSignal.value;
+    final window = WindowManager.instance.getCurrent();
+    if (window != null) {
+      final isCustom = customTitlebarSignal.value;
 
-    final savedBounds = await WindowPlacement.loadBounds();
-    final savedMaximized = await WindowPlacement.loadMaximized();
-    // On Wayland the compositor owns positioning; on other platforms the
-    // saved monitor may be gone — in both cases restore size and center.
-    final restoreBounds =
-        savedBounds != null &&
-            !WindowPlacement.isWayland &&
-            await WindowPlacement.isPositionVisible(savedBounds)
-        ? savedBounds
-        : null;
+      final savedBounds = await WindowPlacement.loadBounds();
+      final savedMaximized = await WindowPlacement.loadMaximized();
+      // On Wayland the compositor owns positioning; on other platforms the
+      // saved monitor may be gone — in both cases restore size and center.
+      final restoreBounds =
+          savedBounds != null &&
+              !WindowPlacement.isWayland &&
+              await WindowPlacement.isPositionVisible(savedBounds)
+          ? savedBounds
+          : null;
 
-    final windowOptions = WindowOptions(
-      size: savedBounds?.size ?? WindowPlacement.defaultSize,
-      minimumSize: WindowPlacement.minimumSize,
-      center: restoreBounds == null,
-      backgroundColor: Colors.transparent,
-      skipTaskbar: false,
-      titleBarStyle: isCustom ? TitleBarStyle.hidden : TitleBarStyle.normal,
-    );
-    windowReady = windowManager.waitUntilReadyToShow(windowOptions, () async {
+      window
+        ..titleBarStyle = isCustom ? TitleBarStyle.hidden : TitleBarStyle.normal
+        ..minimumSize = WindowPlacement.minimumSize.toNative()
+        ..backgroundColor = const Color(0x00000000).toNative()
+        ..isVisibleInTaskbar = true
+        ..setSize(
+          (savedBounds?.size ?? WindowPlacement.defaultSize).toNative(),
+          false,
+        );
       if (restoreBounds != null) {
-        await windowManager.setBounds(restoreBounds);
+        window.bounds = restoreBounds.toNative();
+      } else {
+        window.center();
       }
-      if (savedMaximized) {
-        await windowManager.maximize();
-      }
-      await windowManager.show();
-      await windowManager.focus();
+      if (savedMaximized) window.maximize();
+      window
+        ..show()
+        ..focus();
       WindowPlacement.track();
-    });
+      windowReady = true;
+    }
   }
 
   // Defer optional desktop integrations until Flutter has rendered its first frame.
   await WidgetsBinding.instance.endOfFrame;
 
-  if (windowReady != null) {
-    await windowReady;
+  if (windowReady) {
     await SystemTrayManager.instance.initialize();
     await GlobalHotkeyService.initialize();
   }
