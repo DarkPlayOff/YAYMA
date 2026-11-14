@@ -61,7 +61,10 @@ pub struct ThumbnailManager {
 /// Only a raw `HWND` value is stored; the manager itself owns no COM/GDI
 /// objects. Every Win32 call made with that handle (`IsWindow`,
 /// `DwmInvalidateIconicBitmaps`) is documented to be valid from any thread.
+// SAFETY: matches the guarantee above — the handle is only ever used from
+// calls that accept it cross-thread, and no owned object is shared.
 unsafe impl Send for ThumbnailManager {}
+// SAFETY: same as the `Send` impl above; `&ThumbnailManager` only reads that handle.
 unsafe impl Sync for ThumbnailManager {}
 
 impl ThumbnailManager {
@@ -74,11 +77,14 @@ impl ThumbnailManager {
 
         // `SetWindowsHookExW` runs `hook_proc` on the target thread's message
         // loop, which is where the DWM attributes and the subclass must be set.
+        // SAFETY: `target_hwnd` comes from `get_flutter_hwnd` and is a live window.
         let thread_id = unsafe { GetWindowThreadProcessId(target_hwnd, None) };
         if thread_id == 0 {
             return None;
         }
         let hook =
+            // SAFETY: no DLL module is passed (`None`), so the hook lives in this
+            // process and is removed before the module unloads.
             match unsafe { SetWindowsHookExW(WH_CALLWNDPROC, Some(hook_proc), None, thread_id) } {
                 Ok(hook) => hook,
                 Err(e) => {
@@ -86,6 +92,9 @@ impl ThumbnailManager {
                     return None;
                 }
             };
+        // SAFETY: `hook` is the live hook handle just installed and `target_hwnd`
+        // is a live window; `SendMessageW` blocks until the target thread runs
+        // `hook_proc`, which is what installs the DWM attributes on that thread.
         unsafe {
             HOOK_HANDLE.store(hook.0 as isize, Ordering::Relaxed);
             let _ = SendMessageW(
@@ -188,6 +197,8 @@ fn prerender_loop(rx: std::sync::mpsc::Receiver<()>) {
             };
             let mut ready = READY_BITMAPS.lock();
             if !is_current(&job) {
+                // SAFETY: `h` is an HBITMAP we created for this job and never
+                // handed to DWM, so this is the only owner releasing it.
                 unsafe {
                     let _ = DeleteObject(HBITMAP(h.0.cast()).into());
                 }
@@ -200,6 +211,8 @@ fn prerender_loop(rx: std::sync::mpsc::Receiver<()>) {
         if installed_any {
             INVALIDATED_HASH.store(job.hash, Ordering::Relaxed);
             let hwnd = HWND(job.hwnd as *mut _);
+            // SAFETY: `hwnd` was captured from the live Flutter window; both calls
+            // are documented to accept a stale handle and return an error instead.
             unsafe {
                 if IsWindow(Some(hwnd)).as_bool() {
                     let _ = DwmInvalidateIconicBitmaps(hwnd);
@@ -220,11 +233,14 @@ fn is_current(job: &PrerenderJob) -> bool {
 fn replace_ready_bitmap(ready: &mut Vec<CachedBitmap>, tw: u32, th: u32, h: HBITMAP) {
     if let Some(pos) = ready.iter().position(|c| c.width == tw && c.height == th) {
         let old = ready.remove(pos);
+        // SAFETY: `old` was removed from the ready list, so no live request can
+        // still hand this bitmap to DWM; we are its last owner.
         unsafe {
             let _ = DeleteObject(HBITMAP(old.hbitmap_ptr as *mut _).into());
         }
     } else if ready.len() >= MAX_READY_BITMAPS {
         let old = ready.remove(0);
+        // SAFETY: same as above — evicted from the list before being freed.
         unsafe {
             let _ = DeleteObject(HBITMAP(old.hbitmap_ptr as *mut _).into());
         }
@@ -237,6 +253,8 @@ fn replace_ready_bitmap(ready: &mut Vec<CachedBitmap>, tw: u32, th: u32, h: HBIT
 }
 
 fn set_iconic_bitmap(hwnd: HWND, msg: u32, h: HBITMAP) {
+    // SAFETY: `hwnd`/`h` belong to a thumbnail request DWM just delivered, and the
+    // bitmap is still owned by us here; DWM copies it during the call.
     unsafe {
         if msg == WM_DWMSENDICONICTHUMBNAIL {
             let _ = DwmSetIconicThumbnail(hwnd, h, 0);
@@ -248,6 +266,8 @@ fn set_iconic_bitmap(hwnd: HWND, msg: u32, h: HBITMAP) {
 
 pub fn get_flutter_hwnd() -> Option<HWND> {
     let mut target_hwnd = HWND::default();
+    // SAFETY: `enum_windows_proc` only writes through the `*mut HWND` we pass in,
+    // which stays alive for the duration of the call.
     unsafe {
         let _ = EnumWindows(
             Some(enum_windows_proc),
@@ -412,12 +432,19 @@ fn ensure_com() {
     // STA, so MTA init there fails with RPC_E_CHANGED_MODE and is ignored;
     // WIC objects are free-threaded either way. Skipping CoUninitialize is
     // intentional: it would tear down COM under threads we don't own.
+    // SAFETY: `CoInitializeEx` on an already-initialized thread just returns a
+    // mode error, which is expected here and ignored.
     unsafe {
         let _ = CoInitializeEx(None, COINIT_MULTITHREADED | COINIT_DISABLE_OLE1DDE);
     }
 }
 
 fn create_hbitmap_from_wic(bytes: &[u8], target_w: u32, target_h: u32) -> Option<HBITMAP> {
+    // SAFETY: every WIC/DWM call below is a plain COM/Win32 call on objects this
+    // function created and still owns, made on the thread that ran `ensure_com`.
+    // `dest_ptr` is only written inside the bounds of the DIB section allocated
+    // for `target_w * target_h` 32-bit pixels, using offsets derived from `size`
+    // clamped to `min(target_w, target_h)`.
     unsafe {
         ensure_com();
         let factory = WIC_FACTORY.with(|f| {

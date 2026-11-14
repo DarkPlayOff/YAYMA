@@ -1,0 +1,4 @@
+# A panic is the assertion in tests, so unwrap/expect/prints are fine there.
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-print-in-tests = true

@@ -17,7 +17,10 @@ static TITLE_CLEANUP_PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
         r"(?i)\s*feat\..*$",
         r"(?i)\s*ft\..*$",
     ];
-    patterns.iter().map(|p| Regex::new(p).unwrap()).collect()
+    patterns
+        .iter()
+        .map(|p| Regex::new(p).expect("regex is a literal and always compiles"))
+        .collect()
 });
 
 const ARTIST_SEPARATORS: &[&str] = &[

@@ -49,7 +49,10 @@ pub async fn set_hotkeys_enabled(ctx: &AppContext, enabled: bool) -> HotkeySetti
 /// (unknown action, unmappable key, combo already taken) are reported as a
 /// structured result instead of an error, so the UI can show a precise
 /// message without string matching.
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "one argument per binding field keeps the FFI signature flat"
+)]
 pub async fn set_hotkey_binding(
     ctx: &AppContext,
     action: String,

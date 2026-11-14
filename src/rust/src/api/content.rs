@@ -455,7 +455,9 @@ async fn embed_metadata(
         tagged_file.clear();
         let primary_tag_type = tagged_file.primary_tag_type();
         tagged_file.insert_tag(Tag::new(primary_tag_type));
-        let tag = tagged_file.primary_tag_mut().unwrap();
+        let tag = tagged_file
+            .primary_tag_mut()
+            .expect("the primary tag was just inserted");
 
         tag.set_title(title);
         tag.set_artist(artists);

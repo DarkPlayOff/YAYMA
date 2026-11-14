@@ -222,7 +222,7 @@ impl AudioSystem {
         // Monitor signals to update SMTC
         #[cfg(not(any(target_os = "android")))]
         {
-            let smtc_clone = smtc.clone();
+            let smtc_clone = smtc;
             let signals_clone = signals.clone();
             let poll_handle = tokio::spawn(async move {
                 let mut last_track_id = None;

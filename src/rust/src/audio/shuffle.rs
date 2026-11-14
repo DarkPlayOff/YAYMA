@@ -161,7 +161,7 @@ mod tests {
     fn enable_keeps_current_first_and_disable_restores_order() {
         let mut s = ShuffleState::inactive();
         let q = queue(&["a", "b", "c", "d", "e"]);
-        let (shuffled, new_index) = s.enable(q.clone(), 2);
+        let (shuffled, new_index) = s.enable(q, 2);
         // Current track stays first at index 0.
         assert_eq!(new_index, 0);
         assert_eq!(shuffled[0].id, "c");

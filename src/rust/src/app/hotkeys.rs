@@ -334,7 +334,7 @@ fn apply_current() {
             Some((hotkey.id(), action))
         })
         .collect();
-    *REGISTERED.write() = registered.clone();
+    *REGISTERED.write() = registered;
 
     if !settings.enabled {
         // Still send an empty apply so previously registered hotkeys are
@@ -427,6 +427,8 @@ fn pump_win32_messages() {
     use windows::Win32::UI::WindowsAndMessaging::{
         DispatchMessageW, MSG, PM_REMOVE, PeekMessageW, TranslateMessage,
     };
+    // SAFETY: this is the thread that created the windows whose messages are
+    // pumped; `msg` is a stack value owned by the loop for the whole call.
     unsafe {
         let mut msg = MSG::default();
         while PeekMessageW(&mut msg, None, 0, 0, PM_REMOVE).as_bool() {

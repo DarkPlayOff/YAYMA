@@ -26,6 +26,7 @@ impl DelayLine {
     #[inline(always)]
     pub fn read(&self, delay: usize) -> f32 {
         let idx = self.pos.wrapping_sub(1).wrapping_sub(delay) & self.mask;
+        // SAFETY: `mask` is `buffer.len() - 1`, so the masked index is in bounds.
         unsafe { *self.buffer.get_unchecked(idx) }
     }
 

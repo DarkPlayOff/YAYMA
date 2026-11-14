@@ -92,7 +92,10 @@ async fn fetch_remote_for_source(
 /// Unified offline-or-remote resolution; sends `LoadContext` or
 /// `ContextFetched` back to the actor. Differences are driven by `source`.
 /// Takes the full actor dependency set to replace three ~45-line copies.
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "replaces three copies of the same 45-line body; grouping the deps into a struct would only rename them"
+)]
 pub async fn resolve_single_track_offline_or_remote(
     source: SingleTrackSource,
     tid: String,

@@ -10,10 +10,12 @@ use crate::lyrics::{ParsedLine, ParsedWord};
 use regex::Regex;
 use std::sync::LazyLock;
 
-static LINE_RE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"^\[(\d+):(\d+\.\d+)\](.*)$").unwrap());
-static INLINE_WORD_RE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"<(\d+):(\d+\.\d+)>([^<]*)").unwrap());
+static LINE_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"^\[(\d+):(\d+\.\d+)\](.*)$").expect("regex is a literal and always compiles")
+});
+static INLINE_WORD_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"<(\d+):(\d+\.\d+)>([^<]*)").expect("regex is a literal and always compiles")
+});
 
 fn parse_timestamp(minutes: &str, seconds: &str) -> f64 {
     minutes.parse().unwrap_or(0.0) * 60.0 + seconds.parse().unwrap_or(0.0)

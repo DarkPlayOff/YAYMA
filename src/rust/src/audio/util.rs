@@ -32,6 +32,9 @@ pub(crate) fn get_windows_full_device_names() -> Vec<String> {
 
     let mut result = Vec::new();
 
+    // SAFETY: COM is initialized and torn down on this same thread within the
+    // block; every COM object lives only inside it, and the copied-out names are
+    // plain Rust strings.
     unsafe {
         let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
 

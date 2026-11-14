@@ -145,6 +145,8 @@ fn vibe_window_hidden() -> bool {
         }
     };
     let hwnd = HWND(raw as *mut _);
+    // SAFETY: `raw` came from `get_flutter_hwnd`; both queries accept a stale or
+    // foreign handle and report it as not-iconic/not-visible rather than fault.
     unsafe { IsIconic(hwnd).as_bool() || !IsWindowVisible(hwnd).as_bool() }
 }
 

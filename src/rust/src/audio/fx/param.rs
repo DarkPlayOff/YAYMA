@@ -44,9 +44,6 @@ pub struct EffectParams {
     version: AtomicU32,
 }
 
-unsafe impl Send for EffectParams {}
-unsafe impl Sync for EffectParams {}
-
 impl EffectParams {
     pub fn new(info: &[ParamInfo]) -> Self {
         Self {

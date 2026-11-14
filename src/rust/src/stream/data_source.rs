@@ -241,7 +241,10 @@ impl StreamingDataSource {
                         std::future::pending().await
                     }
                 }, if has_fetch => {
-                    let (_, start, _end, request_generation) = current_fetch.take().unwrap();
+                    let Some((_, start, _end, request_generation)) = current_fetch.take() else {
+                        // `has_fetch` was true when the branch was selected.
+                        continue;
+                    };
                     match res {
                         Ok(Ok(data)) => {
                             let current_gen = ctx.generation.load(Ordering::Acquire);

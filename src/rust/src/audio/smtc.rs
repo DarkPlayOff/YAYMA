@@ -32,6 +32,7 @@ impl SmtcManager {
         >,
     ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         #[cfg(target_os = "windows")]
+        // SAFETY: pure Win32 call taking a static NUL-terminated wide string.
         unsafe {
             let _ = SetCurrentProcessExplicitAppUserModelID(w!("com.darkplayoff.yayma"));
         }

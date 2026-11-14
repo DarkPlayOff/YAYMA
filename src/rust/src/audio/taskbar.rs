@@ -274,6 +274,9 @@ fn dispatch_on_ui_thread(cmd: UiCmd) {
         return;
     };
     *PENDING_CMD.lock() = Some(cmd);
+    // SAFETY: `MAIN_HWND` only ever stores the handle of this process's main
+    // window; posting to a since-destroyed handle merely fails, and the command
+    // is dropped below in that case.
     let posted = unsafe {
         PostMessageW(
             Some(HWND(hwnd as *mut _)),
@@ -289,6 +292,8 @@ fn dispatch_on_ui_thread(cmd: UiCmd) {
 }
 
 fn apply_buttons(hwnd: HWND, buttons: &[ButtonSpec], tooltip: &str) {
+    // SAFETY: called from the window's own subclass proc, so `hwnd` is live and
+    // every taskbar/ITaskbarList3 call happens on its owning (UI) thread.
     unsafe {
         if !IsWindowVisible(hwnd).as_bool() {
             // Hidden (e.g. closed to tray): skip now, the watcher retries on
@@ -415,6 +420,8 @@ fn cached_icon(
     wide.push(0);
 
     let handle = unsafe {
+        // SAFETY: `wide` is NUL-terminated (pushed above) and outlives the call;
+        // `cx`/`cy` are caller-supplied icon dimensions, which is all the API needs.
         LoadImageW(
             None,
             PCWSTR(wide.as_ptr()),
@@ -436,6 +443,9 @@ fn resolve_asset(asset: &str) -> Option<std::path::PathBuf> {
     static ASSETS_DIR: OnceLock<Option<std::path::PathBuf>> = OnceLock::new();
     let dir = ASSETS_DIR.get_or_init(|| {
         let mut buf = [0u16; 1024];
+        // SAFETY: writes at most `buf.len()` UTF-16 units into a stack buffer that
+        // outlives the call; a truncated path is handled by the `len == 0` guard
+        // and `from_utf16_lossy`.
         let len = unsafe { GetModuleFileNameW(Some(HMODULE::default()), &mut buf) } as usize;
         if len == 0 {
             return None;

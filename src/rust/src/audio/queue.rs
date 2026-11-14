@@ -338,7 +338,7 @@ impl QueueManager {
         signals: AudioSignals,
         track_progress: Arc<TrackProgress>,
     ) -> Self {
-        let url_prefetcher = UrlPrefetcher::new(api.clone(), url_cache.clone());
+        let url_prefetcher = UrlPrefetcher::new(api.clone(), url_cache);
 
         Self {
             api,

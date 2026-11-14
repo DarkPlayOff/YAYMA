@@ -169,7 +169,7 @@ pub async fn fetch_full_tracks(
         PlaylistTracks::Full(tracks) => tracks,
         PlaylistTracks::WithInfo(tracks) => tracks.into_iter().map(|t| t.track).collect(),
         PlaylistTracks::Partial(partial) => {
-            let ids: Vec<String> = partial.into_iter().map(|p| p.id.to_string()).collect();
+            let ids: Vec<String> = partial.into_iter().map(|p| p.id).collect();
 
             let mut fetched = Vec::new();
             // Keep requests sequential and bounded.  Apart from avoiding a burst of

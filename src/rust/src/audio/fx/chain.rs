@@ -66,7 +66,7 @@ impl EffectChain {
             params: params.clone(),
         };
 
-        self.handles.insert(id_str.clone(), handle.clone());
+        self.handles.insert(id_str, handle.clone());
         self.slots.push(EffectSlot { effect, params });
 
         handle
