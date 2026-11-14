@@ -108,14 +108,16 @@ class _AppContextMenuState<T> extends State<AppContextMenu<T>> {
     if (_entry != null) return;
     final box = _anchorKey.currentContext?.findRenderObject() as RenderBox?;
     if (box == null) return;
-    final origin = box.localToGlobal(Offset(0, box.size.height));
+    // The menu lays itself out against the whole anchor rect. A zero-size
+    // point at the trigger's bottom let the "no room below, open above"
+    // fallback end flush with the trigger's bottom and cover it.
+    final anchorRect = box.localToGlobal(Offset.zero) & box.size;
 
     _entry = OverlayEntry(
       builder: (context) => Stack(
         children: [
-          Positioned(
-            left: origin.dx,
-            top: origin.dy,
+          Positioned.fromRect(
+            rect: anchorRect,
             child: MenuAnchor(
               controller: _controller,
               style: _menuStyle(context),
@@ -126,7 +128,7 @@ class _AppContextMenuState<T> extends State<AppContextMenu<T>> {
               menuChildren: widget.items.asMap().entries.map((entry) {
                 return _buildItem(context, entry.value, entry.key);
               }).toList(),
-              builder: (context, controller, child) => const SizedBox.shrink(),
+              builder: (context, controller, child) => const SizedBox.expand(),
             ),
           ),
         ],

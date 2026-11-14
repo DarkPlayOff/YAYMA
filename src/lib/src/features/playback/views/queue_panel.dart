@@ -574,14 +574,21 @@ class _QueueTrackRow extends StatelessWidget {
         child: row,
       );
     }
-    return InkWell(
-      onTap: absoluteIndex == null
-          ? null
-          : () =>
-                unawaited(PlaybackController.jumpToQueueIndex(absoluteIndex!)),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        child: row,
+    // Local Material: ink must paint inside the row. On the dialog's Material
+    // the hover highlight of a row at the list edge is clipped to the dialog
+    // instead of the viewport, so it spills over the panel's actions.
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: absoluteIndex == null
+            ? null
+            : () => unawaited(
+                PlaybackController.jumpToQueueIndex(absoluteIndex!),
+              ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          child: row,
+        ),
       ),
     );
   }
