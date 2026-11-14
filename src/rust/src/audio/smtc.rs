@@ -18,6 +18,10 @@ pub struct SmtcManager {
     http_cache: std::sync::Arc<crate::storage::cache::HttpCache>,
     #[cfg(target_os = "windows")]
     thumbnail_manager: Option<ThumbnailManager>,
+    /// Incremented per metadata update so a slow cover load can't replace the
+    /// artwork of a track that was started after it.
+    #[cfg(target_os = "windows")]
+    cover_seq: u64,
 }
 
 impl SmtcManager {
@@ -93,6 +97,8 @@ impl SmtcManager {
             http_cache,
             #[cfg(target_os = "windows")]
             thumbnail_manager,
+            #[cfg(target_os = "windows")]
+            cover_seq: 0,
         })
     }
 
@@ -115,13 +121,15 @@ impl SmtcManager {
 
         #[cfg(target_os = "windows")]
         if let (Some(url), Some(thumb_mgr)) = (&cover_url, self.thumbnail_manager) {
+            self.cover_seq = self.cover_seq.wrapping_add(1);
+            let seq = self.cover_seq;
             let url_clone = url.clone();
             let cache = self.http_cache.clone();
             tokio::spawn(async move {
                 if let Ok(path) = cache.get_file(&url_clone).await
                     && let Ok(bytes) = tokio::fs::read(path).await
                 {
-                    thumb_mgr.update_cover(bytes);
+                    thumb_mgr.update_cover(seq, bytes);
                 }
             });
         }
