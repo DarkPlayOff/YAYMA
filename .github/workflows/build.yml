@@ -64,6 +64,7 @@ jobs:
         run: |
           VERSION=${GITHUB_REF#refs/tags/v}
           if [ "$VERSION" == "$GITHUB_REF" ]; then VERSION="manual"; fi
+          cp LICENSE src/build/linux/x64/release/bundle/LICENSE
           tar -czvf yayma-linux-x64-${VERSION}.tar.gz -C src/build/linux/x64/release/bundle/ .
 
       - name: Upload
@@ -130,6 +131,7 @@ jobs:
           $zip = Join-Path $env:GITHUB_WORKSPACE "yayma-windows-x64-$VERSION.zip"
           $sevenZip = @("$env:ProgramFiles\7-Zip\7z.exe", "${env:ProgramFiles(x86)}\7-Zip\7z.exe") | Where-Object { Test-Path $_ } | Select-Object -First 1
           if (-not $sevenZip) { throw "7-Zip not found on runner" }
+          Copy-Item "$env:GITHUB_WORKSPACE\LICENSE" "src\build\windows\x64\runner\Release\LICENSE" -Force
           Push-Location "src\build\windows\x64\runner\Release"
           # 7z is multi-threaded; Compress-Archive is single-threaded and takes minutes here.
           # No file args = add everything from the current dir, stored at archive root.
@@ -261,6 +263,7 @@ jobs:
             abi=$(basename "$apk" | sed -E 's/app-(.*)-release\.apk/\1/')
             cp "$apk" "android_artifacts/yayma-android-${abi}-${VERSION}${SIGN_SUFFIX}.apk"
           done
+          cp LICENSE android_artifacts/LICENSE
 
       - name: Upload
         uses: actions/upload-artifact@v4
@@ -268,7 +271,7 @@ jobs:
           # Artifacts are already compressed (apk/zip/dmg/tar.gz); re-gzipping costs minutes.
           compression-level: 0
           name: android_release
-          path: android_artifacts/yayma-android-*.apk
+          path: android_artifacts/*
 
   build-macos:
     runs-on: macos-latest
@@ -320,7 +323,10 @@ jobs:
           if [ "$VERSION" == "$GITHUB_REF" ]; then VERSION="manual"; fi
           APP="src/build/macos/Build/Products/Release/yayma.app"
           test -d "$APP"
-          hdiutil create -volname "YAYMA" -srcfolder "$APP" -ov -format UDZO "yayma-macos-arm64-${VERSION}.dmg"
+          mkdir -p dmg_stage
+          cp -R "$APP" dmg_stage/
+          cp LICENSE dmg_stage/LICENSE
+          hdiutil create -volname "YAYMA" -srcfolder dmg_stage -ov -format UDZO "yayma-macos-arm64-${VERSION}.dmg"
 
       - name: Upload
         uses: actions/upload-artifact@v4

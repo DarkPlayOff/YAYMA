@@ -1,3 +1,8 @@
+//! TTML (BetterLyrics / Apple-style) lyrics parser with word-level timing.
+//!
+//! Ported to Rust from vivi-music's `TTMLParser.kt` (vivimusic Project
+//! (C) 2026, GPL-3.0), modified 2026.
+
 use crate::lyrics::{ParsedLine, ParsedWord};
 use quick_xml::events::{BytesStart, Event};
 use quick_xml::{Reader, XmlVersion};
