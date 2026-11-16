@@ -49,6 +49,11 @@ impl LikedCache {
         (self.liked_ids_set.clone(), self.disliked_ids.clone())
     }
 
+    /// Borrowed view for hot paths that only need lookups.
+    pub fn sets(&self) -> (&HashSet<String>, &HashSet<String>) {
+        (&self.liked_ids_set, &self.disliked_ids)
+    }
+
     pub fn ordered_snapshot(&self) -> OrderedLikedSnapshot {
         (self.liked_ids.clone(), self.disliked_ids.clone())
     }

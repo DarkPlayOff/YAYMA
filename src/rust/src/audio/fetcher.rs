@@ -299,6 +299,19 @@ impl FetchState {
         self.wave_session.lock().clone()
     }
 
+    /// Runs `f` with the stored wave session under the lock. Callers that only
+    /// read a few fields must not clone it: it carries a whole page of tracks.
+    pub fn with_wave_session<R>(&self, f: impl FnOnce(&Session) -> R) -> Option<R> {
+        self.wave_session.lock().as_ref().map(f)
+    }
+
+    pub fn wave_session_terminated(&self) -> bool {
+        self.wave_session
+            .lock()
+            .as_ref()
+            .is_some_and(|s| s.terminated)
+    }
+
     pub fn wave_session_arc(&self) -> Arc<Mutex<Option<Session>>> {
         self.wave_session.clone()
     }
@@ -359,19 +372,24 @@ impl FetchState {
         if self.is_fetching() {
             return Err(FetchError::AlreadyFetching);
         }
-        let session = match self.wave_session_clone() {
-            Some(s) => s,
-            None => return Err(FetchError::MissingWaveSession),
-        };
-        let session_id = match session.radio_session_id.clone() {
-            Some(id) if !id.is_empty() => id,
-            _ => return Err(FetchError::MissingWaveSession),
+        // Snapshot only what the spawned task needs: the session carries a
+        // whole page of tracks.
+        let Some((session_id, default_batch, source_id)) = self
+            .with_wave_session(|s| {
+                Some((
+                    s.radio_session_id.clone().filter(|id| !id.is_empty())?,
+                    s.batch_id.clone(),
+                    s.source_id().to_string(),
+                ))
+            })
+            .flatten()
+        else {
+            return Err(FetchError::MissingWaveSession);
         };
 
         let finished = self.fetch_finished.clone();
         let result_tx = self.result_tx.clone();
         self.task = Some(tokio::spawn(async move {
-            let default_batch = session.batch_id.clone();
             // Kept aside so a failed page request can hand its finish/skip
             // events back for retry instead of dropping them.
             let retry_events = pending_feedback.clone();
@@ -395,7 +413,7 @@ impl FetchState {
                             total_played: Some(e.total_played),
                             track_length: e.track_length,
                         },
-                        from: Some(session.source_id().to_string()),
+                        from: Some(source_id.clone()),
                     }
                 })
                 .collect();
@@ -622,6 +640,25 @@ mod tests {
         assert!(state.pending_track_ids.is_empty());
         assert!(!state.is_fetching());
         assert!(state.wave_session_clone().is_none());
+    }
+
+    #[test]
+    fn wave_session_fields_are_read_under_the_lock() {
+        let state = FetchState::new();
+        assert!(!state.wave_session_terminated());
+        assert!(state.with_wave_session(|s| s.batch_id.clone()).is_none());
+
+        state.set_wave_session(test_session("b1", Some("sess-1")));
+        assert!(!state.wave_session_terminated());
+        assert_eq!(
+            state.with_wave_session(|s| s.batch_id.clone()).as_deref(),
+            Some("b1")
+        );
+
+        let mut dead = test_session("b2", Some("sess-1"));
+        dead.terminated = true;
+        state.set_wave_session(dead);
+        assert!(state.wave_session_terminated());
     }
 
     fn test_session(batch_id: &str, radio_session_id: Option<&str>) -> Session {

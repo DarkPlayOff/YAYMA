@@ -27,12 +27,10 @@ pub fn spawn_bridge_worker(ctx: AppContext, mut shutdown_rx: watch::Receiver<boo
 
         // Send initial state
         {
-            let (liked, disliked) = audio_state.read().await.liked.snapshot();
-            let state = crate::api::playback::get_playback_state_internal(
-                &audio_signals,
-                &liked,
-                &disliked,
-            );
+            let state = {
+                let audio = audio_state.read().await;
+                crate::api::playback::get_playback_state_internal(&audio_signals, &audio.liked)
+            };
             ctx.send_event(AppEvent::PlaybackStateChanged(state));
 
             ctx.send_event(AppEvent::PlaybackProgress(
@@ -56,8 +54,10 @@ pub fn spawn_bridge_worker(ctx: AppContext, mut shutdown_rx: watch::Receiver<boo
                 }
                 res = changed_rx.changed() => {
                     if res.is_err() { break; }
-                    let (liked, disliked) = audio_state.read().await.liked.snapshot();
-                    let state = crate::api::playback::get_playback_state_internal(&audio_signals, &liked, &disliked);
+                    let state = {
+                        let audio = audio_state.read().await;
+                        crate::api::playback::get_playback_state_internal(&audio_signals, &audio.liked)
+                    };
                     ctx.send_event(AppEvent::PlaybackStateChanged(state));
 
                     // Save state when is_playing changes (play/pause)

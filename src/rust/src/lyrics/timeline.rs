@@ -35,12 +35,12 @@ pub fn build_timeline(
         });
     }
 
-    for (index, line) in lines.iter().enumerate() {
-        let is_last = index + 1 == lines.len();
-        let next_start = lines
-            .get(index + 1)
-            .map_or(line.start_ms + LAST_LINE_MS, |next| next.start_ms);
-        let duration = next_start - line.start_ms;
+    let mut lines = lines.into_iter().peekable();
+    while let Some(line) = lines.next() {
+        let start_ms = line.start_ms;
+        let is_last = lines.peek().is_none();
+        let next_start = lines.peek().map_or(start_ms + LAST_LINE_MS, |next| next.start_ms);
+        let duration = next_start - start_ms;
 
         // The last line only carries its text; any trailing silence is the
         // outro pause below. An in-line pause here would swallow the outro.
@@ -48,15 +48,15 @@ pub fn build_timeline(
             let text_duration = if is_last {
                 line.words
                     .last()
-                    .map_or(LINE_TEXT_MS, |word| word.end_ms - line.start_ms)
+                    .map_or(LINE_TEXT_MS, |word| word.end_ms - start_ms)
                     .clamp(0, duration)
             } else {
                 duration
             };
             items.push(LyricItemDto {
-                time_ms: line.start_ms,
+                time_ms: start_ms,
                 duration_ms: text_duration,
-                line: Some(line.clone()),
+                line: Some(line),
             });
         } else {
             // Word timings can span most of a long gap: end the line when the
@@ -64,19 +64,19 @@ pub fn build_timeline(
             let sung = line
                 .words
                 .last()
-                .map_or(LINE_TEXT_MS, |word| word.end_ms - line.start_ms);
+                .map_or(LINE_TEXT_MS, |word| word.end_ms - start_ms);
             let text_duration = sung.clamp(0, duration);
 
             items.push(LyricItemDto {
-                time_ms: line.start_ms,
+                time_ms: start_ms,
                 duration_ms: text_duration,
-                line: Some(line.clone()),
+                line: Some(line),
             });
 
             let pause_duration = duration - text_duration - LINE_BREATH_MS;
             if pause_duration > 0 {
                 items.push(LyricItemDto {
-                    time_ms: line.start_ms + text_duration,
+                    time_ms: start_ms + text_duration,
                     duration_ms: pause_duration,
                     line: None,
                 });

@@ -357,13 +357,17 @@ impl QueueManager {
         }
     }
 
-    pub fn wave_context(&self) -> Option<Session> {
-        self.fetch.wave_session_clone()
+    /// Runs `f` with the stored wave session under the lock. Callers that only
+    /// read a field must not clone it: it carries a whole page of tracks.
+    pub fn with_wave_session<R>(&self, f: impl FnOnce(&Session) -> R) -> Option<R> {
+        self.fetch.with_wave_session(f)
     }
 
-    /// Clone of the active playback context for `/plays` attribution.
-    pub fn playback_context(&self) -> PlaybackContext {
-        self.playback_context.lock().clone()
+    /// Runs `f` with the active context under the lock. Callers that only read
+    /// a field must not clone the context: a playlist/album carries its whole
+    /// track list.
+    pub fn with_playback_context<R>(&self, f: impl FnOnce(&PlaybackContext) -> R) -> R {
+        f(&self.playback_context.lock())
     }
 
     pub fn in_wave(&self) -> bool {
@@ -385,14 +389,18 @@ impl QueueManager {
         self.generation
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
-        *self.playback_context.lock() = context.clone();
-        self.signals.set_playback_context(&context);
         // Shuffle is a player-level setting (desktop parity): it survives a
         // context switch and is re-applied to the freshly loaded queue below.
         // The wave queue is owned by the rotor session, so it never starts
         // shuffled.
         let keep_shuffled =
             self.signals.is_shuffled() && !matches!(context, PlaybackContext::Wave(_));
+        {
+            // Moved, not cloned: the DTO below is all the bridge needs from it.
+            let mut guard = self.playback_context.lock();
+            *guard = context;
+            self.signals.set_playback_context(&guard);
+        }
         self.shuffle.reset();
         self.wave_buffer.clear();
         self.wave_fetch_times.clear();
@@ -602,11 +610,7 @@ impl QueueManager {
             return None;
         }
 
-        if self.in_wave()
-            && self
-                .fetch_wave_session_clone()
-                .is_some_and(|s| s.terminated)
-        {
+        if self.in_wave() && self.fetch.wave_session_terminated() {
             self.recreate_wave_session().await;
         }
 
@@ -685,11 +689,7 @@ impl QueueManager {
     }
 
     pub async fn skip_wave_track(&mut self) -> Option<Track> {
-        if self.in_wave()
-            && self
-                .fetch_wave_session_clone()
-                .is_some_and(|s| s.terminated)
-        {
+        if self.in_wave() && self.fetch.wave_session_terminated() {
             self.recreate_wave_session().await;
         }
         if self.in_wave()
@@ -926,10 +926,6 @@ impl QueueManager {
         self.update_prefetch_interest();
     }
 
-    fn fetch_wave_session_clone(&self) -> Option<Session> {
-        self.fetch.wave_session_clone()
-    }
-
     fn trigger_fetch(&mut self) {
         if self.fetch.is_fetching() {
             return;
@@ -942,15 +938,18 @@ impl QueueManager {
             return;
         }
 
-        if let Some(session) = self.fetch_wave_session_clone() {
-            if session.terminated {
+        if let Some((terminated, usable)) = self
+            .fetch
+            .with_wave_session(|s| (s.terminated, is_usable_wave_session(s)))
+        {
+            if terminated {
                 // Dead session: paging/feedback on it is rejected by the
                 // server. Recreate happens in the async next/skip paths
                 // (sync context can't await create_session); don't spam
                 // doomed page requests or lose feedbacks here.
                 return;
             }
-            if !is_usable_wave_session(&session) {
+            if !usable {
                 // No radio_session_id (and preservation had nothing to keep):
                 // trigger_wave_batch would just drop our finish/skip events
                 // with MissingWaveSession, so don't take them.

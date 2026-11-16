@@ -41,8 +41,9 @@ pub fn parse(text: &str) -> Vec<ParsedLine> {
         let start = parse_timestamp(&caps[1], &caps[2]);
         let rest = caps[3].trim();
 
-        let word_caps: Vec<_> = INLINE_WORD_RE.captures_iter(rest).collect();
-        if word_caps.is_empty() {
+        // One scan, no throwaway `Vec<Captures>`.
+        let mut word_caps = INLINE_WORD_RE.captures_iter(rest).peekable();
+        if word_caps.peek().is_none() {
             lines.push(ParsedLine {
                 start,
                 text: rest.to_string(),
@@ -52,14 +53,14 @@ pub fn parse(text: &str) -> Vec<ParsedLine> {
         }
 
         let mut words = Vec::new();
-        for (i, caps) in word_caps.iter().enumerate() {
+        while let Some(caps) = word_caps.next() {
             let word_text = caps[3].trim();
             if word_text.is_empty() {
                 continue;
             }
             let word_start = parse_timestamp(&caps[1], &caps[2]);
             let word_end = word_caps
-                .get(i + 1)
+                .peek()
                 .map(|next| parse_timestamp(&next[1], &next[2]))
                 .unwrap_or(word_start + 2.0);
             words.push(ParsedWord {
@@ -69,11 +70,14 @@ pub fn parse(text: &str) -> Vec<ParsedLine> {
             });
         }
 
-        let line_text = words
-            .iter()
-            .map(|w| w.text.as_str())
-            .collect::<Vec<_>>()
-            .join(" ");
+        // One String instead of a Vec of slices plus `join`.
+        let mut line_text = String::with_capacity(rest.len());
+        for word in &words {
+            if !line_text.is_empty() {
+                line_text.push(' ');
+            }
+            line_text.push_str(&word.text);
+        }
         lines.push(ParsedLine {
             start,
             text: line_text,

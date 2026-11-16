@@ -422,8 +422,7 @@ impl AudioSystem {
         source: &system_loading::SingleTrackSource,
         tid: &str,
     ) -> bool {
-        let ctx = self.queue.playback_context();
-        let matched = match (&ctx, source) {
+        let matched = self.queue.with_playback_context(|ctx| match (ctx, source) {
             (
                 crate::audio::queue::PlaybackContext::Album(album),
                 system_loading::SingleTrackSource::AlbumTrack { album_id },
@@ -438,7 +437,7 @@ impl AudioSystem {
                 system_loading::SingleTrackSource::Liked,
             ) => playlist.kind == 3,
             _ => false,
-        };
+        });
         if !matched {
             return false;
         }
@@ -988,7 +987,7 @@ impl AudioSystem {
 
     // Wave batches are attributed per track like the desktop client.
     fn report_track_start(&mut self, track: &Track, position: Duration, paused: bool) {
-        let mut ctx = PlayContext::from_playback(&self.queue.playback_context());
+        let mut ctx = self.queue.with_playback_context(PlayContext::from_playback);
         if ctx.context == "radio"
             && let Some(batch) = self.queue.wave_batch_for_track(track)
         {
@@ -1024,35 +1023,46 @@ impl AudioSystem {
         batch_id: Option<String>,
         total_played: Option<Duration>,
     ) {
-        let session = match self.queue.wave_context() {
-            Some(s) => s,
-            None => return,
+        // Snapshot only the values the request needs: the session carries a
+        // whole page of tracks, so never clone it on this hot path.
+        let Some((terminated, usable, session_batch_id, radio_session_id, station_id, source_id)) =
+            self.queue.with_wave_session(|s| {
+                (
+                    s.terminated,
+                    is_usable_wave_session(s),
+                    s.batch_id.clone(),
+                    s.radio_session_id.clone(),
+                    s.station_id().to_string(),
+                    s.source_id().to_string(),
+                )
+            })
+        else {
+            return;
         };
         // Never send feedback for a dead session: without radio_session_id
         // the request goes to the user:onyourwave fallback URL with a foreign
         // batch_id (HTTP 400), and a terminated session is rejected too.
         // The session is repaired by preservation (fetcher) / recreate (queue).
-        if session.terminated || !is_usable_wave_session(&session) {
+        if terminated || !usable {
             tracing::error!(
                 feedback_type,
                 track_id = track_id.as_deref().unwrap_or("-"),
-                batch_id = %session.batch_id,
-                radio_session_id = session.radio_session_id.as_deref().unwrap_or("-"),
-                terminated = session.terminated,
+                batch_id = %session_batch_id,
+                radio_session_id = radio_session_id.as_deref().unwrap_or("-"),
+                terminated,
                 "wave_feedback_skipped_dead_session"
             );
             return;
         }
-        let station_id = session.station_id().to_string();
         // Per-track batch attribution like the original client; fall back to
         // the stored session batch for tracks served before per-track
         // mapping existed. `radioStarted` carries no batch.
         let batch_id = match (track_id.is_some(), batch_id) {
             (false, _) => None,
             (true, Some(batch)) => Some(batch),
-            (true, None) => Some(session.batch_id.clone()),
+            (true, None) => Some(session_batch_id),
         };
-        let from = Some(session.source_id().to_string());
+        let from = Some(source_id);
 
         let api = self.yandex.api.clone();
         tokio::spawn(async move {

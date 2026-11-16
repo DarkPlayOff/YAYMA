@@ -45,7 +45,11 @@ static ARTIST_SEPARATORS_LOWER: LazyLock<Vec<String>> =
 pub fn clean_title(title: &str) -> String {
     let mut cleaned = title.trim().to_string();
     for pattern in TITLE_CLEANUP_PATTERNS.iter() {
-        cleaned = pattern.replace_all(&cleaned, "").to_string();
+        // `replace_all` borrows when nothing matched; only a real replacement
+        // needs the extra allocation.
+        if let std::borrow::Cow::Owned(replaced) = pattern.replace_all(&cleaned, "") {
+            cleaned = replaced;
+        }
     }
     cleaned.trim().to_string()
 }

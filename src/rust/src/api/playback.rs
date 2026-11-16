@@ -4,12 +4,21 @@ use crate::app::AppContext;
 use crate::audio::commands::AudioMessage;
 use crate::audio::queue::preview_neighbor;
 
-pub(crate) fn get_playback_state_internal<S: std::hash::BuildHasher>(
+pub(crate) fn get_playback_state_internal(
+    signals: &crate::audio::signals::AudioSignals,
+    liked: &crate::audio::liked::LikedCache,
+) -> PlaybackState {
+    let (liked_ids, disliked_ids) = liked.sets();
+    build_playback_state(signals, liked_ids, disliked_ids)
+}
+
+/// Assembles the bridge payload from borrowed sets so callers with a
+/// `LikedCache` do not have to clone the whole collection per event.
+fn build_playback_state<S: std::hash::BuildHasher>(
     signals: &crate::audio::signals::AudioSignals,
     liked_ids: &std::collections::HashSet<String, S>,
     disliked_ids: &std::collections::HashSet<String, S>,
 ) -> PlaybackState {
-    let current_track = signals.current_track.get();
     PlaybackState {
         is_playing: signals.is_playing.get(),
         is_buffering: signals.is_buffering.get(),
@@ -27,8 +36,10 @@ pub(crate) fn get_playback_state_internal<S: std::hash::BuildHasher>(
         current_wave_seeds: signals.current_wave_seeds.get(),
         codec: signals.codec.get(),
         playback_context: signals.playback_context.get(),
-        current_track: current_track
-            .map(|t| SimpleTrackDto::from_yandex_owned(t, liked_ids, disliked_ids)),
+        current_track: signals.current_track.with(|t| {
+            t.as_ref()
+                .map(|t| SimpleTrackDto::from_yandex(t, liked_ids, disliked_ids))
+        }),
     }
 }
 
@@ -37,7 +48,7 @@ pub fn get_playback_state(
     liked_ids: &std::collections::HashSet<String>,
     disliked_ids: &std::collections::HashSet<String>,
 ) -> PlaybackState {
-    get_playback_state_internal(signals, liked_ids, disliked_ids)
+    build_playback_state(signals, liked_ids, disliked_ids)
 }
 
 pub async fn toggle_play_pause(ctx: &AppContext) {

@@ -722,10 +722,9 @@ pub async fn move_track_in_playlist(
 fn yandex_track_to_metadata(
     mut t: yandex_music::model::track::Track,
 ) -> crate::storage::db::TrackMetadata {
-    let artists: Vec<crate::api::models::TrackArtistDto> = t
-        .artists
-        .iter()
-        .map(crate::api::models::TrackArtistDto::from_yandex)
+    let artists: Vec<crate::api::models::TrackArtistDto> = std::mem::take(&mut t.artists)
+        .into_iter()
+        .map(crate::api::models::TrackArtistDto::from_yandex_owned)
         .collect();
     let album = t.albums.first_mut().and_then(|a| a.title.take());
     let album_id = t
