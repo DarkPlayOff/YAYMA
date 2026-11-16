@@ -5,7 +5,6 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use chrono::{SecondsFormat, Utc};
-use rand::{Rng, RngExt};
 use serde_json::{Value, json};
 use yandex_music::model::track::Track;
 
@@ -440,25 +439,28 @@ fn iso_now() -> String {
 
 /// Desktop client's `addTracksToPlayerTime`: random digits + unix seconds.
 fn new_add_tracks_time() -> String {
-    let digits = rand::rng().random_range(100_000_000_000_u64..1_000_000_000_000);
+    let digits = fastrand::u64(100_000_000_000..1_000_000_000_000);
     format!("{}-{}", digits, Utc::now().timestamp())
 }
 
 /// Random UUID v4 for `playId`.
 fn new_play_id() -> String {
     let mut b = [0u8; 16];
-    rand::rng().fill_bytes(&mut b);
+    // Telemetry id, not a security token: fastrand is fine here.
+    fastrand::fill(&mut b);
     b[6] = (b[6] & 0x0f) | 0x40;
     b[8] = (b[8] & 0x3f) | 0x80;
-    let hex = |bytes: &[u8]| -> String { bytes.iter().map(|b| format!("{b:02x}")).collect() };
-    format!(
-        "{}-{}-{}-{}-{}",
-        hex(&b[0..4]),
-        hex(&b[4..6]),
-        hex(&b[6..8]),
-        hex(&b[8..10]),
-        hex(&b[10..16])
-    )
+
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut s = String::with_capacity(36);
+    for (i, &byte) in b.iter().enumerate() {
+        if matches!(i, 4 | 6 | 8 | 10) {
+            s.push('-');
+        }
+        s.push(HEX[(byte >> 4) as usize] as char);
+        s.push(HEX[(byte & 0x0f) as usize] as char);
+    }
+    s
 }
 
 #[cfg(test)]

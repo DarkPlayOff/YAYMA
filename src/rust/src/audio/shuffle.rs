@@ -1,5 +1,4 @@
 use im::Vector;
-use rand::{rng, seq::SliceRandom};
 use yandex_music::model::track::Track;
 
 #[derive(Clone)]
@@ -38,7 +37,7 @@ impl ShuffleState {
 
             let mut rest: Vec<(Track, Option<usize>)> =
                 queue_vec.into_iter().zip(indices).collect();
-            rest.shuffle(&mut rng());
+            fastrand::shuffle(&mut rest);
 
             let mut new_queue_vec = Vec::with_capacity(rest.len() + 1);
             let mut new_indices = Vec::with_capacity(rest.len() + 1);
@@ -55,7 +54,7 @@ impl ShuffleState {
         } else {
             let mut combined: Vec<(Track, Option<usize>)> =
                 queue_vec.into_iter().zip(indices).collect();
-            combined.shuffle(&mut rng());
+            fastrand::shuffle(&mut combined);
 
             let (new_queue_vec, new_indices): (Vec<_>, Vec<_>) = combined.into_iter().unzip();
             self.index_map = new_indices;
@@ -129,7 +128,7 @@ impl ShuffleState {
         };
 
         let mut rest: Vec<(Track, Option<usize>)> = tracks.into_iter().zip(map).collect();
-        rest.shuffle(&mut rng());
+        fastrand::shuffle(&mut rest);
 
         let mut new_tracks = Vec::with_capacity(rest.len() + 1);
         let mut new_map = Vec::with_capacity(rest.len() + 1);

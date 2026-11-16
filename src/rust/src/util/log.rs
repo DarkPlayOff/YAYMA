@@ -1,15 +1,11 @@
-use std::sync::{LazyLock, OnceLock};
+use std::io::Write as _;
+use std::sync::LazyLock;
 
-use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::{self, Layer, layer::SubscriberExt, util::SubscriberInitExt};
 
 pub static LOG_ENV: LazyLock<String> =
     LazyLock::new(|| format!("{}_LOGLEVEL", env!("CARGO_CRATE_NAME").to_uppercase()));
 pub static LOG_FILE: LazyLock<String> = LazyLock::new(|| format!("{}.log", env!("CARGO_PKG_NAME")));
-
-/// Keeps the file writer's background thread alive for the process lifetime:
-/// dropping the guard flushes and stops the appender.
-static FILE_LOG_GUARD: OnceLock<WorkerGuard> = OnceLock::new();
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
@@ -148,6 +144,64 @@ impl<W: std::io::Write> SizeCappedWriter<W> {
     }
 }
 
+/// Log lines queued for the writer thread before new ones are dropped, so a
+/// stalled disk cannot grow memory without bound. Far above any real burst
+/// (a few MB worst case) yet far below the 128k lines the old appender buffered.
+const LOG_QUEUE: usize = 8192;
+
+/// Starts the background thread that owns the session log file and returns the
+/// sink for the fmt layer. `None` when the thread cannot be spawned, so the
+/// caller falls back to console-only logging instead of panicking.
+///
+/// There is no guard to keep: a static's destructor never runs at process exit,
+/// so the old appender guard flushed nothing today either.
+fn spawn_file_writer(file: std::fs::File) -> Option<LogSink> {
+    let (tx, rx) = std::sync::mpsc::sync_channel::<Vec<u8>>(LOG_QUEUE);
+    let mut writer = SizeCappedWriter::new(file);
+    std::thread::Builder::new()
+        .name("log-writer".into())
+        .spawn(move || {
+            while let Ok(bytes) = rx.recv() {
+                // Disk errors only lose the lines already being written; the
+                // cap still applies and the process keeps running.
+                let _ = writer.write_all(&bytes);
+            }
+            // Writes go straight to the OS, so the flush is only for tidiness.
+            let _ = writer.flush();
+        })
+        .ok()?;
+    Some(LogSink(tx))
+}
+
+/// `MakeWriter` adapter handing each formatted event to the writer thread.
+struct LogSink(std::sync::mpsc::SyncSender<Vec<u8>>);
+
+/// `Write` view of the sink: every chunk becomes one queued message.
+struct LogChunk(std::sync::mpsc::SyncSender<Vec<u8>>);
+
+impl std::io::Write for LogChunk {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        // The chunk is copied because the writer thread owns it. Never blocks:
+        // a full queue drops the line, and claiming a full write keeps a gone
+        // receiver from surfacing as a broken pipe, which the fmt layer answers
+        // with a panic.
+        let _ = self.0.try_send(buf.to_vec());
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+impl<'a> tracing_subscriber::fmt::writer::MakeWriter<'a> for LogSink {
+    type Writer = LogChunk;
+
+    fn make_writer(&'a self) -> LogChunk {
+        LogChunk(self.0.clone())
+    }
+}
+
 pub fn initialize_logging() -> Result<()> {
     install_panic_hook();
 
@@ -170,11 +224,8 @@ pub fn initialize_logging() -> Result<()> {
                 prune_old_logs(&dir);
                 open_session_log(&dir)
             });
-            match opened {
-                Some((file, log_path)) => {
-                    let (writer, guard) =
-                        tracing_appender::non_blocking(SizeCappedWriter::new(file));
-                    let _ = FILE_LOG_GUARD.set(guard);
+            match opened.and_then(|(file, log_path)| Some((spawn_file_writer(file)?, log_path))) {
+                Some((writer, log_path)) => {
                     let file_subscriber = tracing_subscriber::fmt::layer()
                         .with_ansi(false)
                         .with_writer(writer)
@@ -189,7 +240,7 @@ pub fn initialize_logging() -> Result<()> {
                     let _ = registry.try_init();
                     tracing::warn!(
                         dir = %dir.display(),
-                        "failed to open session log file, file logging disabled"
+                        "failed to start file logging, console only"
                     );
                 }
             }
@@ -217,7 +268,7 @@ pub fn initialize_logging() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Write as _;
+    use tracing_subscriber::fmt::writer::MakeWriter as _;
 
     #[test]
     fn size_capped_writer_stops_at_limit_and_marks_once() {
@@ -238,6 +289,40 @@ mod tests {
             1,
             "the drop marker must be written exactly once"
         );
+    }
+
+    #[test]
+    fn log_sink_keeps_chunk_order() {
+        let (tx, rx) = std::sync::mpsc::sync_channel::<Vec<u8>>(LOG_QUEUE);
+        let sink = LogSink(tx);
+        let mut writer = sink.make_writer();
+        writer.write_all(b"line one\n").unwrap();
+        writer.write_all(b"line two\n").unwrap();
+        assert_eq!(rx.recv().unwrap(), b"line one\n".to_vec());
+        assert_eq!(rx.recv().unwrap(), b"line two\n".to_vec());
+    }
+
+    #[test]
+    fn writer_thread_reaches_the_file() {
+        let path = std::env::temp_dir().join(format!("yayma-log-test-{}.log", std::process::id()));
+        let file = std::fs::File::create(&path).unwrap();
+        let sink = spawn_file_writer(file).unwrap();
+        let mut writer = sink.make_writer();
+        writer.write_all(b"line one\n").unwrap();
+        drop(writer);
+        drop(sink);
+        // Dropping the sink closes the channel; the thread then flushes and
+        // exits, so the content must show up shortly.
+        let mut text = String::new();
+        for _ in 0..100 {
+            text = std::fs::read_to_string(&path).unwrap_or_default();
+            if !text.is_empty() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        std::fs::remove_file(&path).ok();
+        assert_eq!(text, "line one\n");
     }
 
     #[test]

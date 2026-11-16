@@ -43,7 +43,7 @@ impl VibeEngine {
             0.4,
         ];
         Self {
-            time: rand::random::<f32>() * 3600.0,
+            time: fastrand::f32() * 3600.0,
             energy_target: AtomicU32::new(0.4f32.to_bits()),
             smoothed_energy: 0.4,
             audio_values: [0.0; 3],

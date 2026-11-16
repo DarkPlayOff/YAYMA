@@ -45,13 +45,12 @@ serde = { version = "1.0.229", features = ["derive"] }
 
 # Logging
 tracing = "0.1.44"
-tracing-appender = "0.2"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 directories = "6.0.0"
 
 # Utilities
-flume = "0.12.0"
-rand = "0.10.3"
+flume = { version = "0.12.0", default-features = false, features = ["async"] }
+fastrand = "2.5.0"
 crossbeam-channel = "0.5.17"
 thiserror = "2.0.21"
 futures = "0.3.34"
@@ -59,7 +58,7 @@ serde_json = "1.0.154"
 
 im = "15.1.0"
 arc-swap = "1.9.5"
-rusqlite = { version = "0.42.0", features = ["bundled"] }
+rusqlite = { version = "0.43.0", default-features = false, features = ["bundled"] }
 
 
 parking_lot = "0.13"
