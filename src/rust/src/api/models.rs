@@ -45,7 +45,8 @@ pub struct InitialSettingsDto {
     pub close_to_tray: bool,
     pub vibe_animation_enabled: bool,
     pub vibe_render_scale: f64,
-    pub blur_effects_enabled: bool,
+    /// Which background shader to show: "aurora" (Сияние) or "wave" (Волна).
+    pub vibe_style: String,
     /// Crossfade toggle: on = fixed-length overlap, off = strict gapless.
     pub crossfade_enabled: bool,
     /// "Меньше ИИ": fewer AI-generated tracks in the recommendations.
@@ -60,7 +61,7 @@ impl Default for InitialSettingsDto {
             close_to_tray: true,
             vibe_animation_enabled: true,
             vibe_render_scale: 0.50,
-            blur_effects_enabled: true,
+            vibe_style: "aurora".to_string(),
             crossfade_enabled: true,
             ai_content_reduction: false,
         }

@@ -50,7 +50,7 @@ class AppInit {
         customTitlebarSignal.value = settings.customTitlebar;
         vibeVisibleSignal.value = settings.vibeAnimationEnabled;
         vibeRenderScaleSignal.value = settings.vibeRenderScale;
-        blurEffectsEnabledSignal.value = settings.blurEffectsEnabled;
+        vibeStyleSignal.value = VibeStyle.fromName(settings.vibeStyle);
         crossfadeEnabledSignal.value = settings.crossfadeEnabled;
         aiContentReductionSignal.value = settings.aiContentReduction;
       } on Object catch (e) {

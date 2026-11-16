@@ -150,12 +150,17 @@ class _SettingsViewState extends State<SettingsView> {
     );
   }
 
-  Future<void> _toggleBlurEffects(bool enabled) async {
-    blurEffectsEnabledSignal.value = enabled;
+  Future<void> _saveVibeStyle(VibeStyle style) async {
+    vibeStyleSignal.value = style;
     await runRustAction(
-      (ctx) => simple.setBlurEffectsEnabled(ctx: ctx, enabled: enabled),
+      (ctx) => simple.setVibeStyle(ctx: ctx, style: style.name),
     );
   }
+
+  String _vibeStyleSubtitle(VibeStyle style) => switch (style) {
+    VibeStyle.aurora => 'Северное сияние: мягкие полосы света в цветах обложки',
+    VibeStyle.wave => 'Волна: пульсирующие пятна света в такт музыке',
+  };
 
   Future<void> _pickPath() async {
     final result = await FilePicker.getDirectoryPath();
@@ -285,13 +290,13 @@ class _SettingsViewState extends State<SettingsView> {
       const SizedBox(height: 32),
       const _SectionTitle(title: 'Визуальные эффекты'),
       const SizedBox(height: 20),
-      // Android has no wave shader, so its settings are hidden.
+      // Android has no background shader, so its settings are hidden.
       if (!Platform.isAndroid) ...[
         SignalBuilder(
           builder: (context) {
             final enabled = vibeVisibleSignal.value;
             return _SettingItem(
-              title: 'Показывать волну',
+              title: 'Показывать фон',
               subtitle: 'Динамический фон, реагирующий на музыку',
               icon: Icons.waves_rounded,
               onTap: () => unawaited(_toggleVibeVisibility(!enabled)),
@@ -302,12 +307,56 @@ class _SettingsViewState extends State<SettingsView> {
             );
           },
         ),
+        SignalBuilder(
+          builder: (context) {
+            final style = vibeStyleSignal.value;
+            final isNarrow = context.isNarrow;
+            final colorScheme = Theme.of(context).colorScheme;
+            return _SettingItem(
+              title: 'Стиль фона',
+              subtitle: _vibeStyleSubtitle(style),
+              icon: Icons.auto_awesome_rounded,
+              onTap: () {},
+              trailing: SegmentedButton<VibeStyle>(
+                segments: [
+                  for (final option in VibeStyle.values)
+                    ButtonSegment(
+                      value: option,
+                      icon: Icon(
+                        option == VibeStyle.aurora
+                            ? Icons.auto_awesome_rounded
+                            : Icons.graphic_eq_rounded,
+                      ),
+                      label: isNarrow ? null : Text(option.label),
+                    ),
+                ],
+                selected: {style},
+                showSelectedIcon: false,
+                // The M3 default fills the selected segment with
+                // secondaryContainer, which drifts away from the track's
+                // accent; primary is what the rest of the app uses.
+                style: SegmentedButton.styleFrom(
+                  selectedBackgroundColor: colorScheme.primary,
+                  selectedForegroundColor: colorScheme.onPrimary,
+                  foregroundColor: colorScheme.onSurfaceVariant,
+                  side: BorderSide(
+                    color: colorScheme.outline.withValues(alpha: 0.5),
+                  ),
+                ),
+                onSelectionChanged: vibeVisibleSignal.value
+                    ? (selection) =>
+                          unawaited(_saveVibeStyle(selection.first))
+                    : null,
+              ),
+            );
+          },
+        ),
         const SizedBox(height: 8),
         SignalBuilder(
           builder: (context) {
             final scale = vibeRenderScaleSignal.value;
             return _SettingItem(
-              title: 'Разрешение волны',
+              title: 'Разрешение фона',
               subtitle:
                   '${(scale * 100).round()}% — выше качество, выше нагрузка',
               icon: Icons.high_quality_rounded,
@@ -334,21 +383,6 @@ class _SettingsViewState extends State<SettingsView> {
         ),
         const SizedBox(height: 8),
       ],
-      SignalBuilder(
-        builder: (context) {
-          final enabled = blurEffectsEnabledSignal.value;
-          return _SettingItem(
-            title: 'Размытие интерфейса',
-            subtitle: 'Размывать фон под панелями управления',
-            icon: Icons.blur_on_rounded,
-            onTap: () => unawaited(_toggleBlurEffects(!enabled)),
-            trailing: Switch(
-              value: enabled,
-              onChanged: (value) => unawaited(_toggleBlurEffects(value)),
-            ),
-          );
-        },
-      ),
     ];
   }
 
@@ -833,9 +867,11 @@ class _HotkeySettingRow extends StatelessWidget {
             ),
           ),
           IconButton(
-            tooltip: 'Изменить сочетание',
             onPressed: onEdit,
-            icon: const Icon(Icons.edit_rounded),
+            icon: const Icon(
+              Icons.edit_rounded,
+              semanticLabel: 'Изменить сочетание',
+            ),
           ),
           Switch(value: binding.enabled, onChanged: onEnabledChanged),
         ],
@@ -1214,8 +1250,11 @@ class _AboutAppCard extends StatelessWidget {
     if (isNarrow) {
       return IconButton.filledTonal(
         onPressed: () => unawaited(_openRepo()),
-        tooltip: 'Страница проекта на GitHub',
-        icon: const Icon(Icons.code_rounded, size: 20),
+        icon: const Icon(
+          Icons.code_rounded,
+          size: 20,
+          semanticLabel: 'Страница проекта на GitHub',
+        ),
       );
     }
     return M3EOutlinedButton.icon(

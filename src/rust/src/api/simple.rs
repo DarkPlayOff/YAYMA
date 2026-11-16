@@ -6,6 +6,10 @@ use crate::app::settings::parse_setting;
 use crate::frb_generated::StreamSink;
 use std::collections::HashMap;
 
+/// Background shader names accepted by [`set_vibe_style`]. Each maps to
+/// `assets/shaders/vibe_<name>.frag` on the Dart side.
+const VIBE_STYLES: [&str; 2] = ["aurora", "wave"];
+
 #[derive(Debug, Clone)]
 // `PlaybackState` is large, but events are sent one at a time through a channel
 // and consumed immediately; boxing would add an allocation per progress tick.
@@ -88,7 +92,9 @@ pub async fn get_initial_settings() -> InitialSettingsDto {
         vibe_render_scale: parse_setting::<f64>(&settings, "vibe_render_scale")
             .unwrap_or(0.50)
             .clamp(0.25, 0.50),
-        blur_effects_enabled: parse_setting(&settings, "blur_effects_enabled").unwrap_or(true),
+        vibe_style: parse_setting::<String>(&settings, "vibe_style")
+            .filter(|s| VIBE_STYLES.contains(&s.as_str()))
+            .unwrap_or_else(|| "aurora".to_string()),
         crossfade_enabled: parse_setting::<bool>(&settings, "crossfade_enabled").unwrap_or(true),
         ai_content_reduction: parse_setting::<bool>(&settings, "ai_content_reduction")
             .unwrap_or(false),
@@ -255,13 +261,18 @@ pub async fn set_vibe_render_scale(ctx: &AppContext, scale: f64) {
         .await;
 }
 
-pub async fn set_blur_effects_enabled(ctx: &AppContext, enabled: bool) {
+/// Unknown names are ignored so a bad value can never leave the user without
+/// a background shader.
+pub async fn set_vibe_style(ctx: &AppContext, style: String) {
+    if !VIBE_STYLES.contains(&style.as_str()) {
+        return;
+    }
     let _ = ctx
         .core
         .db
         .lock()
         .await
-        .save_setting("blur_effects_enabled", &enabled)
+        .save_setting("vibe_style", &style)
         .await;
 }
 

@@ -345,14 +345,16 @@ class WaveBackground extends StatefulWidget {
 }
 
 class _WaveBackgroundState extends State<WaveBackground> {
-  ui.FragmentShader? _shader;
+  // Both shaders are loaded up front: each one is a compiled program already
+  // bundled, and having them ready makes switching styles instant.
+  final Map<VibeStyle, ui.FragmentShader> _shaders = {};
   late List<double>? _cachedThemePalette;
   double _devicePixelRatio = 1;
 
   @override
   void initState() {
     super.initState();
-    unawaited(_loadShader());
+    unawaited(_loadShaders());
   }
 
   @override
@@ -369,30 +371,36 @@ class _WaveBackgroundState extends State<WaveBackground> {
     }
   }
 
-  Future<void> _loadShader() async {
-    try {
-      final program = await ui.FragmentProgram.fromAsset('shaders/vibe.frag');
-      if (mounted) setState(() => _shader = program.fragmentShader());
-    } on Object catch (e) {
-      debugPrint('vibe shader load failed: $e');
+  Future<void> _loadShaders() async {
+    for (final style in VibeStyle.values) {
+      try {
+        final program = await ui.FragmentProgram.fromAsset(
+          'shaders/vibe_${style.name}.frag',
+        );
+        if (!mounted) return;
+        setState(() => _shaders[style] = program.fragmentShader());
+      } on Object catch (e) {
+        debugPrint('vibe shader ${style.name} load failed: $e');
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final shader = _shader;
-    if (shader == null) return Container(color: Colors.black);
     return SignalBuilder(
       builder: (context) {
         if (!vibeVisibleSignal.value) return const SizedBox.shrink();
-        final renderScale = vibeRenderScaleSignal.value;
+        final style = vibeStyleSignal.value;
+        final shader = _shaders[style];
+        if (shader == null) return Container(color: Colors.black);
         return RepaintBoundary(
           child: CustomPaint(
             painter: PixelPerfectVibePainter(
               shader: shader,
+              style: style,
               signal: vibeTickSignal,
               devicePixelRatio: _devicePixelRatio,
-              renderScale: renderScale,
+              renderScale: vibeRenderScaleSignal.value,
             ),
           ),
         );
@@ -403,11 +411,20 @@ class _WaveBackgroundState extends State<WaveBackground> {
 
 class PixelPerfectVibePainter extends CustomPainter {
   final ui.FragmentShader shader;
+  final VibeStyle style;
   final FlutterSignal<F32Array26> signal;
   final double devicePixelRatio;
   final double renderScale;
+  // One entry per curtain layer (back to front), aurora only.
+  static const _curtainX = [-0.7, 0.1, 0.9];
+  static const _curtainY = [0.45, 0.02, -0.35];
+  static const _curtainFreq = [1.0, 1.2, 1.4];
+  static const _curtainFade = [2.0, 2.4, 3.0];
+  static const _curtainIntensity = [0.8, 0.5, 0.25];
+  // Per-blob rotation offsets and drift speeds, wave only.
   static const _rotData = [-0.3, 0.3, 0.4, -0.3, -0.3, -0.4, -0.3, -0.3, 0.4];
-  static const _viewScale = 0.4;
+  // The wave shader spreads its blobs over a smaller unit space than aurora.
+  static const _waveViewScale = 0.4;
 
   // Fraction of *physical* pixels to shade before upscaling. Applied against
   // size * devicePixelRatio (not raw logical size) so screens with a high
@@ -415,6 +432,7 @@ class PixelPerfectVibePainter extends CustomPainter {
   // instead of a much blurrier result for the same nominal scale.
   PixelPerfectVibePainter({
     required this.shader,
+    required this.style,
     required this.signal,
     required this.devicePixelRatio,
     required this.renderScale,
@@ -425,14 +443,15 @@ class PixelPerfectVibePainter extends CustomPainter {
     ..filterQuality = FilterQuality.medium
     ..blendMode = BlendMode.screen;
 
-  // Uniform indices must match the declaration order in shaders/vibe.frag.
-  // All per-frame constants (rotations, sin phases, reaction coefficients)
+  // Uniform indices must match shaders/vibe_aurora.frag and
+  // shaders/vibe_wave.frag, which share indices 0-23. All per-frame constants
   // are computed here once per tick instead of per fragment.
   @override
   void paint(Canvas canvas, Size size) {
     final u = signal.value;
     if (u.length < 26) return;
     final t = u[0];
+    final isAurora = style == VibeStyle.aurora;
 
     final physicalScale = devicePixelRatio * renderScale;
     final lowWidth = math.max(1, (size.width * physicalScale).round());
@@ -440,7 +459,9 @@ class PixelPerfectVibePainter extends CustomPainter {
     final lowW = lowWidth.toDouble();
     final lowH = lowHeight.toDouble();
 
-    final f = 1.0 / (math.min(lowW, lowH) * _viewScale);
+    // Normalized screen coords expected by the shader: y in [-1, 1].
+    final f =
+        1.0 / (math.min(lowW, lowH) * (isAurora ? 1.0 : _waveViewScale));
     shader
       ..setFloat(0, lowW * f)
       ..setFloat(1, lowH * f)
@@ -451,6 +472,50 @@ class PixelPerfectVibePainter extends CustomPainter {
       shader.setFloat(6 + i, u[8 + i]);
     }
 
+    if (isAurora) {
+      _setAuroraUniforms(u, t);
+    } else {
+      _setWaveUniforms(u, t);
+    }
+
+    _shaderPaint.shader = shader;
+    final recorder = ui.PictureRecorder();
+    Canvas(recorder).drawRect(Rect.fromLTWH(0, 0, lowW, lowH), _shaderPaint);
+    final picture = recorder.endRecording();
+    final image = picture.toImageSync(lowWidth, lowHeight);
+    picture.dispose();
+
+    canvas.drawImageRect(
+      image,
+      Rect.fromLTWH(0, 0, lowW, lowH),
+      Offset.zero & size,
+      _upscalePaint,
+    );
+    image.dispose();
+  }
+
+  void _setAuroraUniforms(F32Array26 u, double t) {
+    // u[1] is the player energy: 0.4 idle, 1.2 playing.
+    shader.setFloat(5, 0.45 + 0.5 * u[1]);
+
+    for (var i = 0; i < 3; i++) {
+      final a = 24 + i * 4;
+      shader
+        ..setFloat(a, _curtainX[i])
+        ..setFloat(a + 1, _curtainY[i])
+        ..setFloat(a + 2, 1.57 * i)
+        ..setFloat(a + 3, _curtainFreq[i]);
+
+      final b = 36 + i * 4;
+      shader
+        ..setFloat(b, _curtainFade[i])
+        ..setFloat(b + 1, _curtainIntensity[i])
+        ..setFloat(b + 2, math.max(u[5 + i], u[2 + i] * 0.6))
+        ..setFloat(b + 3, 0.6 * u[5 + i]);
+    }
+  }
+
+  void _setWaveUniforms(F32Array26 u, double t) {
     var maxOuter = 0.0;
     for (var i = 0; i < 3; i++) {
       final audio = u[2 + i];
@@ -484,7 +549,7 @@ class PixelPerfectVibePainter extends CustomPainter {
 
       // Conservative bound: transformed spark <= 1.2 * SPARK_GAIN (0.48),
       // blob noise wobble <= 0.35.
-      // Must stay in sync with the outer-radius formula in vibe.frag,
+      // Must stay in sync with the outer-radius formula in vibe_wave.frag,
       // including its direct AUDIO_PUMP_GAIN term.
       const sparkMax = 1.2 * 0.4; // polynomial maximum * SPARK_GAIN
       final brMax = sparkMax * (1.0 - 0.3 * i);
@@ -493,25 +558,12 @@ class PixelPerfectVibePainter extends CustomPainter {
       if (outer > maxOuter) maxOuter = outer;
     }
     shader.setFloat(5, maxOuter);
-
-    _shaderPaint.shader = shader;
-    final recorder = ui.PictureRecorder();
-    Canvas(recorder).drawRect(Rect.fromLTWH(0, 0, lowW, lowH), _shaderPaint);
-    final picture = recorder.endRecording();
-    final image = picture.toImageSync(lowWidth, lowHeight);
-    picture.dispose();
-
-    canvas.drawImageRect(
-      image,
-      Rect.fromLTWH(0, 0, lowW, lowH),
-      Offset.zero & size,
-      _upscalePaint,
-    );
-    image.dispose();
   }
 
   @override
   bool shouldRepaint(covariant PixelPerfectVibePainter oldDelegate) =>
       oldDelegate.renderScale != renderScale ||
-      oldDelegate.devicePixelRatio != devicePixelRatio;
+      oldDelegate.devicePixelRatio != devicePixelRatio ||
+      oldDelegate.style != style ||
+      oldDelegate.shader != shader;
 }
