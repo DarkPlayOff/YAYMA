@@ -84,8 +84,8 @@ class _TrackDetailsDialogState extends State<TrackDetailsDialog> {
                 ? const Center(child: Text('Загрузка...'))
                 : _buildDetails(context, details),
           ),
-          error: (Object e, _) =>
-              _buildSurface(context, CommonErrorWidget(error: e)),
+          error: (Object? e) =>
+              _buildSurface(context, CommonErrorWidget(error: e!)),
         );
       },
     );

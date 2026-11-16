@@ -424,9 +424,13 @@ class CommonAsyncView<T> extends StatelessWidget {
         return builder(context, data);
       },
       loading: () => loading ?? const CommonLoadingWidget(),
-      error: (Object e, _) => error != null
-          ? error!(humanizeError(e))
-          : CommonErrorWidget(error: e),
+      // The single nullable parameter is deliberate: signals' AsyncState.map
+      // only recognizes the error callback through `is Function(dynamic)`, and
+      // an `(Object e, _)` closure fails that check and is then called with no
+      // arguments. `Object?` is the narrowest type that still matches.
+      error: (Object? e) => error != null
+          ? error!(humanizeError(e!))
+          : CommonErrorWidget(error: e!),
     );
   }
 }

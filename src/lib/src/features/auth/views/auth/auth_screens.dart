@@ -92,8 +92,9 @@ class _RootScreenState extends State<RootScreen> {
             }
             return const LoginScreen();
           },
-          error: (Object e, _) =>
-              Scaffold(body: Center(child: Text(humanizeError(e)))),
+          // Single nullable parameter, see the note in CommonAsyncView.
+          error: (Object? e) =>
+              Scaffold(body: Center(child: Text(humanizeError(e!)))),
           loading: () =>
               const Scaffold(body: Center(child: M3ELoadingIndicator())),
         );
@@ -341,12 +342,20 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
               ),
               if (isCustomTitlebar)
-                const Positioned(
+                // Not const: WindowCaption holds a Finalizable field, and the
+                // incremental compiler then fails with "A const constructor
+                // can't have a body" (dart-lang/sdk#64487).
+                // ignore: prefer_const_constructors
+                Positioned(
                   top: 0,
                   left: 0,
                   right: 0,
+                  // dart-lang/sdk#64487 above
+                  // ignore: prefer_const_constructors
                   child: SizedBox(
                     height: 32,
+                    // dart-lang/sdk#64487 above
+                    // ignore: prefer_const_constructors
                     child: WindowCaption(
                       brightness: Brightness.dark,
                       backgroundColor: Colors.transparent,

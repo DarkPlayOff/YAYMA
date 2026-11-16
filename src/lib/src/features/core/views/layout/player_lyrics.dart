@@ -364,7 +364,7 @@ class _PlayerLyricsState extends State<PlayerLyrics>
             );
           },
           loading: () => const CommonLoadingWidget(),
-          error: (Object e, _) => CommonErrorWidget(error: e),
+          error: (Object? e) => CommonErrorWidget(error: e!),
         );
       },
     );

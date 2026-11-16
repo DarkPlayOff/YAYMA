@@ -97,7 +97,7 @@ class _LyricsReaderDialogState extends State<LyricsReaderDialog> {
               );
             },
             loading: () => const CommonLoadingWidget(),
-            error: (Object e, _) => CommonErrorWidget(error: e),
+            error: (Object? e) => CommonErrorWidget(error: e!),
           );
         }
 
