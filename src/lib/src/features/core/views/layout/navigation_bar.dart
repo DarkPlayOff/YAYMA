@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:ui' as ui;
 
 import 'package:material_ui/material_ui.dart';
 import 'package:signals_flutter/signals_flutter.dart';
@@ -8,7 +7,6 @@ import 'package:yayma/src/app/init.dart';
 import 'package:yayma/src/app/session.dart';
 import 'package:yayma/src/features/auth/views/yandex_id_view.dart';
 import 'package:yayma/src/features/core/providers/navigation_provider.dart';
-import 'package:yayma/src/features/core/providers/visual_effects_provider.dart';
 import 'package:yayma/src/features/core/theme/app_tokens.dart';
 import 'package:yayma/src/features/core/views/widgets/common_ui.dart';
 import 'package:yayma/src/features/core/views/widgets/responsive.dart';
@@ -97,8 +95,6 @@ class _FloatingNavBarState extends State<FloatingNavBar>
         // so lift the floating navbar above the 3-button/gesture bar.
         // viewPadding stays stable when the keyboard opens.
         final systemBottom = MediaQuery.viewPaddingOf(context).bottom;
-
-        const alpha = 0.5;
 
         final children = [
           if (isDesktop)
@@ -211,47 +207,29 @@ class _FloatingNavBarState extends State<FloatingNavBar>
                 child: CompositedTransformTarget(
                   link: _layerLink,
                   child: Container(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(AppRadius.xxxl),
+                    width: isNarrow ? null : 64,
+                    height: isNarrow ? 64 : null,
+                    padding: EdgeInsets.symmetric(
+                      vertical: isNarrow ? 0 : 12,
+                      horizontal: isNarrow ? 12 : 0,
                     ),
-                    child: ClipRRect(
+                    decoration: BoxDecoration(
+                      color: barColor,
                       borderRadius: BorderRadius.circular(AppRadius.xxxl),
-                      child: BackdropFilter(
-                        enabled: blurEffectsEnabledSignal.value && !isHome,
-                        filter: ui.ImageFilter.blur(
-                          sigmaX: isHome ? 0 : 2,
-                          sigmaY: isHome ? 0 : 2,
-                        ),
-                        child: Container(
-                          width: isNarrow ? null : 64,
-                          height: isNarrow ? 64 : null,
-                          padding: EdgeInsets.symmetric(
-                            vertical: isNarrow ? 0 : 12,
-                            horizontal: isNarrow ? 12 : 0,
-                          ),
-                          decoration: BoxDecoration(
-                            color: barColor.withValues(alpha: alpha),
-                            borderRadius: BorderRadius.circular(AppRadius.xxxl),
-                            border: Border.all(
-                              color: colorScheme.onSurface.withValues(
-                                alpha: 0.1,
-                              ),
-                            ),
-                          ),
-                          child: isNarrow
-                              ? Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceEvenly,
-                                  children: children,
-                                )
-                              : Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: children,
-                                ),
-                        ),
+                      border: Border.all(
+                        color: colorScheme.onSurface.withValues(alpha: 0.1),
                       ),
                     ),
+                    child: isNarrow
+                        ? Row(
+                            mainAxisSize: MainAxisSize.min,
+                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                            children: children,
+                          )
+                        : Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: children,
+                          ),
                   ),
                 ),
               ),

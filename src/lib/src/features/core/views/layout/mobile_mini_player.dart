@@ -7,7 +7,6 @@ import 'package:m3e_core/m3e_core.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/features/core/providers/navigation_provider.dart';
-import 'package:yayma/src/features/core/providers/visual_effects_provider.dart';
 import 'package:yayma/src/features/core/theme/app_tokens.dart';
 import 'package:yayma/src/features/core/views/layout/mobile_full_player.dart';
 import 'package:yayma/src/features/core/views/layout/mobile_plate.dart';
@@ -329,53 +328,44 @@ class _MobileMiniPlayerState extends State<MobileMiniPlayer> {
                         ),
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(AppRadius.xxxl),
-                          child: BackdropFilter(
-                            enabled:
-                                blurEffectsEnabledSignal.value &&
-                                surface.blur > 0,
-                            filter: ui.ImageFilter.blur(
-                              sigmaX: surface.blur,
-                              sigmaY: surface.blur,
-                            ),
-                            child: Stack(
-                              alignment: Alignment.centerLeft,
-                              children: [
-                                Positioned.fill(
-                                  child: AnimatedSwitcher(
-                                    duration: const Duration(milliseconds: 350),
-                                    transitionBuilder: _buildContentTransition,
-                                    child: _TrackContentPair(
-                                      key: ValueKey(meta.id),
-                                      opacity: contentOpacity,
-                                      defaultWidth: defaultWidth,
-                                      animationDuration: _animationDuration,
-                                    ),
+                          child: Stack(
+                            alignment: Alignment.centerLeft,
+                            children: [
+                              Positioned.fill(
+                                child: AnimatedSwitcher(
+                                  duration: const Duration(milliseconds: 350),
+                                  transitionBuilder: _buildContentTransition,
+                                  child: _TrackContentPair(
+                                    key: ValueKey(meta.id),
+                                    opacity: contentOpacity,
+                                    defaultWidth: defaultWidth,
+                                    animationDuration: _animationDuration,
                                   ),
                                 ),
-                                Positioned(
-                                  right: 8,
-                                  child: AnimatedOpacity(
-                                    duration: _animationDuration,
-                                    curve: Curves.easeOutCubic,
-                                    opacity: buttonOpacity,
-                                    child: const MiniPlayPauseButton(),
+                              ),
+                              Positioned(
+                                right: 8,
+                                child: AnimatedOpacity(
+                                  duration: _animationDuration,
+                                  curve: Curves.easeOutCubic,
+                                  opacity: buttonOpacity,
+                                  child: const MiniPlayPauseButton(),
+                                ),
+                              ),
+                              Positioned(
+                                bottom: 0,
+                                left: progressInset,
+                                right: progressInset,
+                                child: AnimatedOpacity(
+                                  duration: _animationDuration,
+                                  curve: Curves.easeOutCubic,
+                                  opacity: buttonOpacity,
+                                  child: _MiniProgressBar(
+                                    width: defaultWidth - progressInset * 2,
                                   ),
                                 ),
-                                Positioned(
-                                  bottom: 0,
-                                  left: progressInset,
-                                  right: progressInset,
-                                  child: AnimatedOpacity(
-                                    duration: _animationDuration,
-                                    curve: Curves.easeOutCubic,
-                                    opacity: buttonOpacity,
-                                    child: _MiniProgressBar(
-                                      width: defaultWidth - progressInset * 2,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
+                              ),
+                            ],
                           ),
                         ),
                       ),
@@ -487,8 +477,8 @@ class _MiniProgressBarState extends State<_MiniProgressBar> {
 
   @override
   Widget build(BuildContext context) {
-    // Sits inside the plate's BackdropFilter: without its own layer every
-    // position tick would make the blur pass re-run over the whole plate.
+    // Repaints on every position tick: keep the slider isolated from the
+    // plate's content layer.
     return RepaintBoundary(
       child: SignalBuilder(
         builder: (context) {
@@ -511,9 +501,6 @@ class _MiniProgressBarState extends State<_MiniProgressBar> {
             lyricsStyle: isHome && showLyrics,
             colorScheme: colorScheme,
           );
-          // The drag tooltip is a floating chip, not the plate itself, so it
-          // gets a stronger blur than the plate backdrop.
-          final blur = surface.lyricsStyle ? 0.0 : 3.0;
 
           return SizedBox(
             height: 16,
@@ -583,9 +570,10 @@ class _MiniProgressBarState extends State<_MiniProgressBar> {
                     ),
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(AppRadius.xs),
+                      // The drag tooltip is a floating chip, not the plate
+                      // itself: it always gets its own blur.
                       child: BackdropFilter(
-                        enabled: blurEffectsEnabledSignal.value && blur > 0,
-                        filter: ui.ImageFilter.blur(sigmaX: blur, sigmaY: blur),
+                        filter: ui.ImageFilter.blur(sigmaX: 3, sigmaY: 3),
                         child: Container(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 8,

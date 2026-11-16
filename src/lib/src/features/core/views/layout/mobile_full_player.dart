@@ -6,17 +6,16 @@ import 'dart:ui' as ui;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/physics.dart';
 import 'package:flutter/scheduler.dart';
-import 'package:m3e_core/m3e_core.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/features/core/providers/navigation_provider.dart';
-import 'package:yayma/src/features/core/providers/visual_effects_provider.dart';
 import 'package:yayma/src/features/core/theme/app_tokens.dart';
 import 'package:yayma/src/features/core/views/layout/mobile_cover_swipe.dart';
 import 'package:yayma/src/features/core/views/layout/mobile_plate.dart';
 import 'package:yayma/src/features/core/views/layout/player_lyrics.dart';
 import 'package:yayma/src/features/core/views/widgets/app_cover.dart';
 import 'package:yayma/src/features/core/views/widgets/common_ui.dart';
+import 'package:yayma/src/features/core/views/widgets/morphing_play_button.dart';
 import 'package:yayma/src/features/core/views/widgets/rust_cached_image.dart';
 import 'package:yayma/src/features/core/views/widgets/track_context_actions.dart';
 import 'package:yayma/src/features/core/views/widgets/track_elements.dart';
@@ -537,7 +536,6 @@ class _MobileFullPlayerState extends State<MobileFullPlayer>
     final bottomColor = Color.lerp(baseColor, Colors.black, 0.5)!;
 
     final miniAlpha = surface.alpha;
-    final miniBlur = surface.blur;
     final miniColor = surface.color;
     final miniContentOpacity =
         1 - const Interval(0.16, 0.4, curve: Curves.easeOut).transform(panelT);
@@ -561,18 +559,11 @@ class _MobileFullPlayerState extends State<MobileFullPlayer>
                   Positioned.fill(
                     child: Opacity(
                       opacity: 1 - panelOpacity,
-                      child: BackdropFilter(
-                        enabled: blurEffectsEnabledSignal.value && miniBlur > 0,
-                        filter: ui.ImageFilter.blur(
-                          sigmaX: miniBlur,
-                          sigmaY: miniBlur,
-                        ),
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            color: miniColor.withValues(alpha: miniAlpha),
-                            borderRadius: BorderRadius.circular(panelRadius),
-                            border: Border.all(color: surface.borderColor),
-                          ),
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: miniColor.withValues(alpha: miniAlpha),
+                          borderRadius: BorderRadius.circular(panelRadius),
+                          border: Border.all(color: surface.borderColor),
                         ),
                       ),
                     ),
@@ -1248,11 +1239,11 @@ class _FullPlayerHeader extends StatelessWidget {
         children: [
           IconButton(
             onPressed: onClose,
-            tooltip: 'Свернуть',
             icon: Icon(
               Icons.keyboard_arrow_down_rounded,
               size: 28,
               color: onSurfaceVariant,
+              semanticLabel: 'Свернуть',
             ),
           ),
           Expanded(
@@ -1274,11 +1265,11 @@ class _FullPlayerHeader extends StatelessWidget {
                 width: 48,
                 child: IconButton(
                   onPressed: hasTrack ? onToggleLyrics : null,
-                  tooltip: 'Текст песни',
                   icon: Icon(
                     Icons.lyrics_rounded,
                     size: 24,
                     color: lyrics ? accent : onSurfaceVariant,
+                    semanticLabel: 'Текст песни',
                   ),
                   padding: EdgeInsets.zero,
                   visualDensity: VisualDensity.compact,
@@ -1309,8 +1300,8 @@ class _FullPlayerWaveButton extends StatelessWidget {
             color: isWaveActive
                 ? accent
                 : Theme.of(context).colorScheme.onSurfaceVariant,
+            semanticLabel: 'Настройки волны',
           ),
-          tooltip: 'Настройки волны',
           onPressed: () => unawaited(showWaveSettingsSheet(context)),
         );
       },
@@ -1406,7 +1397,10 @@ class _FullPlayerTrackInfo extends StatelessWidget {
                         coverUrl: meta.coverUrl,
                       ).showSheet(context),
                     ),
-                    icon: const Icon(Icons.more_vert_rounded),
+                    icon: const Icon(
+                      Icons.more_vert_rounded,
+                      semanticLabel: 'Действия',
+                    ),
                     iconSize: 22,
                     color: cs.onSurfaceVariant,
                     padding: EdgeInsets.zero,
@@ -1415,7 +1409,6 @@ class _FullPlayerTrackInfo extends StatelessWidget {
                       minWidth: 36,
                       minHeight: 36,
                     ),
-                    tooltip: 'Действия',
                   ),
               ],
             ),
@@ -1629,36 +1622,12 @@ class _FullPlayerControls extends StatelessWidget {
               icon: Icon(Icons.skip_previous_rounded, color: onSurface),
               onPressed: PlaybackController.prev,
             ),
-            IconButton(
-              iconSize: 76,
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 76, minHeight: 76),
-              icon: showBuffering
-                  ? M3ECircularWavyProgressIndicator(
-                      strokeWidth: 3,
-                      color: accent,
-                    )
-                  : AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 250),
-                      switchInCurve: Curves.easeOutBack,
-                      switchOutCurve: Curves.easeIn,
-                      transitionBuilder: (child, animation) {
-                        return FadeTransition(
-                          opacity: animation,
-                          child: ScaleTransition(
-                            scale: animation,
-                            child: child,
-                          ),
-                        );
-                      },
-                      child: Icon(
-                        isPlaying
-                            ? Icons.pause_circle_filled_rounded
-                            : Icons.play_circle_filled_rounded,
-                        key: ValueKey<bool>(isPlaying),
-                        color: onSurface,
-                      ),
-                    ),
+            MorphingPlayPauseButton(
+              isPlaying: isPlaying,
+              isBuffering: showBuffering,
+              size: 76,
+              iconSize: 42,
+              color: accent,
               onPressed: PlaybackController.togglePlay,
             ),
             IconButton(

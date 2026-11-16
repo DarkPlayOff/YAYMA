@@ -6,6 +6,7 @@ import 'package:yayma/src/features/core/providers/navigation_provider.dart';
 import 'package:yayma/src/features/core/views/layout/player_lyrics.dart';
 import 'package:yayma/src/features/core/views/widgets/common_ui.dart';
 import 'package:yayma/src/features/core/views/widgets/home_cover_widget.dart';
+import 'package:yayma/src/features/core/views/widgets/morphing_play_button.dart';
 import 'package:yayma/src/features/core/views/widgets/quality_selector.dart';
 import 'package:yayma/src/features/core/views/widgets/responsive.dart';
 import 'package:yayma/src/features/core/views/widgets/tab_visibility.dart';
@@ -249,41 +250,35 @@ class _HomeTrackHeaderState extends State<_HomeTrackHeader> {
                                 navigateTo(AppSection.album, meta.albumId);
                               }
                             },
-                            child: Tooltip(
-                              message: meta.version == null
-                                  ? meta.title
-                                  : '${meta.title} ${meta.version}',
-                              waitDuration: const Duration(milliseconds: 500),
-                              child: Text.rich(
-                                trackTitleSpan(
-                                  context,
-                                  title: meta.title,
-                                  version: meta.version,
-                                  versionFontSize: widget.small
-                                      ? (widget.isNarrow ? 12 : 16)
-                                      : (widget.isNarrow ? 14 : 20),
-                                  style: TextStyle(
-                                    fontSize: widget.small
-                                        ? (widget.isNarrow ? 18 : 32)
-                                        : (widget.isNarrow ? 22 : 42),
-                                    fontWeight: FontWeight.w900,
-                                    color: Theme.of(
-                                      context,
-                                    ).colorScheme.onSurface,
-                                    letterSpacing: -1,
-                                    height: 1.05,
-                                    decoration: hovered && meta.albumId != null
-                                        ? TextDecoration.underline
-                                        : null,
-                                    shadows: widget.isNarrow
-                                        ? null
-                                        : const [Shadow(blurRadius: 20)],
-                                  ),
+                            child: Text.rich(
+                              trackTitleSpan(
+                                context,
+                                title: meta.title,
+                                version: meta.version,
+                                versionFontSize: widget.small
+                                    ? (widget.isNarrow ? 12 : 16)
+                                    : (widget.isNarrow ? 14 : 20),
+                                style: TextStyle(
+                                  fontSize: widget.small
+                                      ? (widget.isNarrow ? 18 : 32)
+                                      : (widget.isNarrow ? 22 : 42),
+                                  fontWeight: FontWeight.w900,
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurface,
+                                  letterSpacing: -1,
+                                  height: 1.05,
+                                  decoration: hovered && meta.albumId != null
+                                      ? TextDecoration.underline
+                                      : null,
+                                  shadows: widget.isNarrow
+                                      ? null
+                                      : const [Shadow(blurRadius: 20)],
                                 ),
-                                maxLines: 1,
-                                softWrap: false,
-                                overflow: TextOverflow.ellipsis,
                               ),
+                              maxLines: 1,
+                              softWrap: false,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           );
                         },
@@ -388,14 +383,11 @@ class _HomeMainControls extends StatelessWidget {
               ),
               onPressed: () => unawaited(PlaybackController.prev()),
             ),
-            IconButton(
-              iconSize: 84,
-              icon: Icon(
-                isPlaying
-                    ? Icons.pause_circle_filled_rounded
-                    : Icons.play_circle_filled_rounded,
-              ),
-              color: onSurface,
+            MorphingPlayPauseButton(
+              isPlaying: isPlaying,
+              size: 84,
+              iconSize: 46,
+              color: accentColor,
               onPressed: () => unawaited(PlaybackController.togglePlay()),
             ),
             IconButton(
@@ -555,14 +547,11 @@ class _HomeMainControls extends StatelessWidget {
               onPressed: () => unawaited(PlaybackController.prev()),
             ),
             SizedBox(width: small ? 16 : 24),
-            IconButton(
-              iconSize: small ? 56 : 72,
-              icon: Icon(
-                isPlaying
-                    ? Icons.pause_circle_filled_rounded
-                    : Icons.play_circle_filled_rounded,
-              ),
-              color: onSurface,
+            MorphingPlayPauseButton(
+              isPlaying: isPlaying,
+              size: small ? 56 : 72,
+              iconSize: small ? 32 : 40,
+              color: accentColor,
               onPressed: () => unawaited(PlaybackController.togglePlay()),
             ),
             SizedBox(width: small ? 16 : 24),
