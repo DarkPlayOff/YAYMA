@@ -24,7 +24,10 @@ class SystemTrayManager {
 
   static final SystemTrayManager instance = SystemTrayManager._();
 
-  Window? get _window => WindowManager.instance.getCurrent();
+  /// Captured at startup. [WindowManager.getCurrent] resolves the active window
+  /// of the calling thread, which is null — or the tray's own message window —
+  /// while the app sits in the tray, so resolving it per click restores nothing.
+  Window? _window;
 
   bool _initialized = false;
   bool _quitting = false;
@@ -41,7 +44,7 @@ class SystemTrayManager {
   /// Whether the tray is supported on the current platform.
   static bool get isSupported => Platform.isWindows;
 
-  Future<void> initialize() async {
+  Future<void> initialize(Window window) async {
     // Registered before the bail-outs below: quitting must work even when the
     // tray icon could not be created.
     _lifecycleChannel.setMethodCallHandler((call) async {
@@ -49,6 +52,7 @@ class SystemTrayManager {
     });
 
     if (_initialized || !isSupported) return;
+    _window = window;
 
     final trayIcon = TrayIcon.create();
     if (trayIcon == null) return;

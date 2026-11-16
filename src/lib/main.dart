@@ -68,7 +68,7 @@ Future<void> main() async {
 
   await appInitialization;
 
-  var windowReady = false;
+  Window? mainWindow;
   if (isDesktop) {
     final window = WindowManager.instance.getCurrent();
     if (window != null) {
@@ -104,15 +104,15 @@ Future<void> main() async {
         ..show()
         ..focus();
       WindowPlacement.track();
-      windowReady = true;
+      mainWindow = window;
     }
   }
 
   // Defer optional desktop integrations until Flutter has rendered its first frame.
   await WidgetsBinding.instance.endOfFrame;
 
-  if (windowReady) {
-    await SystemTrayManager.instance.initialize();
+  if (mainWindow != null) {
+    await SystemTrayManager.instance.initialize(mainWindow);
     await GlobalHotkeyService.initialize();
   }
 }
