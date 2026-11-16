@@ -83,12 +83,21 @@ class _AppLayoutState extends State<AppLayout> {
                           _FloatingBackButton(),
                           const _FloatingRefreshButton(),
                           if (isCustomTitlebar)
-                            const Positioned(
+                            // Not const: WindowCaption holds a Finalizable
+                            // field, and the incremental compiler then fails
+                            // with "A const constructor can't have a body"
+                            // (dart-lang/sdk#64487).
+                            // ignore: prefer_const_constructors
+                            Positioned(
                               top: 0,
                               left: 0,
                               right: 0,
+                              // dart-lang/sdk#64487 above
+                              // ignore: prefer_const_constructors
                               child: SizedBox(
                                 height: 32,
+                                // dart-lang/sdk#64487 above
+                                // ignore: prefer_const_constructors
                                 child: WindowCaption(
                                   brightness: Brightness.dark,
                                   backgroundColor: Colors.transparent,
@@ -184,8 +193,7 @@ class _AppLayoutState extends State<AppLayout> {
                       : 0.0) +
                   systemBottom,
               // While the full player covers the app, the bar keeps painting
-              // behind it (its own blur pass included). Unmount it on Android
-              // instead.
+              // behind it. Unmount it on Android instead.
               child: ValueListenableBuilder<double>(
                 valueListenable: mobileFullPlayerProgress,
                 builder: (context, progress, child) {
@@ -403,7 +411,7 @@ class _WindowContent extends StatelessWidget {
 
         // Bottom padding calculation to avoid overlap with PlayerBar and NavBar
         // We only apply it to the browser (yandexId) and settings (account) to prevent them from being covered,
-        // while other views scroll under the player for the blur effect.
+        // while other views keep scrolling to the very bottom.
         final hasPlayerBar = !isHome || showLyrics;
 
         double bottomPadding = 0;
@@ -571,7 +579,6 @@ class _FloatingRefreshButtonState extends State<_FloatingRefreshButton> {
           left: 24,
           child: IconButton(
             onPressed: _spinning ? null : _onRefresh,
-            tooltip: 'Обновить',
             style: IconButton.styleFrom(
               backgroundColor: Color.lerp(
                 Theme.of(context).colorScheme.surfaceContainerHighest,
@@ -598,6 +605,7 @@ class _FloatingRefreshButtonState extends State<_FloatingRefreshButton> {
                     Icons.refresh_rounded,
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
                     size: 24,
+                    semanticLabel: 'Обновить',
                   ),
           ),
         );
