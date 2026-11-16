@@ -45,7 +45,7 @@ ColorScheme appColorScheme(ColorScheme? cover) {
 Color surfaceOverlay(Color? surface) =>
     Color.lerp(surface, Colors.black, 0.4) ?? const Color(0xFF181818);
 
-/// The six accent colours the wave shader consumes, in its expected order.
+/// The six accent colours the glow shader consumes, in its expected order.
 List<double> vibePalette(ColorScheme scheme) {
   List<double> c(Color col) => [
     (col.r * 255.0).round().clamp(0, 255) / 255.0,
@@ -147,13 +147,6 @@ ThemeData buildAppTheme(ColorScheme scheme) {
       backgroundColor: scheme.inverseSurface,
       contentTextStyle: TextStyle(color: scheme.onInverseSurface),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-    ),
-    tooltipTheme: TooltipThemeData(
-      decoration: BoxDecoration(
-        color: scheme.inverseSurface,
-        borderRadius: BorderRadius.circular(10),
-      ),
-      textStyle: TextStyle(color: scheme.onInverseSurface, fontSize: 13),
     ),
     listTileTheme: const ListTileThemeData(
       shape: RoundedRectangleBorder(

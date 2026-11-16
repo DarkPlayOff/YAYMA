@@ -239,11 +239,11 @@ class _ArtistViewState extends State<ArtistView> {
                 IconButton(
                   onPressed: () =>
                       unawaited(_toggleArtistLike(artist, isLiked)),
-                  tooltip: isLiked ? 'В любимых' : 'В любимые',
                   icon: Icon(
                     isLiked
                         ? Icons.favorite_rounded
                         : Icons.favorite_border_rounded,
+                    semanticLabel: isLiked ? 'В любимых' : 'В любимые',
                   ),
                   style: IconButton.styleFrom(
                     minimumSize: const Size(64, 56),

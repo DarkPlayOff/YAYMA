@@ -260,8 +260,11 @@ class _UpdateDialogState extends State<UpdateDialog> {
   Widget _browserIconButton(ColorScheme cs, String url) {
     return IconButton(
       onPressed: () => _launchUrl(url),
-      icon: const Icon(Icons.open_in_new_rounded, size: 20),
-      tooltip: 'Открыть в браузере',
+      icon: const Icon(
+        Icons.open_in_new_rounded,
+        size: 20,
+        semanticLabel: 'Открыть в браузере',
+      ),
       color: cs.onSurfaceVariant,
       visualDensity: VisualDensity.compact,
     );

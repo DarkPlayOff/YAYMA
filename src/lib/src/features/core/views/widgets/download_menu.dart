@@ -29,9 +29,8 @@ class DownloadTargetMenu extends StatelessWidget {
                     strokeWidth: 2,
                     size: 18,
                   )
-                : const Icon(Icons.download_rounded),
+                : const Icon(Icons.download_rounded, semanticLabel: 'Скачать'),
             onPressed: isEnabled ? () {} : null,
-            tooltip: 'Скачать',
             style: IconButton.styleFrom(
               minimumSize: const Size(64, 56),
               iconSize: 26,

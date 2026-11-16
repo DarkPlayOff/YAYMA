@@ -437,7 +437,7 @@ class _LikedTracksTabState extends State<_LikedTracksTab> {
                       unawaited(_downloadLikedTracks(context, tracks, mode)),
                   onPressed: () => _showDeleteAllConfirmation(context, tracks),
                   icon: const Icon(Icons.delete_sweep_rounded),
-                  tooltip: 'Удалить всё из кэша',
+                  label: 'Удалить всё из кэша',
                   style: IconButton.styleFrom(
                     backgroundColor: cs.onSurface.withValues(alpha: 0.05),
                     foregroundColor: cs.error,
@@ -455,7 +455,7 @@ class _LikedTracksTabState extends State<_LikedTracksTab> {
                         size: 20,
                       )
                     : const Icon(Icons.download_rounded),
-                tooltip: 'Скачать всё',
+                label: 'Скачать всё',
                 style: IconButton.styleFrom(
                   backgroundColor: cs.onSurface.withValues(alpha: 0.05),
                   foregroundColor: cs.primary,
@@ -570,14 +570,14 @@ class _LikedTracksTabState extends State<_LikedTracksTab> {
 class _LikedTracksCompletedActions extends StatelessWidget {
   final VoidCallback? onPressed;
   final Widget icon;
-  final String tooltip;
+  final String label;
   final ButtonStyle? style;
   final void Function(DownloadMode mode) onSelected;
 
   const _LikedTracksCompletedActions({
     required this.onPressed,
     required this.icon,
-    required this.tooltip,
+    required this.label,
     required this.style,
     required this.onSelected,
   });
@@ -589,8 +589,7 @@ class _LikedTracksCompletedActions extends StatelessWidget {
       children: [
         IconButton(
           onPressed: onPressed,
-          icon: icon,
-          tooltip: tooltip,
+          icon: Semantics(label: label, child: icon),
           style: style,
         ),
         DownloadTargetMenu(
@@ -606,14 +605,14 @@ class _LikedTracksCompletedActions extends StatelessWidget {
 class _LikedTracksDownloadButton extends StatelessWidget {
   final VoidCallback? onPressed;
   final Widget icon;
-  final String tooltip;
+  final String label;
   final ButtonStyle? style;
   final void Function(DownloadMode mode) onSelected;
 
   const _LikedTracksDownloadButton({
     required this.onPressed,
     required this.icon,
-    required this.tooltip,
+    required this.label,
     required this.style,
     required this.onSelected,
   });
@@ -652,8 +651,7 @@ class _LikedTracksDownloadButton extends StatelessWidget {
         child: IgnorePointer(
           child: IconButton(
             onPressed: onPressed,
-            icon: icon,
-            tooltip: tooltip,
+            icon: Semantics(label: label, child: icon),
             style: style,
           ),
         ),
@@ -984,8 +982,11 @@ class _LikedArtistsTab extends StatelessWidget {
                     child: IconButton(
                       onPressed: () =>
                           unawaited(_removeLikedArtist(context, artist.id)),
-                      tooltip: 'Убрать из любимых',
-                      icon: const Icon(Icons.favorite_rounded, size: 18),
+                      icon: const Icon(
+                        Icons.favorite_rounded,
+                        size: 18,
+                        semanticLabel: 'Убрать из любимых',
+                      ),
                       style: IconButton.styleFrom(
                         minimumSize: const Size(36, 36),
                         iconSize: 18,

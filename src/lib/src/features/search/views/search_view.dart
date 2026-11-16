@@ -305,8 +305,8 @@ class _TrackSearchTile extends StatelessWidget {
           icon: Icon(
             Icons.add_rounded,
             color: Theme.of(context).colorScheme.onSurfaceVariant,
+            semanticLabel: 'Добавить в плейлист',
           ),
-          tooltip: 'Добавить в плейлист',
           onPressed: () => AddToPlaylistDialog.show(context, track),
         ),
       ],

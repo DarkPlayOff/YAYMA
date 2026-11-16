@@ -111,8 +111,10 @@ class _HorizontalShelfState extends State<HorizontalShelf> {
     return Center(
       child: IconButton(
         onPressed: () => _step(direction),
-        tooltip: direction < 0 ? 'Назад' : 'Вперёд',
-        icon: Icon(direction < 0 ? Icons.chevron_left : Icons.chevron_right),
+        icon: Icon(
+          direction < 0 ? Icons.chevron_left : Icons.chevron_right,
+          semanticLabel: direction < 0 ? 'Назад' : 'Вперёд',
+        ),
         style: IconButton.styleFrom(
           backgroundColor: cs.surfaceContainerHighest.withValues(alpha: 0.92),
           foregroundColor: cs.onSurface,

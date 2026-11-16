@@ -507,11 +507,11 @@ class _QuickActionButton<T> extends StatelessWidget {
         IconButton.filledTonal(
           onPressed: () =>
               _runAction(context, action, onSelected, subSheetRebuildOn),
-          tooltip: action.label,
           icon: Icon(
             action.icon,
             size: 22,
             color: action.isSelected ? scheme.primary : action.color,
+            semanticLabel: action.label,
           ),
         ),
         const SizedBox(height: 4),

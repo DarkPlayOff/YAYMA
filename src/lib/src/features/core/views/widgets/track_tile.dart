@@ -268,8 +268,8 @@ class _TrackTileActions extends StatelessWidget {
         icon: Icon(
           Icons.more_horiz_rounded,
           color: Theme.of(context).colorScheme.onSurfaceVariant,
+          semanticLabel: 'Действия',
         ),
-        tooltip: 'Действия',
         onPressed: onShowSheet,
       );
     }
@@ -413,9 +413,9 @@ class _TrackMenu extends StatelessWidget {
             icon: Icon(
               Icons.more_horiz_rounded,
               color: Theme.of(context).colorScheme.onSurfaceVariant,
+              semanticLabel: 'Действия',
             ),
             onPressed: null,
-            tooltip: 'Действия',
           ),
         );
       },
@@ -557,8 +557,8 @@ class _LeadingPlayingBadge extends StatelessWidget {
             Positioned(
               right: -6,
               bottom: -6,
-              child: Tooltip(
-                message: isPlaying ? 'Сейчас играет' : 'Текущий трек на паузе',
+              child: Semantics(
+                label: isPlaying ? 'Сейчас играет' : 'Текущий трек на паузе',
                 child: Container(
                   width: 28,
                   height: 28,

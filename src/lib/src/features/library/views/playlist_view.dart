@@ -323,9 +323,9 @@ class _PlaylistContentState extends State<_PlaylistContent> {
                   Icons.more_vert_rounded,
                   color: cs.onSurfaceVariant,
                   size: 32,
+                  semanticLabel: 'Опции плейлиста',
                 ),
                 onPressed: _showPlaylistSheet,
-                tooltip: 'Опции плейлиста',
               )
             : AppContextMenu<String>(
                 onSelected: (value) => unawaited(_handlePlaylistAction(value)),
@@ -361,9 +361,9 @@ class _PlaylistContentState extends State<_PlaylistContent> {
                     Icons.more_vert_rounded,
                     color: cs.onSurfaceVariant,
                     size: 32,
+                    semanticLabel: 'Опции плейлиста',
                   ),
                   onPressed: null,
-                  tooltip: 'Опции плейлиста',
                 ),
               ),
         actions: isAndroid
@@ -376,8 +376,10 @@ class _PlaylistContentState extends State<_PlaylistContent> {
                         widget.playlist.uid.toString(),
                         widget.playlist.kind,
                       ),
-                      tooltip: 'Слушать',
-                      icon: const Icon(Icons.play_arrow_rounded),
+                      icon: const Icon(
+                        Icons.play_arrow_rounded,
+                        semanticLabel: 'Слушать',
+                      ),
                       style: IconButton.styleFrom(
                         minimumSize: const Size(64, 56),
                         iconSize: 26,
@@ -389,8 +391,10 @@ class _PlaylistContentState extends State<_PlaylistContent> {
                     const SizedBox(width: 8),
                     IconButton(
                       onPressed: () => _handleUpload(context),
-                      tooltip: 'Загрузить трек',
-                      icon: const Icon(Icons.upload_rounded),
+                      icon: const Icon(
+                        Icons.upload_rounded,
+                        semanticLabel: 'Загрузить трек',
+                      ),
                       style: IconButton.styleFrom(
                         minimumSize: const Size(64, 56),
                         iconSize: 26,
@@ -671,9 +675,12 @@ class _TrackTile extends StatelessWidget {
       ),
       hoverActions: [
         IconButton(
-          icon: Icon(Icons.playlist_remove_rounded, color: cs.error),
+          icon: Icon(
+            Icons.playlist_remove_rounded,
+            color: cs.error,
+            semanticLabel: 'Удалить из плейлиста',
+          ),
           onPressed: onRemove,
-          tooltip: 'Удалить из плейлиста',
         ),
       ],
       onTap: () => PlaybackController.playPlaylistTrack(
