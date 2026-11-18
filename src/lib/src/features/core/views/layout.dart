@@ -546,11 +546,11 @@ class _WindowContent extends StatelessWidget {
         } else if (isHome && isNarrow) {
           // Home is centered non-scrollable content: its bottom row
           // (wave settings, repeat, quality) must stay above the floating
-          // navbar. Navbar top sits at 64 (height) + 12 (gap) +
+          // navbar. Navbar top sits at 56 (height) + 12 (gap) +
           // systemBottom above the screen bottom, plus a small gap.
           final navbarVisible = !(Platform.isAndroid && showLyrics);
           if (navbarVisible) {
-            bottomPadding = 88 + MediaQuery.viewPaddingOf(context).bottom;
+            bottomPadding = 80 + MediaQuery.viewPaddingOf(context).bottom;
           }
         }
 
