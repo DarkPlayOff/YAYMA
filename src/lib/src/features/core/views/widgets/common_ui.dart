@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/services.dart' show PredictiveBackEvent;
 import 'package:m3e_core/m3e_core.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:signals_flutter/signals_flutter.dart';
@@ -24,14 +25,108 @@ Future<T?> showAppBottomSheet<T>({
   Color? backgroundColor,
 }) {
   final cs = Theme.of(context).colorScheme;
+  final color = backgroundColor ?? surfaceOverlay(cs.surfaceContainerHighest);
+  final navigator = Navigator.of(context);
+  final controller = BottomSheet.createAnimationController(navigator);
   return showM3EModalBottomSheet<T>(
     context: context,
     showDragHandle: showDragHandle,
-    backgroundColor:
-        backgroundColor ?? surfaceOverlay(cs.surfaceContainerHighest),
+    backgroundColor: color,
     style: const M3EBottomSheetStyle(padding: EdgeInsets.zero),
-    builder: builder,
-  );
+    transitionAnimationController: controller,
+    // The route already slides the sheet in; the spring entrance would
+    // start a second motion one frame later and make the opening stutter.
+    builder: (context) => M3EBottomSheet(
+      animateEntrance: false,
+      showDragHandle: showDragHandle,
+      backgroundColor: color,
+      style: const M3EBottomSheetStyle(padding: EdgeInsets.zero),
+      child: _PredictiveBackSheet(
+        controller: controller,
+        child: builder(context),
+      ),
+    ),
+  ).whenComplete(controller.dispose);
+}
+
+/// Drives the sheet's own route from Android predictive back, the same way
+/// page transitions do for pages.
+class _PredictiveBackSheet extends StatefulWidget {
+  const _PredictiveBackSheet({required this.controller, required this.child});
+
+  final AnimationController controller;
+  final Widget child;
+
+  @override
+  State<_PredictiveBackSheet> createState() => _PredictiveBackSheetState();
+}
+
+class _PredictiveBackSheetState extends State<_PredictiveBackSheet>
+    with WidgetsBindingObserver {
+  TransitionRoute<dynamic>? _route;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    _route = route is TransitionRoute<dynamic> ? route : null;
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  bool handleStartBackGesture(PredictiveBackEvent backEvent) {
+    final route = _route;
+    if (backEvent.isButtonEvent ||
+        route == null ||
+        !route.isCurrent ||
+        !route.popGestureEnabled) {
+      return false;
+    }
+    route.handleStartBackGesture(progress: 1 - backEvent.progress);
+    return true;
+  }
+
+  @override
+  void handleUpdateBackGestureProgress(PredictiveBackEvent backEvent) {
+    _route?.handleUpdateBackGestureProgress(progress: 1 - backEvent.progress);
+  }
+
+  @override
+  void handleCommitBackGesture() {
+    // The route's own commit reverses from the top, which snaps the sheet back
+    // to its rest position first. Slide it away from where the gesture left it.
+    final navigator = Navigator.of(context);
+    unawaited(
+      widget.controller
+          .animateBack(
+            0,
+            duration: const Duration(milliseconds: 250),
+            curve: Curves.easeOutCubic,
+          )
+          .then(
+            (_) => navigator
+              ..pop()
+              ..didStopUserGesture(),
+          ),
+    );
+  }
+
+  @override
+  void handleCancelBackGesture() => _route?.handleCancelBackGesture();
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }
 
 String formatDuration(int ms) {

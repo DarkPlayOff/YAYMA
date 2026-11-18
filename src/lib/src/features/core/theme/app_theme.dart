@@ -81,7 +81,9 @@ ThemeData buildAppTheme(ColorScheme scheme) {
     pageTransitionsTheme: PageTransitionsTheme(
       builders: {
         for (final platform in TargetPlatform.values)
-          platform: const FadeForwardsPageTransitionsBuilder(),
+          platform: platform == TargetPlatform.android
+              ? const PredictiveBackPageTransitionsBuilder()
+              : const FadeForwardsPageTransitionsBuilder(),
       },
     ),
     progressIndicatorTheme: ProgressIndicatorThemeData(
