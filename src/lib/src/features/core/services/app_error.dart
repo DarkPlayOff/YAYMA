@@ -1,4 +1,4 @@
-import 'package:material_ui/material_ui.dart';
+import 'package:yayma/src/features/core/services/app_logger.dart';
 import 'package:yayma/src/rust/api/models.dart';
 
 /// Whether [error] means the session is no longer valid.
@@ -24,7 +24,7 @@ bool isSessionExpired(Object error) {
 /// Anything unrecognised is logged in full and replaced with a generic line:
 /// never show a stack trace or an internal message in the UI.
 String humanizeError(Object error) {
-  debugPrint('Handled error: $error');
+  appLog(AppLogLevel.warn, 'handled error: $error');
 
   if (isSessionExpired(error)) return 'Сессия истекла. Войдите снова.';
 

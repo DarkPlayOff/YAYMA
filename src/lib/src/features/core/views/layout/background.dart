@@ -8,6 +8,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/app/session.dart';
 import 'package:yayma/src/features/core/providers/visual_effects_provider.dart';
+import 'package:yayma/src/features/core/services/app_logger.dart';
 import 'package:yayma/src/features/core/theme/app_theme.dart';
 import 'package:yayma/src/features/core/utils/lru_map.dart';
 import 'package:yayma/src/features/core/views/widgets/rust_cached_image.dart';
@@ -169,7 +170,7 @@ class _BlurredCoverBackgroundState extends State<BlurredCoverBackground> {
         _show(entry, rawUrl);
       }
     } on Object catch (e) {
-      debugPrint('blurred cover background failed for $rawUrl: $e');
+      appLog(AppLogLevel.debug, 'blurred cover background failed for $rawUrl: $e');
     } finally {
       if (seq == _seq) _pendingUrl = null;
     }
@@ -380,7 +381,7 @@ class _WaveBackgroundState extends State<WaveBackground> {
         if (!mounted) return;
         setState(() => _shaders[style] = program.fragmentShader());
       } on Object catch (e) {
-        debugPrint('vibe shader ${style.name} load failed: $e');
+        appLog(AppLogLevel.debug, 'vibe shader ${style.name} load failed: $e');
       }
     }
   }

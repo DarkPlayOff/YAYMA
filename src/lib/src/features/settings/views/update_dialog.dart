@@ -6,6 +6,7 @@ import 'package:m3e_core/m3e_core.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:yayma/src/features/core/providers/notification_provider.dart';
+import 'package:yayma/src/features/core/services/app_logger.dart';
 import 'package:yayma/src/features/core/theme/app_tokens.dart';
 import 'package:yayma/src/features/core/views/widgets/common_ui.dart';
 import 'package:yayma/src/features/core/views/widgets/smooth_scroll.dart';
@@ -96,7 +97,7 @@ class _UpdateDialogState extends State<UpdateDialog> {
           await launchUrl(uri, mode: LaunchMode.externalApplication);
         }
       } on Object catch (e) {
-        debugPrint('Error launching browser: $e');
+        appLog(AppLogLevel.warn, 'error launching browser: $e');
       }
     }());
   }
@@ -131,7 +132,7 @@ class _UpdateDialogState extends State<UpdateDialog> {
         _downloadedPath = file.path;
       });
     } on Object catch (e) {
-      debugPrint('Update download failed: $e');
+      appLog(AppLogLevel.error, 'update download failed: $e');
       if (!mounted) return;
       setState(() {
         _isDownloading = false;
@@ -163,7 +164,7 @@ class _UpdateDialogState extends State<UpdateDialog> {
       await UpdateService.installApk(path);
       if (mounted) setState(() => _isInstalling = false);
     } on Object catch (e) {
-      debugPrint('Update install failed: $e');
+      appLog(AppLogLevel.error, 'update install failed: $e');
       if (mounted) {
         setState(() => _isInstalling = false);
         // The platform message names the real cause ("No Activity found to

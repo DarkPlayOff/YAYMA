@@ -12,6 +12,7 @@ import 'package:yayma/src/app/session.dart';
 import 'package:yayma/src/features/core/providers/navigation_provider.dart';
 import 'package:yayma/src/features/core/providers/notification_provider.dart';
 import 'package:yayma/src/features/core/providers/visual_effects_provider.dart';
+import 'package:yayma/src/features/core/services/app_logger.dart';
 import 'package:yayma/src/features/core/services/global_hotkey_service.dart';
 import 'package:yayma/src/features/core/services/rust_bridge.dart';
 import 'package:yayma/src/features/core/theme/app_tokens.dart';
@@ -1096,7 +1097,7 @@ class _AboutAppCard extends StatelessWidget {
         return;
       }
     } on Object catch (e) {
-      debugPrint('Error opening repository page: $e');
+      appLog(AppLogLevel.warn, 'error opening repository page: $e');
     }
     showAppError('Не удалось открыть страницу проекта');
   }

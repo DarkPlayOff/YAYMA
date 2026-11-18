@@ -439,8 +439,6 @@ checksum = "84f840cff84d10085260e460023934d0af699e71212b09b2a41452e8bd9cda43"
 dependencies = [
  "brotli",
  "compression-core",
- "flate2",
- "memchr",
 ]
 
 [[package]]

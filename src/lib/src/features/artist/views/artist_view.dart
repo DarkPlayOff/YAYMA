@@ -145,7 +145,6 @@ class _ArtistViewState extends State<ArtistView> {
         _tracks.value = [..._tracks.value, ...details.tracks];
       }
     } on Object catch (e) {
-      debugPrint('Error loading more tracks: $e');
       showAppError(humanizeError(e));
     } finally {
       _isLoading.value = false;

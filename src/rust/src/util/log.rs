@@ -12,7 +12,7 @@ type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>
 /// Resolves the log filter: the app-advertised knob (`YAYMA_LOGLEVEL`) wins,
 /// then the generic `RUST_LOG`, then the release default of `warn,yayma=debug`
 /// (the app logs everything, dependencies stay quiet at warn; the volume is
-/// bounded by the daily rotation and the 7-day prune).
+/// bounded by the per-launch rotation and the 3-file prune).
 fn make_filter() -> tracing_subscriber::filter::EnvFilter {
     if let Ok(directives) = std::env::var(LOG_ENV.as_str())
         && let Ok(filter) = tracing_subscriber::filter::EnvFilter::try_new(directives)

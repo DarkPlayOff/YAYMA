@@ -81,7 +81,7 @@ class _RootScreenState extends State<RootScreen> {
                             }
                           }
                         } on Object catch (e) {
-                          debugPrint('Error checking for updates: $e');
+                          appLog(AppLogLevel.warn, 'update check failed: $e');
                         }
                       }());
                     }());
@@ -610,7 +610,7 @@ class _YandexDeviceLoginDialogState extends State<YandexDeviceLoginDialog> {
         });
       }
     } on Object catch (e) {
-      debugPrint('Error polling token: $e');
+      appLog(AppLogLevel.warn, 'device token polling failed: $e');
     }
   }
 
@@ -633,7 +633,7 @@ class _YandexDeviceLoginDialogState extends State<YandexDeviceLoginDialog> {
           await launchUrl(uri, mode: LaunchMode.externalApplication);
         }
       } on Object catch (e) {
-        debugPrint('Error launching browser: $e');
+        appLog(AppLogLevel.warn, 'error launching browser: $e');
       }
     }());
   }

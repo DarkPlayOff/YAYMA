@@ -10,6 +10,7 @@ import 'package:material_color_utilities/material_color_utilities.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/app/session.dart';
+import 'package:yayma/src/features/core/services/app_logger.dart';
 import 'package:yayma/src/features/core/theme/app_theme.dart';
 import 'package:yayma/src/features/core/utils/lru_map.dart';
 import 'package:yayma/src/features/core/views/widgets/rust_cached_image.dart';
@@ -254,7 +255,7 @@ Future<int?> _coverSeed(String path) async {
           });
     });
   } on Object catch (error) {
-    debugPrint('Cover seed extraction failed: $error');
+    appLog(AppLogLevel.debug, 'cover seed extraction failed: $error');
     return null;
   }
 }
@@ -303,7 +304,7 @@ Future<ColorScheme?> _extractCoverScheme(String url) async {
 
     return scheme;
   } on Object catch (error) {
-    debugPrint('Cover preparation failed: $error');
+    appLog(AppLogLevel.debug, 'cover preparation failed: $error');
     return null;
   }
 }

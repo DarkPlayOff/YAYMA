@@ -1,8 +1,8 @@
 import 'dart:async';
 
 import 'package:audio_session/audio_session.dart';
-import 'package:flutter/foundation.dart';
 import 'package:signals_flutter/signals_flutter.dart';
+import 'package:yayma/src/features/core/services/app_logger.dart';
 import 'package:yayma/src/features/playback/providers/playback_provider.dart';
 
 /// Bridges audio_session interruptions to the Rust playback engine.
@@ -39,7 +39,7 @@ class AudioFocusManager {
         );
       },
       onError: (Object e, StackTrace st) {
-        debugPrint('Audio interruption stream error: $e');
+        appLog(AppLogLevel.warn, 'audio interruption stream error: $e');
       },
     );
 
@@ -52,7 +52,7 @@ class AudioFocusManager {
         );
       },
       onError: (Object e, StackTrace st) {
-        debugPrint('Audio becoming-noisy stream error: $e');
+        appLog(AppLogLevel.warn, 'audio becoming-noisy stream error: $e');
       },
     );
 
@@ -131,7 +131,7 @@ class AudioFocusManager {
           }
       }
     } on Object catch (e, st) {
-      debugPrint('Audio interruption handling failed: $e\n$st');
+      appLog(AppLogLevel.warn, 'audio interruption handling failed: $e $st');
     }
   }
 
@@ -145,7 +145,7 @@ class AudioFocusManager {
       }
       if (isPlayingSignal.value) await PlaybackController.pause();
     } on Object catch (e, st) {
-      debugPrint('Audio becoming-noisy handling failed: $e\n$st');
+      appLog(AppLogLevel.warn, 'audio becoming-noisy handling failed: $e $st');
     }
   }
 
@@ -183,7 +183,7 @@ class AudioFocusManager {
         _sessionActive = false;
       }
     } on Object catch (e, st) {
-      debugPrint('Failed to sync audio session active state: $e\n$st');
+      appLog(AppLogLevel.warn, 'audio session active sync failed: $e $st');
     }
   }
 }

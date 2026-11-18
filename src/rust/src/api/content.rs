@@ -73,7 +73,15 @@ macro_rules! map_results {
 
 pub async fn search(ctx: &AppContext, query: String) -> Option<SearchResultsDto> {
     let (liked, disliked) = get_liked_snapshot(ctx).await;
-    let results = ctx.core.api.search(&query).await.ok()?;
+    let results = ctx
+        .core
+        .api
+        .search(&query)
+        .await
+        // Collapsed to `None` below, but a network/auth failure must not look
+        // like "nothing found" in the log.
+        .inspect_err(|e| tracing::warn!(error = ?e, "search_failed"))
+        .ok()?;
 
     Some(SearchResultsDto {
         tracks: map_results!(results.tracks, |t| {
@@ -292,7 +300,11 @@ async fn download_track_to_destination(
     }
 
     let cache = ctx.core.http_cache.clone();
-    let _ = embed_metadata(&dest_path, dto, cache).await;
+    // A tag failure must not fail the download, but the file lands without
+    // metadata, so the user should be able to find out why from the log.
+    if let Err(e) = embed_metadata(&dest_path, dto, cache).await {
+        tracing::warn!(path = %dest_path.display(), error = ?e, "embed_metadata_failed");
+    }
     Ok(dest_path.to_string_lossy().into_owned())
 }
 
@@ -499,7 +511,14 @@ pub async fn get_track_details(
 
 pub async fn get_album_details(ctx: &AppContext, album_id: u32) -> Option<AlbumDetailsDto> {
     let (liked, disliked) = get_liked_snapshot(ctx).await;
-    let album = ctx.core.api.fetch_album_with_tracks(album_id).await.ok()?;
+    let album = ctx
+        .core
+        .api
+        .fetch_album_with_tracks(album_id)
+        .await
+        // `None` reaches Dart as "not found"; log why it really failed.
+        .inspect_err(|e| tracing::warn!(error = ?e, "album_details_fetch_failed"))
+        .ok()?;
     Some(AlbumDetailsDto::from_yandex(album, &liked, &disliked))
 }
 
@@ -517,7 +536,14 @@ pub async fn get_artist_details(
             .fetch_artist_tracks_paginated(artist_id.clone(), page, page_size)
     );
 
-    let (mut artist, (tracks, pager)) = (artist_res.ok()?, tracks_res.ok()?);
+    let (mut artist, (tracks, pager)) = (
+        artist_res
+            .inspect_err(|e| tracing::warn!(error = ?e, "artist_details_fetch_failed"))
+            .ok()?,
+        tracks_res
+            .inspect_err(|e| tracing::warn!(error = ?e, "artist_tracks_fetch_failed"))
+            .ok()?,
+    );
 
     let mapped_tracks = tracks
         .into_iter()
@@ -559,7 +585,14 @@ pub async fn get_playlist_details(
     kind: u32,
     query: Option<String>,
 ) -> Option<PlaylistDetailsDto> {
-    let mut playlist = ctx.core.api.fetch_playlist(kind).await.ok()?;
+    let mut playlist = ctx
+        .core
+        .api
+        .fetch_playlist(kind)
+        .await
+        // `None` reaches Dart as "not found"; log why it really failed.
+        .inspect_err(|e| tracing::warn!(error = ?e, "playlist_details_fetch_failed"))
+        .ok()?;
     let tracks_enum = playlist
         .tracks
         .take()
