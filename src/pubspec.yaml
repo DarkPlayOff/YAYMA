@@ -1,6 +1,6 @@
 name: yayma
 description: "YAYMA - Yet Another Yandex Music App"
-version: 2.6.0+1
+version: 2.7.0+1
 publish_to: 'none'
 license: GPL-3.0-or-later
 
