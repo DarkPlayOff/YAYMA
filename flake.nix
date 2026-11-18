@@ -14,7 +14,7 @@
       # URL: https://github.com/DarkPlayOff/YAYMA/releases/download/v${version}/yayma-linux-x64-${version}.tar.gz
       # Bump `version` and re-run `nix flake lock --update-input nixpkgs` + `nix store prefetch-file <url>`
       # to get the new sha256.
-      srcHash = "sha256-SkYTPTOWcowu1132FB2RfoXi7jKgbTyFEP88MK6ZCTk=";
+      srcHash = "sha256-md5RPUM/GKSFcabvq0eOk6MrUXpIwhdTgsemKeh5wNA=";
     in
     {
       packages = forAllSystems (system:
