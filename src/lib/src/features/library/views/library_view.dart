@@ -1,6 +1,6 @@
 import 'dart:async';
+import 'dart:io';
 
-import 'package:flutter/rendering.dart';
 import 'package:m3e_core/m3e_core.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:signals_flutter/signals_flutter.dart';
@@ -119,13 +119,6 @@ class _LibraryViewState extends State<LibraryView>
     super.dispose();
   }
 
-  void _showCreatePlaylistDialog(BuildContext context) {
-    showDialog<void>(
-      context: context,
-      builder: (context) => const _CreatePlaylistDialog(),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final isNarrow = context.isNarrow;
@@ -133,36 +126,18 @@ class _LibraryViewState extends State<LibraryView>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Padding(
-          padding: EdgeInsets.fromLTRB(
-            context.horizontalPadding,
-            isNarrow ? 16 : 40,
-            context.horizontalPadding,
-            isNarrow ? 8 : 20,
+        // Creating a playlist lives on a card in the playlists tab, so the
+        // header is title-only, and Android drops it entirely.
+        if (!Platform.isAndroid)
+          Padding(
+            padding: EdgeInsets.fromLTRB(
+              context.horizontalPadding,
+              isNarrow ? 16 : 40,
+              context.horizontalPadding,
+              isNarrow ? 8 : 20,
+            ),
+            child: const CommonPageTitle(title: 'Библиотека'),
           ),
-          child: Row(
-            children: [
-              const Expanded(child: CommonPageTitle(title: 'Библиотека')),
-              const SizedBox(width: 16),
-              M3EButton.icon(
-                onPressed: () => _showCreatePlaylistDialog(context),
-                icon: const Icon(Icons.add_rounded),
-                label: isNarrow
-                    ? const SizedBox.shrink()
-                    : const Text('Создать плейлист'),
-                style: M3EButtonStyle.outlined,
-                // In icon-only mode the package still inserts the icon-label
-                // gap, which pushes the icon off-center; drop the gap.
-                size: isNarrow
-                    ? M3EButtonSize.fromBase(M3EButtonSize.sm, iconGap: 0)
-                    : M3EButtonSize.md,
-                decoration: M3EButtonDecoration.styleFrom(
-                  foregroundColor: Theme.of(context).colorScheme.primary,
-                ),
-              ),
-            ],
-          ),
-        ),
         TabBar(
           controller: _tabController,
           isScrollable: true,
@@ -672,30 +647,6 @@ class _PlaylistsTab extends StatelessWidget {
         // No subscription while the tab is hidden.
         final playlists = visibleSignal(context, playlistsSignal);
 
-        if (playlists.isEmpty) {
-          return AppRefreshIndicator(
-            onRefresh: refreshPlaylists,
-            child: CustomScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              slivers: [
-                SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: Center(
-                    child: Text(
-                      'Нет плейлистов',
-                      style: TextStyle(
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.onSurface.withValues(alpha: 0.38),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          );
-        }
-
         return AppRefreshIndicator(
           onRefresh: refreshPlaylists,
           child: GridView.builder(
@@ -714,10 +665,12 @@ class _PlaylistsTab extends StatelessWidget {
               crossAxisSpacing: isNarrow ? 16 : 24,
               childAspectRatio: isNarrow ? 0.7 : 0.75,
             ),
-            itemCount: playlists.length,
+            // The last tile creates a playlist, so adding one is always at the
+            // end of the list the user already has.
+            itemCount: playlists.length + 1,
             itemBuilder: (context, index) {
-              final playlist = playlists[index];
-              return _PlaylistCard(playlist: playlist);
+              if (index == playlists.length) return const _CreatePlaylistCard();
+              return _PlaylistCard(playlist: playlists[index]);
             },
           ),
         );
@@ -1008,118 +961,140 @@ class _LikedArtistsTab extends StatelessWidget {
   }
 }
 
-class _PlaylistCard extends StatefulWidget {
+class _CreatePlaylistCard extends StatelessWidget {
+  const _CreatePlaylistCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        AspectRatio(
+          aspectRatio: 1,
+          child: M3EButton(
+            onPressed: () => showDialog<void>(
+              context: context,
+              builder: (context) => const _CreatePlaylistDialog(),
+            ),
+            style: M3EButtonStyle.text,
+            semanticLabel: 'Создать плейлист',
+            // The button is the cover only, so the tile reads like its
+            // neighbours: title below the square, no highlight over it.
+            decoration: const M3EButtonDecoration(
+              padding: EdgeInsets.zero,
+              minimumSize: Size.zero,
+              borderRadius: AppRadius.md,
+              hoveredRadius: AppRadius.md,
+              pressedRadius: AppRadius.md,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: Container(
+              decoration: BoxDecoration(
+                color: cs.onSurface.withValues(alpha: 0.05),
+                borderRadius: BorderRadius.circular(AppRadius.md),
+                border: Border.all(
+                  color: cs.onSurface.withValues(alpha: 0.12),
+                ),
+              ),
+              // The button centers its child at intrinsic size; stretch the
+              // plate to the whole cover.
+              child: SizedBox.expand(
+                child: Icon(Icons.add_rounded, size: 40, color: cs.primary),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Text(
+          'Создать плейлист',
+          style: TextStyle(
+            color: cs.onSurface,
+            fontWeight: FontWeight.bold,
+            fontSize: 16,
+          ),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ],
+    );
+  }
+}
+
+class _PlaylistCard extends StatelessWidget {
   final SimplePlaylistDto playlist;
   const _PlaylistCard({required this.playlist});
 
   @override
-  State<_PlaylistCard> createState() => _PlaylistCardState();
-}
-
-class _PlaylistCardState extends State<_PlaylistCard> {
-  final ValueNotifier<bool> _isHovered = ValueNotifier(false);
-
-  @override
-  void dispose() {
-    _isHovered.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final playlist = widget.playlist;
+    final cs = Theme.of(context).colorScheme;
 
-    return MouseRegion(
-      onEnter: (_) => _isHovered.value = true,
-      onExit: (_) => _isHovered.value = false,
-      child: ValueListenableBuilder<bool>(
-        valueListenable: _isHovered,
-        builder: (context, hovered, _) {
-          return GestureDetector(
-            onTap: () => navigateTo(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        AspectRatio(
+          aspectRatio: 1,
+          child: M3EButton(
+            onPressed: () => navigateTo(
               AppSection.playlist,
               '${playlist.uid}:${playlist.kind}',
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                AspectRatio(
-                  aspectRatio: 1,
-                  child: Stack(
-                    children: [
-                      Container(
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(AppRadius.md),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.4),
-                              blurRadius: 12,
-                              offset: const Offset(0, 6),
-                            ),
-                          ],
-                        ),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(AppRadius.md),
-                          child: AppCover(
-                            coverUrl: playlist.coverUrl,
-                            size: 200,
-                            borderRadius: AppRadius.md,
-                          ),
-                        ),
-                      ),
-                      if (hovered)
-                        Positioned.fill(
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: Colors.black45,
-                              borderRadius: BorderRadius.circular(AppRadius.md),
-                            ),
-                            child: Center(
-                              child: IconButton(
-                                iconSize: 48,
-                                icon: Icon(
-                                  Icons.play_circle_filled_rounded,
-                                  color: Theme.of(context).colorScheme.primary,
-                                ),
-                                onPressed: () => unawaited(
-                                  PlaybackController.playPlaylist(
-                                    playlist.uid.toString(),
-                                    playlist.kind,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  playlist.title,
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.onSurface,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '${playlist.trackCount} треков',
-                  style: TextStyle(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.onSurface.withValues(alpha: 0.38),
-                    fontSize: 13,
-                  ),
-                ),
-              ],
+            style: M3EButtonStyle.text,
+            semanticLabel: '${playlist.title}, ${playlist.trackCount} треков',
+            // The button is the cover only, so the highlight stops at the
+            // square and the title below stays plain.
+            decoration: const M3EButtonDecoration(
+              padding: EdgeInsets.zero,
+              minimumSize: Size.zero,
+              borderRadius: AppRadius.md,
+              hoveredRadius: AppRadius.md,
+              pressedRadius: AppRadius.md,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
-          );
-        },
-      ),
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(AppRadius.md),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.4),
+                    blurRadius: 12,
+                    offset: const Offset(0, 6),
+                  ),
+                ],
+              ),
+              // The button centers its child at intrinsic size; stretch the
+              // cover to the whole tile.
+              child: SizedBox.expand(
+                child: AppCover(
+                  coverUrl: playlist.coverUrl,
+                  size: 200,
+                  borderRadius: AppRadius.md,
+                ),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Text(
+          playlist.title,
+          style: TextStyle(
+            color: cs.onSurface,
+            fontWeight: FontWeight.bold,
+            fontSize: 16,
+          ),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        const SizedBox(height: 4),
+        Text(
+          '${playlist.trackCount} треков',
+          style: TextStyle(
+            color: cs.onSurface.withValues(alpha: 0.38),
+            fontSize: 13,
+          ),
+        ),
+      ],
     );
   }
 }
