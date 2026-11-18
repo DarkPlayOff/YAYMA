@@ -642,7 +642,6 @@ class _MobileFullPlayerState extends State<MobileFullPlayer>
                       panelRect,
                       openCoverRect,
                       coverRadius,
-                      panelT,
                       metrics.coverRect.width,
                       dx:
                           _coverSwipe.value +
@@ -667,7 +666,6 @@ class _MobileFullPlayerState extends State<MobileFullPlayer>
                     panelRect,
                     coverRect,
                     coverRadius,
-                    panelT,
                     metrics.coverRect.width,
                     dx: _coverSwipe.value,
                     coverUrl: _swipe.holdUrl,
@@ -719,7 +717,6 @@ class _MobileFullPlayerState extends State<MobileFullPlayer>
     Rect panelRect,
     Rect coverRect,
     double radius,
-    double progress,
     double side, {
     double dx = 0,
     String? coverUrl,
@@ -728,74 +725,60 @@ class _MobileFullPlayerState extends State<MobileFullPlayer>
     double scale = 1,
     bool interactive = true,
   }) {
-    // The shadow is the most expensive thing to paint here, and it only
-    // changes when the panel animates or the artwork loads: keep it in its
-    // own layer instead of re-blurring it per frame.
+    // Its own layer keeps the artwork off the panel's per-frame repaint path.
     final Widget artwork = RepaintBoundary(
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(radius),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.35 * progress),
-              blurRadius: 12 + 24 * progress,
-              offset: Offset(0, 8 * progress),
-            ),
-          ],
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(radius),
-          child: SignalBuilder(
-            builder: (context) {
-              final rawUrl = coverUrl ?? trackMetadataSignal().coverUrl;
-              final dpr = MediaQuery.devicePixelRatioOf(context);
-              final targetPx = (side * dpr).round().clamp(0, 800);
-              final lowResUrl = rawUrl == null
-                  ? null
-                  : resolveCoverUrl(rawUrl, (48 * dpr).round());
-              final highResUrl = rawUrl == null
-                  ? null
-                  : resolveCoverUrl(rawUrl, targetPx);
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(radius),
+        child: SignalBuilder(
+          builder: (context) {
+            final rawUrl = coverUrl ?? trackMetadataSignal().coverUrl;
+            final dpr = MediaQuery.devicePixelRatioOf(context);
+            final targetPx = (side * dpr).round().clamp(0, 800);
+            final lowResUrl = rawUrl == null
+                ? null
+                : resolveCoverUrl(rawUrl, (48 * dpr).round());
+            final highResUrl = rawUrl == null
+                ? null
+                : resolveCoverUrl(rawUrl, targetPx);
 
-              final placeholder = lowResUrl == null
-                  ? CoverPlaceholder(size: side, icon: Icons.music_note)
-                  : RustCachedImage(
-                      imageUrl: lowResUrl,
-                      width: side,
-                      height: side,
-                      cacheWidth: (48 * dpr).round(),
-                      cacheHeight: (48 * dpr).round(),
-                    );
+            final placeholder = lowResUrl == null
+                ? CoverPlaceholder(size: side, icon: Icons.music_note)
+                : RustCachedImage(
+                    imageUrl: lowResUrl,
+                    width: side,
+                    height: side,
+                    cacheWidth: (48 * dpr).round(),
+                    cacheHeight: (48 * dpr).round(),
+                  );
 
-              return GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                // Follow the finger from where it went down: with the default
-                // the cover only starts moving after the drag is accepted,
-                // which reads as lag on the first few pixels.
-                dragStartBehavior: DragStartBehavior.down,
-                onTap: onTap,
-                onHorizontalDragStart: _onCoverDragStart,
-                onHorizontalDragUpdate: _onCoverDragUpdate,
-                onHorizontalDragEnd: _onCoverDragEnd,
-                onHorizontalDragCancel: _onCoverDragCancel,
-                child: FittedBox(
-                  fit: BoxFit.fill,
-                  child: SizedBox.square(
-                    dimension: side,
-                    child: RustCachedImage(
-                      imageUrl: highResUrl,
-                      width: side,
-                      height: side,
-                      cacheWidth: targetPx,
-                      cacheHeight: targetPx,
-                      placeholder: placeholder,
-                      errorWidget: placeholder,
-                    ),
+            return GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              // Follow the finger from where it went down: with the default
+              // the cover only starts moving after the drag is accepted,
+              // which reads as lag on the first few pixels.
+              dragStartBehavior: DragStartBehavior.down,
+              onTap: onTap,
+              onHorizontalDragStart: _onCoverDragStart,
+              onHorizontalDragUpdate: _onCoverDragUpdate,
+              onHorizontalDragEnd: _onCoverDragEnd,
+              onHorizontalDragCancel: _onCoverDragCancel,
+              child: FittedBox(
+                fit: BoxFit.fill,
+                child: SizedBox.square(
+                  dimension: side,
+                  child: RustCachedImage(
+                    imageUrl: highResUrl,
+                    width: side,
+                    height: side,
+                    cacheWidth: targetPx,
+                    cacheHeight: targetPx,
+                    placeholder: placeholder,
+                    errorWidget: placeholder,
                   ),
                 ),
-              );
-            },
-          ),
+              ),
+            );
+          },
         ),
       ),
     );
@@ -803,8 +786,7 @@ class _MobileFullPlayerState extends State<MobileFullPlayer>
     return Positioned(
       // Only the resting layout here: the swipe / slide offset goes through
       // the transform below, so moving the carousel is compositing only.
-      // A changing Positioned rect would relayout the cover and invalidate
-      // its cached raster (the large blurred shadow) on every frame.
+      // A changing Positioned rect would relayout the cover on every frame.
       left: coverRect.left - panelRect.left,
       top: coverRect.top - panelRect.top,
       width: coverRect.width,
