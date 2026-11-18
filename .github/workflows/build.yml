@@ -9,7 +9,9 @@ jobs:
     uses: ./.github/workflows/bridge.yml
 
   build-linux:
-    runs-on: ubuntu-22.04
+    # webview_all_linux >= 1.5 needs glib >= 2.74 (G_CONNECT_DEFAULT & co);
+    # 22.04 ships glib 2.72, 24.04 ships 2.80.
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
     env:
       RUSTFLAGS: -C link-arg=-fuse-ld=lld
@@ -326,12 +328,12 @@ jobs:
           mkdir -p dmg_stage
           cp -R "$APP" dmg_stage/
           cp LICENSE dmg_stage/LICENSE
-          hdiutil create -volname "YAYMA" -srcfolder dmg_stage -ov -format UDZO "yayma-macos-arm64-${VERSION}.dmg"
+          hdiutil create -volname "YAYMA" -srcfolder dmg_stage -ov -format UDZO "yayma-macos-${VERSION}.dmg"
 
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
           # Artifacts are already compressed (apk/zip/dmg/tar.gz); re-gzipping costs minutes.
           compression-level: 0
-          name: macos_arm64_release
+          name: macos_release
           path: yayma-macos-*.dmg

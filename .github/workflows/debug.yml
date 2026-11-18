@@ -8,7 +8,8 @@ jobs:
     uses: ./.github/workflows/bridge.yml
 
   build-linux-debug:
-    runs-on: ubuntu-22.04
+    # Keep in sync with build-linux: webview_all_linux >= 1.5 needs glib 2.74+.
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
     env:
       RUSTFLAGS: -C link-arg=-fuse-ld=lld

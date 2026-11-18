@@ -70,7 +70,9 @@ jobs:
         run: |
           flutter config --no-analytics
           flutter pub get
-          flutter_rust_bridge_codegen generate
+          # The codegen's INFO trace (parse skips, expand dumps) floods the
+          # Actions log UI with near-source output; errors still reach stderr.
+          RUST_LOG=error flutter_rust_bridge_codegen generate
 
       - name: Pack Bridge
         run: |
