@@ -67,6 +67,25 @@ where
     Err(last.expect("attempts are non-empty").into())
 }
 
+/// A finished HTTP response whose body was never read, boxed as the error of
+/// [`send_with_retry`]. Carries the host so the `AppError` conversion can tell
+/// a real auth-API 401 from a stale signed CDN link.
+#[derive(Debug, thiserror::Error)]
+#[error("HTTP {status}")]
+pub struct HttpStatusError {
+    pub status: u16,
+    pub host: Option<String>,
+}
+
+impl From<&reqwest::Response> for HttpStatusError {
+    fn from(response: &reqwest::Response) -> Self {
+        HttpStatusError {
+            status: response.status().as_u16(),
+            host: response.url().host_str().map(str::to_string),
+        }
+    }
+}
+
 /// Execute a raw request with the same bounded retry policy as the desktop client.
 /// The reqwest client timeout provides cancellation of the in-flight operation.
 pub async fn send_with_retry<F>(mut make_request: F) -> Result<reqwest::Response>
@@ -78,9 +97,9 @@ where
         match make_request().send().await {
             Ok(response) if response.status().is_success() => return Ok(response),
             Ok(response) if retryable_status(response.status()) => {
-                last_error = Some(format!("HTTP {}", response.status()).into());
+                last_error = Some(HttpStatusError::from(&response).into());
             }
-            Ok(response) => return Err(format!("HTTP {}", response.status()).into()),
+            Ok(response) => return Err(HttpStatusError::from(&response).into()),
             Err(error) => last_error = Some(error.into()),
         }
         if attempt + 1 < MAX_REQUEST_ATTEMPTS {

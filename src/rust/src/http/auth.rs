@@ -32,6 +32,24 @@ impl ApiService {
         self.user_id
     }
 
+    /// One cheap account-status probe used to confirm a reported 401 before
+    /// the UI logs out. Returns `false` only when the probe *also* got a 401
+    /// from the auth host; network or server errors mean "cannot confirm"
+    /// and keep the session, like the official desktop client's
+    /// "confirmed-401" check.
+    pub async fn verify_auth(&self) -> bool {
+        self.client
+            .get_account_status()
+            .await
+            .map(|_| true)
+            .unwrap_or_else(|e| {
+                !matches!(
+                    crate::api::models::AppError::from(e),
+                    crate::api::models::AppError::Unauthorized
+                )
+            })
+    }
+
     pub async fn get_account_info(&self) -> Result<crate::api::models::UserAccountDto> {
         let status = self.client.get_account_status().await?;
 

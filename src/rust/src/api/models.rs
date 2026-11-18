@@ -702,11 +702,16 @@ pub enum AppError {
 /// as an auth failure logged users out mid-track.
 const AUTH_HOST: &str = "api.music.yandex.net";
 
+/// True when [host] is (or cannot be determined to be anything but) the auth
+/// host; an unknown host keeps the previous, conservative behaviour.
+fn is_auth_host_str(host: Option<&str>) -> bool {
+    host.is_none_or(|h| h == AUTH_HOST)
+}
+
 /// True when [url] is (or cannot be determined to be anything but) the auth
 /// host; an unknown URL keeps the previous, conservative behaviour.
 fn is_auth_host(url: Option<&reqwest::Url>) -> bool {
-    url.and_then(|u| u.host_str())
-        .is_none_or(|host| host == AUTH_HOST)
+    is_auth_host_str(url.and_then(|u| u.host_str()))
 }
 
 impl From<yandex_music::error::ClientError> for AppError {
@@ -768,6 +773,18 @@ impl From<std::io::Error> for AppError {
 
 impl From<Box<dyn std::error::Error + Send + Sync>> for AppError {
     fn from(err: Box<dyn std::error::Error + Send + Sync>) -> Self {
+        // `send_with_retry` boxes an [HttpStatusError](crate::http::HttpStatusError)
+        // that still knows its host: apply the same host rule as the typed
+        // branches above instead of string matching, so a stale CDN link's
+        // 401 is not mistaken for a dead session.
+        if let Some(e) = err.downcast_ref::<crate::http::HttpStatusError>() {
+            return match e.status {
+                401 if is_auth_host_str(e.host.as_deref()) => AppError::Unauthorized,
+                404 => AppError::NotFound(e.to_string()),
+                429 => AppError::RateLimited,
+                _ => AppError::ApiError(e.to_string()),
+            };
+        }
         let s = err.to_string();
         // Same host rule as above, for errors that still carry their request.
         let auth_401 = err
@@ -784,5 +801,35 @@ impl From<Box<dyn std::error::Error + Send + Sync>> for AppError {
         } else {
             AppError::ApiError(s)
         }
+    }
+}
+
+#[cfg(test)]
+mod boxed_401_tests {
+    use super::AppError;
+    use crate::http::HttpStatusError;
+
+    fn boxed(status: u16, host: &str) -> Box<dyn std::error::Error + Send + Sync> {
+        Box::new(HttpStatusError {
+            status,
+            host: Some(host.to_string()),
+        })
+    }
+
+    #[test]
+    fn boxed_401_from_auth_host_is_unauthorized() {
+        assert!(matches!(
+            AppError::from(boxed(401, "api.music.yandex.net")),
+            AppError::Unauthorized
+        ));
+    }
+
+    #[test]
+    fn boxed_401_from_cdn_host_is_not_unauthorized() {
+        // A stale signed download link answers 401 without the session dying.
+        assert!(!matches!(
+            AppError::from(boxed(401, "strm.yandex.net")),
+            AppError::Unauthorized
+        ));
     }
 }

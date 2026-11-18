@@ -5,7 +5,6 @@ import 'dart:typed_data';
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:signals_flutter/signals_flutter.dart';
-import 'package:yayma/src/app/init.dart';
 import 'package:yayma/src/app/session.dart';
 import 'package:yayma/src/features/core/providers/notification_provider.dart';
 import 'package:yayma/src/features/core/providers/visual_effects_provider.dart';
@@ -157,8 +156,9 @@ Future<void> _initPlaybackUnsafe() async {
         showAppWarning(message);
       case rust.AppEvent_Error(field0: final message):
         if (isSessionExpired(message)) {
-          showAppError(humanizeError(message));
-          unawaited(AppInit.logout());
+          // Rust sends the raw auth wording; confirm before logging out so a
+          // transient 401 keeps the session.
+          unawaited(confirmedLogout(ctx, message));
         } else {
           // Rust sends the actionable reason here ("Buffering timed out after
           // 15s", "Failed to play track: …"), so keep it instead of replacing

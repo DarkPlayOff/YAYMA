@@ -104,11 +104,31 @@ pub async fn try_auto_login() -> Option<AppContext> {
         && let Ok(ctx) = initialize_app(api).await
     {
         tracing::info!("user_login");
+        // The fast path never validated the token: probe in the background so
+        // a dead token surfaces as one deliberate expiry event instead of a
+        // 401 from every later fetch. The Dart handler re-confirms it before
+        // logging out.
+        let probe = ctx.clone();
+        tokio::spawn(async move {
+            if !probe.core.api.verify_auth().await {
+                tracing::info!("auto_login_token_invalid");
+                probe.send_event(crate::api::simple::AppEvent::Error(
+                    "Invalid token or session expired".to_string(),
+                ));
+            }
+        });
         return Some(ctx);
     }
 
     // Fallback if the fast path fails for any reason
     login_with_token(token).await.ok()
+}
+
+#[frb]
+/// Confirms the session is really dead before the UI logs out: a single 401
+/// can be transient or come from a stale URL.
+pub async fn verify_auth(ctx: &AppContext) -> bool {
+    ctx.core.api.verify_auth().await
 }
 
 #[frb]
