@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:audio_service/audio_service.dart';
 import 'package:audio_session/audio_session.dart';
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:path_provider/path_provider.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/app/session.dart';
@@ -61,10 +62,19 @@ class AppInit {
       unawaited(_initializeAuthAndServices());
     } on Object catch (e, st) {
       // RootScreen renders AsyncError, so a failed startup surfaces a message
-      // instead of spinning forever.
+      // instead of spinning forever. Both sinks: when the bridge itself died
+      // appLog is swallowed, so debugPrint is the only trace (run from a
+      // terminal to see it).
+      debugPrint('Startup failed: $e\n$st');
+      appLog(AppLogLevel.error, 'startup failed: $e | ${_stackExcerpt(st)}');
       authSignal.value = AsyncError(e, st);
     }
   }
+
+  /// First frames only: appLog flattens newlines, and a full stack would
+  /// flood the single-line file entry.
+  static String _stackExcerpt(StackTrace st) =>
+      st.toString().split('\n').take(4).join(' ');
 
   static Future<void> _initAudioService() async {
     final session = await AudioSession.instance;
@@ -110,6 +120,8 @@ class AppInit {
       authSignal.value = const AsyncData(true);
     } on Object catch (e, st) {
       if (epoch != _authEpoch) return;
+      debugPrint('Auto-login failed: $e\n$st');
+      appLog(AppLogLevel.error, 'auto-login failed: $e | ${_stackExcerpt(st)}');
       authSignal.value = AsyncError(e, st);
     }
   }
@@ -159,6 +171,8 @@ class AppInit {
       authSignal.value = const AsyncData(true);
     } on Object catch (e, st) {
       if (epoch != _authEpoch) return;
+      debugPrint('Login failed: $e\n$st');
+      appLog(AppLogLevel.error, 'login failed: $e | ${_stackExcerpt(st)}');
       authSignal.value = AsyncError(e, st);
     }
   }

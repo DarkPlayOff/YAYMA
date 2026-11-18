@@ -5,7 +5,7 @@ use tracing_subscriber::{self, Layer, layer::SubscriberExt, util::SubscriberInit
 
 pub static LOG_ENV: LazyLock<String> =
     LazyLock::new(|| format!("{}_LOGLEVEL", env!("CARGO_CRATE_NAME").to_uppercase()));
-pub static LOG_FILE: LazyLock<String> = LazyLock::new(|| format!("{}.log", env!("CARGO_PKG_NAME")));
+pub static LOG_FILE: LazyLock<String> = LazyLock::new(|| env!("CARGO_PKG_NAME").to_string());
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
@@ -60,8 +60,8 @@ const MAX_LOG_BYTES: u64 = 10 * 1024 * 1024;
 
 /// Deletes old session logs so the current run's file (created right after)
 /// fits into `MAX_LOG_FILES`. Per-launch files are named
-/// `yayma.log.<timestamp>`, so the newest sorts last; daily-rotated files
-/// from older builds share the prefix and age out the same way.
+/// `yayma.<month-day_time>.log`, so the newest sorts last; the `yayma.`
+/// prefix also ages out the old `yayma.log.<timestamp>` files.
 fn prune_old_logs(dir: &std::path::Path) {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return;
@@ -85,12 +85,12 @@ fn prune_old_logs(dir: &std::path::Path) {
     }
 }
 
-/// Opens this session's log file: `yayma.log.<local timestamp>`, with a
+/// Opens this session's log file: `yayma.<month-day_hour.min.sec>.log`, with a
 /// numeric suffix when a previous run left a same-second collision.
 fn open_session_log(dir: &std::path::Path) -> Option<(std::fs::File, std::path::PathBuf)> {
-    let stamp = chrono::Local::now().format("%Y-%m-%d_%H-%M-%S");
+    let stamp = chrono::Local::now().format("%m-%d_%H.%M.%S");
     for suffix in ["", "_1", "_2", "_3", "_4"] {
-        let path = dir.join(format!("{}.{stamp}{suffix}", *LOG_FILE));
+        let path = dir.join(format!("{}.{stamp}{suffix}.log", *LOG_FILE));
         match std::fs::OpenOptions::new()
             .create_new(true)
             .write(true)

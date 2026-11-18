@@ -15,6 +15,7 @@ import 'package:yayma/src/features/core/services/app_error.dart';
 import 'package:yayma/src/features/core/services/app_logger.dart';
 import 'package:yayma/src/features/core/services/rust_bridge.dart';
 import 'package:yayma/src/features/core/views/layout.dart';
+import 'package:yayma/src/features/core/views/widgets/common_ui.dart';
 import 'package:yayma/src/features/core/views/widgets/smooth_scroll.dart';
 import 'package:yayma/src/features/settings/services/update_service.dart';
 import 'package:yayma/src/features/settings/views/update_dialog.dart';
@@ -93,8 +94,11 @@ class _RootScreenState extends State<RootScreen> {
             return const LoginScreen();
           },
           // Single nullable parameter, see the note in CommonAsyncView.
+          // No retry button: the failures that reach this screen (bridge,
+          // data dir, db) are persistent, and the transient ones never get
+          // here — auto-login errors collapse into the login screen.
           error: (Object? e) =>
-              Scaffold(body: Center(child: Text(humanizeError(e!)))),
+              Scaffold(body: CommonErrorWidget(error: e!)),
           loading: () =>
               const Scaffold(body: Center(child: M3ELoadingIndicator())),
         );
