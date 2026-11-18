@@ -596,7 +596,12 @@ class CommonDetailSliverLayout extends StatelessWidget {
 
 /// Shared pull-to-refresh for the whole app: branded colors,
 /// triggers on the top edge only.
-class AppRefreshIndicator extends StatelessWidget {
+///
+/// The M3E header pushes the list down while pulling. Left alone it also lets
+/// the list scroll up during the same drag, so the header closes while the
+/// content runs away under it; [_PullHold] pins the list at the top for as long
+/// as the header is open, and the drag only moves the header.
+class AppRefreshIndicator extends StatefulWidget {
   final Future<void> Function() onRefresh;
   final Widget child;
 
@@ -607,16 +612,97 @@ class AppRefreshIndicator extends StatelessWidget {
   });
 
   @override
+  State<AppRefreshIndicator> createState() => _AppRefreshIndicatorState();
+}
+
+class _AppRefreshIndicatorState extends State<AppRefreshIndicator> {
+  final _pull = M3EPullToRefreshController();
+
+  /// The header is open and belongs to the finger: not a running refresh,
+  /// whose header stays open while the list must stay scrollable.
+  bool get _held => _pull.distanceFraction > 0 && !_pull.isRefreshing;
+
+  @override
+  void dispose() {
+    _pull.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     return M3EPullToRefreshIndicator(
-      onRefresh: onRefresh,
+      controller: _pull,
+      onRefresh: widget.onRefresh,
       style: M3EPullToRefreshStyle(
         indicatorColor: cs.primary,
         containerColor: cs.surfaceContainerHighest,
       ),
-      child: child,
+      child: _PullHold(held: () => _held, child: widget.child),
     );
+  }
+}
+
+/// Keeps the scroll view at the top while [held] and reports the swallowed
+/// drag back as a scroll update, which is what the M3E header listens to.
+class _PullHold extends StatelessWidget {
+  final bool Function() held;
+  final Widget child;
+
+  const _PullHold({required this.held, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    final behavior = ScrollConfiguration.of(context);
+    return ScrollConfiguration(
+      behavior: behavior.copyWith(
+        physics: _PullHoldPhysics(
+          held: held,
+          parent: behavior.getScrollPhysics(context),
+        ),
+      ),
+      child: NotificationListener<ScrollNotification>(
+        onNotification: (notification) {
+          if (notification is OverscrollNotification &&
+              notification.overscroll > 0 &&
+              notification.dragDetails != null &&
+              notification.context != null &&
+              held()) {
+            ScrollUpdateNotification(
+              metrics: notification.metrics,
+              context: notification.context!,
+              dragDetails: notification.dragDetails,
+              scrollDelta: notification.overscroll,
+            ).dispatch(notification.context);
+          }
+          return false;
+        },
+        child: child,
+      ),
+    );
+  }
+}
+
+class _PullHoldPhysics extends ScrollPhysics {
+  final bool Function() held;
+
+  const _PullHoldPhysics({required this.held, super.parent});
+
+  @override
+  _PullHoldPhysics applyTo(ScrollPhysics? ancestor) =>
+      _PullHoldPhysics(held: held, parent: buildParent(ancestor));
+
+  @override
+  double applyBoundaryConditions(ScrollMetrics position, double value) {
+    // Refuse to scroll down while the header is open; the whole delta comes
+    // back as overscroll, which [_PullHold] turns into a header drag.
+    if (held() &&
+        position.axis == Axis.vertical &&
+        position.pixels <= position.minScrollExtent &&
+        value > position.pixels) {
+      return value - position.pixels;
+    }
+    return super.applyBoundaryConditions(position, value);
   }
 }
 
