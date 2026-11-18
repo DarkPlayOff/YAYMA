@@ -23,7 +23,7 @@ extension ResponsiveContext on BuildContext {
       Platform.isWindows || Platform.isLinux || Platform.isMacOS;
 
   double get horizontalPadding => isNarrow ? 20.0 : 40.0;
-  double get topPadding => isNarrow ? 40.0 : 60.0;
+  double get topPadding => isNarrow ? 16.0 : 40.0;
 
   EdgeInsets get viewPadding =>
       EdgeInsets.fromLTRB(horizontalPadding, topPadding, horizontalPadding, 20);

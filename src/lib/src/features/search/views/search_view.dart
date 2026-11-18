@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:m3e_core/m3e_core.dart';
 import 'package:material_ui/material_ui.dart';
@@ -101,9 +102,11 @@ class _SearchViewState extends State<SearchView> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const CommonPageTitle(title: 'Поиск'),
-                        if (!isNarrow) const SizedBox(height: 24),
-                        if (isNarrow) const SizedBox(height: 8),
+                        if (!Platform.isAndroid) ...[
+                          const CommonPageTitle(title: 'Поиск'),
+                          if (!isNarrow) const SizedBox(height: 24),
+                          if (isNarrow) const SizedBox(height: 8),
+                        ],
                         TextField(
                           controller: _controller,
                           onChanged: setSearchQuery,

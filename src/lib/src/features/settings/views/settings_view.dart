@@ -225,7 +225,7 @@ class _SettingsViewState extends State<SettingsView> {
             child: Padding(
               padding: EdgeInsets.fromLTRB(
                 context.horizontalPadding,
-                isNarrow ? 20 : 60,
+                isNarrow ? 16 : 40,
                 context.horizontalPadding,
                 isNarrow ? 20 : 40,
               ),
