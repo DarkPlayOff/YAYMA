@@ -198,7 +198,10 @@ class _ArtistViewState extends State<ArtistView> {
         // No subscriptions while the screen is hidden (local signals keep
         // loading in the background, the UI just doesn't rebuild for it).
         if (visibleSignal(context, _isError) != null) {
-          return CommonErrorWidget(error: visibleSignal(context, _isError)!);
+          return CommonErrorWidget(
+            error: visibleSignal(context, _isError)!,
+            onRetry: requestGlobalRefresh,
+          );
         }
 
         final artist = visibleSignal(context, _artist);

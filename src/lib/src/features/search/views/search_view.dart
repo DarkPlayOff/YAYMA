@@ -72,7 +72,10 @@ class _SearchViewState extends State<SearchView> {
         final Widget? placeholder = searchResultsAsync.isLoading
             ? const CommonLoadingWidget()
             : searchResultsAsync.hasError
-            ? CommonErrorWidget(error: searchResultsAsync.error!)
+            ? CommonErrorWidget(
+                error: searchResultsAsync.error!,
+                onRetry: requestGlobalRefresh,
+              )
             : results == null
             ? const _EmptySearchState()
             : noResults

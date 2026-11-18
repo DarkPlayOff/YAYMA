@@ -119,7 +119,12 @@ class _PlaylistViewState extends State<PlaylistView> {
         }
 
         if (state.hasError && meta == null) {
-          return Center(child: CommonErrorWidget(error: state.error!));
+          return Center(
+            child: CommonErrorWidget(
+              error: state.error!,
+              onRetry: requestGlobalRefresh,
+            ),
+          );
         }
 
         if (meta == null) {

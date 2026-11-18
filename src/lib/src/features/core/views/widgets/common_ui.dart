@@ -102,16 +102,43 @@ class CommonLoadingWidget extends StatelessWidget {
 /// only gets [humanizeError] text, never an internal message.
 class CommonErrorWidget extends StatelessWidget {
   final Object error;
-  const CommonErrorWidget({required this.error, super.key});
+  final VoidCallback? onRetry;
+
+  const CommonErrorWidget({required this.error, this.onRetry, super.key});
+
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
-        child: Text(
-          humanizeError(error),
-          textAlign: TextAlign.center,
-          style: TextStyle(color: Theme.of(context).colorScheme.error),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.error_outline_rounded, size: 48, color: cs.error),
+            const SizedBox(height: 16),
+            Text(
+              'Не удалось загрузить',
+              style: textTheme.titleMedium?.copyWith(
+                color: cs.onSurface,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              humanizeError(error),
+              textAlign: TextAlign.center,
+              style: textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
+            ),
+            if (onRetry != null) ...[
+              const SizedBox(height: 24),
+              FilledButton.tonal(
+                onPressed: onRetry,
+                child: const Text('Повторить'),
+              ),
+            ],
+          ],
         ),
       ),
     );
@@ -403,6 +430,7 @@ class CommonAsyncView<T> extends StatelessWidget {
   final Widget Function(String error)? error;
   final Widget? empty;
   final bool Function(T data)? isEmpty;
+  final VoidCallback? onRetry;
 
   const CommonAsyncView({
     required this.state,
@@ -412,6 +440,7 @@ class CommonAsyncView<T> extends StatelessWidget {
     this.error,
     this.empty,
     this.isEmpty,
+    this.onRetry,
   });
 
   @override
@@ -430,7 +459,7 @@ class CommonAsyncView<T> extends StatelessWidget {
       // arguments. `Object?` is the narrowest type that still matches.
       error: (Object? e) => error != null
           ? error!(humanizeError(e!))
-          : CommonErrorWidget(error: e!),
+          : CommonErrorWidget(error: e!, onRetry: onRetry),
     );
   }
 }

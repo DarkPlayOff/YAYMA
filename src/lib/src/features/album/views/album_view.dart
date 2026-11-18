@@ -167,6 +167,7 @@ class _AlbumViewState extends State<AlbumView> {
         return CommonAsyncView<AlbumDetailsDto?>(
           state: visibleSignal(context, _albumAsync),
           isEmpty: (album) => album == null,
+          onRetry: requestGlobalRefresh,
           empty: const Center(child: Text('Альбом не найден')),
           builder: (context, album) {
             final albumData = album!;
