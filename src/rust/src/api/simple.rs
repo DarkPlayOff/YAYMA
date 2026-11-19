@@ -4,6 +4,7 @@ use crate::api::models::{
 use crate::app::AppContext;
 use crate::app::settings::parse_setting;
 use crate::frb_generated::StreamSink;
+#[cfg(not(target_os = "linux"))]
 use std::collections::HashMap;
 
 /// Background shader names accepted by [`set_vibe_style`]. Each maps to
@@ -158,6 +159,7 @@ pub async fn set_close_to_tray_enabled(ctx: &AppContext, enabled: bool) {
     }
 }
 
+#[cfg(not(target_os = "linux"))]
 fn extract_display_name(raw: &str) -> String {
     if let Some(pos) = raw.find(" (") {
         let inner = &raw[pos + 2..];
@@ -168,6 +170,17 @@ fn extract_display_name(raw: &str) -> String {
     raw.to_string()
 }
 
+/// Linux deliberately exposes no per-app device list: routing belongs to the
+/// sound server (pavucontrol, GNOME/KDE settings). Enumerating ALSA PCMs here
+/// invited picks of raw hardware devices, which grab the card exclusively and
+/// wedge audio for the whole desktop. Playback always follows the server
+/// default.
+#[cfg(target_os = "linux")]
+pub fn get_audio_devices(_ctx: &AppContext) -> Vec<String> {
+    Vec::new()
+}
+
+#[cfg(not(target_os = "linux"))]
 pub fn get_audio_devices(_ctx: &AppContext) -> Vec<String> {
     #[cfg(target_os = "windows")]
     let raw_names: Vec<String> = crate::audio::util::get_windows_full_device_names();
@@ -179,11 +192,7 @@ pub fn get_audio_devices(_ctx: &AppContext) -> Vec<String> {
         let host = rodio::cpal::default_host();
         host.output_devices()
             .map(|devs| {
-                // Raw hardware PCMs bypass the session sound server and wedge
-                // the whole desktop's audio when opened — they must never be
-                // offered. On non-Linux hosts the check is a no-op.
                 devs.filter_map(|d| d.description().ok().map(|desc| desc.name().to_string()))
-                    .filter(|name| crate::audio::util::is_server_mediated_pcm(name))
                     .collect()
             })
             .unwrap_or_default()

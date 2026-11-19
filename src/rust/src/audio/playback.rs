@@ -238,12 +238,6 @@ impl PlaybackEngine {
         device_name: Option<&str>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let (device, stream_config, sample_format) = setup_device_config(device_name)?;
-        let sample_rate = NonZero::new(stream_config.sample_rate).ok_or_else(|| {
-            Box::<dyn std::error::Error + Send + Sync>::from("device reported a sample rate of 0")
-        })?;
-        let channels = NonZero::new(stream_config.channels).ok_or_else(|| {
-            Box::<dyn std::error::Error + Send + Sync>::from("device reported 0 channels")
-        })?;
 
         let tx_clone = self.tx.clone();
         let error_callback = move |err: rodio::cpal::Error| {
@@ -262,6 +256,13 @@ impl PlaybackEngine {
         };
 
         let (stream, sink) = construct_sink(device, &stream_config, sample_format, error_callback)?;
+
+        // Trust what was actually opened: a fallback config may differ from
+        // the device default we asked for, and resampling to the wrong
+        // rate/channels would speed up or slow down every track.
+        let actual = stream.config();
+        let sample_rate = actual.sample_rate();
+        let channels = actual.channel_count();
 
         *self.state.write() = Some(EngineState {
             _stream: stream,

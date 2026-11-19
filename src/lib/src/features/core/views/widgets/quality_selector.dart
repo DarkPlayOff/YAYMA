@@ -74,32 +74,35 @@ class CommonQualitySelector extends SignalWidget {
             isSelected: quality == AudioQuality.high,
             color: quality == AudioQuality.high ? accentColor : null,
           ),
-          AppContextMenuItem(
-            label: 'Устройство вывода',
-            icon: Icons.speaker_group_rounded,
-            subItems: () {
-              final devices = audioDevicesSignal.value;
-              final selectedDevice = selectedAudioDeviceSignal.value;
-              return <AppContextMenuItem<dynamic>>[
-                AppContextMenuItem<dynamic>(
-                  value: const _DeviceChoice(''),
-                  label: 'По умолчанию',
-                  icon: Icons.computer_rounded,
-                  isSelected: selectedDevice == null,
-                  color: selectedDevice == null ? accentColor : null,
-                ),
-                ...devices.map(
-                  (device) => AppContextMenuItem<dynamic>(
-                    value: _DeviceChoice(device),
-                    label: device,
-                    icon: Icons.speaker_rounded,
-                    isSelected: device == selectedDevice,
-                    color: device == selectedDevice ? accentColor : null,
+          // Linux routing belongs to the sound server (pavucontrol, GNOME/KDE
+          // settings); the picker would only offer the default, so hide it.
+          if (!Platform.isLinux)
+            AppContextMenuItem(
+              label: 'Устройство вывода',
+              icon: Icons.speaker_group_rounded,
+              subItems: () {
+                final devices = audioDevicesSignal.value;
+                final selectedDevice = selectedAudioDeviceSignal.value;
+                return <AppContextMenuItem<dynamic>>[
+                  AppContextMenuItem<dynamic>(
+                    value: const _DeviceChoice(''),
+                    label: 'По умолчанию',
+                    icon: Icons.computer_rounded,
+                    isSelected: selectedDevice == null,
+                    color: selectedDevice == null ? accentColor : null,
                   ),
-                ),
-              ];
-            },
-          ),
+                  ...devices.map(
+                    (device) => AppContextMenuItem<dynamic>(
+                      value: _DeviceChoice(device),
+                      label: device,
+                      icon: Icons.speaker_rounded,
+                      isSelected: device == selectedDevice,
+                      color: device == selectedDevice ? accentColor : null,
+                    ),
+                  ),
+                ];
+              },
+            ),
           const AppContextMenuItem(
             value: 'eq',
             label: 'Настройки звука',

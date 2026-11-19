@@ -77,6 +77,10 @@ pub async fn load_persisted_settings(ctx: &AppContext) {
     let ai_reduction = parse_setting::<bool>(&settings, "ai_content_reduction").unwrap_or(false);
     ctx.core.api.set_ai_reduction(ai_reduction);
 
+    // Linux always plays through the sound server's default device (routing
+    // belongs to the server), so a stored per-app device name is meaningless
+    // there and must not force an engine recreate on startup.
+    #[cfg(not(target_os = "linux"))]
     if let Some(device) = parse_setting::<String>(&settings, "audio_device")
         && !device.is_empty()
     {

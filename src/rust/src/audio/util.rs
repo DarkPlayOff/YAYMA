@@ -3,6 +3,7 @@ use rodio::{
     cpal::{BufferSize, SampleFormat, StreamConfig, default_host, traits::HostTrait},
 };
 
+#[cfg(not(target_os = "linux"))]
 fn extract_display_name(raw: &str) -> &str {
     if let Some(pos) = raw.find(" (") {
         let inner = &raw[pos + 2..];
@@ -59,6 +60,7 @@ pub(crate) fn get_windows_full_device_names() -> Vec<String> {
     result
 }
 
+#[cfg(not(target_os = "linux"))]
 fn parse_device_spec(name: &str) -> (&str, usize) {
     if let Some(rest) = name.strip_suffix(')')
         && let Some((base, num)) = rest.rsplit_once(" (")
@@ -69,31 +71,20 @@ fn parse_device_spec(name: &str) -> (&str, usize) {
     (name, 1)
 }
 
-/// True for ALSA PCMs that route through the session sound server
-/// (PipeWire/PulseAudio). Raw hardware PCMs (`hw:`, `front:`, `dmix:` ...)
-/// bypass it: opening one grabs the card exclusively and wedges every other
-/// pulse client on the desktop — field-verified on PipeWire, where a stream
-/// ending up on `hw:` froze system-wide audio for 15+ seconds.
-/// No-op (always true) on platforms where cpal's default host is not ALSA.
-#[cfg(target_os = "linux")]
-pub(crate) fn is_server_mediated_pcm(name: &str) -> bool {
-    !(name.starts_with("hw:")
-        || name.starts_with("plughw:")
-        || name.starts_with("front:")
-        || name.starts_with("dmix:")
-        || name.starts_with("sysdefault")
-        || name.starts_with("surround"))
-}
-
-#[cfg(not(target_os = "linux"))]
-pub(crate) fn is_server_mediated_pcm(_name: &str) -> bool {
-    true
-}
-
 pub fn setup_device_config(
     device_name: Option<&str>,
 ) -> Result<(Device, StreamConfig, SampleFormat), Box<dyn std::error::Error + Send + Sync>> {
     let host = default_host();
+
+    // On Linux there is deliberately no per-app device choice: a PCM picked
+    // by name can be a raw ALSA device that grabs the card exclusively and
+    // wedges the desktop's audio server, and routing belongs to the server
+    // (pavucontrol, GNOME/KDE settings). Always follow the server default;
+    // a stored name (from another platform or an older build) is ignored.
+    #[cfg(target_os = "linux")]
+    let device = host.default_output_device();
+
+    #[cfg(not(target_os = "linux"))]
     let device = if let Some(name) = device_name {
         let (base_name, index) = parse_device_spec(name);
         let cpal_devices: Vec<Device> = host
@@ -101,45 +92,37 @@ pub fn setup_device_config(
             .map(|devs| devs.into_iter().collect())
             .unwrap_or_default();
 
-        // Try matching by display name (full names from Windows, or raw names otherwise).
-        // A stored raw-hardware PCM name (saved by an older build whose picker
-        // still listed `hw:` devices) must never be honored: opening one grabs
-        // the card exclusively and wedges the desktop's audio server, so fall
-        // back to the default device, which routes through the server.
-        let chosen = if is_server_mediated_pcm(base_name) {
-            let mut matched = 0usize;
-            let mut fallback: Option<Device> = None;
+        // Try matching by display name (full names from Windows, or raw names otherwise)
+        let mut matched = 0usize;
+        let mut fallback: Option<Device> = None;
 
-            #[cfg(target_os = "windows")]
-            let windows_names: Vec<String> = get_windows_full_device_names();
+        #[cfg(target_os = "windows")]
+        let windows_names: Vec<String> = get_windows_full_device_names();
 
-            #[cfg_attr(not(target_os = "windows"), allow(unused_variables))]
-            for (i, dev) in cpal_devices.iter().enumerate() {
-                if let Ok(desc) = dev.description() {
-                    #[cfg(target_os = "windows")]
-                    let display = {
-                        let full = windows_names
-                            .get(i)
-                            .map(|s| s.as_str())
-                            .unwrap_or(desc.name());
-                        extract_display_name(full).to_string()
-                    };
-                    #[cfg(not(target_os = "windows"))]
-                    let display = extract_display_name(desc.name()).to_string();
+        #[cfg_attr(not(target_os = "windows"), allow(unused_variables))]
+        for (i, dev) in cpal_devices.iter().enumerate() {
+            if let Ok(desc) = dev.description() {
+                #[cfg(target_os = "windows")]
+                let display = {
+                    let full = windows_names
+                        .get(i)
+                        .map(|s| s.as_str())
+                        .unwrap_or(desc.name());
+                    extract_display_name(full).to_string()
+                };
+                #[cfg(not(target_os = "windows"))]
+                let display = extract_display_name(desc.name()).to_string();
 
-                    if display == base_name {
-                        if matched == index.saturating_sub(1) {
-                            fallback = Some(dev.clone());
-                            break;
-                        }
-                        matched += 1;
+                if display == base_name {
+                    if matched == index.saturating_sub(1) {
+                        fallback = Some(dev.clone());
+                        break;
                     }
+                    matched += 1;
                 }
             }
-            fallback
-        } else {
-            None
-        };
+        }
+        let chosen = fallback;
 
         chosen.or_else(|| host.default_output_device())
     } else {
@@ -167,20 +150,40 @@ pub fn setup_device_config(
         sample_format = SampleFormat::F32;
     }
 
+    // Field debugging: which PCM was actually opened (raw hw vs server) and
+    // what the device settled on. Without this, reports of "no sound / wrong
+    // speed" cannot be tied to a device or config. `stored` is what the
+    // setting held; on Linux it is intentionally ignored (server default).
+    let desc = device.description().ok();
+    tracing::info!(
+        device = desc.as_ref().map(|d| d.name()).unwrap_or_default(),
+        pcm = desc.as_ref().and_then(|d| d.driver()).unwrap_or_default(),
+        stored = device_name.unwrap_or("default"),
+        rate = config.sample_rate,
+        channels = config.channels,
+        sample_format = ?sample_format,
+        "audio_device_opened"
+    );
+
     Ok((device, config, sample_format))
 }
 
 pub fn construct_sink<F>(
     device: Device,
-    _config: &StreamConfig,
-    _sample_format: SampleFormat,
+    config: &StreamConfig,
+    sample_format: SampleFormat,
     error_callback: F,
 ) -> Result<(MixerDeviceSink, Player), Box<dyn std::error::Error + Send + Sync>>
 where
     F: FnMut(rodio::cpal::Error) + Send + Clone + 'static,
 {
+    // Open with the device's own default config, not the builder's 44.1k/2ch
+    // default: on a fallback the engine would resample to a rate/channel count
+    // the stream never runs at, playing everything at the wrong pitch.
     let stream = DeviceSinkBuilder::default()
         .with_device(device)
+        .with_config(config)
+        .with_sample_format(sample_format)
         .with_error_callback(error_callback)
         .open_sink_or_fallback()
         .map_err(|e| Box::<dyn std::error::Error + Send + Sync>::from(e.to_string()))?;
@@ -194,32 +197,14 @@ where
 mod tests {
     use super::*;
 
+    // Linux ignores the stored device name entirely, so the spec parser only
+    // exists on the platforms that still honor it.
+    #[cfg(not(target_os = "linux"))]
     #[test]
     fn device_spec_roundtrips() {
         assert_eq!(parse_device_spec("pulse"), ("pulse", 1));
         assert_eq!(parse_device_spec("Name (2)"), ("Name", 2));
         // Not a spec suffix — a display name that just ends in a parenthesis.
         assert_eq!(parse_device_spec("Weird (x)"), ("Weird (x)", 1));
-    }
-
-    // The picker and the stored-name matcher must agree: server-mediated
-    // PCMs are usable, raw hardware PCMs are not. Meaningless (always true)
-    // on non-Linux hosts, so only assert there.
-    #[cfg(target_os = "linux")]
-    #[test]
-    fn raw_hardware_pcms_are_rejected() {
-        for raw in [
-            "hw:CARD=PCH,DEV=0",
-            "plughw:CARD=PCH,DEV=0",
-            "front:CARD=PCH,DEV=0",
-            "surround51:CARD=PCH,DEV=0",
-            "dmix:CARD=PCH,DEV=0",
-            "sysdefault:CARD=PCH,DEV=0",
-        ] {
-            assert!(!is_server_mediated_pcm(raw), "{raw} must be rejected");
-        }
-        for server in ["default", "pulse", "pipewire"] {
-            assert!(is_server_mediated_pcm(server), "{server} must be kept");
-        }
     }
 }
