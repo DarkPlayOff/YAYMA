@@ -26,14 +26,16 @@ Future<T?> showAppBottomSheet<T>({
 }) {
   final cs = Theme.of(context).colorScheme;
   final color = backgroundColor ?? surfaceOverlay(cs.surfaceContainerHighest);
-  final navigator = Navigator.of(context);
-  final controller = BottomSheet.createAnimationController(navigator);
   return showM3EModalBottomSheet<T>(
     context: context,
     showDragHandle: showDragHandle,
     backgroundColor: color,
     style: const M3EBottomSheetStyle(padding: EdgeInsets.zero),
-    transitionAnimationController: controller,
+    // The route owns its animation controller: it disposes the controller
+    // only after the exit animation has finished. Handing it our own and
+    // disposing it when the push future completes killed the controller the
+    // instant the route was popped, freezing the sheet on screen with the
+    // barrier up and no way to dismiss it.
     // The route already slides the sheet in; the spring entrance would
     // start a second motion one frame later and make the opening stutter.
     builder: (context) => M3EBottomSheet(
@@ -41,20 +43,16 @@ Future<T?> showAppBottomSheet<T>({
       showDragHandle: showDragHandle,
       backgroundColor: color,
       style: const M3EBottomSheetStyle(padding: EdgeInsets.zero),
-      child: _PredictiveBackSheet(
-        controller: controller,
-        child: builder(context),
-      ),
+      child: _PredictiveBackSheet(child: builder(context)),
     ),
-  ).whenComplete(controller.dispose);
+  );
 }
 
 /// Drives the sheet's own route from Android predictive back, the same way
 /// page transitions do for pages.
 class _PredictiveBackSheet extends StatefulWidget {
-  const _PredictiveBackSheet({required this.controller, required this.child});
+  const _PredictiveBackSheet({required this.child});
 
-  final AnimationController controller;
   final Widget child;
 
   @override
@@ -104,22 +102,31 @@ class _PredictiveBackSheetState extends State<_PredictiveBackSheet>
 
   @override
   void handleCommitBackGesture() {
-    // The route's own commit reverses from the top, which snaps the sheet back
-    // to its rest position first. Slide it away from where the gesture left it.
+    if (!mounted) return;
+    final route = _route;
+    if (route == null) return;
     final navigator = Navigator.of(context);
-    unawaited(
-      widget.controller
-          .animateBack(
-            0,
-            duration: const Duration(milliseconds: 250),
-            curve: Curves.easeOutCubic,
-          )
-          .then(
-            (_) => navigator
-              ..pop()
-              ..didStopUserGesture(),
-          ),
-    );
+    // Pop now: didPop reverses from where the gesture left it — the same
+    // exit the back button runs. The route's own commit would
+    // reverse(from: upperBound) and snap the sheet back open first.
+    if (route.isCurrent) {
+      navigator.pop();
+    }
+    // Keep the user gesture open until the exit animation finishes, the way
+    // TransitionRoute's own commit bookkeeping does.
+    final animation = route.animation;
+    if (animation != null && animation.status == AnimationStatus.reverse) {
+      late final AnimationStatusListener stopGesture;
+      stopGesture = (status) {
+        if (status == AnimationStatus.dismissed) {
+          navigator.didStopUserGesture();
+          animation.removeStatusListener(stopGesture);
+        }
+      };
+      animation.addStatusListener(stopGesture);
+    } else {
+      navigator.didStopUserGesture();
+    }
   }
 
   @override
