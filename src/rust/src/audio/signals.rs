@@ -116,9 +116,10 @@ impl AudioSignals {
             ));
             self.current_track_id.set(Some(t.id.clone()));
 
-            if let Some(duration) = t.duration {
-                self.duration_ms.set(duration.as_millis() as u64);
-            }
+            // 0 = unknown: a duration-less track must not inherit the
+            // previous track's value (a natural end would read as ended-early).
+            self.duration_ms
+                .set(t.duration.map_or(0, |d| d.as_millis() as u64));
             self.is_stopped.set(false);
         } else {
             self.title.set(None);
@@ -216,5 +217,21 @@ mod tests {
         // A same-length replacement must still be observable.
         signals.set_queue(Vector::new(), 0);
         assert_eq!(signals.queue_revision.get(), 2);
+    }
+
+    #[test]
+    fn durationless_track_resets_stale_duration() {
+        let signals = AudioSignals::new();
+        let with_duration: Track = serde_json::from_value(
+            serde_json::json!({ "id": "1", "realId": "1", "durationMs": 213_000 }),
+        )
+        .expect("test track JSON must deserialize");
+        signals.set_current_track(Some(with_duration));
+        assert_eq!(signals.duration_ms.get(), 213_000);
+
+        // The next track carries no duration: the old value must not leak
+        // (a stale one makes a natural end classify as ended_early).
+        signals.set_current_track(Some(crate::util::track::test_track("2")));
+        assert_eq!(signals.duration_ms.get(), 0);
     }
 }
