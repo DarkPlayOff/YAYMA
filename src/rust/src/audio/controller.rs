@@ -788,6 +788,10 @@ impl AudioController {
                 task.abort();
             }
             self.engine.stop();
+            // engine.stop() dropped the parked preheat player; stale
+            // controller-side metadata would block re-arming it for the
+            // rest of the track.
+            self.drop_preheat();
         }
 
         // Claim this play_track call as the sole authority over the engine going forward.
@@ -939,6 +943,12 @@ impl AudioController {
                     }
                 }
                 Err(e) => {
+                    // Same superseded check as the Ok branch: a task whose
+                    // session failed must not hijack the newer track's
+                    // signals or enqueue a reload against it.
+                    if generation.load(Ordering::SeqCst) != my_generation {
+                        return;
+                    }
                     if stream_error_retries.load(Ordering::SeqCst) < 2
                         && reload_in_flight
                             .compare_exchange(0, 1, Ordering::SeqCst, Ordering::SeqCst)
