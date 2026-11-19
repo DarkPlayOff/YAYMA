@@ -42,6 +42,17 @@ const MIN_INITIAL_DATA: usize = 512 * 1024;
 const MAX_ATTEMPTS: usize = 20; // 10 seconds total while waiting for a range
 const RANGE_TIMEOUT: Duration = Duration::from_secs(10);
 const MAX_RANGE_RETRIES: usize = 3;
+/// Body-read floor: a range request is allowed at least this transfer rate.
+/// Slower-but-flowing links would turn every large prefetch into a timeout
+/// under a fixed cap, starving playback exactly when it needs the buffer.
+const RANGE_BODY_BYTES_PER_MS: u64 = 64; // 64 KB/s
+
+/// Deadline for reading one range body: the fixed connect/headers budget
+/// plus a size-proportional transfer budget. A dead peer is still caught by
+/// the client-level `read_timeout`; this only has to outlive a slow link.
+fn range_body_timeout(bytes: u64) -> Duration {
+    RANGE_TIMEOUT + Duration::from_millis(bytes / RANGE_BODY_BYTES_PER_MS)
+}
 
 enum FetchCommand {
     Fetch {
@@ -149,10 +160,13 @@ impl StreamingDataSource {
             (8 * 1024 * 1024, 256 * 1024, 1024 * 1024)
         };
 
-        let initial_data = tokio::time::timeout(RANGE_TIMEOUT, resp.bytes())
-            .await
-            .map_err(|_| StreamSourceError::Other("initial stream range body timed out".into()))?
-            .map_err(|e| StreamSourceError::Other(e.into()))?;
+        let initial_data = tokio::time::timeout(
+            range_body_timeout(initial_size as u64),
+            resp.bytes(),
+        )
+        .await
+        .map_err(|_| StreamSourceError::Other("initial stream range body timed out".into()))?
+        .map_err(|e| StreamSourceError::Other(e.into()))?;
         let initial_data_len = initial_data.len();
 
         let buffer = Arc::new(Mutex::new(BufferState::new(
@@ -326,8 +340,12 @@ impl StreamingDataSource {
     }
 
     fn fetch_range_timeout(client: Client, urls: Vec<String>, start: u64, end: u64) -> FetchFuture {
+        // The outer cap covers all retry attempts of one fetch; scaled with
+        // the body size so it never fires before a single slow attempt could
+        // have finished on its own.
+        let budget = range_body_timeout(end.saturating_sub(start)).saturating_mul(MAX_RANGE_RETRIES as u32);
         Box::pin(tokio::time::timeout(
-            RANGE_TIMEOUT * MAX_RANGE_RETRIES as u32,
+            budget,
             async move { Self::fetch_range_async(&client, &urls, start, end).await },
         ))
     }
@@ -414,7 +432,12 @@ impl StreamingDataSource {
                                 {
                                     last_error = Some("invalid content-range unit".into());
                                 } else {
-                                    match tokio::time::timeout(RANGE_TIMEOUT, resp.bytes()).await {
+                                    match tokio::time::timeout(
+                                        range_body_timeout(end.saturating_sub(start)),
+                                        resp.bytes(),
+                                    )
+                                    .await
+                                    {
                                         Ok(Ok(bytes)) => {
                                             if bytes.is_empty() {
                                                 last_error = Some("empty stream range body".into());
@@ -728,6 +751,19 @@ impl Drop for StreamingDataSource {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn range_body_timeout_scales_with_size_and_keeps_a_floor() {
+        // Headers/connect keep the fixed budget even for an empty body.
+        assert_eq!(range_body_timeout(0), RANGE_TIMEOUT);
+        // ~64 KB/s floor: 512 KB buys ~8 extra seconds, 4 MB over a minute,
+        // so a slow-but-flowing link can deliver a large prefetch.
+        assert_eq!(
+            range_body_timeout(512 * 1024),
+            RANGE_TIMEOUT + Duration::from_millis(8192)
+        );
+        assert!(range_body_timeout(4 * 1024 * 1024) > RANGE_TIMEOUT * 3);
+    }
 
     #[test]
     fn wait_budget_resets_while_bytes_arrive() {

@@ -108,7 +108,12 @@ impl StreamManager {
         let http_client = match crate::util::tls::builder()
             .pool_max_idle_per_host(4)
             .pool_idle_timeout(std::time::Duration::from_secs(60))
-            .timeout(std::time::Duration::from_secs(10))
+            // Range fetches carry up to a few MB; a total deadline kills them
+            // on any link slower than ~3 Mbit/s and starves playback. The
+            // data source already enforces its own per-range deadlines; here
+            // only a dead peer needs detection, which read_timeout provides.
+            .connect_timeout(std::time::Duration::from_secs(10))
+            .read_timeout(std::time::Duration::from_secs(10))
             .build()
         {
             Ok(client) => client,

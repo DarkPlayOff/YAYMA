@@ -233,8 +233,12 @@ impl ApiService {
             .user_agent(crate::util::tls::USER_AGENT)
             .default_headers(headers.clone())
             .brotli(true)
-            // Keep playlist/context requests from blocking playback indefinitely.
-            .timeout(FILE_INFO_REQUEST_TIMEOUT)
+            // This client also carries full-track downloads and uploads, so a
+            // total deadline would kill any body that needs more than 10 s to
+            // transfer. Per-read stall detection keeps a stuck request from
+            // blocking playback indefinitely without capping body size/time.
+            .connect_timeout(FILE_INFO_REQUEST_TIMEOUT)
+            .read_timeout(FILE_INFO_REQUEST_TIMEOUT)
             .build()?;
 
         let client = Arc::new(YandexMusicClient::from_client(http_client.clone()));
