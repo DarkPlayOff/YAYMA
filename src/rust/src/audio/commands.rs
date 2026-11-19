@@ -85,4 +85,8 @@ pub enum AudioMessage {
     /// a preheated next session parked — start the overlap transition.
     BeginCrossfade,
     RecreateStream,
+    /// Stops the audio actor so its post-loop teardown runs. The actor owns
+    /// one of the channel's senders itself, so `recv()` can never return
+    /// `None` — this message is the only way the loop ends.
+    Shutdown,
 }

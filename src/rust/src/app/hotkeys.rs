@@ -190,27 +190,36 @@ pub async fn init(ctx: AppContext, mut shutdown_rx: tokio::sync::watch::Receiver
     let settings = load_settings(&ctx).await;
     *SETTINGS.write() = merge_with_defaults(settings);
 
-    let (tx, rx) = mpsc::channel::<ManagerCmd>();
-    let _ = MANAGER_TX.set(tx);
+    // The manager and event threads are process singletons: their channels
+    // (`MANAGER_TX`, the crate-global event receiver) are set once, so a
+    // later session stays connected only while the first thread lives.
+    if MANAGER_TX.get().is_none() {
+        let (tx, rx) = mpsc::channel::<ManagerCmd>();
+        let _ = MANAGER_TX.set(tx);
 
-    std::thread::Builder::new()
-        .name("hotkey-manager".into())
-        .spawn(move || manager_loop(rx))
-        .expect("spawn hotkey manager thread");
+        std::thread::Builder::new()
+            .name("hotkey-manager".into())
+            .spawn(move || manager_loop(rx))
+            .expect("spawn hotkey manager thread");
 
-    std::thread::Builder::new()
-        .name("hotkey-events".into())
-        .spawn(event_loop)
-        .expect("spawn hotkey event thread");
+        std::thread::Builder::new()
+            .name("hotkey-events".into())
+            .spawn(event_loop)
+            .expect("spawn hotkey event thread");
+    }
 
     apply_current();
 
     tokio::spawn(async move {
         let _ = shutdown_rx.changed().await;
-        if *shutdown_rx.borrow()
-            && let Some(tx) = MANAGER_TX.get()
-        {
-            let _ = tx.send(ManagerCmd::Shutdown);
+        if *shutdown_rx.borrow() {
+            // Logout: unregister everything and drop the context clone so
+            // presses between accounts dispatch to nothing. The manager
+            // thread itself must survive — killing it would strand
+            // `MANAGER_TX` and break the next login's re-registration; the
+            // next `init` re-applies the persisted bindings.
+            send_apply(Vec::new());
+            *CTX.write() = None;
         }
     });
 }

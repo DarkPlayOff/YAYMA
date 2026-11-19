@@ -15,6 +15,16 @@ static DATA_DIR: OnceLock<PathBuf> = OnceLock::new();
 static DATABASE: tokio::sync::OnceCell<Arc<Mutex<AppDatabase>>> =
     tokio::sync::OnceCell::const_new();
 
+/// The live session's context. `clear_token` is the FRB logout and takes no
+/// context argument, so this static is its only handle to the stack it must
+/// tear down. One session is live at a time: login overwrites, logout takes.
+static CURRENT: parking_lot::RwLock<Option<AppContext>> = parking_lot::RwLock::new(None);
+
+/// Takes the live context for teardown. Only the logout path may call this.
+pub fn take_context() -> Option<AppContext> {
+    CURRENT.write().take()
+}
+
 pub async fn get_database()
 -> Result<Arc<Mutex<AppDatabase>>, Box<dyn std::error::Error + Send + Sync>> {
     let database = DATABASE
@@ -85,16 +95,21 @@ async fn initialize_services(
     let track_cache = Arc::new(TrackCache::new(DATA_DIR.get().cloned()));
     let _ = track_cache.init().await;
 
+    // Created here (not in AppContext::new) so the audio stack can be wired
+    // to the same shutdown channel the context will hold.
+    let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
+
     let (audio_tx, signals, state, effect_handles) = AudioSystem::spawn(
         error_reporter,
         api_arc.clone(),
         db_arc.clone(),
         http_cache.clone(),
         track_cache.clone(),
+        shutdown_rx.clone(),
     )
     .await?;
 
-    let (context, shutdown_rx) = AppContext::new(
+    let context = AppContext::new(
         AppAudioContext {
             tx: audio_tx,
             signals,
@@ -108,7 +123,9 @@ async fn initialize_services(
             track_cache,
         },
         event_sink,
+        shutdown_tx,
     );
+    *CURRENT.write() = Some(context.clone());
 
     load_persisted_settings(&context).await;
     // The monitor feeds only the vibe shader: keep it off while the shader is

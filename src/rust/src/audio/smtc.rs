@@ -24,6 +24,15 @@ pub struct SmtcManager {
     cover_seq: u64,
 }
 
+impl Drop for SmtcManager {
+    fn drop(&mut self) {
+        // souvlaki has no Drop of its own and the Windows SMTC is a
+        // per-window singleton: without an explicit detach, every re-login
+        // stacks another dead event handler on the same control.
+        let _ = self.controls.detach();
+    }
+}
+
 impl SmtcManager {
     pub fn new(
         cmd_tx: mpsc::UnboundedSender<AudioMessage>,

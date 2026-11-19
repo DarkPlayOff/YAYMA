@@ -57,6 +57,13 @@ pub async fn restore_saved_state(ctx: &AppContext) -> Option<SavedStateDto> {
 
 pub async fn clear_token() {
     tracing::info!("user_logout");
+    // Explicit teardown: `Drop` never fires for the audio stack (desktop
+    // statics hold context clones forever), so without this a logout would
+    // leak a whole second stack on re-login and the sync worker would keep
+    // calling the server with the dead account's token.
+    if let Some(ctx) = crate::app::init::take_context() {
+        ctx.shutdown().await;
+    }
     if let Err(e) = TokenProvider::delete().await {
         tracing::error!(error = ?e, "delete_auth_token_failed");
     }

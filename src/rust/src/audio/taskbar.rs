@@ -108,7 +108,13 @@ pub fn init(ctx: AppContext, mut shutdown_rx: watch::Receiver<bool>) {
         loop {
             tokio::select! {
                 _ = shutdown_rx.changed() => {
-                    if *shutdown_rx.borrow() { break; }
+                    if *shutdown_rx.borrow() {
+                        // Drop the eternal context clone so the old stack is
+                        // not pinned alive; the subclass no-ops button
+                        // presses until the next login rewrites it.
+                        *CTX.write() = None;
+                        break;
+                    }
                 }
                 res = changed_rx.changed() => {
                     if res.is_err() { break; }

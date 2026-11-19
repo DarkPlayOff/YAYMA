@@ -103,6 +103,7 @@ impl AudioSystem {
         db: Arc<tokio::sync::Mutex<crate::db::AppDatabase>>,
         _http_cache: Arc<crate::storage::cache::HttpCache>,
         track_cache: Arc<crate::storage::cache::TrackCache>,
+        _shutdown_rx: tokio::sync::watch::Receiver<bool>,
     ) -> Result<(
         mpsc::Sender<AudioMessage>,
         AudioSignals,
@@ -205,7 +206,7 @@ impl AudioSystem {
 
         // Start Discord integration
         #[cfg(not(any(target_os = "android")))]
-        DiscordManager::spawn(signals.clone());
+        DiscordManager::spawn(signals.clone(), _shutdown_rx.clone());
 
         // Background task for SMTC
         #[cfg(not(any(target_os = "android")))]
@@ -274,6 +275,13 @@ impl AudioSystem {
                 tokio::select! {
                     msg = rx.recv() => {
                         let Some(msg) = msg else { break };
+                        if matches!(msg, AudioMessage::Shutdown) {
+                            // Only way out of this loop: the actor holds one
+                            // of the channel's senders itself, so `recv()`
+                            // never yields `None`. Breaking here lets the
+                            // post-loop teardown below finally run.
+                            break;
+                        }
                         if matches!(msg, AudioMessage::Next) {
                             // Skip-burst debounce: collapse already-queued
                             // Next presses into a single advance without
@@ -939,6 +947,9 @@ impl AudioSystem {
             AudioMessage::RecreateStream => {
                 self.recreate_stream().await;
             }
+            // The actor loop breaks on this before dispatching; the arm
+            // exists only to keep the match exhaustive.
+            AudioMessage::Shutdown => {}
             AudioMessage::ReloadCurrentTrack => {
                 self.reload_track().await;
             }

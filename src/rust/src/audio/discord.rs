@@ -1,6 +1,7 @@
 use crate::audio::signals::AudioSignals;
 use discord_rich_presence::{DiscordIpc, DiscordIpcClient, activity};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use tokio::sync::watch;
 
 const CLIENT_ID: &str = "1269826362399522849";
 const RECONNECT_INTERVAL: Duration = Duration::from_secs(15);
@@ -8,7 +9,7 @@ const RECONNECT_INTERVAL: Duration = Duration::from_secs(15);
 pub struct DiscordManager;
 
 impl DiscordManager {
-    pub fn spawn(signals: AudioSignals) {
+    pub fn spawn(signals: AudioSignals, shutdown: watch::Receiver<bool>) {
         tokio::task::spawn_blocking(move || {
             let mut client: Option<DiscordIpcClient> = None;
             let mut last_track_id: Option<String> = None;
@@ -18,6 +19,19 @@ impl DiscordManager {
 
             loop {
                 std::thread::sleep(Duration::from_millis(1000));
+
+                // Logout teardown: release the socket so the presence ends
+                // instead of staying pinned to a dead session. The watch
+                // borrow works on this blocking thread; one tick of latency
+                // is fine.
+                if *shutdown.borrow() {
+                    if let Some(mut c) = client.take() {
+                        let _ = c.clear_activity();
+                        let _ = c.close();
+                    }
+                    break;
+                }
+
                 let rpc_enabled = signals.discord_rpc.get();
 
                 // If disabled - tear down immediately
