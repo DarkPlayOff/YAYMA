@@ -328,6 +328,10 @@ pub struct QueueManager {
     /// Bumped on every load()/clear() to invalidate stale background tasks
     /// (wave_by_seed session creation).
     generation: Arc<std::sync::atomic::AtomicU64>,
+    /// One-shot: the playing row was removed and its successor slid into
+    /// the cursor slot; the next advance must stay on the cursor instead
+    /// of current+1, which would silently skip the successor.
+    advance_in_place: bool,
 }
 
 impl QueueManager {
@@ -354,6 +358,7 @@ impl QueueManager {
             wave_feedback_sent: false,
             track_progress,
             generation: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            advance_in_place: false,
         }
     }
 
@@ -402,6 +407,7 @@ impl QueueManager {
             self.signals.set_playback_context(&guard);
         }
         self.shuffle.reset();
+        self.advance_in_place = false;
         self.wave_buffer.clear();
         self.wave_fetch_times.clear();
         self.wave_feedbacks.clear();
@@ -615,6 +621,9 @@ impl QueueManager {
         }
 
         if !user_skip && self.signals.repeat_mode() == RepeatMode::Single {
+            // The cursor row starts replaying now: a pending remove-debt
+            // (advance_in_place) is paid.
+            self.advance_in_place = false;
             return self.signals.queue().get(self.signals.index()).cloned();
         }
 
@@ -652,11 +661,19 @@ impl QueueManager {
             self.signals.queue().len(),
             self.signals.repeat_mode(),
         )?;
+        // The previous row starts playing: a pending remove-debt is moot.
+        self.advance_in_place = false;
         self.advance_to(prev)
     }
 
     async fn try_advance_or_fetch(&mut self, current: usize) -> Option<Track> {
         let queue_len = self.signals.queue().len();
+        // One-shot from remove_track: the successor slid into the cursor
+        // slot when the playing row was deleted, so the first advance stays
+        // put once instead of skipping it with current+1.
+        if std::mem::take(&mut self.advance_in_place) && current < queue_len {
+            return self.advance_to(current);
+        }
         if let Some(next) = PlaybackPolicy::try_advance(current, queue_len) {
             return self.advance_to(next);
         }
@@ -835,6 +852,10 @@ impl QueueManager {
                 self.signals.set_index(0);
             } else if current_index >= len {
                 self.signals.set_index(len - 1);
+            } else {
+                // The successor slid into the cursor slot while the removed
+                // track keeps playing; the next advance must not skip it.
+                self.advance_in_place = true;
             }
         }
         self.signals.bump_revision();
@@ -891,6 +912,8 @@ impl QueueManager {
             return None;
         }
         let index = index.min(queue_len - 1);
+        // The jumped-to row starts playing: a pending remove-debt is moot.
+        self.advance_in_place = false;
         if self.signals.is_shuffled() {
             let queue = self.signals.queue();
             let (shuffled, new_index) = self.shuffle.reroll_anchored(queue, index);
@@ -915,6 +938,7 @@ impl QueueManager {
         self.signals.inner.set_stream_info(None);
 
         self.shuffle.reset();
+        self.advance_in_place = false;
         self.wave_buffer.clear();
         self.wave_fetch_times.clear();
         self.wave_feedbacks.clear();
@@ -1416,6 +1440,17 @@ mod tests {
         let prev = q.get_previous_track().expect("prev exists");
         assert_eq!(prev.id, "t0");
         assert!(q.get_next_track().await.is_some());
+    }
+
+    #[tokio::test]
+    async fn remove_current_track_then_natural_advance_plays_successor() {
+        let mut q = manager().await;
+        q.load(PlaybackContext::Standalone, standalone(3), 1).await;
+        q.remove_track(1); // "t1" keeps playing; "t2" slides into slot 1.
+        // The natural end must land on the successor, not skip it (which
+        // would end the queue and auto-start the default wave).
+        let next = q.get_next_track().await.expect("successor plays next");
+        assert_eq!(next.id, "t2");
     }
 
     #[tokio::test]
