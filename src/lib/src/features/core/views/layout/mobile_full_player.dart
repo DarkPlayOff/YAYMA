@@ -6,6 +6,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/physics.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:flutter/services.dart' show PredictiveBackEvent;
 import 'package:material_ui/material_ui.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:yayma/src/features/core/providers/navigation_provider.dart';
@@ -131,7 +132,7 @@ class MobileFullPlayer extends StatefulWidget {
 }
 
 class _MobileFullPlayerState extends State<MobileFullPlayer>
-    with TickerProviderStateMixin {
+    with TickerProviderStateMixin, WidgetsBindingObserver {
   late final AnimationController _controller;
   late final AnimationController _coverSwipe;
 
@@ -172,6 +173,7 @@ class _MobileFullPlayerState extends State<MobileFullPlayer>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _controller = AnimationController(vsync: this);
     _controller.addListener(_syncProgress);
     _lyricsFade = AnimationController(
@@ -236,6 +238,7 @@ class _MobileFullPlayerState extends State<MobileFullPlayer>
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     mobileFullPlayerOpenSignal.value = false;
     mobileFullPlayerProgress.value = 0;
     widget.controller?._detach(this);
@@ -344,6 +347,42 @@ class _MobileFullPlayerState extends State<MobileFullPlayer>
   void _onVerticalDragStart(DragStartDetails details) {
     if (_closing) return;
     _controller.stop();
+  }
+
+  // Android predictive back. The player is an overlay, not a route, so while
+  // it is the topmost surface it drives its own collapse with the finger:
+  // progress 0 (gesture started) maps to fully open, progress 1 to collapsed.
+  // The plain back button stays on the PopScope path below, so it keeps the
+  // spring close instead of jumping straight to the mini player.
+  @override
+  bool handleStartBackGesture(PredictiveBackEvent backEvent) {
+    // Routes above (a sheet or a pushed page) own the gesture, and a player
+    // that is already closing settles on its own.
+    if (backEvent.isButtonEvent || !mounted || _closing) {
+      return false;
+    }
+    if (Navigator.of(context).canPop()) {
+      return false;
+    }
+    return true;
+  }
+
+  @override
+  void handleUpdateBackGestureProgress(PredictiveBackEvent backEvent) {
+    if (!mounted || _closing) return;
+    _applyDragProgress(1 - backEvent.progress);
+  }
+
+  @override
+  void handleCommitBackGesture() {
+    if (!mounted || _closing) return;
+    _settleFromDrag(expand: false);
+  }
+
+  @override
+  void handleCancelBackGesture() {
+    if (!mounted || _closing) return;
+    _settleFromDrag(expand: true);
   }
 
   void _onVerticalDragUpdate(DragUpdateDetails details) {

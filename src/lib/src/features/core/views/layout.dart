@@ -64,8 +64,9 @@ class _AppLayoutState extends State<AppLayout>
 
   @override
   bool handleStartBackGesture(PredictiveBackEvent backEvent) {
-    // A sheet or pushed page above the app gets the gesture first, and so do
-    // the full player and root tab, which keep the system back behaviour.
+    // A sheet or pushed page above the app gets the gesture first, and so does
+    // the full player, which drives its own collapse while it is open. Only
+    // the root tab keeps the system back behaviour.
     // Navigator.of does not subscribe to route changes, unlike ModalRoute.of,
     // which would rebuild the whole layout on every sheet open and close.
     if (Navigator.of(context).canPop()) return false;
