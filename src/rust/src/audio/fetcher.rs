@@ -252,6 +252,10 @@ impl FetchState {
             );
         }
         preserve_session_identity(&mut session, guard.as_ref());
+        // The replaced session is dead: its per-track batch ids must not
+        // survive, or feedback built after a recreate carries a foreign
+        // batchId that 400s the new session's page/feedback requests.
+        self.wave_batch_ids.lock().clear();
         self.remember_wave_batch_locked(&session.batch_id, &session.sequence);
         *guard = Some(session);
     }
@@ -720,5 +724,21 @@ mod tests {
         let mut state = state;
         state.reset();
         assert!(state.wave_batch_for("t1").is_none());
+    }
+
+    #[test]
+    fn set_wave_session_replaces_stale_batch_attribution() {
+        use crate::util::track::test_track;
+
+        let state = FetchState::new();
+        state.set_wave_session(test_session("b1", Some("sess-1")));
+        state.remember_wave_batch("b1-page", &[test_track("t1")]);
+        assert_eq!(state.wave_batch_for("t1").as_deref(), Some("b1-page"));
+
+        // A recreated session must not inherit the dead session's batches:
+        // stale tracks fall back to the LIVE session's batch instead of
+        // poisoning feedback/page requests with a foreign batchId.
+        state.set_wave_session(test_session("b2", Some("sess-2")));
+        assert_eq!(state.wave_batch_for("t1").as_deref(), Some("b2"));
     }
 }
