@@ -74,8 +74,9 @@ Future<void> main() async {
     if (window != null) {
       final isCustom = customTitlebarSignal.value;
 
-      final savedBounds = await WindowPlacement.loadBounds();
-      final savedMaximized = await WindowPlacement.loadMaximized();
+      final saved = await WindowPlacement.loadState();
+      final savedBounds = saved.bounds;
+      final savedMaximized = saved.maximized;
       // On Wayland the compositor owns positioning; on other platforms the
       // saved monitor may be gone — in both cases restore size and center.
       final restoreBounds =
