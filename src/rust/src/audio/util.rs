@@ -110,8 +110,16 @@ pub fn setup_device_config(
     #[cfg(target_os = "linux")]
     let device = host.default_output_device();
 
+    // With cpal's native pulse host compiled in (see Cargo.toml) playback
+    // goes through the sound server's socket and ALSA 'default' is never
+    // opened, so the probe is only meaningful — and only harmless — when
+    // the ALSA host is the one in use.
     #[cfg(target_os = "linux")]
-    warn_if_default_bypasses_sound_server();
+    {
+        if host.id() == rodio::cpal::HostId::Alsa {
+            warn_if_default_bypasses_sound_server();
+        }
+    }
 
     #[cfg(not(target_os = "linux"))]
     let device = if let Some(name) = device_name {
@@ -179,12 +187,14 @@ pub fn setup_device_config(
         sample_format = SampleFormat::F32;
     }
 
-    // Field debugging: which PCM was actually opened (raw hw vs server) and
-    // what the device settled on. Without this, reports of "no sound / wrong
-    // speed" cannot be tied to a device or config. `stored` is what the
-    // setting held; on Linux it is intentionally ignored (server default).
+    // Field debugging: which host and PCM was actually opened (raw hw vs
+    // server) and what the device settled on. Without this, reports of
+    // "no sound / wrong speed" cannot be tied to a device or config.
+    // `stored` is what the setting held; on Linux it is intentionally
+    // ignored (server default).
     let desc = device.description().ok();
     tracing::info!(
+        host = ?host.id(),
         device = desc.as_ref().map(|d| d.name()).unwrap_or_default(),
         pcm = desc.as_ref().and_then(|d| d.driver()).unwrap_or_default(),
         stored = device_name.unwrap_or("default"),

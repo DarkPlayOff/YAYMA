@@ -92,6 +92,14 @@ windows = { version = "0.62.2", features = [
 # what ALSA 'default' actually resolves to (see audio::util).
 [target.'cfg(target_os = "linux")'.dependencies]
 alsa = "0.11"
+# Compile cpal's native PulseAudio host into the same cpal rodio already
+# uses (cargo features are additive across the graph): default_host() then
+# connects to the session sound server (PipeWire through pipewire-pulse, or
+# PulseAudio) over its socket instead of opening ALSA 'default', which on
+# systems without the server bridge resolves to raw hardware and grabs the
+# card exclusively, freezing the desktop's audio. Pure-Rust protocol client,
+# no C dependencies; a session without the socket stays on the ALSA host.
+cpal = { version = "0.18.2", features = ["pulseaudio"] }
 
 [target.'cfg(target_os = "android")'.dependencies]
 rustls-platform-verifier = { version = "0.7.1", features = ["jni"] }
