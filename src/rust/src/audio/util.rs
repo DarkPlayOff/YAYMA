@@ -69,6 +69,27 @@ fn parse_device_spec(name: &str) -> (&str, usize) {
     (name, 1)
 }
 
+/// True for ALSA PCMs that route through the session sound server
+/// (PipeWire/PulseAudio). Raw hardware PCMs (`hw:`, `front:`, `dmix:` ...)
+/// bypass it: opening one grabs the card exclusively and wedges every other
+/// pulse client on the desktop — field-verified on PipeWire, where a stream
+/// ending up on `hw:` froze system-wide audio for 15+ seconds.
+/// No-op (always true) on platforms where cpal's default host is not ALSA.
+#[cfg(target_os = "linux")]
+pub(crate) fn is_server_mediated_pcm(name: &str) -> bool {
+    !(name.starts_with("hw:")
+        || name.starts_with("plughw:")
+        || name.starts_with("front:")
+        || name.starts_with("dmix:")
+        || name.starts_with("sysdefault")
+        || name.starts_with("surround"))
+}
+
+#[cfg(not(target_os = "linux"))]
+pub(crate) fn is_server_mediated_pcm(_name: &str) -> bool {
+    true
+}
+
 pub fn setup_device_config(
     device_name: Option<&str>,
 ) -> Result<(Device, StreamConfig, SampleFormat), Box<dyn std::error::Error + Send + Sync>> {
@@ -80,8 +101,12 @@ pub fn setup_device_config(
             .map(|devs| devs.into_iter().collect())
             .unwrap_or_default();
 
-        // Try matching by display name (full names from Windows, or raw names otherwise)
-        let chosen = {
+        // Try matching by display name (full names from Windows, or raw names otherwise).
+        // A stored raw-hardware PCM name (saved by an older build whose picker
+        // still listed `hw:` devices) must never be honored: opening one grabs
+        // the card exclusively and wedges the desktop's audio server, so fall
+        // back to the default device, which routes through the server.
+        let chosen = if is_server_mediated_pcm(base_name) {
             let mut matched = 0usize;
             let mut fallback: Option<Device> = None;
 
@@ -112,6 +137,8 @@ pub fn setup_device_config(
                 }
             }
             fallback
+        } else {
+            None
         };
 
         chosen.or_else(|| host.default_output_device())
@@ -161,4 +188,38 @@ where
     let sink = Player::connect_new(mixer);
 
     Ok((stream, sink))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn device_spec_roundtrips() {
+        assert_eq!(parse_device_spec("pulse"), ("pulse", 1));
+        assert_eq!(parse_device_spec("Name (2)"), ("Name", 2));
+        // Not a spec suffix — a display name that just ends in a parenthesis.
+        assert_eq!(parse_device_spec("Weird (x)"), ("Weird (x)", 1));
+    }
+
+    // The picker and the stored-name matcher must agree: server-mediated
+    // PCMs are usable, raw hardware PCMs are not. Meaningless (always true)
+    // on non-Linux hosts, so only assert there.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn raw_hardware_pcms_are_rejected() {
+        for raw in [
+            "hw:CARD=PCH,DEV=0",
+            "plughw:CARD=PCH,DEV=0",
+            "front:CARD=PCH,DEV=0",
+            "surround51:CARD=PCH,DEV=0",
+            "dmix:CARD=PCH,DEV=0",
+            "sysdefault:CARD=PCH,DEV=0",
+        ] {
+            assert!(!is_server_mediated_pcm(raw), "{raw} must be rejected");
+        }
+        for server in ["default", "pulse", "pipewire"] {
+            assert!(is_server_mediated_pcm(server), "{server} must be kept");
+        }
+    }
 }

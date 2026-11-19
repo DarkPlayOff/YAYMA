@@ -179,7 +179,11 @@ pub fn get_audio_devices(_ctx: &AppContext) -> Vec<String> {
         let host = rodio::cpal::default_host();
         host.output_devices()
             .map(|devs| {
+                // Raw hardware PCMs bypass the session sound server and wedge
+                // the whole desktop's audio when opened — they must never be
+                // offered. On non-Linux hosts the check is a no-op.
                 devs.filter_map(|d| d.description().ok().map(|desc| desc.name().to_string()))
+                    .filter(|name| crate::audio::util::is_server_mediated_pcm(name))
                     .collect()
             })
             .unwrap_or_default()
