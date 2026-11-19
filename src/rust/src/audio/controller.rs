@@ -912,7 +912,9 @@ impl AudioController {
                     engine.play_source(source);
 
                     if start_pos.as_millis() > 0 {
-                        let _ = engine.try_seek(start_pos);
+                        // Bounded: a direct try_seek would park this worker
+                        // thread on a stalled audio callback (see seek).
+                        let _ = Self::bounded_engine_seek(&engine, start_pos).await;
                         progress_clock.set_current_position(start_pos);
                     }
 
@@ -1014,20 +1016,61 @@ impl AudioController {
         self.signals.set_playing(true);
     }
 
+    /// Runs an engine seek off the actor thread with a bounded wait: rodio
+    /// 0.23's `Player::try_seek` parks the caller on the audio callback's
+    /// seek feedback with no timeout of its own, and while the callback is
+    /// stalled in the decoder wait (network stall) that ack never comes — a
+    /// direct call would wedge the whole audio actor behind one seek.
+    /// Returns `None` when no ack arrived in time.
+    // shortcut: a timed-out seek abandons one parked blocking thread until
+    // the audio thread recovers, like DEVICE_OPEN_TIMEOUT in recreate_engine;
+    // a real fix needs a non-blocking seek ack in the engine.
+    async fn bounded_engine_seek(
+        engine: &Arc<PlaybackEngine>,
+        pos: std::time::Duration,
+    ) -> Option<Result<(), rodio::source::SeekError>> {
+        const SEEK_ACK_TIMEOUT: Duration = Duration::from_secs(3);
+        let engine = engine.clone();
+        match tokio::time::timeout(
+            SEEK_ACK_TIMEOUT,
+            tokio::task::spawn_blocking(move || engine.try_seek(pos)),
+        )
+        .await
+        {
+            Ok(Ok(result)) => Some(result),
+            // Only reachable in debug builds (release uses panic="abort").
+            Ok(Err(e)) => {
+                tracing::warn!(error = %e, "seek_blocking_task_failed");
+                None
+            }
+            Err(_) => {
+                tracing::warn!(position_ms = pos.as_millis() as u64, "seek_ack_timeout");
+                None
+            }
+        }
+    }
+
     pub(crate) async fn seek(&self, pos: std::time::Duration) {
-        if self.engine.try_seek(pos).is_err() {
-            // Unsupported seek: keep UI and engine in sync at zero instead of
-            // showing `pos` while audio restarts from the beginning.
-            self.progress_clock
-                .set_current_position(std::time::Duration::ZERO);
-            self.signals
-                .update_progress(0, self.signals.duration_ms.get());
-        } else {
-            self.progress_clock.set_current_position(pos);
-            // Emit immediately so the UI reflects the new position even while
-            // paused (the monitor loop only publishes progress during playback).
-            self.signals
-                .update_progress(pos.as_millis() as u64, self.signals.duration_ms.get());
+        match Self::bounded_engine_seek(&self.engine, pos).await {
+            Some(Ok(())) => {
+                self.progress_clock.set_current_position(pos);
+                // Emit immediately so the UI reflects the new position even while
+                // paused (the monitor loop only publishes progress during playback).
+                self.signals
+                    .update_progress(pos.as_millis() as u64, self.signals.duration_ms.get());
+            }
+            Some(Err(_)) => {
+                // Unsupported seek: keep UI and engine in sync at zero instead of
+                // showing `pos` while audio restarts from the beginning.
+                self.progress_clock
+                    .set_current_position(std::time::Duration::ZERO);
+                self.signals
+                    .update_progress(0, self.signals.duration_ms.get());
+            }
+            // Ack timeout: the seek order stays queued and is applied once the
+            // stream recovers; leave the optimistic progress (the UI already
+            // shows `pos`), the monitor reconciles.
+            None => {}
         }
     }
 
