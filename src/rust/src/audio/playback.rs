@@ -237,6 +237,14 @@ impl PlaybackEngine {
         &self,
         device_name: Option<&str>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        // Stop the old players while their device callback still runs: once
+        // the old MixerDeviceSink is dropped below, the queue drain is never
+        // signalled and boundary-watch threads blocked in `sleep_until_end`
+        // would leak with the whole old pipeline.
+        if let Some(state) = self.state.write().as_mut() {
+            state.players.stop();
+        }
+
         let (device, stream_config, sample_format) = setup_device_config(device_name)?;
 
         let tx_clone = self.tx.clone();
@@ -699,6 +707,31 @@ mod tests {
         assert!(
             started.elapsed() < Duration::from_secs(1),
             "sleep_until_end must wake promptly at the end of the source"
+        );
+    }
+
+    #[test]
+    fn stop_releases_a_blocked_boundary_watch() {
+        let (_mixer, mut players) = engine_players();
+        load_sink(&players);
+        // Paused so the (unpaced) drain thread cannot consume it: only the
+        // stop flag may end this source. `recreate()` relies on this — the
+        // flag must land while the old mixer callback still polls the player.
+        players.pause();
+
+        let watcher = players.current_player();
+        let (done_tx, done_rx) = std::sync::mpsc::channel::<()>();
+        std::thread::spawn(move || {
+            watcher.sleep_until_end();
+            let _ = done_tx.send(());
+        });
+        std::thread::sleep(Duration::from_millis(150));
+        assert_eq!(players.sink.len(), 1, "precondition: source still queued");
+
+        players.stop();
+        assert!(
+            done_rx.recv_timeout(Duration::from_secs(2)).is_ok(),
+            "stop must wake a blocked sleep_until_end"
         );
     }
 
