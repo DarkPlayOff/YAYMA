@@ -783,9 +783,9 @@ impl QueueManager {
     fn insert_into_queue(&mut self, track: Track, insert_at: usize) {
         let mut queue = self.signals.queue();
         if insert_at <= queue.len() {
-            queue.insert(insert_at, track);
+            queue.insert(insert_at, track.clone());
             self.signals.set_queue(queue);
-            self.shuffle.record_inserted(insert_at);
+            self.shuffle.record_inserted(track, insert_at);
         }
         self.signals.bump_revision();
         self.refill_wave_window(true);
@@ -1169,6 +1169,9 @@ impl QueueManager {
                 }
             }
         } else {
+            // Lazy playlist top-up: extend the source order too, so a later
+            // shuffle-disable keeps the loaded tail.
+            self.shuffle.record_appended(&tracks);
             let mut queue = self.signals.queue();
             queue.extend(tracks);
             self.signals.set_queue(queue);
@@ -1413,6 +1416,25 @@ mod tests {
         let prev = q.get_previous_track().expect("prev exists");
         assert_eq!(prev.id, "t0");
         assert!(q.get_next_track().await.is_some());
+    }
+
+    #[tokio::test]
+    async fn disable_shuffle_keeps_edits_made_while_shuffled() {
+        let mut q = manager().await;
+        q.load(PlaybackContext::Standalone, standalone(3), 1).await;
+        q.toggle_shuffle();
+        q.play_next(test_track("next"));
+        // Remove an upcoming row (whatever track holds visible slot 2).
+        let removed_id = q.signals.queue()[2].id.clone();
+        q.remove_track(2);
+        q.toggle_shuffle(); // disable: edits must survive the restore.
+        let ids: Vec<String> = q.signals.queue().iter().map(|t| t.id.clone()).collect();
+        assert_eq!(ids.len(), 3);
+        assert!(!ids.contains(&removed_id));
+        // "next" still plays right after the current track.
+        let i = ids.iter().position(|id| id == "t1").expect("t1 playing");
+        assert_eq!(ids[i + 1], "next");
+        assert_eq!(q.signals.queue()[q.signals.index()].id, "t1");
     }
 
     #[tokio::test]

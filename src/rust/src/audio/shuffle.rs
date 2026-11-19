@@ -3,8 +3,13 @@ use yandex_music::model::track::Track;
 
 #[derive(Clone)]
 pub struct ShuffleState {
+    /// Live mirror of the queue in source order: every mutation made while
+    /// shuffled is mirrored here, so `disable` restores the CURRENT tracks
+    /// (with additions/removals applied), not a stale enable-time snapshot.
     original_queue: Option<Vector<Track>>,
-    index_map: Vec<Option<usize>>,
+    /// Shuffled position -> source position in `original_queue`; a live
+    /// bijection maintained by the `record_*` mirrors.
+    index_map: Vec<usize>,
     is_active: bool,
 }
 
@@ -28,15 +33,14 @@ impl ShuffleState {
 
         self.original_queue = Some(queue.clone());
 
-        let mut indices: Vec<Option<usize>> = (0..queue.len()).map(Some).collect();
+        let mut indices: Vec<usize> = (0..queue.len()).collect();
         let mut queue_vec: Vec<Track> = queue.into_iter().collect();
 
         if !queue_vec.is_empty() && current_index < queue_vec.len() {
             let current_track = queue_vec.remove(current_index);
             let current_index_val = indices.remove(current_index);
 
-            let mut rest: Vec<(Track, Option<usize>)> =
-                queue_vec.into_iter().zip(indices).collect();
+            let mut rest: Vec<(Track, usize)> = queue_vec.into_iter().zip(indices).collect();
             fastrand::shuffle(&mut rest);
 
             let mut new_queue_vec = Vec::with_capacity(rest.len() + 1);
@@ -52,7 +56,7 @@ impl ShuffleState {
             self.is_active = true;
             (Vector::from(new_queue_vec), 0)
         } else {
-            let mut combined: Vec<(Track, Option<usize>)> =
+            let mut combined: Vec<(Track, usize)> =
                 queue_vec.into_iter().zip(indices).collect();
             fastrand::shuffle(&mut combined);
 
@@ -70,7 +74,7 @@ impl ShuffleState {
         let restored_index = self
             .index_map
             .get(current_shuffled_index)
-            .and_then(|i| *i)
+            .copied()
             .unwrap_or(0);
 
         self.index_map.clear();
@@ -78,15 +82,45 @@ impl ShuffleState {
         Some((original_queue, restored_index))
     }
 
-    pub fn record_inserted(&mut self, at: usize) {
-        if self.is_active && at <= self.index_map.len() {
-            self.index_map.insert(at, None);
+    /// Mirror a visible-queue insertion at `at`: the track lands right after
+    /// the source position of its visible predecessor, so a "play next"
+    /// insertion still plays right after the current track once shuffle is
+    /// turned off.
+    pub fn record_inserted(&mut self, track: Track, at: usize) {
+        if !self.is_active || at > self.index_map.len() {
+            return;
         }
+        let Some(original) = self.original_queue.as_mut() else {
+            return;
+        };
+        let source_at = if at == 0 { 0 } else { self.index_map[at - 1] + 1 };
+        for entry in &mut self.index_map {
+            if *entry >= source_at {
+                *entry += 1;
+            }
+        }
+        original.insert(source_at, track);
+        self.index_map.insert(at, source_at);
     }
 
+    /// Mirror a visible-queue removal at `at`: the track leaves the source
+    /// order too and later source positions shift down.
     pub fn record_removed(&mut self, at: usize) {
-        if self.is_active && at < self.index_map.len() {
-            self.index_map.remove(at);
+        if !self.is_active || at >= self.index_map.len() {
+            return;
+        }
+        let source = self.index_map.remove(at);
+        let Some(original) = self.original_queue.as_mut() else {
+            return;
+        };
+        if source >= original.len() {
+            return;
+        }
+        original.remove(source);
+        for entry in &mut self.index_map {
+            if *entry > source {
+                *entry -= 1;
+            }
         }
     }
 
@@ -101,6 +135,21 @@ impl ShuffleState {
             self.index_map.insert(to, entry);
         } else {
             self.index_map.push(entry);
+        }
+    }
+
+    /// Mirror tracks appended at the visible end (lazy playlist top-up):
+    /// they continue the source list, so they land at the source end too.
+    pub fn record_appended(&mut self, tracks: &[Track]) {
+        if !self.is_active {
+            return;
+        }
+        let Some(original) = self.original_queue.as_mut() else {
+            return;
+        };
+        for track in tracks {
+            original.push_back(track.clone());
+            self.index_map.push(original.len() - 1);
         }
     }
 
@@ -124,10 +173,10 @@ impl ShuffleState {
         let current_entry = if anchor < map.len() {
             map.remove(anchor)
         } else {
-            None
+            0
         };
 
-        let mut rest: Vec<(Track, Option<usize>)> = tracks.into_iter().zip(map).collect();
+        let mut rest: Vec<(Track, usize)> = tracks.into_iter().zip(map).collect();
         fastrand::shuffle(&mut rest);
 
         let mut new_tracks = Vec::with_capacity(rest.len() + 1);
@@ -196,8 +245,50 @@ mod tests {
         let q = queue(&["a", "b", "c"]);
         let (mut shuffled, _) = s.enable(q, 0);
         shuffled.insert(1, test_track("x"));
-        s.record_inserted(1);
+        s.record_inserted(test_track("x"), 1);
         let (_, restored_index) = s.disable(0).expect("disable must work");
+        assert_eq!(restored_index, 0);
+    }
+
+    #[test]
+    fn disable_keeps_tracks_added_and_removed_while_shuffled() {
+        let mut s = ShuffleState::inactive();
+        let q = queue(&["a", "b", "c", "d"]);
+        let (mut shuffled, _) = s.enable(q, 0);
+        // "Play next": the insertion goes right after the playing track.
+        shuffled.insert(1, test_track("x"));
+        s.record_inserted(test_track("x"), 1);
+        // Remove another upcoming row (whatever track it holds).
+        let removed = shuffled[2].id.clone();
+        shuffled.remove(2);
+        s.record_removed(2);
+
+        let (restored, restored_index) = s.disable(0).expect("disable must work");
+        let restored_ids = ids(&restored);
+        assert_eq!(restored_ids.len(), 4);
+        assert!(!restored_ids.contains(&removed));
+        // "x" still plays right after the current track ...
+        assert_eq!(restored_ids[0], "a");
+        assert_eq!(restored_ids[1], "x");
+        // ... and the survivors keep their source order.
+        let mut expected_tail: Vec<String> = vec!["b".into(), "c".into(), "d".into()];
+        expected_tail.retain(|id| *id != removed);
+        assert_eq!(restored_ids[2..], expected_tail);
+        assert_eq!(restored_index, 0);
+    }
+
+    #[test]
+    fn appended_tracks_extend_the_source_tail() {
+        let mut s = ShuffleState::inactive();
+        let q = queue(&["a", "b"]);
+        let (mut shuffled, _) = s.enable(q, 0);
+        let appended = vec![test_track("m"), test_track("n")];
+        for t in &appended {
+            shuffled.push_back(t.clone());
+        }
+        s.record_appended(&appended);
+        let (restored, restored_index) = s.disable(0).expect("disable must work");
+        assert_eq!(ids(&restored), vec!["a", "b", "m", "n"]);
         assert_eq!(restored_index, 0);
     }
 }
