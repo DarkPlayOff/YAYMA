@@ -124,9 +124,14 @@ impl BufferedStreamingSource {
                     continue;
                 }
                 Err(TryRecvError::Empty) => {
-                    // Wait with a timeout so seek/stop (generation bump) wakes
-                    // us even when the decoder is stalled; the loop head
-                    // re-checks the generation on every wake-up.
+                    // shortcut: the RT thread can block here (by design, no
+                    // manufactured silence) for as long as the decoder stalls
+                    // on the network; the real exits (channel message /
+                    // disconnect) wake recv_timeout immediately, and a
+                    // generation bump is only ever written by this same
+                    // thread (try_seek), so the wait length never gates
+                    // unwedging. Proper fix: an SPSC ring fed by a dedicated
+                    // thread, needed only if network stalls become frequent.
                     match self.rx.recv_timeout(Duration::from_millis(150)) {
                         Ok(SampleMessage::Samples(samples, msg_gen)) => {
                             if msg_gen != current_generation {
