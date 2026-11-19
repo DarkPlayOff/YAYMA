@@ -71,6 +71,32 @@ fn parse_device_spec(name: &str) -> (&str, usize) {
     (name, 1)
 }
 
+/// ALSA `default` must point at the session sound server (pipewire-alsa /
+/// the pulse plugin). On a system without that bridge it resolves to raw
+/// hardware, playback grabs the card exclusively, and the whole desktop's
+/// audio freezes — the "silence while everything hangs" field reports. The
+/// PCM name cannot tell the two apart, but `snd_pcm_info` can: server-facing
+/// plugins (pulse/pipewire/null) report card -1, a chain ending at real
+/// hardware reports the actual card index (plug forwards info to its slave).
+#[cfg(target_os = "linux")]
+fn warn_if_default_bypasses_sound_server() {
+    use alsa::{Direction, pcm::PCM};
+    // Non-blocking: a busy card (e.g. our own stream during a recreate) fails
+    // fast instead of stalling the thread that still must open the real one.
+    let Ok(pcm) = PCM::new("default", Direction::Playback, true) else {
+        return;
+    };
+    let Ok(info) = pcm.info() else { return };
+    if info.get_card() >= 0 {
+        tracing::warn!(
+            card = info.get_card(),
+            "default_bypasses_sound_server: ALSA 'default' resolves to raw hardware; \
+             install pipewire-alsa (or route 'default' through the sound server), \
+             otherwise playback holds the card exclusively and can freeze desktop audio"
+        );
+    }
+}
+
 pub fn setup_device_config(
     device_name: Option<&str>,
 ) -> Result<(Device, StreamConfig, SampleFormat), Box<dyn std::error::Error + Send + Sync>> {
@@ -83,6 +109,9 @@ pub fn setup_device_config(
     // a stored name (from another platform or an older build) is ignored.
     #[cfg(target_os = "linux")]
     let device = host.default_output_device();
+
+    #[cfg(target_os = "linux")]
+    warn_if_default_bypasses_sound_server();
 
     #[cfg(not(target_os = "linux"))]
     let device = if let Some(name) = device_name {
@@ -206,5 +235,19 @@ mod tests {
         assert_eq!(parse_device_spec("Name (2)"), ("Name", 2));
         // Not a spec suffix — a display name that just ends in a parenthesis.
         assert_eq!(parse_device_spec("Weird (x)"), ("Weird (x)", 1));
+    }
+
+    // CI machines have no sound card, so the open fails and nothing is
+    // asserted there; on a real desktop the probe must survive both a
+    // bridged default (card -1) and a raw-hardware one (card >= 0).
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn default_probe_survives_bridged_and_raw_chains() {
+        use alsa::{Direction, pcm::PCM};
+        if let Ok(pcm) = PCM::new("default", Direction::Playback, true)
+            && let Ok(info) = pcm.info()
+        {
+            assert!(info.get_card() >= -1);
+        }
     }
 }

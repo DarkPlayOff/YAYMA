@@ -88,6 +88,11 @@ windows = { version = "0.62.2", features = [
     "Win32_Media_Audio",
 ] }
 
+# Same alsa crate cpal already links on Linux; referenced directly to probe
+# what ALSA 'default' actually resolves to (see audio::util).
+[target.'cfg(target_os = "linux")'.dependencies]
+alsa = "0.11"
+
 [target.'cfg(target_os = "android")'.dependencies]
 rustls-platform-verifier = { version = "0.7.1", features = ["jni"] }
 jni = "0.22"
