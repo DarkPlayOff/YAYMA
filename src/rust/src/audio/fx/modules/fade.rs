@@ -83,6 +83,12 @@ impl Effect for FadeEffect {
     fn reset(&mut self) {
         self.current_frame = 0;
     }
+
+    fn seek(&mut self, pos: std::time::Duration, sample_rate: u32) {
+        // Same f64 math as `new`'s to_frames so the fade-out stays anchored
+        // to its scheduled absolute position after a user seek.
+        self.current_frame = (pos.as_secs_f64() * sample_rate as f64) as u64;
+    }
 }
 
 #[cfg(test)]
@@ -151,5 +157,42 @@ mod tests {
             "u64 counter must advance through 2^24, got {}",
             fx.current_frame
         );
+    }
+
+    #[test]
+    fn seek_repositions_counter_to_absolute_frame() {
+        // Regression: a seek used to reach FadeEffect as reset(), zeroing the
+        // counter — the fade-in ramp then replayed from the seek point and the
+        // fade-out fired at the wrong absolute position (or never).
+        let mut fx = FadeEffect::new(1.0, 2.0, 100.0, 101.0, 48000, 2);
+
+        // Seek into the steady middle: full gain, not a fade-in ramp.
+        fx.seek(std::time::Duration::from_secs(50), 48000);
+        assert_eq!(
+            fx.current_frame, 50 * 48000,
+            "seek must not zero the frame counter"
+        );
+        let mut l = [1.0f32; 1];
+        let mut r = [1.0f32; 1];
+        fx.process(&mut l, &mut r);
+        assert_eq!(l[0], 1.0, "mid-track seek must play at full gain");
+
+        // Seek halfway into the fade-out window: gain 0.5.
+        fx.seek(std::time::Duration::from_millis(100_500), 48000);
+        let mut l = [1.0f32; 1];
+        let mut r = [1.0f32; 1];
+        fx.process(&mut l, &mut r);
+        assert!(
+            (l[0] - 0.5).abs() < 1e-4,
+            "fade-out ramp gain after seek {}",
+            l[0]
+        );
+
+        // Seek past the fade-out end: silence.
+        fx.seek(std::time::Duration::from_secs(102), 48000);
+        let mut l = [1.0f32; 1];
+        let mut r = [1.0f32; 1];
+        fx.process(&mut l, &mut r);
+        assert_eq!(l[0], 0.0, "seek past fade-out end must yield silence");
     }
 }

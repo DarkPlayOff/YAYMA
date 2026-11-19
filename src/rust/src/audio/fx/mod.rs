@@ -25,6 +25,13 @@ pub trait Effect: Send + 'static {
     fn process(&mut self, left: &mut [f32], right: &mut [f32]);
 
     fn reset(&mut self);
+
+    /// Position-aware seek. Buffer-based effects keep the default clear-on-seek
+    /// semantics; position-tracking effects (fade) override this so their
+    /// timeline stays anchored to absolute track time.
+    fn seek(&mut self, _pos: Duration, _sample_rate: u32) {
+        self.reset();
+    }
 }
 
 /// A source that can produce samples block-wise.
