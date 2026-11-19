@@ -387,10 +387,15 @@ Future<void> refreshAudioDevices() async {
 }
 
 Future<void> setAudioDevice(String deviceName) async {
-  final ctx = appContextSignal.value;
-  if (ctx == null) return;
-  selectedAudioDeviceSignal.value = deviceName.isEmpty ? null : deviceName;
-  await rust.setAudioDevice(ctx: ctx, deviceName: deviceName);
+  // Mirrors the Rust side, which commits its selection only after the
+  // engine switch succeeds: write the signal after the call, not before,
+  // so the menu never claims a device the engine did not accept.
+  final ok = await runRustAction(
+    (ctx) => rust.setAudioDevice(ctx: ctx, deviceName: deviceName),
+  );
+  if (ok) {
+    selectedAudioDeviceSignal.value = deviceName.isEmpty ? null : deviceName;
+  }
 }
 
 // Signal for cover URL only to avoid re-calculating on pause/likes

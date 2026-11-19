@@ -398,7 +398,7 @@ impl AudioController {
         // for the next stream error to be retried); only a truly dead one
         // hits it.
         // shortcut: no recreate backoff/serialization; bounded by this deadline.
-        const DEVICE_OPEN_TIMEOUT: Duration = Duration::from_secs(60);
+        const DEVICE_OPEN_TIMEOUT: Duration = Duration::from_secs(30);
         let engine = self.engine.clone();
         let device_name = device_name.map(str::to_string);
         match tokio::time::timeout(

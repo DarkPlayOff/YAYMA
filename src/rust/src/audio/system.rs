@@ -564,7 +564,11 @@ impl AudioSystem {
     async fn recreate_stream(&mut self) {
         let device = self.signals.selected_device.get();
         if let Err(e) = self.controller.recreate_engine(device.as_deref()).await {
+            // The old stream keeps running (recreate swaps state only after
+            // the new device opens), so the user must hear about the failure
+            // instead of wondering why nothing changed.
             tracing::error!(error = %e, "recreate_stream_failed");
+            (self.error_sink)(format!("Failed to recreate audio stream: {e}"));
         } else {
             self.reload_track().await;
         }
@@ -910,6 +914,19 @@ impl AudioSystem {
                 }
             }
             AudioMessage::SetAudioDevice(device_name) => {
+                // Switch the engine first and commit the selection only on
+                // success: recreate_engine leaves the old stream running
+                // when the new device cannot open, and the settings UI
+                // must not show a device the engine is not using.
+                if let Err(e) = self.controller.recreate_engine(device_name.as_deref()).await {
+                    tracing::error!(error = %e, "audio_device_switch_failed");
+                    (self.error_sink)(format!("Failed to switch audio device: {e}"));
+                    // recreate_engine already stopped the old players (to wake
+                    // boundary watchers); the old stream is still alive, so
+                    // rebuild the source on it instead of leaving silence.
+                    self.reload_track().await;
+                    return;
+                }
                 let changed = self.signals.selected_device.get() != device_name;
                 self.signals.selected_device.set(device_name.clone());
                 if changed {
@@ -917,7 +934,7 @@ impl AudioSystem {
                 }
                 // Don't hold the actor on a DB write; persist in background.
                 self.persist_setting("audio_device", &device_name);
-                self.recreate_stream().await;
+                self.reload_track().await;
             }
             AudioMessage::RecreateStream => {
                 self.recreate_stream().await;
