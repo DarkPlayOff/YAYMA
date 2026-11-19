@@ -175,6 +175,7 @@ impl AudioSystem {
             let smtc = Arc::new(Mutex::new(SmtcManager::new(
                 smtc_cmd_tx,
                 _http_cache.clone(),
+                signals.current_track_id.clone(),
             )?));
             (smtc, smtc_cmd_rx)
         };
@@ -683,7 +684,18 @@ impl AudioSystem {
                     self.controller.drop_preheat();
                 }
             }
-            AudioMessage::Seek(dur) => {
+            AudioMessage::Seek(dur, track_id) => {
+                // The id was captured at send time; a seek that raced an
+                // auto-advance or Next must not land on the new track.
+                if let Some(id) = track_id
+                    && self
+                        .signals
+                        .current_track_id
+                        .with(|cur| cur.as_deref() != Some(id.as_str()))
+                {
+                    tracing::debug!(track_id = %id, "seek_dropped_stale_track");
+                    return;
+                }
                 tracing::debug!(position_ms = dur.as_millis() as u64, "seek");
                 self.plays.seek();
                 self.controller.seek(dur).await;

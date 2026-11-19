@@ -20,7 +20,10 @@ pub enum AudioMessage {
     /// Unconditional previous-track skip: unlike `Prev`, it does not restart
     /// the current track when the playhead is past the restart threshold.
     PreviousTrack,
-    Seek(Duration),
+    /// Track id captured at send time; the actor drops the seek when the
+    /// loaded track changed in flight (auto-advance / Next). `None` keeps
+    /// the legacy unguarded behavior.
+    Seek(Duration, Option<String>),
     SetVolume(u8),
     /// Applies a transient gain on top of the user volume without changing
     /// the volume signal or its persisted setting (e.g. Android ducking).

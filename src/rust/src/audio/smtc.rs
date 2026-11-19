@@ -30,6 +30,7 @@ impl SmtcManager {
         #[cfg_attr(not(target_os = "windows"), allow(unused_variables))] http_cache: std::sync::Arc<
             crate::storage::cache::HttpCache,
         >,
+        current_track_id: crate::util::reactive::Signal<Option<String>>,
     ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         #[cfg(target_os = "windows")]
         // SAFETY: pure Win32 call taking a static NUL-terminated wide string.
@@ -74,7 +75,8 @@ impl SmtcManager {
                     let _ = cmd_tx_clone.send(AudioMessage::Stop);
                 }
                 MediaControlEvent::SetPosition(pos) => {
-                    let _ = cmd_tx_clone.send(AudioMessage::Seek(pos.0));
+                    let _ =
+                        cmd_tx_clone.send(AudioMessage::Seek(pos.0, current_track_id.get()));
                 }
                 _ => {}
             })

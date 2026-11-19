@@ -80,12 +80,14 @@ pub async fn play_previous_track(ctx: &AppContext) {
 }
 
 pub async fn seek(ctx: &AppContext, position_ms: u32) {
+    let track_id = ctx.audio.signals.current_track_id.get();
     let _ = ctx
         .audio
         .tx
-        .send(AudioMessage::Seek(std::time::Duration::from_millis(
-            position_ms as u64,
-        )))
+        .send(AudioMessage::Seek(
+            std::time::Duration::from_millis(position_ms as u64),
+            track_id,
+        ))
         .await;
 }
 

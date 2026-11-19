@@ -500,9 +500,10 @@ async fn seek_by(ctx: &AppContext, offset_ms: i64) {
     let position = ctx.audio.signals.position_ms.get() as i64;
     let duration = ctx.audio.signals.duration_ms.get() as i64;
     let target = (position + offset_ms).clamp(0, duration.max(0)) as u64;
+    let track_id = ctx.audio.signals.current_track_id.get();
     let _ = ctx
         .audio
         .tx
-        .send(AudioMessage::Seek(Duration::from_millis(target)))
+        .send(AudioMessage::Seek(Duration::from_millis(target), track_id))
         .await;
 }
