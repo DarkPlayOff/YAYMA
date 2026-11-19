@@ -393,10 +393,12 @@ impl AudioController {
         // it on the audio actor would freeze every control button behind it.
         // The blocking thread cannot be cancelled; after the deadline it is
         // abandoned (one leaked thread while the device is wedged, instead of
-        // a dead app) — a late success may clobber a newer recreate's state,
-        // which the next stream error repairs.
+        // a dead app). The deadline is generous on purpose: slow-but-alive
+        // servers must finish the open (a recreate that fails here has to wait
+        // for the next stream error to be retried); only a truly dead one
+        // hits it.
         // shortcut: no recreate backoff/serialization; bounded by this deadline.
-        const DEVICE_OPEN_TIMEOUT: Duration = Duration::from_secs(15);
+        const DEVICE_OPEN_TIMEOUT: Duration = Duration::from_secs(60);
         let engine = self.engine.clone();
         let device_name = device_name.map(str::to_string);
         match tokio::time::timeout(
