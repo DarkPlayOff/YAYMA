@@ -562,7 +562,7 @@ impl AudioSystem {
 
     async fn recreate_stream(&mut self) {
         let device = self.signals.selected_device.get();
-        if let Err(e) = self.controller.recreate_engine(device.as_deref()) {
+        if let Err(e) = self.controller.recreate_engine(device.as_deref()).await {
             tracing::error!(error = %e, "recreate_stream_failed");
         } else {
             self.reload_track().await;

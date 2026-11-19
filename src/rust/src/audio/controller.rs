@@ -3,6 +3,7 @@ use parking_lot::RwLock;
 use rodio::Source;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU64, Ordering};
+use std::time::Duration;
 use tokio::sync::Mutex;
 use yandex_music::model::track::{Track, TrackFade};
 
@@ -378,7 +379,7 @@ impl AudioController {
         self.stream_manager.invalidate_track(track_id);
     }
 
-    pub fn recreate_engine(
+    pub async fn recreate_engine(
         &self,
         device_name: Option<&str>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -387,7 +388,30 @@ impl AudioController {
         self.preheat.lock().take();
         self.crossfade_active.store(false, Ordering::SeqCst);
         self.fade_epoch.fetch_add(1, Ordering::SeqCst);
-        self.engine.recreate(device_name)
+        // Opening an output device is blocking ALSA/pulse work. On a wedged
+        // pipewire-pulse it can hang far past any server timeout, and running
+        // it on the audio actor would freeze every control button behind it.
+        // The blocking thread cannot be cancelled; after the deadline it is
+        // abandoned (one leaked thread while the device is wedged, instead of
+        // a dead app) — a late success may clobber a newer recreate's state,
+        // which the next stream error repairs.
+        // shortcut: no recreate backoff/serialization; bounded by this deadline.
+        const DEVICE_OPEN_TIMEOUT: Duration = Duration::from_secs(15);
+        let engine = self.engine.clone();
+        let device_name = device_name.map(str::to_string);
+        match tokio::time::timeout(
+            DEVICE_OPEN_TIMEOUT,
+            tokio::task::spawn_blocking(move || engine.recreate(device_name.as_deref())),
+        )
+        .await
+        {
+            Ok(result) => result
+                .map_err(|e| Box::<dyn std::error::Error + Send + Sync>::from(e.to_string()))?,
+            Err(_) => {
+                tracing::error!("device_open_timed_out");
+                Err("audio device open timed out".into())
+            }
+        }
     }
 
     // --- Gapless preheat -------------------------------------------------
