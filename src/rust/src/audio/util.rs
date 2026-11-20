@@ -187,6 +187,23 @@ pub fn setup_device_config(
         sample_format = SampleFormat::F32;
     }
 
+    // Linux: with `BufferSize::Default` the cpal pulse host sends the server
+    // an empty BufferAttr, so the sound server picks its own latency —
+    // seconds of queued audio under pipewire-pulse. Volume, EQ/DSP and
+    // pause/stop are all applied in the callback as the server pulls new
+    // frames, so each control only lands after that queue drains (the
+    // "everything responds 2s late" field reports; WASAPI on Windows and
+    // cpal 0.18's ALSA host are unaffected). Request one explicit period:
+    // the pulse host maps it to a ~2-period latency target with
+    // ADJUST_LATENCY, the ALSA host to a 2-period ring. 1024 frames ≈ 21ms
+    // @48k — small enough to be imperceptible, large enough to survive
+    // scheduling hiccups (xruns are already tolerated in the error path).
+    #[cfg(target_os = "linux")]
+    let config = StreamConfig {
+        buffer_size: BufferSize::Fixed(1024),
+        ..config
+    };
+
     // Field debugging: which host and PCM was actually opened (raw hw vs
     // server) and what the device settled on. Without this, reports of
     // "no sound / wrong speed" cannot be tied to a device or config.
